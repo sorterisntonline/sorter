@@ -1,0 +1,1 @@
+ALTER TABLE perms ALTER COLUMN user_id TYPE TEXT;

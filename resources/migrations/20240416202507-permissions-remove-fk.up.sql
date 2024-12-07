@@ -1,0 +1,2 @@
+ALTER TABLE perms
+DROP CONSTRAINT perms_user_id_fkey;

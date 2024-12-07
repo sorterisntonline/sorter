@@ -1,0 +1,6 @@
+I am following this tutorial for managing postgres cleanly in a repo.
+   this is for dev only, as prod will use cloud managed db connectstring
+
+tutorial.html
+=
+https://www.perrygeo.com/dont-install-postgresql-using-containers-for-local-development.html

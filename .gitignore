@@ -1,0 +1,9 @@
+.cpcache/
+.shadow-cljs/
+.clj-kondo/
+.lsp/
+.calva/
+resources/public/js/
+resources/public/
+target/
+secrets.edn

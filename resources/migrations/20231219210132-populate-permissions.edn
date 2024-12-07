@@ -1,0 +1,4 @@
+{:ns app.permissions
+ :up-fn populate-current-tags-migration
+ :down-fn populate-current-tags-down-migration
+ :transaction? true}

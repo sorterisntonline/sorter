@@ -1,0 +1,1 @@
+ALTER TABLE tags ROP INDEX (slug);
