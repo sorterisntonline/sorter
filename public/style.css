@@ -1,0 +1,3 @@
+input[type="range"]::-webkit-slider-thumb {
+    border: 10px solid #3490dc;
+}
