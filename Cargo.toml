@@ -1,0 +1,32 @@
+[package]
+name = "rustsorter"
+version = "0.1.0"
+edition = "2021"
+default-run="rustsorter"
+
+[dependencies]
+actix-files = "0.6.5"
+actix-web = {version="4", features = ["rustls-0_21"]}
+bcrypt = "0.15.0"
+dotenv = "0.15.0"
+edn = "0.3.0"
+edn-format = "3.3.0"
+env_logger = "0.11.2"
+graph = "0.3.1"
+graph_builder = "0.4.0"
+serde = { version = "1.0", features = ["derive"] }
+chrono = { version = "^0", features = ["serde"] }
+serde_json = "1"
+sqlx = { version = "0.8.2", features = ["runtime-async-std-native-tls", "postgres", "chrono", "uuid"] }
+actix-session = { version = "0.9.0", features = ["cookie-session"] }
+slug = "0.1.5"
+rand = "0.8.5"
+elo = "0.3.0"
+rayon = "1.9.0"
+
+[dev-dependencies]
+sqlx = { version = "0.8.2", features = ["runtime-async-std-native-tls", "postgres", "chrono", "uuid"] }
+
+[[bin]]
+name = "test"
+path = "src/bin/test.rs"

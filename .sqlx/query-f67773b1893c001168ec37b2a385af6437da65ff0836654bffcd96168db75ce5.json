@@ -1,0 +1,72 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT * FROM votes WHERE owner = $1 AND (left_item_id = $2 AND right_item_id = $3) OR (left_item_id = $3 AND right_item_id = $2)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "owner",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "domain_pk_namespace",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "left_item_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "right_item_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "magnitude",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "attribute",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 8,
+        "name": "edited_at",
+        "type_info": "Timestamp"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f67773b1893c001168ec37b2a385af6437da65ff0836654bffcd96168db75ce5"
+}
