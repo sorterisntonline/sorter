@@ -386,6 +386,7 @@ const TextInput = () => {
   const navigate = useNavigate();
   const { data: tagData } = useSWR("/api/tag", fetcher);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+  const [isValidInput, setIsValidInput] = useState(true);
 
   useEffect(() => {
     if (!tagData) return;
@@ -446,6 +447,7 @@ const TextInput = () => {
     
     try {
       const match = grammar.match(e.target.value);
+      setIsValidInput(match.succeeded());
       if (match.succeeded()) {
         const parsedData = semantics(match).toArray();
         
@@ -498,6 +500,7 @@ const TextInput = () => {
       }
     } catch (error) {
       console.error('Failed to parse CSV:', error);
+      setIsValidInput(false);
     }
   };
 
@@ -505,7 +508,11 @@ const TextInput = () => {
     <div className="flex flex-col items-center">
       <input
         type="text"
-        className="font-serif p-2 mt-4 text-lg w-[600px] border border-gray-300 focus:border-gray-500 focus:outline-none"
+        className={`font-serif p-2 mt-4 text-lg w-[600px] border focus:outline-none ${
+          isValidInput 
+            ? 'border-gray-300 focus:border-gray-500' 
+            : 'border-red-300 focus:border-red-500 bg-red-50'
+        }`}
         placeholder="#kendrick-lamar #songs @me"
         value={input}
         autoFocus
