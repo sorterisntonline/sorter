@@ -1,6 +1,5 @@
 # sorter
 clojure, rust, and react based pair-wise staunchly democratic social media application  
-by [`@thmorris`](https://github.com/thmorris)  
  
 > this repo: `forter`  
 > _frontend for sorter_  
@@ -14,11 +13,10 @@ by [`@thmorris`](https://github.com/thmorris)
 - (babashka) <sub>optional</sub>  
 - (Calva VSCode Extension)  
 
-2. clone `borter`, `forter`, and `rustsorter`
+2. clone sorter (this repo)
 ```sh
-$ git clone git@github.com:sorterisntonline/forter.git
-$ git clone git@github.com:sorterisntonline/borter.git
-$ git clone git@github.com:sorterisntonline/rustsorter.git
+$ git clone git@github.com:sorterisntonline/sorter.git
+$ cd sorter
 ```
 
 ## build
@@ -43,8 +41,13 @@ $ cd forter/
 $ npm install
 $ npm run dev
 ```
+4. (frontend) run node/frontend
+```sh
+$ cd clisorter/
+$ npm install
+$ npm run dev
+```
 
 5. visit `http://localhost:3000`  
 
 that is all!
-

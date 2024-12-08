@@ -3,11 +3,10 @@ use actix_web::{web, App, HttpServer};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    // open edn file with database string
     env_logger::init();
+    dotenv::dotenv().ok();
 
     let database_string = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    //println!("database string: {}", database_string);
 
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(5)
