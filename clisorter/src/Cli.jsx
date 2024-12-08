@@ -249,7 +249,7 @@ const HashtagItem = ({ value }) => {
       <div 
         className="bg-yellow-100 w-full h-[100px] p-2 rounded flex items-center justify-center cursor-pointer"
         onClick={() => {
-          const newInput = '!add "' + value + '" ';
+          const newInput = '!add(' + value + ')';
           setInput(newInput);
           parseInput(newInput);
         }}
@@ -430,18 +430,19 @@ const TextInput = () => {
   }, [tagData, searchParams, input, setInput, setCsvData, fetchResults]);
 
   const handleKeyDown = (e) => {
-    // Get current suggestions from HashtagItem components
-    const lastTag = input.split(' ').pop();
-    if (!lastTag?.startsWith('#') || !tagData) return;
-    
-    const suggestions = tagData.public
-      .filter(tag => tag.slug.startsWith(lastTag.slice(1)))
-      .map(tag => tag.slug);
-
-    if (suggestions.length === 0) return;
-
+    // Always prevent default behavior for Tab
     if (e.key === 'Tab') {
       e.preventDefault();
+      
+      // Get current suggestions from HashtagItem components
+      const lastTag = input.split(' ').pop();
+      if (!lastTag?.startsWith('#') || !tagData) return;
+      
+      const suggestions = tagData.public
+        .filter(tag => tag.slug.startsWith(lastTag.slice(1)))
+        .map(tag => tag.slug);
+
+      if (suggestions.length === 0) return;
       
       // Calculate next suggestion index
       const nextIndex = selectedSuggestionIndex === -1 ? 0 : 
