@@ -1,0 +1,27 @@
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+
+  overscroll-behavior-x: contain;
+  overflow-x: hidden;
+
+
+  @media screen and (max-width: 768px) {
+    padding-left: 0; /* Disable left padding */
+    padding-right: 0; /* Disable right padding */
+  }
+}
+
+.bigbutton {
+  border-style: solid;
+}
+
+.bigbutton:hover {
+  border-style: outset;
+}
+
+.bigbutton:active {
+  border-style: inset;
+}

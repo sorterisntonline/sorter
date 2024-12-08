@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 30px;
+    height: 30px;
+    background: purple;
+    cursor: pointer;
+    border-radius: 3%;
+}
+
+#root {
+    height: 100%;
+    overflow-x: visible;
+}
