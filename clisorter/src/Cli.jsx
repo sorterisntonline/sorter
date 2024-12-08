@@ -200,7 +200,7 @@ const grammarSource = String.raw`
     tag = "#" tagContent?
     mention = "@" tagContent
     command = "!" commandContent
-    itemCommand = "!" "item" space number
+    itemCommand = "!" "item" "(" number ")"
     tagContent = (alnum | "-" | "_")+
     commandContent = (alnum)+
     number = digit+
@@ -215,7 +215,7 @@ semantics.addOperation('toArray', {
   tag: (hash, content) => ({ type: 'hashtag', value: content.sourceString }),
   mention: (at, content) => ({ type: 'mention', value: content.sourceString }),
   command: (bang, content) => ({ type: 'action', value: content.sourceString }),
-  itemCommand: (bang, item, space, num) => ({ 
+  itemCommand: (bang, item, leftParen, num, rightParen) => ({ 
     type: 'action', 
     value: 'item', 
     itemId: num.sourceString 
@@ -282,12 +282,28 @@ const GrammarDisplay = () => {
   if (!csvData.length) return null;
   if (!results) return null;
 
-  // Find the item command if it exists
+  // Find the item and vote commands
   const itemCommand = activeCommands.find(cmd => cmd.command === 'item');
+  const voteCommand = activeCommands.find(cmd => cmd.command === 'vote');
+  const votesCommand = activeCommands.find(cmd => cmd.command === 'votes');
   const selectedItem = itemCommand ? results.items_by_id?.[itemCommand.itemId] : null;
 
   return (
     <div className="mt-4">
+      {/* Show VotePanel if vote command is active */}
+      {voteCommand && (
+        <div className="w-[800px] bg-purple-100 m-4">
+          <VotePanel mutate={fetchResults} />
+        </div>
+      )}
+
+      {/* Show VotesPanel if votes command is active */}
+      {votesCommand && (
+        <div className="w-[800px] bg-purple-100 m-4">
+          <VotesPanel votes={results.votes} mutate={fetchResults} />
+        </div>
+      )}
+
       {/* Show ItemPanel if item command is active and item exists */}
       {selectedItem && (
         <div className="w-[800px] bg-purple-100 m-4">
@@ -305,7 +321,7 @@ const GrammarDisplay = () => {
                 className="cursor-pointer text-left border-b border-dashed border-gray-200 dark:border-gray-800"
                 onClick={() => {
                   const { setInput, parseInput } = useStore.getState();
-                  const newInput = `!item ${item.id}`;
+                  const newInput = `!item(${item.id})`;
                   setInput(newInput);
                   parseInput(newInput);
                 }}
@@ -335,7 +351,7 @@ const GrammarDisplay = () => {
                 className="cursor-pointer text-left border-b border-dashed border-gray-200 dark:border-gray-800"
                 onClick={() => {
                   const { setInput, parseInput } = useStore.getState();
-                  const newInput = `!item ${item.id}`;
+                  const newInput = `!item(${item.id})`;
                   setInput(newInput);
                   parseInput(newInput);
                 }}
