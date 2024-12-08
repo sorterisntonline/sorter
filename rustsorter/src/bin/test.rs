@@ -67,9 +67,9 @@ pub fn main() {
                 let mut pair;
 
                 if name == "random baseline" {
-                    pair = algorithm(&vec![], &items, &vec![], &votes, None);
+                    pair = algorithm(&vec![], &items, &vec![], &votes, None, None);
                 } else {
-                    pair = algorithm(&sorted, &unsorted, &vec![], &votes, None);
+                    pair = algorithm(&sorted, &unsorted, &vec![], &votes, None, None);
                 }
 
                 let vote = vote_correctly_alphabet(&pair[0], &pair[1]);
