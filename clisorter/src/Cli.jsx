@@ -196,13 +196,15 @@ const TagCategories = () => {
 
 const grammarSource = String.raw`
   Input {
-    input = (tag | mention | command | itemCommand | space)*
+    input = (tag | mention | command | itemCommand | addCommand | space)*
     tag = "#" tagContent?
     mention = "@" tagContent
     command = "!" commandContent
     itemCommand = "!" "item" "(" number ")"
+    addCommand = "!" "add" "(" addContent ")"
     tagContent = (alnum | "-" | "_")+
     commandContent = (alnum)+
+    addContent = (alnum | " ")+
     number = digit+
   }
 `;
@@ -219,6 +221,11 @@ semantics.addOperation('toArray', {
     type: 'action', 
     value: 'item', 
     itemId: num.sourceString 
+  }),
+  addCommand: (bang, add, leftParen, content, rightParen) => ({ 
+    type: 'action', 
+    value: 'add', 
+    addValue: content.sourceString 
   }),
   tagContent: (chars) => chars.sourceString,
   commandContent: (chars) => chars.sourceString,
@@ -276,16 +283,18 @@ const GrammarDisplay = () => {
     .filter(item => item.type === 'action')
     .map(item => ({
       command: item.value,
-      itemId: item.itemId
+      itemId: item.itemId,
+      addValue: item.addValue
     }));
 
   if (!csvData.length) return null;
   if (!results) return null;
 
-  // Find the item and vote commands
+  // Find the item, vote, votes, and add commands
   const itemCommand = activeCommands.find(cmd => cmd.command === 'item');
   const voteCommand = activeCommands.find(cmd => cmd.command === 'vote');
   const votesCommand = activeCommands.find(cmd => cmd.command === 'votes');
+  const addCommand = activeCommands.find(cmd => cmd.command === 'add');
   const selectedItem = itemCommand ? results.items_by_id?.[itemCommand.itemId] : null;
 
   return (
@@ -308,6 +317,13 @@ const GrammarDisplay = () => {
       {selectedItem && (
         <div className="w-[800px] bg-purple-100 m-4">
           <ItemPanel item={selectedItem} mutate={fetchResults} />
+        </div>
+      )}
+
+      {/* Show AddPanel if add command is active */}
+      {addCommand && (
+        <div className="w-[800px] bg-green-100 m-4">
+          <AddPanel addValue={addCommand.addValue} mutate={fetchResults} />
         </div>
       )}
 
