@@ -120,30 +120,22 @@ export const useStore = create((set, get) => ({
   },
 }));
 
+// Utility function to update input and parse it
+const updateAndParseInput = (newInput, setInput, parseInput) => {
+  setInput(newInput);
+  parseInput(newInput);
+};
+
+// Utility function to handle tag and command clicks
+const handleClick = (input, setInput, parseInput, command) => {
+  if (!input.includes(command)) {
+    const newInput = input + (input.endsWith(' ') || input === '' ? '' : ' ') + command + ' ';
+    updateAndParseInput(newInput, setInput, parseInput);
+  }
+};
+
 const TagCategories = () => {
   const { input, setInput, parseInput } = useStore();
-
-  const handleTagClick = (tag) => {
-    const newInput = input + (input.endsWith(' ') || input === '' ? '' : ' ') + tag + ' ';
-    setInput(newInput);
-    parseInput(newInput);
-  };
-
-  const handleVoteClick = () => {
-    if (!input.includes('!vote')) {
-      const newInput = input + (input.endsWith(' ') || input === '' ? '' : ' ') + '!vote ';
-      setInput(newInput);
-      parseInput(newInput);
-    }
-  };
-
-  const handleVotesClick = () => {
-    if (!input.includes('!votes')) {
-      const newInput = input + (input.endsWith(' ') || input === '' ? '' : ' ') + '!votes ';
-      setInput(newInput);
-      parseInput(newInput);
-    }
-  };
 
   return (
     <>
@@ -151,41 +143,44 @@ const TagCategories = () => {
         {/* Hashtags Square */}
         <div className="w-[200px] h-[200px] bg-gray-200 p-4 flex flex-col">
           <div className="space-y-2">
-            <div 
-              onClick={() => handleTagClick('#songs')} 
-              className="font-serif text-lg text-left hover:underline cursor-pointer"
-            >#songs</div>
-            <div 
-              onClick={() => handleTagClick('#albums')} 
-              className="font-serif text-lg text-left hover:underline cursor-pointer"
-            >#albums</div>
-            <div 
-              onClick={() => handleTagClick('#artists')} 
-              className="font-serif text-lg text-left hover:underline cursor-pointer"
-            >#artists</div>
+            {['#songs', '#albums', '#artists'].map(tag => (
+              <div 
+                key={tag}
+                onClick={() => handleClick(input, setInput, parseInput, tag)}
+                className="font-serif text-lg text-left hover:underline cursor-pointer"
+              >
+                {tag}
+              </div>
+            ))}
           </div>
         </div>
 
         {/* Commands Square */}
         <div className="w-[200px] h-[200px] bg-purple-200 p-4 flex flex-col">
           <div className="space-y-2">
-            <div 
-              onClick={handleVoteClick}
-              className="font-serif text-lg text-left hover:underline cursor-pointer"
-            >!vote</div>
-            <div 
-              onClick={handleVotesClick}
-              className="font-serif text-lg text-left hover:underline cursor-pointer"
-            >!votes</div>
+            {['!vote', '!votes'].map(command => (
+              <div 
+                key={command}
+                onClick={() => handleClick(input, setInput, parseInput, command)}
+                className="font-serif text-lg text-left hover:underline cursor-pointer"
+              >
+                {command}
+              </div>
+            ))}
           </div>
         </div>
 
         {/* Mentions Square */}
         <div className="w-[200px] h-[200px] bg-purple-400 p-4 flex flex-col">
           <div className="space-y-2">
-            <div className="font-serif text-lg text-left hover:underline cursor-pointer">@me</div>
-            <div className="font-serif text-lg text-left hover:underline cursor-pointer">@you</div>
-            <div className="font-serif text-lg text-left hover:underline cursor-pointer">@all</div>
+            {['@me', '@you', '@all'].map(mention => (
+              <div 
+                key={mention}
+                className="font-serif text-lg text-left hover:underline cursor-pointer"
+              >
+                {mention}
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -386,7 +381,6 @@ const TextInput = () => {
   const navigate = useNavigate();
   const { data: tagData } = useSWR("/api/tag", fetcher);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
-  const [isValidInput, setIsValidInput] = useState(true);
 
   useEffect(() => {
     if (!tagData) return;
@@ -447,7 +441,6 @@ const TextInput = () => {
     
     try {
       const match = grammar.match(e.target.value);
-      setIsValidInput(match.succeeded());
       if (match.succeeded()) {
         const parsedData = semantics(match).toArray();
         
@@ -500,7 +493,6 @@ const TextInput = () => {
       }
     } catch (error) {
       console.error('Failed to parse CSV:', error);
-      setIsValidInput(false);
     }
   };
 
@@ -508,11 +500,7 @@ const TextInput = () => {
     <div className="flex flex-col items-center">
       <input
         type="text"
-        className={`font-serif p-2 mt-4 text-lg w-[600px] border focus:outline-none ${
-          isValidInput 
-            ? 'border-gray-300 focus:border-gray-500' 
-            : 'border-red-300 focus:border-red-500 bg-red-50'
-        }`}
+        className="font-serif p-2 mt-4 text-lg w-[600px] border border-gray-300 focus:border-gray-500 focus:outline-none"
         placeholder="#kendrick-lamar #songs @me"
         value={input}
         autoFocus
