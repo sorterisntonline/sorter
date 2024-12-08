@@ -313,7 +313,7 @@ const GrammarDisplay = () => {
 
       {/* Update the item click handlers to modify input */}
       {results.unsorted?.length > 0 && (
-        <div className="mb-4 w-[600px]">
+        <div className="mb-4 min-w-[600px]">
           <ol className="list-disc ml-4">
             {results.unsorted.map(item => (
               <li 
@@ -343,7 +343,7 @@ const GrammarDisplay = () => {
 
       {/* Same update for sorted items */}
       {results.sorted?.length > 0 && (
-        <div className="mb-4">
+        <div className="mb-4 min-w-[600px]">
           <ol className="list-decimal ml-4">
             {results.sorted.map(item => (
               <li 
@@ -443,12 +443,20 @@ const TextInput = () => {
 
   const handleChange = (e) => {
     setSelectedSuggestionIndex(-1);
-    setInput(e.target.value);
-    
+    const newValue = e.target.value;
+    setInput(newValue);
+
+    if (newValue.trim() === "") {
+      // Clear csvData and reset parseError when input is empty
+      setCsvData([]);
+      setParseError(false);
+      return;
+    }
+
     try {
-      const match = grammar.match(e.target.value);
+      const match = grammar.match(newValue);
       setParseError(!match.succeeded());
-      
+
       if (match.succeeded()) {
         const parsedData = semantics(match).toArray();
         
