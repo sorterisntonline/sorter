@@ -16,6 +16,7 @@ export const useStore = create((set, get) => ({
   pinned_left: null,
   pinned_right: null,
   items_by_id: {},
+  parseError: false,
   setInput: (input) => set({ input }),
   setCsvData: (csvData) => set({ csvData }),
   setResults: (results) => {
@@ -59,7 +60,12 @@ export const useStore = create((set, get) => ({
   parseInput: (value) => {
     try {
       const match = grammar.match(value);
-      if (match.succeeded()) {
+      const parseSucceeded = match.succeeded();
+      
+      // Set parse error state
+      set({ parseError: !parseSucceeded });
+
+      if (parseSucceeded) {
         const parsedData = semantics(match).toArray();
         
         // Get current store state
@@ -116,6 +122,7 @@ export const useStore = create((set, get) => ({
       }
     } catch (error) {
       console.error('Failed to parse input:', error);
+      set({ parseError: true });
     }
   },
 }));
@@ -196,10 +203,9 @@ const TagCategories = () => {
 
 const grammarSource = String.raw`
   Input {
-    input = (tag | mention | command | itemCommand | addCommand | space)*
+    input = (tag | mention | itemCommand | addCommand | space)*
     tag = "#" tagContent?
     mention = "@" tagContent
-    command = "!" commandContent
     itemCommand = "!" "item" "(" number ")"
     addCommand = "!" "add" "(" addContent ")"
     tagContent = (alnum | "-" | "_")+
@@ -216,7 +222,6 @@ semantics.addOperation('toArray', {
   input: (elements) => elements.children.map(e => e.toArray()).filter(e => e !== null),
   tag: (hash, content) => ({ type: 'hashtag', value: content.sourceString }),
   mention: (at, content) => ({ type: 'mention', value: content.sourceString }),
-  command: (bang, content) => ({ type: 'action', value: content.sourceString }),
   itemCommand: (bang, item, leftParen, num, rightParen) => ({ 
     type: 'action', 
     value: 'item', 
@@ -430,19 +435,18 @@ const TextInput = () => {
   }, [tagData, searchParams, input, setInput, setCsvData, fetchResults]);
 
   const handleKeyDown = (e) => {
-    // Always prevent default behavior for Tab
+    // Get current suggestions from HashtagItem components
+    const lastTag = input.split(' ').pop();
+    if (!lastTag?.startsWith('#') || !tagData) return;
+    
+    const suggestions = tagData.public
+      .filter(tag => tag.slug.startsWith(lastTag.slice(1)))
+      .map(tag => tag.slug);
+
+    if (suggestions.length === 0) return;
+
     if (e.key === 'Tab') {
       e.preventDefault();
-      
-      // Get current suggestions from HashtagItem components
-      const lastTag = input.split(' ').pop();
-      if (!lastTag?.startsWith('#') || !tagData) return;
-      
-      const suggestions = tagData.public
-        .filter(tag => tag.slug.startsWith(lastTag.slice(1)))
-        .map(tag => tag.slug);
-
-      if (suggestions.length === 0) return;
       
       // Calculate next suggestion index
       const nextIndex = selectedSuggestionIndex === -1 ? 0 : 
