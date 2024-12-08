@@ -412,6 +412,8 @@ const TextInput = () => {
     const actions = searchParams.get('a')?.split('.').map(action => '!' + action) || [];
     
     const initialInput = [...tags, ...mentions, ...actions].join(' ');
+
+    // Only set initial input if it's not already set
     if (initialInput && !input) {
       setInput(initialInput);
       const match = grammar.match(initialInput);
@@ -462,18 +464,20 @@ const TextInput = () => {
     const newValue = e.target.value;
     setInput(newValue);
 
+    // If the input is empty, clear csvData, reset parseError, and update URL
     if (newValue.trim() === "") {
-      // Clear csvData and reset parseError when input is empty
       setCsvData([]);
       setParseError(false);
+      setSearchParams(new URLSearchParams()); // Clear URL parameters
       return;
     }
 
     try {
       const match = grammar.match(newValue);
-      setParseError(!match.succeeded());
+      const parseSucceeded = match.succeeded();
+      setParseError(!parseSucceeded);
 
-      if (match.succeeded()) {
+      if (parseSucceeded) {
         const parsedData = semantics(match).toArray();
         
         // Compare with previous csvData to see if anything meaningful changed
@@ -502,13 +506,10 @@ const TextInput = () => {
             .join('.');
 
           // Create new search params
-          const newParams = new URLSearchParams(searchParams);
+          const newParams = new URLSearchParams();
           if (tags.length) newParams.set('t', tags);
-          else newParams.delete('t');
           if (mentions.length) newParams.set('u', mentions);
-          else newParams.delete('u');
           if (actions.length) newParams.set('a', actions);
-          else newParams.delete('a');
 
           setSearchParams(newParams);
           
@@ -522,10 +523,15 @@ const TextInput = () => {
             }
           }
         }
+      } else {
+        // Clear URL parameters if parsing fails
+        setSearchParams(new URLSearchParams());
       }
     } catch (error) {
       console.error('Failed to parse CSV:', error);
       setParseError(true);
+      // Clear URL parameters on error
+      setSearchParams(new URLSearchParams());
     }
   };
 
