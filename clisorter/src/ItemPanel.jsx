@@ -153,7 +153,7 @@ import { Tweet } from "react-twitter-widgets";
 
 const fetcher = (arg) => fetch(arg).then((res) => res.json());
 export const ItemPanel = ({ item }) => {
-  const { setPinnedLeft, setPinnedRight } = useStore();
+  console.log('item3', item);
 
   const { data, error, isLoading, mutate } = useSWR(
     "/api/item/membership?item_id=" + (item["id"] ?? -1),
@@ -197,31 +197,10 @@ export const ItemPanel = ({ item }) => {
 
   const showMoreActions = skips?.length > 0 || isOwnedByUser;
 
-  const showPinnedLeft = () => {
-    setPinnedLeft(item);
-  };
-
-  const showPinnedRight = () => {
-    setPinnedRight(item);
-  };
-
   return (
     <div className="">
-      <div className="flex justify-between mb-4">
-        <button 
-          onClick={showPinnedLeft} 
-          className="border-2 bigbutton"
-        >
-          📍 Left Pin
-        </button>
-        <button 
-          onClick={showPinnedRight}
-          className="border-2 bigbutton"
-        >
-          📍 Right Pin
-        </button>
-      </div>
       <br />
+      {notEditing}
       <table>
         <tbody className="text-left">
           {showMoreActions &&

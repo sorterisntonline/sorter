@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { VotePanel } from "./VotePanel";
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { VotesPanel } from './VotesPanel';
+import { ItemPanel } from './ItemPanel';
 
 // TODO make /item command pop up when you click on an item
 
@@ -13,8 +14,6 @@ export const useStore = create((set, get) => ({
   csvData: [],
   results: null,
   magnitude: 50,
-  pinned_left: null,
-  pinned_right: null,
   items_by_id: {},
   parseError: false,
   setInput: (input) => set({ input }),
@@ -203,15 +202,14 @@ const TagCategories = () => {
 
 const grammarSource = String.raw`
   Input {
-    input = (tag | mention | itemCommand | addCommand | space)*
+    input = (tag | mention | command | space)*
     tag = "#" tagContent?
     mention = "@" tagContent
-    itemCommand = "!" "item" "(" number ")"
-    addCommand = "!" "add" "(" addContent ")"
+    command = "!" commandName argList?
+    commandName = (alnum)+
+    argList = "(" argContent ")"
+    argContent = (alnum | " ")+
     tagContent = (alnum | "-" | "_")+
-    commandContent = (alnum)+
-    addContent = (alnum | " ")+
-    number = digit+
   }
 `;
 
@@ -222,21 +220,21 @@ semantics.addOperation('toArray', {
   input: (elements) => elements.children.map(e => e.toArray()).filter(e => e !== null),
   tag: (hash, content) => ({ type: 'hashtag', value: content.sourceString }),
   mention: (at, content) => ({ type: 'mention', value: content.sourceString }),
-  itemCommand: (bang, item, leftParen, num, rightParen) => ({ 
-    type: 'action', 
-    value: 'item', 
-    itemId: num.sourceString 
-  }),
-  addCommand: (bang, add, leftParen, content, rightParen) => ({ 
-    type: 'action', 
-    value: 'add', 
-    addValue: content.sourceString 
-  }),
+  command: (bang, name, args) => {
+    const argArray = args.children.length ? args.toArray() : [];
+    const [itemId, addValue] = argArray.length ? argArray : [undefined, undefined];
+    return {
+      type: 'action',
+      value: name.sourceString,
+      itemId: itemId ? itemId.trim() : undefined,
+      addValue: addValue ? addValue.trim() : undefined
+    };
+  },
+  argList: (leftParen, content, rightParen) => content.sourceString,
   tagContent: (chars) => chars.sourceString,
-  commandContent: (chars) => chars.sourceString,
   space: (_) => null,
   _terminal: () => null,
-  number: (digits) => digits.sourceString,
+  _iter: (...children) => children.map(c => c.toArray()),
 });
 
 const fetcher = (url) => fetch(url).then(res => res.json());
@@ -280,8 +278,38 @@ const MentionItem = ({ value }) => (
   </span>
 );
 
+const ItemList = ({ items, onItemClick, isSorted }) => (
+  <div className="mb-4 min-w-[600px]">
+    <ol className={isSorted ? "list-decimal ml-4" : "list-disc ml-4"}>
+      {items.map(item => (
+        <li 
+          key={item.id} 
+          className="cursor-pointer text-left border-b border-dashed border-gray-200 dark:border-gray-800"
+          onClick={() => onItemClick(item.id)}
+          style={isSorted ? { backgroundColor: `rgba(255, 0, 0, ${item.elo ? item.elo / 8.0 : 0})` } : {}}
+        >
+          <div className="flex justify-between">
+            <div>
+              {isSorted && item.elo !== undefined && (
+                <span className="px-4">{Math.round(item.elo * 100) / 100}</span>
+              )}
+              {item.title}
+            </div>
+            {item.vote_count && (
+              <div className="text-gray-500">
+                {item.num_comments > 0 && `${item.num_comments} comments `}
+                {item.vote_count} votes
+              </div>
+            )}
+          </div>
+        </li>
+      ))}
+    </ol>
+  </div>
+);
+
 const GrammarDisplay = () => {
-  const { csvData, results, fetchResults } = useStore();
+  const { csvData, results, fetchResults, items_by_id } = useStore();
 
   // Get active commands and their parameters from csvData
   const activeCommands = csvData
@@ -300,7 +328,19 @@ const GrammarDisplay = () => {
   const voteCommand = activeCommands.find(cmd => cmd.command === 'vote');
   const votesCommand = activeCommands.find(cmd => cmd.command === 'votes');
   const addCommand = activeCommands.find(cmd => cmd.command === 'add');
-  const selectedItem = itemCommand ? results.items_by_id?.[itemCommand.itemId] : null;
+  console.log('activeCommands', activeCommands);
+  const selectedItem = itemCommand ? items_by_id?.[parseInt(itemCommand.itemId)] : null;
+
+  console.log('selectedItem', selectedItem);
+  console.log('items_by_id', items_by_id);
+  console.log('itemCommand', itemCommand);
+
+  const handleItemClick = (itemId) => {
+    const { setInput, parseInput } = useStore.getState();
+    const newInput = `!item(${itemId})`;
+    setInput(newInput);
+    parseInput(newInput);
+  };
 
   return (
     <div className="mt-4">
@@ -320,7 +360,7 @@ const GrammarDisplay = () => {
 
       {/* Show ItemPanel if item command is active and item exists */}
       {selectedItem && (
-        <div className="w-[800px] bg-purple-100 m-4">
+        <div className="w-[800px] bg-red-100 m-4">
           <ItemPanel item={selectedItem} mutate={fetchResults} />
         </div>
       )}
@@ -332,70 +372,14 @@ const GrammarDisplay = () => {
         </div>
       )}
 
-      {/* Update the item click handlers to modify input */}
+      {/* Render unsorted items */}
       {results.unsorted?.length > 0 && (
-        <div className="mb-4 min-w-[600px]">
-          <ol className="list-disc ml-4">
-            {results.unsorted.map(item => (
-              <li 
-                key={item.id} 
-                className="cursor-pointer text-left border-b border-dashed border-gray-200 dark:border-gray-800"
-                onClick={() => {
-                  const { setInput, parseInput } = useStore.getState();
-                  const newInput = `!item(${item.id})`;
-                  setInput(newInput);
-                  parseInput(newInput);
-                }}
-              >
-                <div className="flex justify-between">
-                  <div>{item.title}</div>
-                  {item.vote_count && (
-                    <div className="text-gray-500">
-                      {item.num_comments > 0 && `${item.num_comments} comments `}
-                      {item.vote_count} votes
-                    </div>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ol>
-        </div>
+        <ItemList items={results.unsorted} onItemClick={handleItemClick} isSorted={false} />
       )}
 
-      {/* Same update for sorted items */}
+      {/* Render sorted items */}
       {results.sorted?.length > 0 && (
-        <div className="mb-4 min-w-[600px]">
-          <ol className="list-decimal ml-4">
-            {results.sorted.map(item => (
-              <li 
-                key={item.id} 
-                className="cursor-pointer text-left border-b border-dashed border-gray-200 dark:border-gray-800"
-                onClick={() => {
-                  const { setInput, parseInput } = useStore.getState();
-                  const newInput = `!item(${item.id})`;
-                  setInput(newInput);
-                  parseInput(newInput);
-                }}
-                style={{ backgroundColor: `rgba(255, 0, 0, ${item.elo ? item.elo / 8.0 : 0})` }}
-              >
-                <div className="flex justify-between">
-                  <div>
-                    {item.elo !== undefined && (
-                      <span className="px-4">{Math.round(item.elo * 100) / 100}</span>
-                    )}
-                    {item.title}
-                  </div>
-                  {item.vote_count && (
-                    <div className="text-gray-500">
-                      {item.num_comments > 0 && `${item.num_comments} comments `}
-                      {item.vote_count} votes
-                    </div>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ol>
-        </div>
+        <ItemList items={results.sorted} onItemClick={handleItemClick} isSorted={true} />
       )}
     </div>
   );
