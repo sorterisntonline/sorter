@@ -23,6 +23,8 @@ slug = "0.1.5"
 rand = "0.8.5"
 elo = "0.3.0"
 rayon = "1.9.0"
+serenity = "0.12"
+tokio = { version = "1.21.2", features = ["macros", "rt-multi-thread"] }
 
 [dev-dependencies]
 sqlx = { version = "0.8.2", features = ["runtime-async-std-native-tls", "postgres", "chrono", "uuid"] }

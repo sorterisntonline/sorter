@@ -1,5 +1,9 @@
 use actix_web::middleware::Logger;
 use actix_web::{web, App, HttpServer};
+use tokio::sync::oneshot; //For clean shutdown
+use std::sync::Arc;
+use rustsorter::discord_bot;
+use rustsorter::AppState;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -14,7 +18,17 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Unable to connect to database");
 
-    HttpServer::new(move || {
+    let app_state = Arc::new(AppState { db: pool.clone() });
+
+    let (tx, rx) = oneshot::channel(); //for graceful shutdown
+    let state_clone = Arc::clone(&app_state);
+    let discord_handle = tokio::spawn(async move {
+        let result = discord_bot::run(state_clone, rx).await;
+        //Handle errors from discord_bot.run (if any)
+        result;
+    });
+
+    let server = HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(rustsorter::AppState { db: pool.clone() }))
             .service(rustsorter::tag::hello)
@@ -24,6 +38,12 @@ async fn main() -> std::io::Result<()> {
             .wrap(Logger::default())
     })
     .bind(("127.0.0.1", 8081))?
-    .run()
-    .await
+    .run();
+
+    let _ = server.await;
+    let _ = tx.send(());
+
+    discord_handle.await.expect("Discord bot failed to start");
+
+    Ok(())
 }
