@@ -9,6 +9,8 @@ use serenity::model::channel::{Channel, GuildChannel};
 use serenity::model::id::ChannelId;
 use std::collections::HashSet;
 use tokio::sync::RwLock;
+use serenity::model::channel::Reaction;
+use serenity::all::ReactionType;
 
 struct Handler {
     sorted_channels: Arc<RwLock<HashSet<ChannelId>>>,
@@ -64,17 +66,20 @@ impl EventHandler for Handler {
         if msg.author.bot {
             return;
         }
+        println!("Message received: {:?}", msg);
+    }
 
-        if self.is_sorted_channel(msg.channel_id, &ctx).await {
-            println!("Message received in sorter category!");
-            if let Err(why) = msg.channel_id.say(&ctx.http, "Message received in sorter category!").await {
-                println!("Error sending message: {why:?}");
-            }
-        }
-
-        if msg.content == "!ping" {
-            if let Err(why) = msg.channel_id.say(&ctx.http, "Pong!").await {
-                println!("Error sending message: {why:?}");
+    async fn reaction_add(&self, ctx: Context, reaction: Reaction) {
+        // Get the channel ID from the reaction
+        if self.is_sorted_channel(reaction.channel_id, &ctx).await {
+            for emoji_name in ["🥇", "🥈", "🥉"].iter() {
+                if let Err(e) = ctx.http.create_reaction(
+                    reaction.channel_id,
+                    reaction.message_id,
+                    &ReactionType::Unicode(emoji_name.to_string())
+                ).await {
+                    println!("Failed to add reaction {}: {}", emoji_name, e);
+                }
             }
         }
     }
@@ -87,7 +92,8 @@ pub async fn run(state: Arc<AppState>, mut rx: oneshot::Receiver<()>) -> Result<
     let intents = GatewayIntents::GUILD_MESSAGES
     | GatewayIntents::DIRECT_MESSAGES
     | GatewayIntents::MESSAGE_CONTENT
-    | GatewayIntents::GUILDS;
+    | GatewayIntents::GUILDS
+    | GatewayIntents::GUILD_MESSAGE_REACTIONS;
 
     //Use state.db to access your database connection within commands
     let mut client = Client::builder(&token, intents)
