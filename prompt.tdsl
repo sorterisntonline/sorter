@@ -1,0 +1,55 @@
+Sorter is an ambitious project that starts with a novel approach to ranking - using scalar pairwise comparisons (0-100 preference strength) that empirically converges faster than traditional binary comparisons. While it begins with ranking music and game highlights, it aims to become infrastructure for collective intelligence and decision-making.
+Core Technical Features:
+* Scalar pairwise voting system (more nuanced than binary)
+   * 0-100 preference strength
+   * Empirical convergence faster than binary (sorts the alphabet in only 26 votes)
+* Global tags with local context (same #music tag across platforms)
+* Flexible content deduplication using domain_pk system
+* Tag hierarchy determined by community voting
+Initial Implementation:
+* Discord bot for easy adoption
+* Uses Discord categories and reaction system
+* Paired channels for content and voting
+* Natural interface using built-in emojis
+* Starting with game highlights and music ranking
+Broader Vision:
+* Build consensus on increasingly complex topics
+* Create infrastructure for collective intelligence
+* Enable nuanced preference aggregation
+* Bridge between human and AI decision-making
+* Potentially reshape how communities make decisions
+* Could evolve into new forms of social organization
+The project is fascinating because it starts with something simple and concrete (ranking content in Discord) but has the potential to evolve into infrastructure for coordinating human preferences and knowledge at scale. The technical innovations (like scalar voting) combined with careful UX design could enable new forms of collective decision-making.
+
+
+Here's a summary of the key design decisions for the Discord bot v1:
+Core Structure:
+
+Use Discord categories named "Sorter" to organize ranking channels
+Paired channels for content and votes (e.g., #music + #music-votes)
+Bot automatically monitors all channels in Sorter categories
+
+Content Management:
+
+Any reaction on a message in content channel adds it to ranking pool
+Messages without reactions stay as normal discussion
+Items deduplicated by domain_pk (e.g., Spotify track ID)
+Items_in_tags table tracks Discord server/channel context
+
+Voting Interface:
+
+two messages in the votes channel shows both items being compared
+Use built-in emojis (probably 🥇🥈🥉) for preference strength
+First message message has 🥇🥈🥉 reacts, the other has 🥉🥈🥇
+Voting happens in the votes channel
+Bot removes old reactions to prevent multiple votes
+Shows vote announcements in channel
+
+Future Features (v1.1+):
+
+Spotify album/playlist importing
+Personal rankings based on reactions as "have experienced" markers
+Global tag connections
+Cross-server features
+
+this is summary of a discussion i've already had with you, about a project im working on. what do you think?

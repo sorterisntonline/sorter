@@ -103,6 +103,7 @@
                          (h/join :usergroups [:= :user_name :usergroup_id])))))
 (comment
   (exec! "select * from users")
+  (exec! "select * from tags")
   (exec! "select count(*) from items")
   (exec! "select count(*) from votes")
   (frequencies (map :items/domain_pk_namespace (exec! {:select [:domain_pk_namespace] :from :items}))))

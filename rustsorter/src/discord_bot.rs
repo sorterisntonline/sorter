@@ -11,22 +11,59 @@ use std::collections::HashSet;
 use tokio::sync::RwLock;
 use serenity::model::channel::Reaction;
 use serenity::all::ReactionType;
+use std::collections::HashMap;
 
 struct Handler {
     sorted_channels: Arc<RwLock<HashSet<ChannelId>>>,
     unsorted_channels: Arc<RwLock<HashSet<ChannelId>>>,
+    channel_tag_ids: Arc<RwLock<HashMap<ChannelId, i32>>>,
+    app_state: Arc<AppState>,
 }
 
 impl Handler {
-    fn new() -> Self {
+    fn new(app_state: Arc<AppState>) -> Self {
         Handler {
             sorted_channels: Arc::new(RwLock::new(HashSet::new())),
             unsorted_channels: Arc::new(RwLock::new(HashSet::new())),
+            channel_tag_ids: Arc::new(RwLock::new(HashMap::new())),
+            app_state,
+        }
+    }
+
+    async fn get_or_create_tag(&self, channel_name: &str) -> Option<i32> {
+        let slug = channel_name.to_lowercase();
+        println!("slug: {}", slug);
+        
+        // Try to find existing tag
+        let existing_tag = sqlx::query!(
+            "SELECT id FROM tags WHERE slug = $1",
+            slug
+        )
+        .fetch_optional(&self.app_state.db)
+        .await
+        .ok()?;
+
+        if let Some(tag) = existing_tag {
+            return Some(tag.id);
+        }
+
+        // Create new tag with permissions if it doesn't exist
+        match create_tag_with_permissions(
+            &self.app_state.db,
+            "discord",
+            channel_name,
+            &slug,
+            Some("Discord channel"),
+            Some("discord.channel"),
+            None
+        ).await {
+            Ok(tag_id) => Some(tag_id),
+            Err(_) => None
         }
     }
 
     async fn is_sorted_channel(&self, channel_id: ChannelId, ctx: &Context) -> bool {
-        // Check cache first
+        // Check sorted/unsorted cache first
         if self.sorted_channels.read().await.contains(&channel_id) {
             return true;
         }
@@ -34,12 +71,25 @@ impl Handler {
             return false;
         }
 
-        // If not in cache, perform lookup
+        // Check if channel is in a "sorter" category
         let is_sorted = match channel_id.to_channel(ctx).await {
             Ok(Channel::Guild(guild_channel)) => {
                 if let Some(category_id) = guild_channel.parent_id {
                     match category_id.to_channel(ctx).await {
-                        Ok(Channel::Guild(category)) => category.name.to_lowercase() == "sorter",
+                        Ok(Channel::Guild(category)) => {
+                            if category.name.to_lowercase() == "sorter" {
+                                // Get or create tag for this channel
+                                if let Some(tag_id) = self.get_or_create_tag(&guild_channel.name).await {
+                                    // Cache the tag ID
+                                    self.channel_tag_ids.write().await.insert(channel_id, tag_id);
+                                    true
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            }
+                        }
                         _ => false,
                     }
                 } else {
@@ -58,6 +108,53 @@ impl Handler {
 
         is_sorted
     }
+
+    async fn get_tag_id(&self, channel_id: ChannelId) -> Option<i32> {
+        self.channel_tag_ids.read().await.get(&channel_id).copied()
+    }
+}
+
+async fn create_tag_with_permissions(
+    db: &sqlx::PgPool,
+    owner: &str,
+    title: &str,
+    slug: &str,
+    description: Option<&str>,
+    domain_pk_namespace: Option<&str>,
+    domain_pk: Option<&str>,
+) -> Result<i32, sqlx::Error> {
+    // Create the tag
+    let tag = sqlx::query!(
+        "INSERT INTO tags (owner, title, slug, description, domain_pk_namespace, domain_pk, created_at, edited_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
+         RETURNING id",
+        owner,
+        title,
+        slug,
+        description,
+        domain_pk_namespace,
+        domain_pk
+    )
+    .fetch_one(db)
+    .await?;
+
+    // Insert default permissions
+    for perm in vec![
+        ("view", "all"),
+        ("vote", "all"),
+        ("add", "none"),
+    ] {
+        sqlx::query!(
+            "INSERT INTO perms (tag_id, capability, user_id) VALUES ($1, $2, $3)",
+            tag.id,
+            perm.0,
+            perm.1,
+        )
+        .execute(db)
+        .await?;
+    }
+
+    Ok(tag.id)
 }
 
 #[async_trait]
@@ -66,27 +163,35 @@ impl EventHandler for Handler {
         if msg.author.bot {
             return;
         }
-        println!("Message received: {:?}", msg);
     }
 
     async fn reaction_add(&self, ctx: Context, reaction: Reaction) {
-        // Get the channel ID from the reaction
         if self.is_sorted_channel(reaction.channel_id, &ctx).await {
-            for emoji_name in ["🥇", "🥈", "🥉"].iter() {
-                if let Err(e) = ctx.http.create_reaction(
-                    reaction.channel_id,
-                    reaction.message_id,
-                    &ReactionType::Unicode(emoji_name.to_string())
-                ).await {
-                    println!("Failed to add reaction {}: {}", emoji_name, e);
+            // Get the message that was reacted to
+            if let Ok(message) = reaction.message(&ctx).await {
+                // Query the database similar to tag.rs
+                let tag_id = self.get_tag_id(reaction.channel_id).await;
+                if let Some(tag_id) = tag_id {
+                    println!("Tag ID: {}", tag_id);
                 }
             }
         }
     }
 }
 
-pub async fn run(state: Arc<AppState>, mut rx: oneshot::Receiver<()>) -> Result<(), Box<dyn std::error::Error>>{
-    // ... (Your Serenity bot setup code from before) ...
+pub async fn run(state: Arc<AppState>, rx: oneshot::Receiver<()>) -> Result<(), Box<dyn std::error::Error>>{
+    // Create discord user if it doesn't exist
+    let result = sqlx::query!(
+        "INSERT INTO users (user_name, created_at) 
+         VALUES ($1, CURRENT_TIMESTAMP) 
+         ON CONFLICT (user_name) DO NOTHING",
+        "discord"
+    )
+    .execute(&state.db)
+    .await;
+
+    println!("result: {:?}", result);
+
     let token = std::env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
 
     let intents = GatewayIntents::GUILD_MESSAGES
@@ -97,7 +202,7 @@ pub async fn run(state: Arc<AppState>, mut rx: oneshot::Receiver<()>) -> Result<
 
     //Use state.db to access your database connection within commands
     let mut client = Client::builder(&token, intents)
-        .event_handler(Handler::new())
+        .event_handler(Handler::new(state))
         .await.expect("Failed to create client");
 
     tokio::select! {
