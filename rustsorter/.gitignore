@@ -2,3 +2,4 @@
 static/
 static/index.html
 data.txt
+.env
