@@ -111,7 +111,7 @@
   (exec! {:delete-from :items_in_tags :where [:= :item_id itemid]}))
 
 (comment
-  (migratus/create migratus-config "text-username")
+  (migratus/create migratus-config "discord-item-membership")
   (migratus/rollback migratus-config)
   (run-migrations))
 
