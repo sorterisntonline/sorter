@@ -1,8 +1,7 @@
 # sorter
 clojure, rust, and react based pair-wise staunchly democratic social media application  
- 
-> this repo: `forter`  
-> _frontend for sorter_  
+
+![sorter frontend screenshot](frontend_1.png)
 
 ## install
 1. install prereqs
@@ -41,13 +40,13 @@ $ cd forter/
 $ npm install
 $ npm run dev
 ```
-4. (frontend) run node/frontend
+5. (frontend/chat) run chat node/frontend
 ```sh
 $ cd clisorter/
 $ npm install
 $ npm run dev
 ```
 
-5. visit `http://localhost:3000`  
+6. visit `http://localhost:3000`  
 
 that is all!
