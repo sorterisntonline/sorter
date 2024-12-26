@@ -2,7 +2,8 @@ import { makeRequest } from "./Network";
 import { tag, magnitude } from "./App";
 import { ItemFull } from "./ItemPanel";
 import { current_session } from "./LoginForm";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import WarningPopup from "./WarningPopup";
 
 const calculateMargin = (magnitude) => {
   if (magnitude < 50) {
@@ -12,8 +13,11 @@ const calculateMargin = (magnitude) => {
   }
 };
 
-export const VotePanel = () => {
-  if (tag.value.pair == undefined)
+export const VotePanel = ({ handleError }) => {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  if (tag.value.pair === undefined)
     return (
       <div key="3" className="text-xl">
         no pair
@@ -86,20 +90,25 @@ export const VotePanel = () => {
       <button
         className="bigbutton border-8 w-full h-12 border-yellow-500"
         onClick={async () => {
-          await makeRequest("POST", "/api/vote", {
-            "left_item_id": left["id"],
-            "right_item_id": right["id"],
-            "magnitude": magnitude.value,
-            "attribute": tag.value.selected_attribute, // if id = -1, make new attribute
-            "tag_id": tag.value.tag["id"], // for permission check only
+          try {
+            await makeRequest("POST", "/api/vote", {
+              "left_item_id": left["id"],
+              "right_item_id": right["id"],
+              "magnitude": magnitude.value,
+              "attribute": tag.value.selected_attribute,
+              "tag_id": tag.value.tag["id"],
+            });
 
-          });
-
-          magnitude.value = 50;
+            magnitude.value = 50;
+          } catch (error) {
+            console.log("Error caught in VotePanel:", error); // Debugging: Log the error
+            handleError(error); // Use the passed handleError function
+          }
         }}
       >
         vote
       </button>
+      {/* WarningPopup is now managed by App.jsx */}
     </div>
   );
 };

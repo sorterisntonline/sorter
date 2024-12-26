@@ -58,22 +58,27 @@ export const loadTag = async (id) => {
   }
 };
 
-export const makeRequest = async (method, url, data) => {
+export const makeRequest = async (method, url, body = null) => {
+  const options = {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include', // Include cookies if needed
+  };
 
-  try {
-    const r = await fetch(url, {
-      method: method,
-
-      cors: "no-cors",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-    if (!r.ok) {
-      throw await r.json();
-    }
-    await loadTag();
-  } catch (e) {
-    errors.value = [e, ...errors.value];
+  if (body) {
+    options.body = JSON.stringify(body);
   }
+
+  const response = await fetch(url, options);
+
+  // Check if the response is not ok (status outside 200-299)
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const error = new Error(errorData.message || 'An error occurred');
+    error.status = response.status;
+    throw error;
+  }
+
+  // Assuming the response is JSON
+  return response.json();
 };

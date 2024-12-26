@@ -61,7 +61,7 @@ const UserPanel = ({ onChange, value, users }) => {
   );
 };
 
-export const TagPrefrences = ({ onSubmit }) => {
+export const TagPreferences = ({ onSubmit }) => {
   const [_, setLocation] = useLocation();
   const [perms, setPerms] = useState([]);
   const [newPerm, setNewPerm] = useState({});

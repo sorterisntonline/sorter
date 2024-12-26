@@ -17,6 +17,8 @@ const TagForm = ({ mutate }) => {
   const [namespace, setNamespace] = useState("");
   const [titleError, setTitleError] = useState(false);
   const [location, navigate] = useLocation();
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -37,7 +39,12 @@ const TagForm = ({ mutate }) => {
     });
     if (!response.ok) {
       const msg = await response.text();
-      alert(msg);
+      if (response.status === 401) {  // unauthorized
+        setErrorMessage(msg);
+        setIsModalOpen(true);
+      } else {
+        alert(msg);
+      }
     } else {
       setTitle("");
       setDescription("");

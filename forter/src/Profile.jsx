@@ -76,26 +76,41 @@ export const Profile = () => {
 
     const [newGroupName, setNewGroupName] = useState("")
     const selected_users = useSignal([]);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [errorMessage, setErrorMessage] = useState('');
 
     if (isLoading || isLoading1 || isLoading2) return <h1>loading...</h1>;
     if (error || error1 || error2) return <h1>error</h1>;
 
     const save = async () => {
         if (newGroupName === "") {
-            alert('no group name')
-            return
+            alert('no group name');
+            return;
         }
-        const r = await fetch("/api/user_group", {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ group_name: newGroupName, users: selected_users.value.map(u => u.value) }),
-        });
-        if (!r.ok) {
-            alert(await r.text())
+        try {
+            const r = await fetch("/api/user_group", {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ group_name: newGroupName, users: selected_users.value.map(u => u.value) }),
+            });
+            if (!r.ok) {
+                const msg = await r.text();
+                if (r.status === 401) {  // unauthorized
+                    setErrorMessage(msg);
+                    setIsModalOpen(true);
+                } else {
+                    alert(msg);
+                }
+            }
+            mutate1();
+            mutate2();
+        } catch (error) {
+            if (error.status === 401) {  // unauthorized
+                setErrorMessage(error.message);
+                setIsModalOpen(true);
+            }
         }
-        mutate1();
-        mutate2();
     }
 
     return <div className="dark:text-white h-full">

@@ -10,6 +10,7 @@ import { VotePanel } from "./VotePanel";
 import { ItemPanel, editing_item, pinned_left, pinned_right } from "./ItemPanel";
 import { loadTag } from "./Network";
 import { Modal } from "./Modal";
+import WarningPopup from './WarningPopup';
 
 export const useElo = signal(false);
 export const tag = signal(false);
@@ -144,7 +145,7 @@ export const Item = ({ item }) => {
 };
 
 import { useLocation, useParams } from "wouter";
-import { TagPrefrences } from "./TagPreferences";
+import { TagPreferences } from "./TagPreferences";
 import { IntegrationsPanel } from "./integrations/IntegrationsPanel";
 import { AttributePanel, selected_attribute } from "./AttributePanel";
 import { namespace } from "./main";
@@ -170,7 +171,7 @@ const TextSummary = ({ can_vote, can_add }) => {
           #{tag.value.tag.ns}{tag.value.tag.ns ? '/' : ''}{tag.value.tag.slug}
         </div>
         <Modal isOpen={isViewingTag} onClose={() => setIsViewingTag(false)}>
-          <TagPrefrences onSubmit={() => setIsViewingTag(false)} />
+          <TagPreferences onSubmit={() => setIsViewingTag(false)} />
         </Modal>
         <div className="px-2">by</div>
         <AttributePanel />
@@ -213,7 +214,7 @@ const TextSummary = ({ can_vote, can_add }) => {
 export const toggle = signal(true);
 export const showPin = signal(false);
 
-export const Tag = ({ showVote, isVoting }) => {
+export const Tag = ({ showVote, isVoting, handleError }) => {
   const sorteditems = tag.value["sorted"];
   const unsorteditems = tag.value["unsorted"];
   const votes = tag.value["votes"];
@@ -314,7 +315,7 @@ export const Tag = ({ showVote, isVoting }) => {
           Stop Voting
         </button>
         <div className="w-full flex justify-center flex-col">
-          <VotePanel />
+          <VotePanel handleError={handleError} />
           <br />
           <VotesPanel votes={filteredVotes} />
         </div>
@@ -333,7 +334,7 @@ export const Tag = ({ showVote, isVoting }) => {
           can_vote={can_vote}
           can_add={can_add}
         />
-        {showVote && <VotePanel />}
+        {showVote && <VotePanel handleError={handleError}/>}
         <div className="flex lg:flex-row flex-col">
           {votesList}
           <div className="flex flex-col">
@@ -385,13 +386,33 @@ export const Tag = ({ showVote, isVoting }) => {
 
 
 function App({ tagid, isVoting }) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  const handleError = (error) => {
+    console.log("handler called");
+    if (error.status === 401) {  // unauthorized
+      setErrorMessage(error.message);
+      setIsModalOpen(true);
+    }
+  };
+
   useEffect(() => {
     loadTag(tagid);
   }, []);
   return (
     <>
-      {tag.value && <Tag isVoting={isVoting}/>}
+      {tag.value && <Tag isVoting={isVoting} handleError={handleError}/>}
       <ErrorPanel />
+      <WarningPopup isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
+        <div className="p-4">
+          <h2 className="text-lg font-bold">Login Required</h2>
+          <p>{errorMessage}</p>
+          <button onClick={() => setIsModalOpen(false)} className="mt-4 bg-blue-500 text-white p-2 rounded">
+            Close
+          </button>
+        </div>
+      </WarningPopup>
     </>
   );
 }

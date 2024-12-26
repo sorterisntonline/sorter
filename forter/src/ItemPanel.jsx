@@ -336,19 +336,23 @@ const OtherTagInput = ({ mutate, close }) => {
 
 
   const onInput = async (e) => {
-    // if enter key pressed
     setTagSlug(e.target.value);
-    console.log(e.keyCode)
     if (e.keyCode === 13 && completion.length > 0) {
-      console.log('enter key pressed');
       const tag = completion[0];
-      await makeRequest("POST", "/api/item/membership", {
-        "item_id": selected_item.value["id"],
-        "tag_id": tag.id,
-      });
-      setTagSlug("");
-      mutate();
-      close();
+      try {
+        await makeRequest("POST", "/api/item/membership", {
+          "item_id": selected_item.value["id"],
+          "tag_id": tag.id,
+        });
+        setTagSlug("");
+        mutate();
+        close();
+      } catch (error) {
+        if (error.status === 401) {  // unauthorized
+          setErrorMessage(error.message);
+          setIsModalOpen(true);
+        }
+      }
     }
   }
 
