@@ -51,7 +51,7 @@ const TopNav = () => {
         <div className=" p-0">Twitter</div>
       </MyLink> */}
       <MyLink to="/tags3">
-        <div className=" p-0">Heirarchy</div>
+        <div className=" p-0">Hierarchy</div>
       </MyLink>
       <MyLink to="/tags2">
         <div className=" p-0">Tags2</div>

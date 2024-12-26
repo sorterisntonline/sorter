@@ -144,7 +144,7 @@ export const Item = ({ item }) => {
 };
 
 import { useLocation, useParams } from "wouter";
-import { TagPrefrences } from "./TagPrefrences";
+import { TagPrefrences } from "./TagPreferences";
 import { IntegrationsPanel } from "./integrations/IntegrationsPanel";
 import { AttributePanel, selected_attribute } from "./AttributePanel";
 import { namespace } from "./main";
