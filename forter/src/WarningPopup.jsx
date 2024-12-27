@@ -1,29 +1,61 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
 const WarningPopup = ({ isOpen, onClose, children }) => {
+  useEffect(() => {
+    const handleEsc = (event) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+    if (isOpen) {
+      document.addEventListener('keydown', handleEsc);
+    } else {
+      document.removeEventListener('keydown', handleEsc);
+    }
+    return () => {
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, [isOpen, onClose]);
+
+  const handleLoginFocus = () => {
+    onClose();
+    setTimeout(() => {
+      const loginInput = document.evaluate(
+        '(//input[@autocomplete="username"][@placeholder="username"])[2]',
+        document,
+        null,
+        XPathResult.FIRST_ORDERED_NODE_TYPE,
+        null
+      ).singleNodeValue;
+      
+      if (loginInput) {
+        loginInput.focus();
+      }
+    }, 0);
+  };
+
   if (!isOpen) {
     return null;
   }
 
   return (
-    <div className="fixed z-10 inset-0 overflow-y-visible">
+    <div className="fixed z-50 inset-0 flex items-center justify-center">
+      {/* Overlay */}
       <div
-        className="flex items-center justify-center min-h-screen text-center sm:block sm:p-0"
-        onClick={onClose} // Close popup on overlay click
-      >
-        <div className="fixed inset-0 transition-opacity bg-gradient-to-r from-blue-500 to-purple-500 opacity-50"></div>
+        className="absolute inset-0 bg-black bg-opacity-50 transition-opacity duration-300"
+        onClick={onClose}
+      ></div>
 
-        <div
-          className="inline-block align-bottom bg-white dark:bg-gray-800 text-left shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full overflow-visible"
-          onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside the popup
-        >
-          <div className="p-4">
-            <h2 className="text-lg font-bold">Warning</h2>
-            {children}
-            <button onClick={onClose} className="mt-4 bg-blue-500 text-white p-2 rounded">
-              Close
-            </button>
-          </div>
+      {/* Modal Content */}
+      <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 p-6 w-full max-w-md mx-4 shadow-lg transition-transform transform duration-300 scale-95">
+        <div className="relative">
+          {children}
+          <button
+            className="mt-4 bg-green-500 text-white py-2 px-4 rounded-none hover:bg-green-600 focus:outline-none"
+            onClick={handleLoginFocus}
+          >
+            Login
+          </button>
         </div>
       </div>
     </div>

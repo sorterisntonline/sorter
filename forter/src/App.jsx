@@ -408,9 +408,6 @@ function App({ tagid, isVoting }) {
         <div className="p-4">
           <h2 className="text-lg font-bold">Login Required</h2>
           <p>{errorMessage}</p>
-          <button onClick={() => setIsModalOpen(false)} className="mt-4 bg-blue-500 text-white p-2 rounded">
-            Close
-          </button>
         </div>
       </WarningPopup>
     </>
