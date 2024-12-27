@@ -158,7 +158,7 @@ export const Integrations = () => {
   if (error) return <div>error</div>;
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col py-3"> 
       {JSON.stringify(data)}
       {data.spotify ? (
         <SpotifyPanel code={data.spotify} tags={data.spotifyTags} />

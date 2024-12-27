@@ -57,7 +57,7 @@ export const TagList3 = () => {
   const { data, error, isLoading } = useSWR("/api/hierarchy", fetcher);
   
   return (
-    <div className="dark:text-white w-full max-w-2xl">
+    <div className="dark:text-white w-full max-w-2xl py-4">
       <div 
         className="cursor-pointer mb-4"
         onClick={() => navigate("/namespace/tag-hierarchy")}

@@ -2,12 +2,13 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
 import "./index.css";
-import { Router, Route, Link, useRoute } from "wouter";
+import { Router, Route, Link, useRoute, useLocation } from "wouter";
 import { TagList } from "./TagList.jsx";
 import { TagList2 } from "./TagList2.jsx";
 import { TagList3 } from "./TagList3.jsx";
 import { tag } from "./App";
-import { LoginForm, current_session } from "./LoginForm";
+import { Login } from "./Login.jsx";
+import { Register } from "./Register.jsx";
 import { selected_item } from "./App.jsx";
 import { Faq } from "./Faq.jsx";
 import { CallbackRoute } from "./integrations/Spotify.jsx";
@@ -42,50 +43,75 @@ const ShowLink = (props) => {
 };
 
 const TopNav = () => {
+  const [location, setLocation] = useLocation();
+
   return (
     <div
-      className={"top-0 flex dark:bg-black text-black dark:text-white"}
-      style={{ position: "fixed", top: 0 }}
+      className="top-0 flex items-center justify-between dark:bg-black text-black dark:text-white w-full px-4 py-2"
+      style={{ position: "fixed", top: 0, zIndex: 10 }}
     >
-      {/* <MyLink to="/x">
-        <div className=" p-0">Twitter</div>
-      </MyLink> */}
-      <MyLink to="/tags3">
-        <div className=" p-0">Hierarchy</div>
-      </MyLink>
-      <MyLink to="/tags2">
-        <div className=" p-0">Tags2</div>
-      </MyLink>
-      <MyLink to="/">
-        <div className=" p-0">Tags</div>
-      </MyLink>
-      <MyLink to="/feed">
-        <div className=" p-0">Feed</div>
-      </MyLink>
-      <MyLink to="/faq">
-        <div className=" p-0">FAQ</div>
-      </MyLink>
-      <MyLink to="/leaderboard">
-        <div className=" p-0">Leaderboard</div>
-      </MyLink>
-      {current_session.value.user_name && (
-        <MyLink to="/profile">
-          <div className=" p-0">Profile</div>
+      {/* Left side navigation links */}
+      <div className="flex items-center space-x-2">
+        <MyLink to="/tags3">
+          <div className="p-0">Hierarchy</div>
         </MyLink>
-      )}
-      {/* <MyLink to="/integrations">
-        <div className="text-white p-0">Integrations</div>
-      </MyLink> */}
-      <ShowLink to="/:tag/:slug" />
+        <MyLink to="/tags2">
+          <div className="p-0">Tags2</div>
+        </MyLink>
+        <MyLink to="/">
+          <div className="p-0">Tags</div>
+        </MyLink>
+        <MyLink to="/feed">
+          <div className="p-0">Feed</div>
+        </MyLink>
+        <MyLink to="/faq">
+          <div className="p-0">FAQ</div>
+        </MyLink>
+        <MyLink to="/leaderboard">
+          <div className="p-0">Leaderboard</div>
+        </MyLink>
+        <ShowLink to="/:tag/:slug" />
+      </div>
+
+      {/* Right side authentication */}
+      <div className="flex items-center space-x-4">
+        {typeof current_session !== 'undefined' && current_session.value && current_session.value.user_name ? (
+          <MyLink to="/profile">
+            <div className="hover:text-blue-500 transition-colors">
+              {"@" + current_session.value.user_name}
+            </div>
+          </MyLink>
+        ) : (
+          <div className="flex items-center space-x-2">
+            <button
+              className="bg-blue-200 dark:bg-blue-950 hover:bg-blue-300 dark:hover:bg-blue-900 text-black dark:text-white px-3 py-1 transition-colors"
+              onClick={() => setLocation("/login")}
+            >
+              login
+            </button>
+            <button
+              className="bg-green-200 dark:bg-green-950 hover:bg-green-300 dark:hover:bg-green-900 text-black dark:text-white px-3 py-1 transition-colors"
+              onClick={() => setLocation("/register")}
+            >
+              register
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
-
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <Router>
       <TopNav />
+      <Route path="/login">
+        <Login />
+      </Route>
+      <Route path="/register">
+        <Register />
+      </Route>
       <Route path="/feed">
         {(params) => {
           tag.value = null;
@@ -132,7 +158,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
       </Route>
       <Route path="/:tagid/:slug">
         {(params) => {
-          if (params.tagid == "namespace") {
+          if (params.tagid === "namespace") {
             return <></>
           }
           return <App tagid={params.tagid} />;
@@ -140,7 +166,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
       </Route>
       <Route path="/:tagid/:slug/voting">
         {(params) => {
-          return <App tagid={params.tagid} isVoting/>;
+          return <App tagid={params.tagid} isVoting />;
         }}
       </Route>
       <Route path="/faq">
@@ -159,6 +185,5 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         <Profile />
       </Route>
     </Router>
-    <LoginForm />
-  </React.StrictMode >
+  </React.StrictMode>
 );
