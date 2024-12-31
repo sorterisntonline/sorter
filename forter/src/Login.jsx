@@ -1,8 +1,6 @@
 import { useState, useEffect } from "react";
-import { signal } from "@preact/signals-react";
 import { useLocation } from "wouter";
-
-export const current_session = signal(false);
+import { current_session } from "./session"; // Updated import
 
 async function fetchSession() {
   const response = await fetch("/api/login", {
@@ -55,20 +53,7 @@ export const Login = () => {
           height: "1.5rem",
         }}
       >
-        logged in as {current_session.value.user_name}{" "}
-        <button
-          className="border-2 cursor-pointer"
-          onClick={async () => {
-            await fetch("/api/logout", {
-              method: "POST",
-              credentials: "include",
-            });
-            await fetchSession();
-            setLocation("/");
-          }}
-        >
-          logout
-        </button>
+        logged in as {current_session.value.user_name}
       </div>
     );
   }

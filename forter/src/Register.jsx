@@ -1,8 +1,6 @@
 import { useState, useEffect } from "react";
-import { signal } from "@preact/signals-react";
 import { useLocation } from "wouter";
-
-export const current_session = signal(false);
+import { current_session } from "./session"; // Updated import
 
 async function fetchSession() {
   const response = await fetch("/api/login", {

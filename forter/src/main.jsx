@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
 import "./index.css";
@@ -6,10 +6,9 @@ import { Router, Route, Link, useRoute, useLocation } from "wouter";
 import { TagList } from "./TagList.jsx";
 import { TagList2 } from "./TagList2.jsx";
 import { TagList3 } from "./TagList3.jsx";
-import { tag } from "./App";
+import { tag, selected_item } from "./App.jsx";
 import { Login } from "./Login.jsx";
 import { Register } from "./Register.jsx";
-import { selected_item } from "./App.jsx";
 import { Faq } from "./Faq.jsx";
 import { CallbackRoute } from "./integrations/Spotify.jsx";
 import { Integrations } from "./integrations/IntegrationsPanel.jsx";
@@ -18,7 +17,10 @@ import { Graph } from "./Graph.jsx";
 import { Leaderboard } from "./Leaderboard.jsx";
 import { Profile, dark_mode } from "./Profile.jsx";
 import { signal } from "@preact/signals-react";
+import { current_session } from "./session"; // Updated import
+import { fetchSession } from "./session"; // Make sure fetchSession is exported from session.js
 // import { Twitter } from "./Twitter.jsx";
+import { ProfileHoverPane } from "./ProfileHoverPane.jsx"; // Import the ProfileHoverPane component
 
 export const namespace = signal(false);
 
@@ -27,7 +29,15 @@ const MyLink = (props) => {
 
   return (
     <Link {...props} className="flex">
-      <a className={isActive ? "dark:bg-blue-900 bg-blue-300 px-1" : "px-1"}>{props.children}</a>
+      <a
+        className={
+          isActive
+            ? "dark:bg-blue-900 bg-blue-300 px-1"
+            : "px-1"
+        }
+      >
+        {props.children}
+      </a>
     </Link>
   );
 };
@@ -36,7 +46,7 @@ const ShowLink = (props) => {
   const [isActive, params] = useRoute(props.to);
 
   return (
-    <a className={"" + (isActive ? "dark:bg-black px-2 underline" : "")}>
+    <a className={isActive ? "dark:bg-black px-2 underline" : ""}>
       {params && params.slug !== undefined && params.slug}
     </a>
   );
@@ -44,10 +54,28 @@ const ShowLink = (props) => {
 
 const TopNav = () => {
   const [location, setLocation] = useLocation();
+  const [currentPath] = useRoute(location);
+  const [isHovered, setIsHovered] = useState(false);
+  const [hideTimeout, setHideTimeout] = useState(null);
+
+  // Determine if the current path is /login or /register
+  const isAuthPage = location === "/login" || location === "/register";
+
+  const handleMouseEnter = () => {
+    if (hideTimeout) clearTimeout(hideTimeout);
+    setIsHovered(true);
+  };
+
+  const handleMouseLeave = () => {
+    const timeout = setTimeout(() => {
+      setIsHovered(false);
+    }, 300); // 300ms delay before hiding
+    setHideTimeout(timeout);
+  };
 
   return (
     <div
-      className="top-0 flex items-center justify-between dark:bg-black text-black dark:text-white w-full px-4 py-2"
+      className="top-0 right-0 flex flex-wrap items-center justify-between dark:bg-black text-black dark:text-white w-full px-4 py-2"
       style={{ position: "fixed", top: 0, zIndex: 10 }}
     >
       {/* Left side navigation links */}
@@ -75,31 +103,67 @@ const TopNav = () => {
 
       {/* Right side authentication */}
       <div className="flex items-center space-x-4">
-        {typeof current_session !== 'undefined' && current_session.value && current_session.value.user_name ? (
-          <MyLink to="/profile">
-            <div className="hover:text-blue-500 transition-colors">
+        {current_session.value && current_session.value.user_name ? (
+          <div 
+            className="relative"
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+          >
+            <div
+              className="hover:text-blue-500 transition-colors cursor-pointer"
+              onClick={() => setLocation("/profile")}
+            >
               {"@" + current_session.value.user_name}
             </div>
-          </MyLink>
-        ) : (
-          <div className="flex items-center space-x-2">
-            <button
-              className="bg-blue-200 dark:bg-blue-950 hover:bg-blue-300 dark:hover:bg-blue-900 text-black dark:text-white px-3 py-1 transition-colors"
-              onClick={() => setLocation("/login")}
-            >
-              login
-            </button>
-            <button
-              className="bg-green-200 dark:bg-green-950 hover:bg-green-300 dark:hover:bg-green-900 text-black dark:text-white px-3 py-1 transition-colors"
-              onClick={() => setLocation("/register")}
-            >
-              register
-            </button>
+            {isHovered && (
+              <ProfileHoverPane onClose={() => setIsHovered(false)} />
+            )}
           </div>
+        ) : (
+          !isAuthPage && (
+            <div className="flex items-center space-x-2">
+              <button
+                className="bg-blue-200 dark:bg-blue-950 hover:bg-blue-300 dark:hover:bg-blue-900 text-black dark:text-white px-3 py-1 transition-colors"
+                onClick={() => setLocation("/login")}
+              >
+                login
+              </button>
+              <button
+                className="bg-green-200 dark:bg-green-950 hover:bg-green-300 dark:hover:bg-green-900 text-black dark:text-white px-3 py-1 transition-colors"
+                onClick={() => setLocation("/register")}
+              >
+                register
+              </button>
+            </div>
+          )
         )}
       </div>
     </div>
   );
+};
+
+const LogoutRoute = () => {
+  const [_, setLocation] = useLocation();
+  
+  useEffect(() => {
+    const performLogout = async () => {
+      try {
+        await fetch("/api/logout", {
+          method: "POST",
+          credentials: "include",
+        });
+        await fetchSession();
+        setLocation("/");
+      } catch (error) {
+        console.error("Logout failed:", error);
+        setLocation("/");
+      }
+    };
+    
+    performLogout();
+  }, []);
+
+  return null;
 };
 
 ReactDOM.createRoot(document.getElementById("root")).render(
@@ -159,7 +223,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
       <Route path="/:tagid/:slug">
         {(params) => {
           if (params.tagid === "namespace") {
-            return <></>
+            return <></>;
           }
           return <App tagid={params.tagid} />;
         }}
@@ -183,6 +247,9 @@ ReactDOM.createRoot(document.getElementById("root")).render(
       </Route>
       <Route path="/profile">
         <Profile />
+      </Route>
+      <Route path="/logout">
+        <LogoutRoute />
       </Route>
     </Router>
   </React.StrictMode>

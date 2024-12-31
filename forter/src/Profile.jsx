@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { current_session } from "./LoginForm";
+import { current_session } from "./session";
 import { UserPanel } from "./UserPanel";
 import useSWR from "swr";
 import { signal, useSignal } from "@preact/signals-react";

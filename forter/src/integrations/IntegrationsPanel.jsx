@@ -2,7 +2,7 @@ import { tag } from "../App";
 import useSWR from "swr";
 import { startTrackingLiked, youtubeLogin } from "./Youtube";
 import { loginLinear, postView } from "./Linear";
-import { current_session } from "../LoginForm";
+import { current_session } from "../session";
 import { loadTag } from "../Network";
 
 const LinearControls = () => {
