@@ -1,7 +1,7 @@
 import { makeRequest } from "./Network";
 import { tag, magnitude } from "./App";
 import { ItemFull } from "./ItemPanel";
-import { current_session } from "./LoginForm";
+import { current_session } from "./session";
 import { useEffect, useState } from "react";
 import WarningPopup from "./WarningPopup";
 

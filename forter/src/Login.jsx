@@ -42,7 +42,7 @@ export const Login = () => {
     }
   };
 
-  if (current_session.value.user_name) {
+  if (current_session.value && current_session.value.user_name) {
     return (
       <div
         className="dark:text-white"

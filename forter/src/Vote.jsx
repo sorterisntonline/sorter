@@ -1,6 +1,6 @@
 import { items_by_id, selected_item } from "./App";
 import { makeRequest } from "./Network";
-import { current_session } from "./LoginForm";
+import { current_session } from "./session";
 import { magnitude } from "./App";
 
 import { tag } from "./App";

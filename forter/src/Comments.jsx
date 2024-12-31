@@ -1,6 +1,6 @@
 import { useState } from "react";
 import useSWR from "swr";
-import { current_session } from "./LoginForm";
+import { current_session } from "./session";
 
 const fetcher = (url) => fetch(url).then((res) => res.json());
 

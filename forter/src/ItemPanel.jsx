@@ -1,5 +1,5 @@
 import useSWR from "swr";
-import { current_session } from "./LoginForm";
+import { current_session } from "./session";
 import { loadTag, makeRequest } from "./Network";
 import { signal } from "@preact/signals-react";
 

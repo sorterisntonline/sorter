@@ -17,8 +17,7 @@ import { Graph } from "./Graph.jsx";
 import { Leaderboard } from "./Leaderboard.jsx";
 import { Profile, dark_mode } from "./Profile.jsx";
 import { signal } from "@preact/signals-react";
-import { current_session } from "./session"; // Updated import
-import { fetchSession } from "./session"; // Make sure fetchSession is exported from session.js
+import { current_session, fetchSession } from "./session"; // Ensure fetchSession is exported from session.js
 // import { Twitter } from "./Twitter.jsx";
 import { ProfileHoverPane } from "./ProfileHoverPane.jsx"; // Import the ProfileHoverPane component
 
@@ -72,6 +71,13 @@ const TopNav = () => {
     }, 300); // 300ms delay before hiding
     setHideTimeout(timeout);
   };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (hideTimeout) clearTimeout(hideTimeout);
+    };
+  }, [hideTimeout]);
 
   return (
     <div
@@ -144,14 +150,18 @@ const TopNav = () => {
 
 const LogoutRoute = () => {
   const [_, setLocation] = useLocation();
-  
+
   useEffect(() => {
     const performLogout = async () => {
       try {
-        await fetch("/api/logout", {
+        const response = await fetch("/api/logout", {
           method: "POST",
           credentials: "include",
         });
+        if (!response.ok) {
+          const msg = await response.text();
+          alert(msg);
+        }
         await fetchSession();
         setLocation("/");
       } catch (error) {
@@ -159,9 +169,9 @@ const LogoutRoute = () => {
         setLocation("/");
       }
     };
-    
+
     performLogout();
-  }, []);
+  }, [setLocation]);
 
   return null;
 };

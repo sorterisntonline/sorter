@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { tag } from "./App";
-import { current_session } from "./LoginForm";
+import { current_session } from "./session";
 import Select from "react-select";
 import { useLocation } from "wouter";
 import { loadTag } from "./Network";

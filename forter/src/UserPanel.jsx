@@ -1,6 +1,6 @@
 import { tag } from "./App";
 import Select from "react-select";
-import { current_session } from "./LoginForm";
+import { current_session } from "./session";
 import { signal } from "@preact/signals-react";
 import { loadTag } from "./Network";
 import { dark_mode } from "./Profile";
