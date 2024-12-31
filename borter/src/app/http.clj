@@ -322,7 +322,8 @@
          (:user_name (:session req))))
 
   (get-quota [self req]
-    (if (= "tommy" (get-in req [:session :user_name]))
+    (if (or (= "tommy" (get-in req [:session :user_name]))
+            (= "discord" (get-in req [:session :user_name])))
       Integer/MAX_VALUE  ; effectively no rate limit for tommy
       quota))
 

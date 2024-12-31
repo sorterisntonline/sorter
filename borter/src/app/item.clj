@@ -118,8 +118,12 @@
 
 
 (defn create-item [r]
+  (def r r)
+  (-> r :body-params)
   (let [_ " create item  "
-        item (-> r :body-params (dissoc :tag_id))
+        item (-> r :body-params (dissoc :tag_id
+                                        :discord_channel_id
+                                        :discord_server_id))
         item (assoc item
                     :owner (-> r :session :user_name)
                     :slug (sluj (:title item)))
@@ -143,7 +147,9 @@
     (db/exec! (-> (h/insert-into :items_in_tags)
                   (h/values (for [tagid tagids]
                               {:tag_id tagid
-                               :item_id itemid}))))
+                               :item_id itemid
+                               :discord_channel_id (-> r :body-params :discord_channel_id)
+                               :discord_server_id (-> r :body-params :discord_server_id)}))))
     ret))
 
 (defn update-item [r]
