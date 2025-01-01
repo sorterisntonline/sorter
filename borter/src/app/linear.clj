@@ -14,8 +14,8 @@
 
 (defn get-hostname []
   (case (.getCanonicalHostName (java.net.InetAddress/getLocalHost))
-    "localhost" "http://localhost:3000/api/linear/callback"
-    "https://sorter.social/api/linear/callback"))
+    "sorter.social" "https://sorter.social/api/linear/callback"
+    "http://localhost:3000/api/linear/callback"))
 
 (defn code->token [code]
   (def code code)
@@ -83,8 +83,6 @@
                         (str "query  {project(id: \"" projectid "\")
      { name issues(first: 100, filter: {state: {name: {contains: \"Todo\"}}, parent: {null: true}}) {nodes {id title description}}}}")))
 
-  (-> issues :data :project :issues :nodes)
-
   (def tag-name (str "linear " (-> issues :data :project :name ) " " (-> req :session :user_name)))
   
 
@@ -132,7 +130,7 @@
   (db/exec! (-> {:insert-into :items_in_tags
                  :values (map (fn [item] {:item_id (-> item :items/id)
                                           :tag_id (-> r :tags/id)}) r2)}
-                (h/on-conflict :item_id :tag_id)
+                (h/on-conflict)
                 (h/do-nothing)))
 
   {:status 200 :body {:message "ok"}})
