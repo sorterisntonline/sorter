@@ -42,7 +42,7 @@ export const Vote = ({ vote, showDelete }) => {
       </td>
       <td onClick={clicked(rightItem)} className="text-right cursor-pointer w-1/3">
         {rightItem["title"]}
-        {(vote["owner"] === current_session.value.user_name) && showDelete ? (
+        {(current_session.value && vote["owner"] === current_session.value.user_name && showDelete) ? (
           <button
             className="text-red-500"
             onClick={() => {

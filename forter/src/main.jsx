@@ -46,7 +46,7 @@ const ShowLink = (props) => {
 
   return (
     <a className={isActive ? "dark:bg-black px-2 underline" : ""}>
-      {params && params.slug !== undefined && params.slug}
+      {isActive && params.slug !== undefined && params.slug}
     </a>
   );
 };
@@ -59,6 +59,9 @@ const TopNav = () => {
 
   // Determine if the current path is /login or /register
   const isAuthPage = location === "/login" || location === "/register";
+
+  // Check if the user is logged in
+  const isLoggedIn = current_session.value && current_session.value.user_name;
 
   const handleMouseEnter = () => {
     if (hideTimeout) clearTimeout(hideTimeout);
@@ -109,7 +112,7 @@ const TopNav = () => {
 
       {/* Right side authentication */}
       <div className="flex items-center space-x-4">
-        {current_session.value && current_session.value.user_name ? (
+        {isLoggedIn ? (
           <div 
             className="relative"
             onMouseEnter={handleMouseEnter}

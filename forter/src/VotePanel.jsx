@@ -36,7 +36,7 @@ export const VotePanel = ({ handleError }) => {
     const existingVote = tag.value.votes.find(vote => vote.right_item_id === left.id && vote.left_item_id === right.id) ||
       tag.value.votes.find(vote => vote.right_item_id === right.id && vote.left_item_id === left.id);
 
-    if (existingVote && existingVote.owner === current_session.value.user_name) {
+    if (existingVote && current_session.value !== null && existingVote.owner === current_session.value.user_name) {
       if (existingVote.left_item_id === left.id) {
         magnitude.value = existingVote.magnitude;
       } else {

@@ -6,8 +6,17 @@ import { signal } from "@preact/signals-react";
 export const ProfileHoverPane = ({ onClose }) => {
   const [location, setLocation] = useLocation();
 
-  const handleLogout = () => {
-    setLocation("/logout");
+  const handleLogout = async () => {
+    const response = await fetch("/api/logout", {
+      method: "POST",
+      credentials: "include",
+    });
+    if (response.ok) {
+      current_session.value = false;
+      setLocation("/");
+    } else {
+      console.error("Logout failed:", await response.text());
+    }
   };
 
   const handleNavigation = (path) => {

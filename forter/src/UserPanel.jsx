@@ -15,6 +15,7 @@ export const selected_users = signal(users ? users.split('.').map(user => {
 }) : [allUsers]);
 
 export const resetSelectedUsers = () => {
+  if (current_session.value === null) return;
   console.log("resetting selected users")
   const uname = current_session.value.user_name;
   if (uname === undefined) return;
@@ -28,6 +29,7 @@ export const UserPanel = ({ users, selected_users }) => {
 
 
   if (users === undefined || users === null) return null;
+  if (current_session.value === null) return null;
 
   const uname = current_session.value.user_name;
   const yourself = { value: uname, label: '@' + uname };

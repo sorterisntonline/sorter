@@ -104,7 +104,7 @@ const RedditControls = () => {
 };
 
 export const IntegrationsPanel = () => {
-  if (!current_session.value.user_name === tag["owner"]) return <></>;
+  if (current_session.value !== null && !current_session.value.user_name === tag["owner"]) return <></>;
   if (!tag.value.tag["domain_pk_namespace"]) return <></>;
   if (tag.value.tag["domain_pk_namespace"] === "spotify.playlist")
     return <SpotifyControls />;

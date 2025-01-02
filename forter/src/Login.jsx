@@ -1,20 +1,7 @@
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
-import { current_session } from "./session"; // Updated import
-
-async function fetchSession() {
-  const response = await fetch("/api/login", {
-    credentials: "include",
-  });
-  const text = await response.json();
-  if (text) {
-    current_session.value = text;
-  }
-}
+import { current_session, fetchSession } from "./session";
 
 export const Login = () => {
-  const [location, setLocation] = useLocation();
-
   useEffect(() => {
     fetchSession();
   }, []);
@@ -38,7 +25,27 @@ export const Login = () => {
       alert(msg);
     } else {
       await fetchSession();
-      setLocation("/");
+    }
+  };
+
+  const handleRegister = async (event) => {
+    event.preventDefault();
+    if (password_r !== password2_r) {
+      alert("passwords do not match");
+      return;
+    }
+
+    const response = await fetch("/api/register", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_name: username_r, password: password_r }),
+    });
+    if (!response.ok) {
+      const msg = await response.text();
+      alert(msg);
+    } else {
+      await fetchSession();
     }
   };
 
@@ -53,7 +60,20 @@ export const Login = () => {
           height: "1.5rem",
         }}
       >
-        logged in as {current_session.value.user_name}
+        logged in as {current_session.value.user_name} {" "}
+        <button
+          className="border-2 cursor-pointer"
+          onClick={async () => {
+            await fetch("/api/logout", {
+              method: "POST",
+              credentials: "include",
+            });
+            current_session.value = false;
+            await fetchSession();
+          }}
+        >
+          logout
+        </button>
       </div>
     );
   }
