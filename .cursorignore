@@ -1,2 +1,3 @@
 # for now ignore clisorter since it has a lot of duplicate code to forter & we aren't working on it 
-clisorter/
+clisorter/ # for now ignore clisorter since it has a lot of duplicate code to forter & we aren't working on it 
+rustsorter/ # for now this can be ignored because im working frontend and issue isnt here

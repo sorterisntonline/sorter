@@ -1,4 +1,4 @@
-import { makeRequest } from "./Network";
+import { makeRequest, loadTag } from "./Network";
 import { tag, magnitude } from "./App";
 import { ItemFull } from "./ItemPanel";
 import { current_session } from "./session";
@@ -100,9 +100,10 @@ export const VotePanel = ({ handleError }) => {
             });
 
             magnitude.value = 50;
+            await loadTag(tag.value.tag["id"]); // reload tag to update vote
           } catch (error) {
-            console.log("Error caught in VotePanel:", error); // Debugging: Log the error
-            handleError(error); // Use the passed handleError function
+            console.log("Error caught in VotePanel:", error);
+            handleError(error);
           }
         }}
       >

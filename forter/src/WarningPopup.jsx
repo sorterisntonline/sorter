@@ -1,6 +1,9 @@
 import React, { useEffect } from 'react';
+import { useLocation } from 'wouter';
 
 const WarningPopup = ({ isOpen, onClose, children }) => {
+  const [, setLocation] = useLocation();
+
   useEffect(() => {
     const handleEsc = (event) => {
       if (event.key === 'Escape') {
@@ -17,21 +20,9 @@ const WarningPopup = ({ isOpen, onClose, children }) => {
     };
   }, [isOpen, onClose]);
 
-  const handleLoginFocus = () => {
+  const handleLoginRedirect = () => {
     onClose();
-    setTimeout(() => {
-      const loginInput = document.evaluate(
-        '(//input[@autocomplete="username"][@placeholder="username"])[2]',
-        document,
-        null,
-        XPathResult.FIRST_ORDERED_NODE_TYPE,
-        null
-      ).singleNodeValue;
-      
-      if (loginInput) {
-        loginInput.focus();
-      }
-    }, 0);
+    setLocation('/login');
   };
 
   if (!isOpen) {
@@ -52,9 +43,9 @@ const WarningPopup = ({ isOpen, onClose, children }) => {
           {children}
           <button
             className="mt-4 bg-green-500 text-white py-2 px-4 rounded-none hover:bg-green-600 focus:outline-none"
-            onClick={handleLoginFocus}
+            onClick={handleLoginRedirect}
           >
-            Login
+            login
           </button>
         </div>
       </div>

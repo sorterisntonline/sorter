@@ -11,24 +11,36 @@ export const Login = () => {
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [shake, setShake] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleUsernameChange = (event) => setUsername(event.target.value);
   const handlePasswordChange = (event) => setPassword(event.target.value);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    const response = await fetch("/api/login", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_name: username, password: password }),
-    });
-    if (!response.ok) {
-      const msg = await response.text();
-      console.log(msg); // TODO: don't log this error to console probably
-    } else {
-      await fetchSession();
-      setLocation("/");
+    setError("");
+    setIsLoading(true);
+
+    try {
+      const response = await fetch("/api/login", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_name: username, password: password }),
+      });
+      if (!response.ok) {
+        const msg = await response.text();
+        setError(msg);
+        setShake(true);
+        setTimeout(() => setShake(false), 500);
+      } else {
+        await fetchSession();
+        setLocation("/");
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -72,6 +84,9 @@ export const Login = () => {
         className="bg-gray-100 dark:bg-gray-800 p-6 shadow-md w-80"
       >
         <h2 className="text-2xl mb-4 text-center text-black dark:text-white">login</h2>
+        {error && (
+          <div className="mb-4 text-red-500 text-sm text-center">{error}</div>
+        )}
         <div className="mb-4">
           <input
             className="mt-1 p-2 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-black dark:text-white"
@@ -94,9 +109,16 @@ export const Login = () => {
         </div>
         <button
           type="submit"
-          className="w-full bg-blue-500 dark:bg-blue-700 text-white p-2 hover:bg-blue-600 dark:hover:bg-blue-800"
+          disabled={isLoading}
+          className={`w-full p-2 transition-colors duration-200
+            ${isLoading 
+              ? 'bg-gray-400 dark:bg-gray-600' 
+              : 'bg-blue-500 dark:bg-blue-700 hover:bg-blue-600 dark:hover:bg-blue-800'
+            }
+            text-white
+            ${shake ? 'animate-shake' : ''}`}
         >
-          login
+          {isLoading ? 'logging in...' : 'login'}
         </button>
         <p className="mt-4 text-center text-gray-700 dark:text-gray-200">
           no account yet?{" "}
