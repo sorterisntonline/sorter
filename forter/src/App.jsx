@@ -288,7 +288,7 @@ export const Tag = ({ showVote, isVoting, handleError }) => {
   );
 
   const votingRender = (
-    <div className="dark:text-white flex flex-col">
+    <div className="dark:text-white flex flex-col py-3">
       <div className="items-center">
         <div className="text-xl flex flex-row">
           <div className="px-2">
@@ -406,7 +406,7 @@ function App({ tagid, isVoting }) {
       <ErrorPanel />
       <WarningPopup isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
         <div className="p-4">
-          <h2 className="text-lg font-bold">Login Required</h2>
+          <h2 className="text-lg font-bold">login required</h2>
           <p>{errorMessage}</p>
         </div>
       </WarningPopup>

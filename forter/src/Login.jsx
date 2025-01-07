@@ -1,7 +1,10 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { current_session, fetchSession } from "./session";
 
 export const Login = () => {
+  const [location, setLocation] = useLocation();
+
   useEffect(() => {
     fetchSession();
   }, []);
@@ -22,58 +25,42 @@ export const Login = () => {
     });
     if (!response.ok) {
       const msg = await response.text();
-      alert(msg);
+      console.log(msg); // TODO: don't log this error to console probably
     } else {
       await fetchSession();
+      setLocation("/");
     }
   };
 
-  const handleRegister = async (event) => {
-    event.preventDefault();
-    if (password_r !== password2_r) {
-      alert("passwords do not match");
-      return;
-    }
-
-    const response = await fetch("/api/register", {
+  const handleLogout = async () => {
+    await fetch("/api/logout", {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_name: username_r, password: password_r }),
     });
-    if (!response.ok) {
-      const msg = await response.text();
-      alert(msg);
-    } else {
-      await fetchSession();
-    }
+    await fetchSession();
   };
 
   if (current_session.value && current_session.value.user_name) {
     return (
-      <div
-        className="dark:text-white"
-        style={{
-          position: "fixed",
-          right: 0,
-          bottom: 0,
-          height: "1.5rem",
-        }}
-      >
-        logged in as {current_session.value.user_name} {" "}
-        <button
-          className="border-2 cursor-pointer"
-          onClick={async () => {
-            await fetch("/api/logout", {
-              method: "POST",
-              credentials: "include",
-            });
-            current_session.value = false;
-            await fetchSession();
-          }}
-        >
-          logout
-        </button>
+      <div className="flex items-center justify-center min-h-screen bg-white dark:bg-black">
+        <div className="bg-gray-100 dark:bg-gray-800 p-6 shadow-md w-80 flex flex-col items-center">
+          {current_session.value.profile_picture && (
+            <img
+              src={current_session.value.profile_picture}
+              alt="profile"
+              className="w-24 h-24 rounded-full mb-4"
+            />
+          )}
+          <h2 className="text-2xl mb-4 text-center text-black dark:text-white">
+            logged in as @{current_session.value.user_name}
+          </h2>
+          <button
+            onClick={handleLogout}
+            className="w-full bg-red-500 text-white p-2 hover:bg-red-600 rounded"
+          >
+            logout
+          </button>
+        </div>
       </div>
     );
   }
@@ -123,4 +110,4 @@ export const Login = () => {
       </form>
     </div>
   );
-};
+}

@@ -179,91 +179,101 @@ const LogoutRoute = () => {
   return null;
 };
 
-ReactDOM.createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <Router>
-      <TopNav />
-      <Route path="/login">
-        <Login />
-      </Route>
-      <Route path="/register">
-        <Register />
-      </Route>
-      <Route path="/feed">
-        {(params) => {
-          tag.value = null;
-          selected_item.value = false;
-          return <FrontpageFeed />;
-        }}
-      </Route>
-      {/* <Route path="/x">
-        <Twitter />
-      </Route> */}
-      <Route path="/tags3">
-        {(params) => {
-          tag.value = null;
-          selected_item.value = false;
-          return <TagList3 />;
-        }}
-      </Route>
-      <Route path="/tags2">
-        {(params) => {
-          tag.value = null;
-          selected_item.value = false;
-          return <TagList2 />;
-        }}
-      </Route>
-      <Route path="/">
-        {(params) => {
-          tag.value = null;
-          selected_item.value = false;
-          return <TagList />;
-        }}
-      </Route>
-      <Route path="/namespace/:namespace">
-        {(params) => {
-          namespace.value = params.namespace;
-          return <App />;
-        }}
-      </Route>
-      <Route path="/:tagid/:slug/graph">
-        {(params) => {
-          tag.value = null;
-          selected_item.value = false;
-          return <Graph tagid={params.tagid} />;
-        }}
-      </Route>
-      <Route path="/:tagid/:slug">
-        {(params) => {
-          if (params.tagid === "namespace") {
-            return <></>;
-          }
-          return <App tagid={params.tagid} />;
-        }}
-      </Route>
-      <Route path="/:tagid/:slug/voting">
-        {(params) => {
-          return <App tagid={params.tagid} isVoting />;
-        }}
-      </Route>
-      <Route path="/faq">
-        <Faq />
-      </Route>
-      <Route path="/spotify/search/:key">
-        <CallbackRoute />
-      </Route>
-      <Route path="/integrations">
-        <Integrations />
-      </Route>
-      <Route path="/leaderboard">
-        <Leaderboard />
-      </Route>
-      <Route path="/profile">
-        <Profile />
-      </Route>
-      <Route path="/logout">
-        <LogoutRoute />
-      </Route>
-    </Router>
-  </React.StrictMode>
-);
+// === New Root Component with fetchSession useEffect ===
+const Root = () => {
+  useEffect(() => {
+    fetchSession();
+  }, []);
+
+  return (
+    <React.StrictMode>
+      <Router>
+        <TopNav />
+        <Route path="/login">
+          <Login />
+        </Route>
+        <Route path="/register">
+          <Register />
+        </Route>
+        <Route path="/feed">
+          {(params) => {
+            tag.value = null;
+            selected_item.value = false;
+            return <FrontpageFeed />;
+          }}
+        </Route>
+        {/* <Route path="/x">
+          <Twitter />
+        </Route> */}
+        <Route path="/tags3">
+          {(params) => {
+            tag.value = null;
+            selected_item.value = false;
+            return <TagList3 />;
+          }}
+        </Route>
+        <Route path="/tags2">
+          {(params) => {
+            tag.value = null;
+            selected_item.value = false;
+            return <TagList2 />;
+          }}
+        </Route>
+        <Route path="/">
+          {(params) => {
+            tag.value = null;
+            selected_item.value = false;
+            return <TagList />;
+          }}
+        </Route>
+        <Route path="/namespace/:namespace">
+          {(params) => {
+            namespace.value = params.namespace;
+            return <App />;
+          }}
+        </Route>
+        <Route path="/:tagid/:slug/graph">
+          {(params) => {
+            tag.value = null;
+            selected_item.value = false;
+            return <Graph tagid={params.tagid} />;
+          }}
+        </Route>
+        <Route path="/:tagid/:slug">
+          {(params) => {
+            if (params.tagid === "namespace") {
+              return <></>;
+            }
+            return <App tagid={params.tagid} />;
+          }}
+        </Route>
+        <Route path="/:tagid/:slug/voting">
+          {(params) => {
+            return <App tagid={params.tagid} isVoting />;
+          }}
+        </Route>
+        <Route path="/faq">
+          <Faq />
+        </Route>
+        <Route path="/spotify/search/:key">
+          <CallbackRoute />
+        </Route>
+        <Route path="/integrations">
+          <Integrations />
+        </Route>
+        <Route path="/leaderboard">
+          <Leaderboard />
+        </Route>
+        <Route path="/profile">
+          <Profile />
+        </Route>
+        <Route path="/logout">
+          <LogoutRoute />
+        </Route>
+      </Router>
+    </React.StrictMode>
+  );
+};
+// === End of Root Component ===
+
+ReactDOM.createRoot(document.getElementById("root")).render(<Root />);
