@@ -1,13 +1,21 @@
 import React from "react";
 import { useLocation } from "wouter";
 import { current_session } from "./session";
-import { signal } from "@preact/signals-react";
 
 export const ProfileHoverPane = ({ onClose }) => {
   const [location, setLocation] = useLocation();
 
-  const handleLogout = () => {
-    setLocation("/logout");
+  const handleLogout = async () => {
+    const response = await fetch("/api/logout", {
+      method: "POST",
+      credentials: "include",
+    });
+    if (response.ok) {
+      current_session.value = false;
+      setLocation("/");
+    } else {
+      console.error("Logout failed:", await response.text());
+    }
   };
 
   const handleNavigation = (path) => {
@@ -32,19 +40,19 @@ export const ProfileHoverPane = ({ onClose }) => {
           className="w-full text-left py-2 px-4 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
           onClick={() => handleNavigation("/settings")}
         >
-          Settings
+          settings
         </button>
         <button
           className="w-full text-left py-2 px-4 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
           onClick={() => handleNavigation("/groups")}
         >
-          Groups
+          groups
         </button>
         <button
           className="w-full text-left py-2 px-4 rounded text-red-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors mt-2"
           onClick={handleLogout}
         >
-          Logout
+          logout
         </button>
       </div>
     </div>

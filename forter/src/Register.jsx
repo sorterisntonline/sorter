@@ -1,16 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { current_session } from "./session"; // Updated import
-
-async function fetchSession() {
-  const response = await fetch("/api/login", {
-    credentials: "include",
-  });
-  const text = await response.json();
-  if (text) {
-    current_session.value = text;
-  }
-}
+import { current_session, fetchSession } from "./session"; // Updated import
 
 export const Register = () => {
   const [location, setLocation] = useLocation();

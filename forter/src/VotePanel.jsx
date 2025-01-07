@@ -1,4 +1,4 @@
-import { makeRequest } from "./Network";
+import { makeRequest, loadTag } from "./Network";
 import { tag, magnitude } from "./App";
 import { ItemFull } from "./ItemPanel";
 import { current_session } from "./session";
@@ -36,7 +36,7 @@ export const VotePanel = ({ handleError }) => {
     const existingVote = tag.value.votes.find(vote => vote.right_item_id === left.id && vote.left_item_id === right.id) ||
       tag.value.votes.find(vote => vote.right_item_id === right.id && vote.left_item_id === left.id);
 
-    if (existingVote && existingVote.owner === current_session.value.user_name) {
+    if (existingVote && current_session.value !== null && existingVote.owner === current_session.value.user_name) {
       if (existingVote.left_item_id === left.id) {
         magnitude.value = existingVote.magnitude;
       } else {
@@ -100,9 +100,10 @@ export const VotePanel = ({ handleError }) => {
             });
 
             magnitude.value = 50;
+            await loadTag(tag.value.tag["id"]); // reload tag to update vote
           } catch (error) {
-            console.log("Error caught in VotePanel:", error); // Debugging: Log the error
-            handleError(error); // Use the passed handleError function
+            console.log("Error caught in VotePanel:", error);
+            handleError(error);
           }
         }}
       >

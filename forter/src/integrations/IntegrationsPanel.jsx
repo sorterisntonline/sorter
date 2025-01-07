@@ -7,7 +7,7 @@ import { loadTag } from "../Network";
 
 const LinearControls = () => {
   return (
-    <div className="text-xl">
+    <div className="text-xl py-3">
       this tag is a linear project.
       <a
         className="cursor-pointer border-2 border-blue-300"
@@ -41,7 +41,7 @@ const SpotifyControls = () => {
     refresh();
   };
   return (
-    <div className="text-xl">
+    <div className="text-xl py-3">
       this tag is a spotify playlist.
       <a
         className="cursor-pointer border-2 border-green-300"
@@ -58,7 +58,7 @@ const SpotifyControls = () => {
 
 const YoutubeControls = () => {
   return (
-    <div className="text-xl">
+    <div className="text-xl py-3">
       this tag is your youtube liked videos.
       <a
         className="cursor-pointer border-2 border-red-300"
@@ -91,7 +91,7 @@ const RedditControls = () => {
     loadTag(tag.value.tag["id"]);
   }
   return (
-    <div className="text-xl">
+    <div className="text-xl py-3">
       click to refresh
       <a
         className="cursor-pointer border-2 border-orange-300"
@@ -104,7 +104,7 @@ const RedditControls = () => {
 };
 
 export const IntegrationsPanel = () => {
-  if (!current_session.value.user_name === tag["owner"]) return <></>;
+  if (current_session.value !== null && !current_session.value.user_name === tag["owner"]) return <></>;
   if (!tag.value.tag["domain_pk_namespace"]) return <></>;
   if (tag.value.tag["domain_pk_namespace"] === "spotify.playlist")
     return <SpotifyControls />;
