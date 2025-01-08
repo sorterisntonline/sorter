@@ -101,7 +101,9 @@ jobs:
             # Update Environment Variables
             # Write root .env
             cat <<EOF > .env
-            DEPLOYMENT_ENV=${{ secrets.DEPLOYMENT_ENV }}
+            
+            # intentionally omitted for now
+            # ENVIRONMENT=${{ secrets.DEPLOYMENT_ENV }} 
             DATABASE_URL=${{ secrets.DATABASE_URL }}
             
             EOF
@@ -126,9 +128,13 @@ jobs:
 
             # Write rustsorter/.env
             cat <<EOF > rustsorter/.env
-            DEPLOYMENT_ENV=${{ secrets.DEPLOYMENT_ENV }}
-            RUSTSORTER_DB_URL=${{ secrets.DATABASE_URL }}
-            API_KEY=${{ secrets.RUSTSORTER_DISCORD_TOKEN }}
+            
+            # we intentionally don't set ENVIRONMENT yet
+            # ENVIRONMENT=${{ secrets.DEPLOYMENT_ENV }}
+            
+            DATABASE_URL=${{ secrets.DATABASE_URL }}
+            PROD_DATABASE_URL=${{ secrets.PROD_DATABASE_URL }}
+            DISCORD_TOKEN=${{ secrets.RUSTSORTER_DISCORD_TOKEN }}
             EOF
 
             chmod 600 rustsorter/.env
@@ -137,6 +143,13 @@ jobs:
             # Write borter/.env
             cat <<EOF > borter/.env
             # borter/.env
+            
+            # we intentionally dont set ENVIRONMENT here
+            # ENVIRONMENT=${{ secrets.DEPLOYMENT_ENV }}
+            
+            # database URLs
+            DATABASE_URL=${{ secrets.DATABASE_URL }}
+            PROD_DATABASE_URL=${{ secrets.PROD_DATABASE_URL }}
 
             # Linear Integration
             BORTER_LINEAR_CLIENT_ID=${{ secrets.BORTER_LINEAR_CLIENT_ID }}
@@ -195,8 +208,10 @@ jobs:
             clojure -X:build uberjar
             
             # builds to sorter/borter/target/sorter-*-standalone.jar
-            chmod +x target/sorter-*-standalone.jar 
+            # chmod +x target/sorter-*-standalone.jar 
             
+            # its called app.jar now
+            chmod +x target/app.jar
  
             
             cd ..
