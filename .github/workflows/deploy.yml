@@ -21,14 +21,14 @@ jobs:
           ssh-private-key: ${{ secrets.DO_SSH_KEY }}
 
       # Step 3: Create GitHub Release
-      - name: Create GitHub Release
-        id: create_release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            # Optionally include artifacts or built files
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    #   - name: Create GitHub Release
+    #     id: create_release
+    #     uses: softprops/action-gh-release@v1
+    #     with:
+    #       files: |
+    #         # Optionally include artifacts or built files
+    #     env:
+    #       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Step 4: Deploy to DigitalOcean via SSH
       - name: Deploy to DigitalOcean
@@ -47,7 +47,7 @@ jobs:
             # 2. Pull the latest changes
             git pull origin production
 
-            
+
             # 3. Update Environment Variables
             # Write borter/.env
             cat <<EOF > borter/.env
