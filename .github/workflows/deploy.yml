@@ -115,7 +115,7 @@ jobs:
             # forter/.env
 
             # Linear Integration
-            VITE_LINEAR_CLIENT_ID=${{ secrets.BORTERLINEAR_CLIENT_ID }}
+            VITE_LINEAR_CLIENT_ID=${{ secrets.BORTER_LINEAR_CLIENT_ID }}
 
             # Spotify Integration
             VITE_SPOTIFY_CLIENT_ID=${{ secrets.BORTER_SPOTIFY_CLIENT_ID }}
