@@ -93,7 +93,7 @@ jobs:
             rm -rf ~/sorter
 
             # Clone the sorter monorepo from the production branch using gh cli
-            gh repo clone sorterisntonline/sorter -- -b production 
+            git clone git@github.com:sorterisntonline/sorter.git -b production
 
             cd ~/sorter || exit
 
