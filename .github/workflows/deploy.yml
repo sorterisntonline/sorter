@@ -89,13 +89,13 @@ jobs:
             set -e
 
 
-            # Clone the sorter monorepo from the production branch using gh cli if the directory doesn't exist
-            if [ ! -d "~/sorter" ]; then
-              gh repo clone sorterisntonline/sorter -- -b production
-            else
-              # just update it
-              gh repo clone sorterisntonline/sorter -- -b production ~/sorter
+            # Clear the ~/sorter directory if it is not empty
+            if [ -d "~/sorter" ]; then
+              rm -rf ~/sorter/*
             fi
+
+            # Clone the sorter monorepo from the production branch using gh cli
+            gh repo clone sorterisntonline/sorter -- -b production 
 
             cd ~/sorter || exit
 
@@ -115,7 +115,7 @@ jobs:
             # forter/.env
 
             # Linear Integration
-            VITE_LINEAR_CLIENT_ID=${{ secrets.BORTER_LINEAR_CLIENT_ID }}
+            VITE_LINEAR_CLIENT_ID=${{ secrets.BORTERLINEAR_CLIENT_ID }}
 
             # Spotify Integration
             VITE_SPOTIFY_CLIENT_ID=${{ secrets.BORTER_SPOTIFY_CLIENT_ID }}
