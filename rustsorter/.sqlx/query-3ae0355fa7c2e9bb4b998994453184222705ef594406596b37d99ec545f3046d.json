@@ -1,12 +1,12 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT * FROM skipped WHERE owner = $2 AND item_id IN (SELECT item_id FROM items_in_tags WHERE tag_id = $1)",
+  "query": "SELECT * FROM skipped WHERE owner = $1 AND item_id = ANY($2)",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
         "name": "owner",
-        "type_info": "Varchar"
+        "type_info": "Text"
       },
       {
         "ordinal": 1,
@@ -16,8 +16,8 @@
     ],
     "parameters": {
       "Left": [
-        "Int4",
-        "Text"
+        "Text",
+        "Int4Array"
       ]
     },
     "nullable": [
@@ -25,5 +25,5 @@
       false
     ]
   },
-  "hash": "ebe3a59c800172d5e1f88549fc2ea15e73374900b480c3f3e4ee763245ae3d07"
+  "hash": "3ae0355fa7c2e9bb4b998994453184222705ef594406596b37d99ec545f3046d"
 }

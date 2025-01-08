@@ -84,7 +84,7 @@ jobs:
           host: ${{ secrets.DO_SSH_HOST }}
           username: deployer
           key: ${{ secrets.DO_SSH_KEY }}
-          command_timeout: 30m
+          command_timeout: 44m
           port: 22
           script: |
             set -e
@@ -199,7 +199,7 @@ jobs:
             # Build rustsorter 
             echo -e "\033[3mBuilding rustsorter...\033[0m"
             cd rustsorter
-            cargo build --release
+            SQLX_OFFLINE=true cargo build --release
             cd ..
 
             echo -e "\033[1mDone building, running (with systemctl)...\033[0m"
