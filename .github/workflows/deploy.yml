@@ -14,62 +14,62 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      # Step 2: Set up Git user for tagging
-      - name: Set up Git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+    #   # Step 2: Set up Git user for tagging
+    #   - name: Set up Git
+    #     run: |
+    #       git config user.name "github-actions[bot]"
+    #       git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      # Step 3: Determine New Tag
-      - name: Determine New Tag
-        id: new_tag
-        run: |
-          git fetch --tags
-          # Get the latest tag or default to v0.0.0
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-          echo "Latest tag: $LATEST_TAG"
+    #   # Step 3: Determine New Tag
+    #   - name: Determine New Tag
+    #     id: new_tag
+    #     run: |
+    #       git fetch --tags
+    #       # Get the latest tag or default to v0.0.0
+    #       LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+    #       echo "Latest tag: $LATEST_TAG"
 
-          # Extract version numbers
-          VERSION_MAJOR=$(echo $LATEST_TAG | cut -d. -f1 | sed 's/v//')
-          VERSION_MINOR=$(echo $LATEST_TAG | cut -d. -f2)
-          VERSION_PATCH=$(echo $LATEST_TAG | cut -d. -f3)
+    #       # Extract version numbers
+    #       VERSION_MAJOR=$(echo $LATEST_TAG | cut -d. -f1 | sed 's/v//')
+    #       VERSION_MINOR=$(echo $LATEST_TAG | cut -d. -f2)
+    #       VERSION_PATCH=$(echo $LATEST_TAG | cut -d. -f3)
 
-          # Increment patch version
-          NEW_PATCH=$((VERSION_PATCH + 1))
-          NEW_TAG="v${VERSION_MAJOR}.${VERSION_MINOR}.${NEW_PATCH}"
-          echo "New tag: $NEW_TAG"
+    #       # Increment patch version
+    #       NEW_PATCH=$((VERSION_PATCH + 1))
+    #       NEW_TAG="v${VERSION_MAJOR}.${VERSION_MINOR}.${NEW_PATCH}"
+    #       echo "New tag: $NEW_TAG"
 
-          # Set the new tag as output
-          echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
+    #       # Set the new tag as output
+    #       echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
 
-      # Step 4: Create and Push Tag
-      - name: Create and Push Tag
-        run: |
-          git tag ${{ steps.new_tag.outputs.tag }}
-          git push origin ${{ steps.new_tag.outputs.tag }}
+    #   # Step 4: Create and Push Tag
+    #   - name: Create and Push Tag
+    #     run: |
+    #       git tag ${{ steps.new_tag.outputs.tag }}
+    #       git push origin ${{ steps.new_tag.outputs.tag }}
 
-      # Step 5: Generate Release Notes
-      - name: Generate Release Notes
-        id: release_notes
-        run: |
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${{ github.sha }}^ 2>/dev/null || echo "")
-          if [ -z "$PREVIOUS_TAG" ]; then
-            # No previous tag exists, include all commits
-            NOTES=$(git log --pretty=format:'*- %s' ${{ github.sha }} )
-          else
-            NOTES=$(git log $PREVIOUS_TAG..${{ github.sha }} --pretty=format:'*- %s')
-          fi
-          echo "notes=$NOTES" >> $GITHUB_OUTPUT
+    #   # Step 5: Generate Release Notes
+    #   - name: Generate Release Notes
+    #     id: release_notes
+    #     run: |
+    #       PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${{ github.sha }}^ 2>/dev/null || echo "")
+    #       if [ -z "$PREVIOUS_TAG" ]; then
+    #         # No previous tag exists, include all commits
+    #         NOTES=$(git log --pretty=format:'*- %s' ${{ github.sha }} )
+    #       else
+    #         NOTES=$(git log $PREVIOUS_TAG..${{ github.sha }} --pretty=format:'*- %s')
+    #       fi
+    #       echo "notes=$NOTES" >> $GITHUB_OUTPUT
 
-      # Step 6: Create GitHub Release
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ steps.new_tag.outputs.tag }}
-          release_name: "Release ${{ steps.new_tag.outputs.tag }}"
-          body: "${{ steps.release_notes.outputs.notes }}"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    #   # Step 6: Create GitHub Release
+    #   - name: Create GitHub Release
+    #     uses: softprops/action-gh-release@v1
+    #     with:
+    #       tag_name: ${{ steps.new_tag.outputs.tag }}
+    #       release_name: "Release ${{ steps.new_tag.outputs.tag }}"
+    #       body: "${{ steps.release_notes.outputs.notes }}"
+    #     env:
+    #       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Step 7: Set up SSH
       - name: Setup SSH
