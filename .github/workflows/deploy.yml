@@ -89,10 +89,8 @@ jobs:
             set -e
 
 
-            # Clear the ~/sorter directory if it is not empty
-            if [ -d "~/sorter" ]; then
-              rm -rf ~/sorter/*
-            fi
+            # Clear the ~/sorter directory 
+            rm -rf ~/sorter
 
             # Clone the sorter monorepo from the production branch using gh cli
             gh repo clone sorterisntonline/sorter -- -b production 
