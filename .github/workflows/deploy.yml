@@ -193,6 +193,12 @@ jobs:
             # rm resources/public/new/assets/*.js
             clojure -X:build build-client          # optimized release build
             clojure -X:build uberjar
+            
+            # builds to sorter/borter/target/sorter-*-standalone.jar
+            chmod +x target/sorter-*-standalone.jar 
+            
+ 
+            
             cd ..
 
             # Build rustsorter 
