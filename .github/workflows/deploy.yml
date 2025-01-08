@@ -84,6 +84,7 @@ jobs:
           host: ${{ secrets.DO_SSH_HOST }}
           username: deployer
           key: ${{ secrets.DO_SSH_KEY }}
+          command_timeout: 30m
           port: 22
           script: |
             set -e
@@ -194,7 +195,7 @@ jobs:
             clojure -X:build uberjar
             cd ..
 
-            
+
             # Build rustsorter 
             echo -e "\033[3mBuilding rustsorter...\033[0m"
             cd rustsorter
