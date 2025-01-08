@@ -134,8 +134,4 @@ jobs:
 
             chmod 600 rustsorter/.env
 
-            # Execute the deployment script
-            echo "Executing deploy.sh script..."
-            bash scripts/deploy.sh
-
             exit 0
