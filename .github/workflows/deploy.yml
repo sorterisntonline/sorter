@@ -103,7 +103,7 @@ jobs:
             DEPLOYMENT_ENV=${{ secrets.DEPLOYMENT_ENV }}
             DATABASE_URL=${{ secrets.DATABASE_URL }}
             API_KEY=${{ secrets.API_KEY }}
-            # ... add other root variables as needed ...
+            
             EOF
 
             chmod 600 .env
@@ -128,11 +128,85 @@ jobs:
             cat <<EOF > rustsorter/.env
             DEPLOYMENT_ENV=${{ secrets.DEPLOYMENT_ENV }}
             RUSTSORTER_DB_URL=${{ secrets.DATABASE_URL }}
+            API_KEY=${{ secrets.RUSTSORTER_DISCORD_TOKEN }}
             EOF
 
             chmod 600 rustsorter/.env
 
 
-            ls -lhrta
+            # Write borter/.env
+            cat <<EOF > borter/.env
+            # borter/.env
+
+            # Linear Integration
+            BORTER_LINEAR_CLIENT_ID=${{ secrets.BORTER_LINEAR_CLIENT_ID }}
+            BORTER_LINEAR_CLIENT_SECRET=${{ secrets.BORTER_LINEAR_CLIENT_SECRET }}
+
+            # Spotify Integration
+            BORTER_SPOTIFY_CLIENT_ID=${{ secrets.BORTER_SPOTIFY_CLIENT_ID }}
+            BORTER_SPOTIFY_CLIENT_SECRET=${{ secrets.BORTER_SPOTIFY_CLIENT_SECRET }}
+
+            # Reddit Integration
+            BORTER_REDDIT_CLIENT_ID=${{ secrets.BORTER_REDDIT_CLIENT_ID }}
+            BORTER_REDDIT_SECRET=${{ secrets.BORTER_REDDIT_SECRET }}
+
+            # Twitter Integration
+            BORTER_TWITTER_KEY=${{ secrets.BORTER_TWITTER_KEY }}
+            BORTER_TWITTER_KEY_SECRET=${{ secrets.BORTER_TWITTER_KEY_SECRET }}
+            BORTER_TWITTER_BEARER_TOKEN=${{ secrets.BORTER_TWITTER_BEARER_TOKEN }}
+            BORTER_TWITTER_OAUTH_CLIENTID=${{ secrets.BORTER_TWITTER_OAUTH_CLIENTID }}
+            BORTER_TWITTER_OAUTH_CLIENTSECRET=${{ secrets.BORTER_TWITTER_OAUTH_CLIENTSECRET }}
+
+            # YouTube Integration
+            BORTER_YOUTUBE_API_KEY=${{ secrets.BORTER_YOUTUBE_API_KEY }}
+            BORTER_YOUTUBE_CLIENT_ID=${{ secrets.BORTER_YOUTUBE_CLIENT_ID }}
+            BORTER_YOUTUBE_CLIENT_SECRET=${{ secrets.BORTER_YOUTUBE_CLIENT_SECRET }}
+            BORTER_YOUTUBE_REDIRECT_URIS=${{ secrets.BORTER_YOUTUBE_REDIRECT_URIS }}
+            BORTER_YOUTUBE_JAVASCRIPT_ORIGINS=${{ secrets.BORTER_YOUTUBE_JAVASCRIPT_ORIGINS }}
+            EOF
+
+            chmod 600 borter/.env
+
+            echo -e "\033[1mDone writing env files, building...\033[0m"  
+
+            # Install Dependencies and Build Frontends
+            # Build forter
+            echo -e "\033[3mBuilding forter...\033[0m"
+            cd forter
+            npm install
+            npm run build
+            cd ..
+
+            # Build clisorter
+            echo -e "\033[3mBuilding clisorter...\033[0m"
+            cd clisorter
+            npm install
+            npm run build
+            cd ..
+
+            # Build borter
+            echo -e "\033[3mBuilding borter...\033[0m"
+            cd borter
+            chmod +x build.sh
+            ./build.sh
+            cd ..
+
+            # Build rustsorter
+            echo -e "\033[3mBuilding rustsorter...\033[0m"
+            cd rustsorter
+            cargo build --release
+            cd ..
+
+            echo -e "\033[1mDone building, running (with systemctl)...\033[0m"
+
+            # Reload systemd to recognize new services (if any changes)
+            echo -e "\033[3mReloading systemd...\033[0m"
+            sudo systemctl daemon-reload
+
+            # Restart services
+            echo -e "\033[3mRestarting borter...\033[0m"
+            sudo systemctl restart borter.service
+            echo -e "\033[3mRestarting rustsorter...\033[0m"
+            sudo systemctl restart rustsorter.service
 
             exit 0
