@@ -77,7 +77,7 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.DO_SSH_KEY }}
 
-      # Step 8: Deploy to DigitalOcean via SSH
+      # Step 8: Deploy to DigitalOcean
       - name: Deploy to DigitalOcean
         uses: appleboy/ssh-action@v0.1.10
         with:
@@ -85,21 +85,13 @@ jobs:
           username: deployer
           key: ${{ secrets.DO_SSH_KEY }}
           port: 22
+          # Add these parameters to sync the local repository
+          synchronize: true
+          source: "."
+          target: "~/sorter"
           script: |
             set -e
 
-            # Configure Git to use a personal access token for authentication
-            git config --global url."https://${{ secrets.GITHUB_TOKEN }}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
-
-            # If the sorter directory exists, remove it to ensure a fresh clone
-            if [ -d "~/sorter" ]; then
-              rm -rf ~/sorter
-            fi
-
-            # Clone the sorter monorepo from the production branch
-            git clone -b production https://github.com/sorterisntonline/sorter.git ~/sorter
-
-            # Navigate to the application directory
             cd ~/sorter || exit
 
             # Update Environment Variables
@@ -118,13 +110,13 @@ jobs:
             # forter/.env
 
             # Linear Integration
-            VITE_LINEAR_CLIENT_ID=${{ secrets.VITE_LINEAR_CLIENT_ID }}
+            VITE_LINEAR_CLIENT_ID=${{ secrets.BORTERLINEAR_CLIENT_ID }}
 
             # Spotify Integration
-            VITE_SPOTIFY_CLIENT_ID=${{ secrets.VITE_SPOTIFY_CLIENT_ID }}
+            VITE_SPOTIFY_CLIENT_ID=${{ secrets.BORTER_SPOTIFY_CLIENT_ID }}
 
             # YouTube Integration
-            VITE_YOUTUBE_CLIENT_ID=${{ secrets.VITE_YOUTUBE_CLIENT_ID }}
+            VITE_YOUTUBE_CLIENT_ID=${{ secrets.BORTER_YOUTUBE_CLIENT_ID }}
             EOF
 
             chmod 600 forter/.env
