@@ -1,0 +1,113 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - production
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      # Step 2: Set up SSH key
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.DO_SSH_KEY }}
+
+      # Step 3: Create GitHub Release
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            # Optionally include artifacts or built files
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Step 4: Deploy to DigitalOcean via SSH
+      - name: Deploy to DigitalOcean
+        uses: appleboy/ssh-action@v0.1.11
+        with:
+          host: ${{ secrets.DO_SSH_HOST }}
+          username: ${{ secrets.DO_SSH_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          port: 22
+          script: |
+            set -e
+
+            # 1. Navigate to the application directory
+            cd ~/sorter || exit
+
+            # 2. Pull the latest changes
+            git pull origin production
+
+            # 3. Update Environment Variables
+            # Write borter/.env
+            cat <<EOF > borter/.env
+            DEPLOYMENT_ENV=${{ secrets.DEPLOYMENT_ENV }}
+            BORTER_LINEAR_CLIENT_ID=${{ secrets.BORTER_LINEAR_CLIENT_ID }}
+            BORTER_LINEAR_CLIENT_SECRET=${{ secrets.BORTER_LINEAR_CLIENT_SECRET }}
+            BORTER_SPOTIFY_CLIENT_ID=${{ secrets.BORTER_SPOTIFY_CLIENT_ID }}
+            BORTER_SPOTIFY_CLIENT_SECRET=${{ secrets.BORTER_SPOTIFY_CLIENT_SECRET }}
+            BORTER_REDDIT_CLIENT_ID=${{ secrets.BORTER_REDDIT_CLIENT_ID }}
+            BORTER_REDDIT_SECRET=${{ secrets.BORTER_REDDIT_SECRET }}
+            BORTER_TWITTER_KEY=${{ secrets.BORTER_TWITTER_KEY }}
+            BORTER_TWITTER_KEY_SECRET=${{ secrets.BORTER_TWITTER_KEY_SECRET }}
+            BORTER_TWITTER_BEARER_TOKEN=${{ secrets.BORTER_TWITTER_BEARER_TOKEN }}
+            BORTER_TWITTER_OAUTH_CLIENTID=${{ secrets.BORTER_TWITTER_OAUTH_CLIENTID }}
+            BORTER_TWITTER_OAUTH_CLIENTSECRET=${{ secrets.BORTER_TWITTER_OAUTH_CLIENTSECRET }}
+            BORTER_YOUTUBE_API_KEY=${{ secrets.BORTER_YOUTUBE_API_KEY }}
+            BORTER_YOUTUBE_CLIENT_ID=${{ secrets.BORTER_YOUTUBE_CLIENT_ID }}
+            BORTER_YOUTUBE_CLIENT_SECRET=${{ secrets.BORTER_YOUTUBE_CLIENT_SECRET }}
+            BORTER_YOUTUBE_REDIRECT_URIS=${{ secrets.BORTER_YOUTUBE_REDIRECT_URIS }}
+            BORTER_YOUTUBE_JAVASCRIPT_ORIGINS=${{ secrets.BORTER_YOUTUBE_JAVASCRIPT_ORIGINS }}
+            EOF
+
+            # Write rustsorter/.env
+            cat <<EOF > rustsorter/.env
+            DEPLOYMENT_ENV=${{ secrets.DEPLOYMENT_ENV }}
+            RUSTSORTER_DB_URL=${{ secrets.RUSTSORTER_DB_URL }}
+            EOF
+
+            # Write forter/.env
+            cat <<EOF > forter/.env
+            VITE_LINEAR_CLIENT_ID=${{ secrets.BORTER_LINEAR_CLIENT_ID }}
+            VITE_SPOTIFY_CLIENT_ID=${{ secrets.BORTER_SPOTIFY_CLIENT_ID }}
+            VITE_YOUTUBE_CLIENT_ID=${{ secrets.BORTER_YOUTUBE_CLIENT_ID }}
+            EOF
+
+            # 4. Install Dependencies and Build Frontends
+            # Build forter
+            cd forter
+            npm install
+            npm run build
+            cd ..
+
+            # Build clisorter
+            cd clisorter
+            npm install
+            npm run build
+            cd ..
+
+            # 5. Build borter
+            cd borter
+            chmod +x build.sh
+            ./build.sh
+            cd ..
+
+            # 6. Build rustsorter
+            cd rustsorter
+            cargo build --release
+            cd ..
+
+            # 7. Restart systemctl services
+            sudo systemctl restart borter
+            sudo systemctl restart rustsorter
+
+            exit 0
