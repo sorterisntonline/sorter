@@ -25,7 +25,9 @@
         com.github.rawleyfowler/sluj {:mvn/version "1.0.2"}
         com.clojure-goes-fast/clj-async-profiler {:mvn/version "1.2.0"}
         io.github.borkdude/deflet {:mvn/version "0.1.0"}
-        ring-ratelimit/ring-ratelimit {:mvn/version "0.2.3"}}
+        ring-ratelimit/ring-ratelimit {:mvn/version "0.2.3"}
+        yogthos/dotenv {:mvn/version "1.2.0"}
+        }
  :aliases {:dev
            {:extra-deps
             {binaryage/devtools {:mvn/version "1.0.6"}

@@ -5,7 +5,10 @@
             [hikari-cp.core :refer [make-datasource close-datasource]]
             [migratus.core :as migratus]
             [clojure.string :as str]
-            [clojure.edn :as edn]))
+            [clojure.edn :as edn]
+            [dotenv :refer [env]]))
+
+(dotenv/load-env)
 
 (defn get-env [key default]
   "Retrieve the value of an environment variable or return a default."
