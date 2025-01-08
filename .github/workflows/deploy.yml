@@ -93,7 +93,7 @@ jobs:
             rm -rf ~/sorter
 
             # Clone the sorter monorepo from the production branch using gh cli
-            git clone git@github.com:sorterisntonline/sorter.git -b production
+            git clone git@github.com:sorterisntonline/sorter.git -b production ~/sorter
 
             cd ~/sorter || exit
 
@@ -169,23 +169,9 @@ jobs:
 
             echo -e "\033[1mDone writing env files, building...\033[0m"  
 
-            # Install Dependencies and Build Frontends
-            # Build forter
-            echo -e "\033[3mBuilding forter...\033[0m"
-            cd forter
-            npm install
-            npm run build
-            cd ..
-
-            # Build clisorter
-            echo -e "\033[3mBuilding clisorter...\033[0m"
-            cd clisorter
-            npm install
-            npm run build
-            cd ..
 
             # Build borter
-            echo -e "\033[3mBuilding borter...\033[0m"
+            echo -e "\033[3mBuilding borter, forter, and clisorter...\033[0m"
             cd borter
             chmod +x build.sh
             ./build.sh
