@@ -194,7 +194,8 @@ jobs:
             clojure -X:build uberjar
             cd ..
 
-            # Build rustsorter
+            
+            # Build rustsorter 
             echo -e "\033[3mBuilding rustsorter...\033[0m"
             cd rustsorter
             cargo build --release
