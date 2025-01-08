@@ -93,7 +93,7 @@ export const CallbackRoute = ({ refreshFrontpage, setClosed }) => {
 
 export const login = async () => {
   const params = new URLSearchParams("");
-  params.append("client_id", "e61d249115c9451a8137a2a5af90d76b");
+  params.append("client_id", import.meta.env.VITE_SPOTIFY_CLIENT_ID);
   params.append("response_type", "code");
   const redirect_uri = window.location.origin + "/api/spotify/callback";
   params.append("redirect_uri", redirect_uri);

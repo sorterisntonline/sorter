@@ -11,12 +11,12 @@
   (:import
    [java.net URLEncoder]))
 
-(def key "f3ZKYzeEFRAKkDAwfkJ5mhsMW")
-(def key-secret "IXpLUdRSMBiXOsOU5Qf3YwD80n89Zc9j0z17v85NIxvTK1n8aH")
-(def bearer-token "AAAAAAAAAAAAAAAAAAAAAM62uwEAAAAAwwGNlTaT5CE%2FFdFBaIhf2cfpIJw%3DS1cdfua9bCuVlUoQLBLkrJaxlVMld2yfJmYFynaXDaZFNzYiNB")
+(def key (System/getenv "BORTER_TWITTER_KEY"))
+(def key-secret (System/getenv "BORTER_TWITTER_KEY_SECRET"))
+(def bearer-token (System/getenv "BORTER_TWITTER_BEARER_TOKEN"))
 
-(def oauth-clientid "cGJ1ZnVHcTY1cGJmcHhLTUt6SEk6MTpjaQ")
-(def oauth-clientsecret "Lhk4f5Ks2hCLxEfHQ9fm9FGOhl7dM-tVxnDdpABCNQhtU9rQSI")
+(def oauth-clientid (System/getenv "BORTER_TWITTER_OAUTH_CLIENTID"))
+(def oauth-clientsecret (System/getenv "BORTER_TWITTER_OAUTH_CLIENTSECRET"))
 
 
 

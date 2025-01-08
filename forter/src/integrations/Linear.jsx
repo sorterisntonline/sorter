@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 
 export const loginLinear = async () => {
   const params = new URLSearchParams("");
-  params.append("client_id", "169f3f75ce5946ad42e0df47eb23c2eb");
+  params.append("client_id", import.meta.env.VITE_LINEAR_CLIENT_ID);
   const redirect_uri = window.location.origin + "/api/linear/callback";
   params.append("redirect_uri", redirect_uri);
   params.append("response_type", "code");

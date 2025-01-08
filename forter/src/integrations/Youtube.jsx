@@ -5,7 +5,7 @@ export const youtubeLogin = async () => {
   const params = new URLSearchParams("");
   params.append(
     "client_id",
-    "331497482324-hn10ajbj4ecer6b50hgrchtqp18jvou0.apps.googleusercontent.com"
+    import.meta.env.VITE_YOUTUBE_CLIENT_ID
   );
   const redirect_uri = window.location.origin + "/api/youtube/callback";
   params.append("redirect_uri", redirect_uri);

@@ -15,8 +15,8 @@
         encoded-bytes (.encodeToString (Base64/getEncoder) bytes)]
     encoded-bytes))
 
-(def client_id "e61d249115c9451a8137a2a5af90d76b")
-(def client_secret "098f06ddb0a54e29acc89ee7ae766681")
+(def client_id (System/getenv "BORTER_SPOTIFY_CLIENT_ID"))
+(def client_secret (System/getenv "BORTER_SPOTIFY_CLIENT_SECRET"))
 
 (def token (atom nil))
 

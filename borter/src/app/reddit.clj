@@ -7,8 +7,8 @@
             [clojure.data.json :as json])
   (:import [java.util.concurrent Executors TimeUnit]))
 
-(def client_id "jPkQFOxYjEueXdlP_L28Iw")
-(def secret "y3TXoDHFc4OSmCNs92oKNJnWgq5wAA")
+(def client_id (System/getenv "BORTER_REDDIT_CLIENT_ID"))
+(def secret (System/getenv "BORTER_REDDIT_SECRET"))
 (def redir_uri "https://sorter.isnt.online/api/integrations/reddit")
 (def code "XsZkyTrGtrUEKbGS1C1Zb6nIYuD-Kg")
 
