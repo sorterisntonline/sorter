@@ -102,7 +102,6 @@ jobs:
             cat <<EOF > .env
             DEPLOYMENT_ENV=${{ secrets.DEPLOYMENT_ENV }}
             DATABASE_URL=${{ secrets.DATABASE_URL }}
-            API_KEY=${{ secrets.API_KEY }}
             
             EOF
 
