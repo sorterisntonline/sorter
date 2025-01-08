@@ -129,9 +129,12 @@ jobs:
             # Write rustsorter/.env
             cat <<EOF > rustsorter/.env
             DEPLOYMENT_ENV=${{ secrets.DEPLOYMENT_ENV }}
-            RUSTSORTER_DB_URL=${{ secrets.RUSTSORTER_DB_URL }}
+            RUSTSORTER_DB_URL=${{ secrets.DATABASE_URL }}
             EOF
 
             chmod 600 rustsorter/.env
+
+
+            ls -lhrta
 
             exit 0
