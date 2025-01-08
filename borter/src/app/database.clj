@@ -12,30 +12,31 @@
            
            st)))
 
-(def db (let [[username password host port database]
-              (-> (slurp "database/config.edn")
-                  clojure.edn/read-string
-                  :jdbc-url
-                  parse-jdbc)
-              
-              cfg {:auto-commit        true
-                   :read-only          false
-                   :connection-timeout 30000
-                   :validation-timeout 5000
-                   :idle-timeout       600000
-                   :max-lifetime       1800000
-                   :minimum-idle       10
-                   :maximum-pool-size  10
-                   :pool-name          "db-pool"
-                   :register-mbeans false
-                   :adapter "postgresql"
-                   :username username
-                   :password password
-                   :server-name host
-                   :port-number (Integer/parseInt port)
-                   :database-name database}]
-          
-          (make-datasource cfg)))
+(defn create-db-pool [config-path]
+  (let [[username password host port database]
+        (-> (slurp config-path)
+            clojure.edn/read-string
+            :jdbc-url
+            parse-jdbc)
+        cfg {:auto-commit        true
+             :read-only          false
+             :connection-timeout 30000
+             :validation-timeout 5000
+             :idle-timeout       600000
+             :max-lifetime       1800000
+             :minimum-idle       10
+             :maximum-pool-size  10
+             :pool-name          "db-pool"
+             :register-mbeans false
+             :adapter "postgresql"
+             :username username
+             :password password
+             :server-name host
+             :port-number (Integer/parseInt port)
+             :database-name database}]
+    (make-datasource cfg)))
+
+(def db (delay (create-db-pool "database/config.edn")))
 
 
 (def migratus-config {:store :database
@@ -46,7 +47,7 @@
 (comment)
 
 (defn exec! [m]
-  (with-open [conn (jdbc/get-connection {:datasource db})]
+  (with-open [conn (jdbc/get-connection {:datasource @db})]
     (jdbc/execute! conn (cond (map? m)
                               (sql/format m)
                               (string? m)
@@ -85,7 +86,7 @@
 
 (defn run-migrations [] (do
                           (println "running migrations")
-                          (migratus/migrate migratus-config)
+                          (migratus/migrate (update-in migratus-config [:db :datasource] deref))
                           (fill-values)))
 
 (comment (exec! "SELECT
