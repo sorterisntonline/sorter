@@ -6,25 +6,18 @@
             [migratus.core :as migratus]
             [clojure.string :as str]
             [clojure.edn :as edn]
-            [dotenv :refer [env]]))
-
-(dotenv/load-env)
-
-(defn get-env [key default]
-  "Retrieve the value of an environment variable or return a default."
-  (let [value (System/getenv key)]
-    (if (str/blank? value) default value)))
+            [environ.core :refer [env]])) ;; Use environ for environment variables
 
 (defn determine-environment []
   "Determine the current environment. Defaults to 'development' if ENVIRONMENT is not set."
-  (get-env "ENVIRONMENT" "development"))
+  (get env :environment "development"))
 
 (defn get-database-url []
   "Determine the correct database URL based on the ENVIRONMENT variable."
   (let [env (determine-environment)]
     (if (= env "production")
-      (get-env "PROD_DATABASE_URL" nil)
-      (get-env "DATABASE_URL" nil))))
+      (get env :prod-database-url)
+      (get env :database-url))))
 
 (defn parse-jdbc [st]
   "Parse a JDBC URL into its components."

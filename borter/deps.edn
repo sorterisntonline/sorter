@@ -26,7 +26,7 @@
         com.clojure-goes-fast/clj-async-profiler {:mvn/version "1.2.0"}
         io.github.borkdude/deflet {:mvn/version "0.1.0"}
         ring-ratelimit/ring-ratelimit {:mvn/version "0.2.3"}
-        yogthos/dotenv {:mvn/version "1.2.0"}
+        environ/environ {:mvn/version "1.2.0"} ; Corrected dependency
         }
  :aliases {:dev
            {:extra-deps
