@@ -222,6 +222,7 @@ jobs:
             SQLX_OFFLINE=true cargo build --release
             cd ..
 
+
             echo -e "\033[1mDone building, running (with systemctl)...\033[0m"
 
             # Reload systemd to recognize new services (if any changes)
