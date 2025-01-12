@@ -99,3 +99,34 @@ pub fn page_rank(graph: &DirectedCsrGraph<i32, (), i32>) -> Vec<f32> {
         }
     }
 }
+
+pub fn rank_centrality(graph: &DirectedCsrGraph<i32, (), i32>) -> Vec<f32> {
+    // https://docs.rs/graph/latest/src/graph/page_rank.rs.html#1-198
+    let node_count = graph.node_count();
+    let init_score = 1_f32;
+
+    let mut max_out_degree: i32 = 0;
+
+    let mut out_degrees = vec![0; node_count as usize];
+
+    for node in 0..node_count {
+        let out_degree = graph
+            .out_neighbors_with_values(node)
+            .fold(0, |acc, x| acc + x.value);
+        max_out_degree = max_out_degree.max(out_degree);
+
+        out_degrees[node as usize] = out_degree;
+    }
+
+    let mut scores = vec![init_score; node_count as usize];
+
+    let mut iteration = 0;
+    loop {
+        page_rank_iteration(graph, &mut scores, &out_degrees, max_out_degree);
+        iteration += 1;
+
+        if iteration == 10 {
+            return scores;
+        }
+    }
+}

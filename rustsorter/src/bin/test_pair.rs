@@ -50,7 +50,7 @@ pub fn main() {
     println!("algorithm,trial,chars,error");
 
     for (algorithm, name) in algorithms {
-        (0..1000usize).into_par_iter().for_each(|trial| {
+        (0..200usize).into_par_iter().for_each(|trial| {
             let mut votes = vec![];
 
             let mut chars = 0;
