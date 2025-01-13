@@ -104,7 +104,7 @@ jobs:
             
             # intentionally omitted for now
             # ENVIRONMENT=${{ secrets.DEPLOYMENT_ENV }} 
-            DATABASE_URL=${{ secrets.DATABASE_URL }}
+            # DATABASE_URL=${{ secrets.DATABASE_URL }}
             
             EOF
 
@@ -132,8 +132,8 @@ jobs:
             # we intentionally don't set ENVIRONMENT yet
             # ENVIRONMENT=${{ secrets.DEPLOYMENT_ENV }}
             
-            DATABASE_URL=${{ secrets.DATABASE_URL }}
-            PROD_DATABASE_URL=${{ secrets.PROD_DATABASE_URL }}
+            # we're in production, so we use the prod database url
+            DATABASE_URL=${{ secrets.PROD_DATABASE_URL }}
             DISCORD_TOKEN=${{ secrets.RUSTSORTER_DISCORD_TOKEN }}
             EOF
 
@@ -148,8 +148,7 @@ jobs:
             # ENVIRONMENT=${{ secrets.DEPLOYMENT_ENV }}
             
             # database URLs
-            DATABASE_URL=${{ secrets.DATABASE_URL }}
-            PROD_DATABASE_URL=${{ secrets.PROD_DATABASE_URL }}
+            DATABASE_URL=${{ secrets.PROD_DATABASE_URL }}
 
             # Linear Integration
             BORTER_LINEAR_CLIENT_ID=${{ secrets.BORTER_LINEAR_CLIENT_ID }}
