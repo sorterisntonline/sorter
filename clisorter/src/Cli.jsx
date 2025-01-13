@@ -16,11 +16,13 @@ export const useStore = create((set, get) => ({
   magnitude: 50,
   items_by_id: {},
   parseError: false,
+  tagData: null,
+  setTagData: (data) => set({ tagData: data }),
   setInput: (input) => set({ input }),
   setCsvData: (csvData) => set({ csvData }),
   setResults: (results) => {
     const items_by_id = {};
-    console.log('results', results);
+    console.log('Setting results:', results);
     if (results) {
       // Index unsorted items
       if (results.unsorted) {
@@ -41,15 +43,19 @@ export const useStore = create((set, get) => ({
   setPinnedLeft: (item) => set({ pinned_left: item }),
   setPinnedRight: (item) => set({ pinned_right: item }),
   fetchResults: async () => {
+    console.log('Fetching results...');
     const params = new URLSearchParams(window.location.search);
     if (!params.has('t')) {  // If no tags parameter exists
+      console.log('No tags parameter, setting results to null');
       set({ results: null });
       return;
     }
     
     try {
+      console.log('Fetching with params:', params.toString());
       const response = await fetch(`/api/tag/page2?${params.toString()}`);
       const data = await response.json();
+      console.log('Received data:', data);
       get().setResults(data);
     } catch (error) {
       console.error('Failed to fetch results:', error);
@@ -57,6 +63,7 @@ export const useStore = create((set, get) => ({
     }
   },
   parseInput: (value) => {
+    console.log('Parsing input:', value);
     try {
       const match = grammar.match(value);
       const parseSucceeded = match.succeeded();
@@ -66,9 +73,10 @@ export const useStore = create((set, get) => ({
 
       if (parseSucceeded) {
         const parsedData = semantics(match).toArray();
+        console.log('Parsed data:', parsedData);
         
         // Get current store state
-        const currentState = useStore.getState();
+        const currentState = get();
         
         // Compare with previous csvData to see if anything meaningful changed
         const hasMeaningfulChange = !currentState.csvData.length || 
@@ -95,6 +103,8 @@ export const useStore = create((set, get) => ({
             .map(item => item.value)
             .join('.');
 
+          console.log('Updated params:', { tags, mentions, actions });
+
           // Update URL params
           const params = new URLSearchParams(window.location.search);
           if (tags.length) params.set('t', tags);
@@ -113,6 +123,7 @@ export const useStore = create((set, get) => ({
               .filter(item => item.type === 'hashtag')
               .every(tag => currentState.tagData.public.some(publicTag => publicTag.slug === tag.value));
 
+            console.log('All tags exist:', allTagsExist);
             if (allTagsExist) {
               currentState.fetchResults();
             }
@@ -128,11 +139,19 @@ export const useStore = create((set, get) => ({
 
 const TagCategories = () => {
   const { input, setInput, parseInput } = useStore();
+  const [isExpanded, setIsExpanded] = useState(false);
+  const { data, error, isLoading } = useSWR("/api/tag", fetcher);
+
+  useEffect(() => {
+    if (data) {
+      useStore.getState().setTagData(data);
+    }
+  }, [data]);
 
   const handleTagClick = (tag) => {
     const newInput = input + (input.endsWith(' ') || input === '' ? '' : ' ') + tag + ' ';
     setInput(newInput);
-    parseInput(newInput);
+    useStore.getState().parseInput(newInput);
   };
 
   const handleVoteClick = () => {
@@ -151,53 +170,95 @@ const TagCategories = () => {
     }
   };
 
+  if (isLoading) return <div>Loading tags...</div>;
+  if (error) return <div>Error loading tags</div>;
+
+  // Flatten tags and add namespace prefix
+  const flattenedTags = data?.public.map(tag => ({
+    ...tag,
+    displaySlug: tag.ns ? `${tag.ns}/${tag.slug}` : tag.slug
+  }))
+  // Sort by vote count (descending)
+  .sort((a, b) => (b.item_count || 0) - (a.item_count || 0)) || [];
+
   return (
     <>
       <div className="flex flex-col md:flex-row max-w-[200px] md:max-w-none gap-0 justify-start">
-        {/* Hashtags Square */}
-        <div className="w-[200px] h-[200px] bg-gray-200 p-4 flex flex-col">
+        <div className={`${
+          isExpanded 
+            ? 'w-[600px] h-[400px] overflow-y-auto' 
+            : 'w-[200px] h-[200px]'
+          } bg-gray-200 p-4 flex flex-col transition-all duration-300`}>
           <div className="space-y-2">
+            {!isExpanded ? (
+              // Collapsed view with hardcoded tags
+              <>
+                <div 
+                  onClick={() => handleTagClick('#songs')} 
+                  className="font-serif text-lg text-left hover:underline cursor-pointer"
+                >#songs</div>
+                <div 
+                  onClick={() => handleTagClick('#albums')} 
+                  className="font-serif text-lg text-left hover:underline cursor-pointer"
+                >#albums</div>
+                <div 
+                  onClick={() => handleTagClick('#artists')} 
+                  className="font-serif text-lg text-left hover:underline cursor-pointer"
+                >#artists</div>
+              </>
+            ) : (
+              // Expanded view with all tags
+              <div className="grid grid-cols-2 gap-2">
+                {flattenedTags.map(tag => (
+                  <div
+                    key={tag.id}
+                    onClick={() => handleTagClick('#' + tag.slug)}
+                    className="font-serif text-md text-left hover:underline cursor-pointer"
+                  >
+                    #{tag.displaySlug}
+                    <span className="text-sm text-gray-500 ml-2">
+                      ({tag.item_count || 0})
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
             <div 
-              onClick={() => handleTagClick('#songs')} 
-              className="font-serif text-lg text-left hover:underline cursor-pointer"
-            >#songs</div>
-            <div 
-              onClick={() => handleTagClick('#albums')} 
-              className="font-serif text-lg text-left hover:underline cursor-pointer"
-            >#albums</div>
-            <div 
-              onClick={() => handleTagClick('#artists')} 
-              className="font-serif text-lg text-left hover:underline cursor-pointer"
-            >#artists</div>
-            <div 
-              onClick={() => handleTagClick('#artists')} 
+              onClick={() => setIsExpanded(!isExpanded)} 
               className="font-serif text-lg text-gray-500 text-left hover:underline cursor-pointer"
-            >more...</div>
+            >
+              {isExpanded ? 'less...' : 'more...'}
+            </div>
           </div>
         </div>
 
-        {/* Commands Square */}
-        <div className="w-[200px] h-[200px] bg-red-200 p-4 flex flex-col">
-          <div className="space-y-2">
-            <div 
-              onClick={handleVoteClick}
-              className="font-serif text-lg text-left hover:underline cursor-pointer"
-            >!vote</div>
-            <div 
-              onClick={handleVotesClick}
-              className="font-serif text-lg text-left hover:underline cursor-pointer"
-            >!votes</div>
-          </div>
-        </div>
+        {/* Only show these panels when not expanded */}
+        {!isExpanded && (
+          <>
+            {/* Commands Square */}
+            <div className="w-[200px] h-[200px] bg-red-200 p-4 flex flex-col">
+              <div className="space-y-2">
+                <div 
+                  onClick={handleVoteClick}
+                  className="font-serif text-lg text-left hover:underline cursor-pointer"
+                >!vote</div>
+                <div 
+                  onClick={handleVotesClick}
+                  className="font-serif text-lg text-left hover:underline cursor-pointer"
+                >!votes</div>
+              </div>
+            </div>
 
-        {/* Mentions Square */}
-        <div className="w-[200px] h-[200px] bg-red-400 p-4 flex flex-col">
-          <div className="space-y-2">
-            <div className="font-serif text-lg text-left hover:underline cursor-pointer">@me</div>
-            <div className="font-serif text-lg text-left hover:underline cursor-pointer">@you</div>
-            <div className="font-serif text-lg text-left hover:underline cursor-pointer">@all</div>
-          </div>
-        </div>
+            {/* Mentions Square */}
+            <div className="w-[200px] h-[200px] bg-red-400 p-4 flex flex-col">
+              <div className="space-y-2">
+                <div className="font-serif text-lg text-left hover:underline cursor-pointer">@me</div>
+                <div className="font-serif text-lg text-left hover:underline cursor-pointer">@you</div>
+                <div className="font-serif text-lg text-left hover:underline cursor-pointer">@all</div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
       <br/>
     </>
