@@ -207,11 +207,7 @@ jobs:
             clojure -X:build uberjar
             
             # builds to sorter/borter/target/sorter-*-standalone.jar
-            # chmod +x target/sorter-*-standalone.jar 
-            
-            # its called app.jar now
-            chmod +x target/app.jar
- 
+            chmod +x target/sorter-*-standalone.jar 
             
             cd ..
 
