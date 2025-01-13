@@ -506,27 +506,38 @@ const GrammarDisplay = () => {
 
 
   const handleItemClick = (itemId) => {
-    console.log('handleItemClick', itemId);
     const { setInput, parseInput, csvData, parsedDataToString } = useStore.getState();
     
-    // Filter out any existing item commands
+    // Check if we're already looking at this item
+    const existingItem = csvData.find(item => 
+        item.type === 'action' && 
+        item.value === 'item' && 
+        item.itemId === itemId.toString()
+    );
+    
+    // If we are, remove the item command entirely
+    if (existingItem) {
+        const newCsvData = csvData.filter(item => 
+            !(item.type === 'action' && item.value === 'item')
+        );
+        const newInput = parsedDataToString(newCsvData);
+        setInput(newInput);
+        parseInput(newInput);
+        return;
+    }
+    
+    // If not, replace any existing item command with this one
     const filteredData = csvData.filter(item => 
         !(item.type === 'action' && item.value === 'item')
     );
-
-    console.log('filteredData', filteredData);
     
-    // Add the new item command
     const newCsvData = [...filteredData, { 
         type: 'action', 
         value: 'item',
         itemId: itemId.toString()
     }];
-
-    console.log('newCsvData', newCsvData);
     
     const newInput = parsedDataToString(newCsvData);
-    console.log('newInput', newInput);
     setInput(newInput);
     parseInput(newInput);
   };
