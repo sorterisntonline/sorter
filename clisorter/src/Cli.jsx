@@ -142,7 +142,9 @@ export const useStore = create((set, get) => ({
     return parsedData.map(item => {
       if (item.type === 'hashtag') return '#' + item.value;
       if (item.type === 'mention') return '@' + item.value;
-      if (item.type === 'action') return '!' + item.value;
+      if (item.type === 'action') {
+        return item.itemId ? `!${item.value}(${item.itemId})` : `!${item.value}`;
+      }
       return '';
     }).join(' ');
   },
@@ -504,8 +506,27 @@ const GrammarDisplay = () => {
 
 
   const handleItemClick = (itemId) => {
-    const { setInput, parseInput } = useStore.getState();
-    const newInput = `!item(${itemId})`;
+    console.log('handleItemClick', itemId);
+    const { setInput, parseInput, csvData, parsedDataToString } = useStore.getState();
+    
+    // Filter out any existing item commands
+    const filteredData = csvData.filter(item => 
+        !(item.type === 'action' && item.value === 'item')
+    );
+
+    console.log('filteredData', filteredData);
+    
+    // Add the new item command
+    const newCsvData = [...filteredData, { 
+        type: 'action', 
+        value: 'item',
+        itemId: itemId.toString()
+    }];
+
+    console.log('newCsvData', newCsvData);
+    
+    const newInput = parsedDataToString(newCsvData);
+    console.log('newInput', newInput);
     setInput(newInput);
     parseInput(newInput);
   };
