@@ -1,7 +1,7 @@
 import * as ohm from 'ohm-js';
 import useSWR from "swr";
 import { create } from "zustand";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { VotePanel } from "./VotePanel";
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { VotesPanel } from './VotesPanel';
@@ -60,22 +60,18 @@ export const useStore = create((set, get) => ({
     try {
       const match = grammar.match(value);
       const parseSucceeded = match.succeeded();
-      
-      // Set parse error state
       set({ parseError: !parseSucceeded });
 
       if (parseSucceeded) {
         const parsedData = semantics(match).toArray();
-        
-        // Get current store state
-        const currentState = useStore.getState();
+        const { csvData, tagData, fetchResults } = get();
         
         // Compare with previous csvData to see if anything meaningful changed
-        const hasMeaningfulChange = !currentState.csvData.length || 
-          parsedData.length !== currentState.csvData.length ||
+        const hasMeaningfulChange = !csvData.length || 
+          parsedData.length !== csvData.length ||
           !parsedData.every((item, i) => 
-            item.type === currentState.csvData[i]?.type && 
-            item.value === currentState.csvData[i]?.value
+            item.type === csvData[i]?.type && 
+            item.value === csvData[i]?.value
           );
 
         if (hasMeaningfulChange) {
@@ -95,34 +91,15 @@ export const useStore = create((set, get) => ({
             .map(item => item.value)
             .join('.');
 
-          // Update URL params
-          const params = new URLSearchParams(window.location.search);
-          if (tags.length) params.set('t', tags);
-          else params.delete('t');
-          if (mentions.length) params.set('u', mentions);
-          else params.delete('u');
-          if (actions.length) params.set('a', actions);
-          else params.delete('a');
-
-          // Update URL without page reload
-          window.history.replaceState({}, '', `${window.location.pathname}?${params}`);
-          
-          // Fetch results if all tags exist
-          if (currentState.tagData) {
-            const allTagsExist = parsedData
-              .filter(item => item.type === 'hashtag')
-              .every(tag => currentState.tagData.public.some(publicTag => publicTag.slug === tag.value));
-
-            if (allTagsExist) {
-              currentState.fetchResults();
-            }
-          }
+          // Return params for URL update in component
+          return { tags, mentions, actions };
         }
       }
     } catch (error) {
       console.error('Failed to parse input:', error);
       set({ parseError: true });
     }
+    return null;
   },
 }));
 
@@ -241,10 +218,16 @@ const fetcher = (url) => fetch(url).then(res => res.json());
 
 const HashtagItem = ({ value }) => {
   const { data, error, isLoading } = useSWR("/api/tag", fetcher);
-  const { input, setInput, parseInput } = useStore();
   
-  if (isLoading) return <h1> loading... </h1>;
-  if (error) return <h1> error </h1>;
+  if (isLoading) return (
+    <div className="animate-pulse bg-gray-200 h-6 w-20 rounded"></div>
+  );
+  
+  if (error) return (
+    <div className="text-red-500 bg-red-100 p-2 rounded">
+      Failed to load tags. Please try again later.
+    </div>
+  );
 
   const filtered = data.public.filter(tag => tag.slug.startsWith(value));
   if (filtered.length === 0) {
@@ -386,15 +369,14 @@ const GrammarDisplay = () => {
 };
 
 const TextInput = () => {
-  const { input, csvData, setInput, setCsvData, fetchResults, results } = useStore();
+  const { input, csvData, setInput, setCsvData, fetchResults, parseError: storeParseError } = useStore();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { data: tagData } = useSWR("/api/tag", fetcher);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
-  const [parseError, setParseError] = useState(false);
 
   useEffect(() => {
-    if (!tagData) return;
+    if (!tagData || input) return; // Skip if input already exists
     
     const tags = searchParams.get('t')?.split('.').map(tag => '#' + tag) || [];
     const mentions = searchParams.get('u')?.split('.').map(mention => '@' + mention) || [];
@@ -402,134 +384,52 @@ const TextInput = () => {
     
     const initialInput = [...tags, ...mentions, ...actions].join(' ');
 
-    // Only set initial input if it's not already set
-    if (initialInput && !input) {
+    if (initialInput) {
       setInput(initialInput);
       const match = grammar.match(initialInput);
       if (match.succeeded()) {
         const parsedData = semantics(match).toArray();
         setCsvData(parsedData);
         
-        if (parsedData.filter(item => item.type === 'hashtag')
-            .every(tag => tagData.public.some(publicTag => publicTag.slug === tag.value))) {
+        const allTagsExist = parsedData
+          .filter(item => item.type === 'hashtag')
+          .every(tag => tagData.public.some(publicTag => publicTag.slug === tag.value));
+
+        if (allTagsExist) {
           fetchResults();
         }
       }
     }
-  }, [tagData, searchParams, input, setInput, setCsvData, fetchResults]);
+  }, [tagData, searchParams, setInput, setCsvData, fetchResults, input]);
 
-  const handleKeyDown = (e) => {
-    // Get current suggestions from HashtagItem components
-    const lastTag = input.split(' ').pop();
-    if (!lastTag?.startsWith('#') || !tagData) return;
-    
-    const suggestions = tagData.public
-      .filter(tag => tag.slug.startsWith(lastTag.slice(1)))
-      .map(tag => tag.slug);
-
-    if (suggestions.length === 0) return;
-
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      
-      // Calculate next suggestion index
-      const nextIndex = selectedSuggestionIndex === -1 ? 0 : 
-        (selectedSuggestionIndex + 1) % suggestions.length;
-      setSelectedSuggestionIndex(nextIndex);
-
-      // Replace the last tag with the selected suggestion and add a space
-      const inputParts = input.split(' ');
-      inputParts[inputParts.length - 1] = '#' + suggestions[nextIndex] + ' ';
-      const newInput = inputParts.join(' ');
-      setInput(newInput);
-
-      // Trigger handleChange with synthetic event to run parsing and network query
-      handleChange({ target: { value: newInput } });
-    }
-  };
-
-  const handleChange = (e) => {
+  const handleChange = useCallback((e) => {
     setSelectedSuggestionIndex(-1);
     const newValue = e.target.value;
     setInput(newValue);
 
-    // If the input is empty, clear csvData, reset parseError, and update URL
     if (newValue.trim() === "") {
       setCsvData([]);
-      setParseError(false);
-      setSearchParams(new URLSearchParams()); // Clear URL parameters
+      setSearchParams(new URLSearchParams());
       return;
     }
 
-    try {
-      const match = grammar.match(newValue);
-      const parseSucceeded = match.succeeded();
-      setParseError(!parseSucceeded);
-
-      if (parseSucceeded) {
-        const parsedData = semantics(match).toArray();
-        
-        // Compare with previous csvData to see if anything meaningful changed
-        const hasMeaningfulChange = !csvData.length || 
-          parsedData.length !== csvData.length ||
-          !parsedData.every((item, i) => 
-            item.type === csvData[i]?.type && 
-            item.value === csvData[i]?.value
-          );
-
-        if (hasMeaningfulChange) {
-          setCsvData(parsedData);
-
-          // Build query params
-          const tags = parsedData
-            .filter(item => item.type === 'hashtag')
-            .map(item => item.value)
-            .join('.');
-          const mentions = parsedData
-            .filter(item => item.type === 'mention')
-            .map(item => item.value)
-            .join('.');
-          const actions = parsedData
-            .filter(item => item.type === 'action')
-            .map(item => item.value)
-            .join('.');
-
-          // Create new search params
-          const newParams = new URLSearchParams();
-          if (tags.length) newParams.set('t', tags);
-          if (mentions.length) newParams.set('u', mentions);
-          if (actions.length) newParams.set('a', actions);
-
-          setSearchParams(newParams);
-          
-          if (tagData) {
-            const allTagsExist = parsedData
-              .filter(item => item.type === 'hashtag')
-              .every(tag => tagData.public.some(publicTag => publicTag.slug === tag.value));
-
-            if (allTagsExist) {
-              fetchResults();
-            }
-          }
-        }
-      } else {
-        // Clear URL parameters if parsing fails
-        setSearchParams(new URLSearchParams());
-      }
-    } catch (error) {
-      console.error('Failed to parse CSV:', error);
-      setParseError(true);
-      // Clear URL parameters on error
-      setSearchParams(new URLSearchParams());
+    const params = useStore.getState().parseInput(newValue);
+    if (params) {
+      const { tags, mentions, actions } = params;
+      const newParams = new URLSearchParams();
+      if (tags.length) newParams.set('t', tags);
+      if (mentions.length) newParams.set('u', mentions);
+      if (actions.length) newParams.set('a', actions);
+      setSearchParams(newParams);
     }
-  };
+  }, [setInput, setCsvData, setSearchParams]);
 
   return (
     <div className="flex flex-col items-center">
       <input
         type="text"
         className={`font-serif p-2 mt-4 text-lg w-[600px] border focus:outline-none ${
-          parseError 
+          storeParseError 
             ? 'border-red-300 bg-red-50 focus:border-red-500' 
             : 'border-gray-300 focus:border-gray-500'
         }`}
