@@ -135,10 +135,18 @@ export const useStore = create((set, get) => ({
       set({ parseError: true });
     }
   },
+  parsedDataToString: (parsedData) => {
+    return parsedData.map(item => {
+      if (item.type === 'hashtag') return '#' + item.value;
+      if (item.type === 'mention') return '@' + item.value;
+      if (item.type === 'action') return '!' + item.value;
+      return '';
+    }).join(' ');
+  },
 }));
 
 const TagCategories = () => {
-  const { input, setInput, parseInput, csvData } = useStore();
+  const { input, setInput, parseInput, csvData, parsedDataToString } = useStore();
   const [isExpanded, setIsExpanded] = useState(false);
   const { data, error, isLoading } = useSWR("/api/tag", fetcher);
 
@@ -149,15 +157,11 @@ const TagCategories = () => {
   }, [data]);
 
   const handleTagClick = (tag) => {
-    // Remove # from the tag if present
     const tagValue = tag.startsWith('#') ? tag.slice(1) : tag;
     
-    // If we have existing csvData, modify it
     if (csvData.length) {
-      // Find existing hashtags
       const existingHashtags = csvData.filter(item => item.type === 'hashtag');
       
-      // If there are existing hashtags, replace the last one
       if (existingHashtags.length > 0) {
         const newCsvData = csvData.map(item => {
           if (item === existingHashtags[existingHashtags.length - 1]) {
@@ -166,40 +170,99 @@ const TagCategories = () => {
           return item;
         });
         
-        // Convert back to input string
-        const newInput = newCsvData.map(item => {
-          if (item.type === 'hashtag') return '#' + item.value;
-          if (item.type === 'mention') return '@' + item.value;
-          if (item.type === 'action') return '!' + item.value;
-          return '';
-        }).join(' ');
-        
+        const newInput = parsedDataToString(newCsvData);
         setInput(newInput);
         parseInput(newInput);
         return;
       }
     }
     
-    // If no existing hashtags, fall back to simple concatenation
     const newInput = '#' + tagValue;
     setInput(newInput);
     parseInput(newInput);
   };
 
   const handleVoteClick = () => {
-    if (!input.includes('!vote')) {
-      const newInput = input + (input.endsWith(' ') || input === '' ? '' : ' ') + '!vote ';
-      setInput(newInput);
-      parseInput(newInput);
+    if (csvData.length) {
+      // Check if !vote already exists
+      const hasVote = csvData.some(item => 
+        item.type === 'action' && item.value === 'vote'
+      );
+      
+      if (hasVote) {
+        // Remove !vote if it exists
+        const newCsvData = csvData.filter(item => 
+          !(item.type === 'action' && item.value === 'vote')
+        );
+        const newInput = parsedDataToString(newCsvData);
+        setInput(newInput);
+        parseInput(newInput);
+        return;
+      }
     }
+    
+    // Add !vote if it doesn't exist
+    const newCsvData = [...csvData, { type: 'action', value: 'vote' }];
+    const newInput = parsedDataToString(newCsvData);
+    setInput(newInput);
+    parseInput(newInput);
   };
 
   const handleVotesClick = () => {
-    if (!input.includes('!votes')) {
-      const newInput = input + (input.endsWith(' ') || input === '' ? '' : ' ') + '!votes ';
-      setInput(newInput);
-      parseInput(newInput);
+    if (csvData.length) {
+      // Check if !votes already exists
+      const hasVotes = csvData.some(item => 
+        item.type === 'action' && item.value === 'votes'
+      );
+      
+      if (hasVotes) {
+        // Remove !votes if it exists
+        const newCsvData = csvData.filter(item => 
+          !(item.type === 'action' && item.value === 'votes')
+        );
+        const newInput = parsedDataToString(newCsvData);
+        setInput(newInput);
+        parseInput(newInput);
+        return;
+      }
     }
+    
+    // Add !votes if it doesn't exist
+    const newCsvData = [...csvData, { type: 'action', value: 'votes' }];
+    const newInput = parsedDataToString(newCsvData);
+    setInput(newInput);
+    parseInput(newInput);
+  };
+
+  const handleMentionClick = (mention) => {
+    // Remove @ from the mention if present
+    const mentionValue = mention.startsWith('@') ? mention.slice(1) : mention;
+    
+    if (csvData.length) {
+      // Check if @mention already exists
+      const existingMentions = csvData.filter(item => item.type === 'mention');
+      
+      if (existingMentions.length > 0) {
+        // Replace the last mention
+        const newCsvData = csvData.map(item => {
+          if (item === existingMentions[existingMentions.length - 1]) {
+            return { type: 'mention', value: mentionValue };
+          }
+          return item;
+        });
+        
+        const newInput = parsedDataToString(newCsvData);
+        setInput(newInput);
+        parseInput(newInput);
+        return;
+      }
+    }
+    
+    // Add new mention if none exists
+    const newCsvData = [...csvData, { type: 'mention', value: mentionValue }];
+    const newInput = parsedDataToString(newCsvData);
+    setInput(newInput);
+    parseInput(newInput);
   };
 
   if (isLoading) return <div>Loading tags...</div>;
@@ -284,9 +347,18 @@ const TagCategories = () => {
             {/* Mentions Square */}
             <div className="w-[200px] h-[200px] bg-red-400 p-4 flex flex-col">
               <div className="space-y-2">
-                <div className="font-serif text-lg text-left hover:underline cursor-pointer">@me</div>
-                <div className="font-serif text-lg text-left hover:underline cursor-pointer">@you</div>
-                <div className="font-serif text-lg text-left hover:underline cursor-pointer">@all</div>
+                <div 
+                  onClick={() => handleMentionClick('@me')}
+                  className="font-serif text-lg text-left hover:underline cursor-pointer"
+                >@me</div>
+                <div 
+                  onClick={() => handleMentionClick('@you')}
+                  className="font-serif text-lg text-left hover:underline cursor-pointer"
+                >@you</div>
+                <div 
+                  onClick={() => handleMentionClick('@all')}
+                  className="font-serif text-lg text-left hover:underline cursor-pointer"
+                >@all</div>
               </div>
             </div>
           </>
