@@ -169,11 +169,15 @@ const TagCategories = () => {
               onClick={() => handleTagClick('#artists')} 
               className="font-serif text-lg text-left hover:underline cursor-pointer"
             >#artists</div>
+            <div 
+              onClick={() => handleTagClick('#artists')} 
+              className="font-serif text-lg text-gray-500 text-left hover:underline cursor-pointer"
+            >more...</div>
           </div>
         </div>
 
         {/* Commands Square */}
-        <div className="w-[200px] h-[200px] bg-purple-200 p-4 flex flex-col">
+        <div className="w-[200px] h-[200px] bg-red-200 p-4 flex flex-col">
           <div className="space-y-2">
             <div 
               onClick={handleVoteClick}
@@ -187,7 +191,7 @@ const TagCategories = () => {
         </div>
 
         {/* Mentions Square */}
-        <div className="w-[200px] h-[200px] bg-purple-400 p-4 flex flex-col">
+        <div className="w-[200px] h-[200px] bg-red-400 p-4 flex flex-col">
           <div className="space-y-2">
             <div className="font-serif text-lg text-left hover:underline cursor-pointer">@me</div>
             <div className="font-serif text-lg text-left hover:underline cursor-pointer">@you</div>
@@ -594,7 +598,7 @@ export const Cli = () => {
             Find what you want to rank using hashtags. Type #songs #kendrick-lamar or click the tags below to narrow down your focus.
             <br/>
             <br/>
-            Type !vote or click vote to see two items at a time and pick your favorite. Each choice helps build the rankings.
+            Type or click !vote to see two items at a time and pick your favorite. Each choice helps build the rankings.
             <br/>
             <br/>
             Type @me to see your rankings, @username to find others' taste, or @all to see what everyone thinks.
