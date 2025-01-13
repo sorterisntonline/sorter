@@ -138,7 +138,7 @@ export const useStore = create((set, get) => ({
 }));
 
 const TagCategories = () => {
-  const { input, setInput, parseInput } = useStore();
+  const { input, setInput, parseInput, csvData } = useStore();
   const [isExpanded, setIsExpanded] = useState(false);
   const { data, error, isLoading } = useSWR("/api/tag", fetcher);
 
@@ -149,9 +149,41 @@ const TagCategories = () => {
   }, [data]);
 
   const handleTagClick = (tag) => {
-    const newInput = input + (input.endsWith(' ') || input === '' ? '' : ' ') + tag + ' ';
+    // Remove # from the tag if present
+    const tagValue = tag.startsWith('#') ? tag.slice(1) : tag;
+    
+    // If we have existing csvData, modify it
+    if (csvData.length) {
+      // Find existing hashtags
+      const existingHashtags = csvData.filter(item => item.type === 'hashtag');
+      
+      // If there are existing hashtags, replace the last one
+      if (existingHashtags.length > 0) {
+        const newCsvData = csvData.map(item => {
+          if (item === existingHashtags[existingHashtags.length - 1]) {
+            return { type: 'hashtag', value: tagValue };
+          }
+          return item;
+        });
+        
+        // Convert back to input string
+        const newInput = newCsvData.map(item => {
+          if (item.type === 'hashtag') return '#' + item.value;
+          if (item.type === 'mention') return '@' + item.value;
+          if (item.type === 'action') return '!' + item.value;
+          return '';
+        }).join(' ');
+        
+        setInput(newInput);
+        parseInput(newInput);
+        return;
+      }
+    }
+    
+    // If no existing hashtags, fall back to simple concatenation
+    const newInput = '#' + tagValue;
     setInput(newInput);
-    useStore.getState().parseInput(newInput);
+    parseInput(newInput);
   };
 
   const handleVoteClick = () => {
