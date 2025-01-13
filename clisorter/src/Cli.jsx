@@ -68,7 +68,6 @@ export const useStore = create((set, get) => ({
       const match = grammar.match(value);
       const parseSucceeded = match.succeeded();
       
-      // Set parse error state
       set({ parseError: !parseSucceeded });
 
       if (parseSucceeded) {
@@ -78,12 +77,13 @@ export const useStore = create((set, get) => ({
         // Get current store state
         const currentState = get();
         
-        // Compare with previous csvData to see if anything meaningful changed
+        // Compare with previous csvData
         const hasMeaningfulChange = !currentState.csvData.length || 
           parsedData.length !== currentState.csvData.length ||
           !parsedData.every((item, i) => 
             item.type === currentState.csvData[i]?.type && 
-            item.value === currentState.csvData[i]?.value
+            item.value === currentState.csvData[i]?.value &&
+            item.itemId === currentState.csvData[i]?.itemId
           );
 
         if (hasMeaningfulChange) {
@@ -100,7 +100,10 @@ export const useStore = create((set, get) => ({
             .join('.');
           const actions = parsedData
             .filter(item => item.type === 'action')
-            .map(item => item.value)
+            .map(item => item.itemId 
+              ? `${item.value}${item.itemId}`
+              : item.value
+            )
             .join('.');
 
           console.log('Updated params:', { tags, mentions, actions });
@@ -497,12 +500,8 @@ const GrammarDisplay = () => {
   const voteCommand = activeCommands.find(cmd => cmd.command === 'vote');
   const votesCommand = activeCommands.find(cmd => cmd.command === 'votes');
   const addCommand = activeCommands.find(cmd => cmd.command === 'add');
-  console.log('activeCommands', activeCommands);
   const selectedItem = itemCommand ? items_by_id?.[parseInt(itemCommand.itemId)] : null;
 
-  console.log('selectedItem', selectedItem);
-  console.log('items_by_id', items_by_id);
-  console.log('itemCommand', itemCommand);
 
   const handleItemClick = (itemId) => {
     const { setInput, parseInput } = useStore.getState();
@@ -567,7 +566,15 @@ const TextInput = () => {
     
     const tags = searchParams.get('t')?.split('.').map(tag => '#' + tag) || [];
     const mentions = searchParams.get('u')?.split('.').map(mention => '@' + mention) || [];
-    const actions = searchParams.get('a')?.split('.').map(action => '!' + action) || [];
+    const actions = searchParams.get('a')?.split('.').map(action => {
+      // Match action followed by optional numbers
+      const match = action.match(/^([a-zA-Z]+)(\d+)?$/);
+      if (match) {
+        const [_, command, itemId] = match;
+        return itemId ? `!${command}(${itemId})` : `!${command}`;
+      }
+      return '!' + action;
+    }) || [];
     
     const initialInput = [...tags, ...mentions, ...actions].join(' ');
 
@@ -660,7 +667,10 @@ const TextInput = () => {
             .join('.');
           const actions = parsedData
             .filter(item => item.type === 'action')
-            .map(item => item.value)
+            .map(item => item.itemId 
+              ? `${item.value}${item.itemId}`
+              : item.value
+            )
             .join('.');
 
           // Create new search params
