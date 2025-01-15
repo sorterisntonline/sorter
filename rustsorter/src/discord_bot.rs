@@ -112,6 +112,39 @@ impl Handler {
     async fn get_tag_id(&self, channel_id: ChannelId) -> Option<i32> {
         self.channel_tag_ids.read().await.get(&channel_id).copied()
     }
+
+    async fn create_item(&self, message: &Message, channel_id: ChannelId, guild_id: Option<String>, tag_id: i32) {
+        let url = if let Some(embed) = message.embeds.first() {
+            embed.url.as_deref().unwrap_or(&message.content)
+        } else {
+            &message.content
+        };
+
+        let body = serde_json::json!({
+            "title": message.content,
+            "url": url,
+            "tag_id": tag_id,
+            "owner": "discord",
+            "discord_channel_id": channel_id.to_string(),
+            "discord_server_id": guild_id
+        });
+
+        // TODO: Get URL from env
+        let client = reqwest::Client::new();
+        let res = client.post("http://localhost:3000/api/item")
+            .json(&body)
+            .send()
+            .await;
+
+        match res {
+            Ok(response) => {
+                if !response.status().is_success() {
+                    println!("Error creating item: {:?}", response.text().await);
+                }
+            },
+            Err(e) => println!("Failed to create item: {}", e)
+        }
+    }
 }
 
 async fn create_tag_with_permissions(
@@ -167,12 +200,10 @@ impl EventHandler for Handler {
 
     async fn reaction_add(&self, ctx: Context, reaction: Reaction) {
         if self.is_sorted_channel(reaction.channel_id, &ctx).await {
-            // Get the message that was reacted to
             if let Ok(message) = reaction.message(&ctx).await {
-                // Query the database similar to tag.rs
-                let tag_id = self.get_tag_id(reaction.channel_id).await;
-                if let Some(tag_id) = tag_id {
-                    println!("Tag ID: {}", tag_id);
+                if let Some(tag_id) = self.get_tag_id(reaction.channel_id).await {
+                    let guild_id = message.guild_id.map(|g| g.to_string());
+                    self.create_item(&message, reaction.channel_id, guild_id, tag_id).await;
                 }
             }
         }

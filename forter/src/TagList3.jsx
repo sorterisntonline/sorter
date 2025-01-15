@@ -58,15 +58,6 @@ export const TagList3 = () => {
   
   return (
     <div className="dark:text-white w-full max-w-2xl py-4">
-      <div 
-        className="cursor-pointer mb-4"
-        onClick={() => navigate("/namespace/tag-hierarchy")}
-      >
-        <div className="px-3 py-1 bg-purple-200 dark:bg-purple-950 hover:bg-purple-300 dark:hover:bg-purple-900 transition-colors w-fit">
-          Vote on Tag Hierarchy
-        </div>
-      </div>
-
       <div className="border dark:border-gray-700 rounded-lg overflow-hidden">
         {data && data.map((node) => (
           <TreeNode key={node.id} node={node} />

@@ -213,14 +213,6 @@ export const TagList = () => {
         value={search}
         onChange={(e) => setSearch(e.target.value)}
       />
-      <div
-        className="w-fit cursor-pointer m-1"
-        onClick={() => navigate("/namespace/tag-hierarchy")}
-      >
-        <div className="dark:text-white px-3 py-1 bg-purple-200 dark:bg-purple-950 hover:bg-purple-300 dark:hover:bg-purple-900 transition-colors">
-          Vote on Tag Hierarchy
-        </div>
-      </div>
       <div className="dark:text-white flex flex-row flex-wrap">
         {groups.map((group) => {
           const tags = tagsByGroup[group]

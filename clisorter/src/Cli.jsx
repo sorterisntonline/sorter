@@ -16,11 +16,13 @@ export const useStore = create((set, get) => ({
   magnitude: 50,
   items_by_id: {},
   parseError: false,
+  tagData: null,
+  setTagData: (data) => set({ tagData: data }),
   setInput: (input) => set({ input }),
   setCsvData: (csvData) => set({ csvData }),
   setResults: (results) => {
     const items_by_id = {};
-    console.log('results', results);
+    console.log('Setting results:', results);
     if (results) {
       // Index unsorted items
       if (results.unsorted) {
@@ -41,15 +43,19 @@ export const useStore = create((set, get) => ({
   setPinnedLeft: (item) => set({ pinned_left: item }),
   setPinnedRight: (item) => set({ pinned_right: item }),
   fetchResults: async () => {
+    console.log('Fetching results...');
     const params = new URLSearchParams(window.location.search);
     if (!params.has('t')) {  // If no tags parameter exists
+      console.log('No tags parameter, setting results to null');
       set({ results: null });
       return;
     }
     
     try {
+      console.log('Fetching with params:', params.toString());
       const response = await fetch(`/api/tag/page2?${params.toString()}`);
       const data = await response.json();
+      console.log('Received data:', data);
       get().setResults(data);
     } catch (error) {
       console.error('Failed to fetch results:', error);
@@ -57,25 +63,27 @@ export const useStore = create((set, get) => ({
     }
   },
   parseInput: (value) => {
+    console.log('Parsing input:', value);
     try {
       const match = grammar.match(value);
       const parseSucceeded = match.succeeded();
       
-      // Set parse error state
       set({ parseError: !parseSucceeded });
 
       if (parseSucceeded) {
         const parsedData = semantics(match).toArray();
+        console.log('Parsed data:', parsedData);
         
         // Get current store state
-        const currentState = useStore.getState();
+        const currentState = get();
         
-        // Compare with previous csvData to see if anything meaningful changed
+        // Compare with previous csvData
         const hasMeaningfulChange = !currentState.csvData.length || 
           parsedData.length !== currentState.csvData.length ||
           !parsedData.every((item, i) => 
             item.type === currentState.csvData[i]?.type && 
-            item.value === currentState.csvData[i]?.value
+            item.value === currentState.csvData[i]?.value &&
+            item.itemId === currentState.csvData[i]?.itemId
           );
 
         if (hasMeaningfulChange) {
@@ -92,8 +100,13 @@ export const useStore = create((set, get) => ({
             .join('.');
           const actions = parsedData
             .filter(item => item.type === 'action')
-            .map(item => item.value)
+            .map(item => item.itemId 
+              ? `${item.value}${item.itemId}`
+              : item.value
+            )
             .join('.');
+
+          console.log('Updated params:', { tags, mentions, actions });
 
           // Update URL params
           const params = new URLSearchParams(window.location.search);
@@ -113,6 +126,7 @@ export const useStore = create((set, get) => ({
               .filter(item => item.type === 'hashtag')
               .every(tag => currentState.tagData.public.some(publicTag => publicTag.slug === tag.value));
 
+            console.log('All tags exist:', allTagsExist);
             if (allTagsExist) {
               currentState.fetchResults();
             }
@@ -124,76 +138,236 @@ export const useStore = create((set, get) => ({
       set({ parseError: true });
     }
   },
+  parsedDataToString: (parsedData) => {
+    return parsedData.map(item => {
+      if (item.type === 'hashtag') return '#' + item.value;
+      if (item.type === 'mention') return '@' + item.value;
+      if (item.type === 'action') {
+        return item.itemId ? `!${item.value}(${item.itemId})` : `!${item.value}`;
+      }
+      return '';
+    }).join(' ');
+  },
 }));
 
 const TagCategories = () => {
-  const { input, setInput, parseInput } = useStore();
+  const { input, setInput, parseInput, csvData, parsedDataToString } = useStore();
+  const [isExpanded, setIsExpanded] = useState(false);
+  const { data, error, isLoading } = useSWR("/api/tag", fetcher);
+
+  useEffect(() => {
+    if (data) {
+      useStore.getState().setTagData(data);
+    }
+  }, [data]);
 
   const handleTagClick = (tag) => {
-    const newInput = input + (input.endsWith(' ') || input === '' ? '' : ' ') + tag + ' ';
+    const tagValue = tag.startsWith('#') ? tag.slice(1) : tag;
+    
+    if (csvData.length) {
+      const existingHashtags = csvData.filter(item => item.type === 'hashtag');
+      
+      if (existingHashtags.length > 0) {
+        const newCsvData = csvData.map(item => {
+          if (item === existingHashtags[existingHashtags.length - 1]) {
+            return { type: 'hashtag', value: tagValue };
+          }
+          return item;
+        });
+        
+        const newInput = parsedDataToString(newCsvData);
+        setInput(newInput);
+        parseInput(newInput);
+        return;
+      }
+    }
+    
+    const newInput = '#' + tagValue;
     setInput(newInput);
     parseInput(newInput);
   };
 
   const handleVoteClick = () => {
-    if (!input.includes('!vote')) {
-      const newInput = input + (input.endsWith(' ') || input === '' ? '' : ' ') + '!vote ';
-      setInput(newInput);
-      parseInput(newInput);
+    if (csvData.length) {
+      // Check if !vote already exists
+      const hasVote = csvData.some(item => 
+        item.type === 'action' && item.value === 'vote'
+      );
+      
+      if (hasVote) {
+        // Remove !vote if it exists
+        const newCsvData = csvData.filter(item => 
+          !(item.type === 'action' && item.value === 'vote')
+        );
+        const newInput = parsedDataToString(newCsvData);
+        setInput(newInput);
+        parseInput(newInput);
+        return;
+      }
     }
+    
+    // Add !vote if it doesn't exist
+    const newCsvData = [...csvData, { type: 'action', value: 'vote' }];
+    const newInput = parsedDataToString(newCsvData);
+    setInput(newInput);
+    parseInput(newInput);
   };
 
   const handleVotesClick = () => {
-    if (!input.includes('!votes')) {
-      const newInput = input + (input.endsWith(' ') || input === '' ? '' : ' ') + '!votes ';
-      setInput(newInput);
-      parseInput(newInput);
+    if (csvData.length) {
+      // Check if !votes already exists
+      const hasVotes = csvData.some(item => 
+        item.type === 'action' && item.value === 'votes'
+      );
+      
+      if (hasVotes) {
+        // Remove !votes if it exists
+        const newCsvData = csvData.filter(item => 
+          !(item.type === 'action' && item.value === 'votes')
+        );
+        const newInput = parsedDataToString(newCsvData);
+        setInput(newInput);
+        parseInput(newInput);
+        return;
+      }
     }
+    
+    // Add !votes if it doesn't exist
+    const newCsvData = [...csvData, { type: 'action', value: 'votes' }];
+    const newInput = parsedDataToString(newCsvData);
+    setInput(newInput);
+    parseInput(newInput);
   };
+
+  const handleMentionClick = (mention) => {
+    // Remove @ from the mention if present
+    const mentionValue = mention.startsWith('@') ? mention.slice(1) : mention;
+    
+    if (csvData.length) {
+      // Check if @mention already exists
+      const existingMentions = csvData.filter(item => item.type === 'mention');
+      
+      if (existingMentions.length > 0) {
+        // Replace the last mention
+        const newCsvData = csvData.map(item => {
+          if (item === existingMentions[existingMentions.length - 1]) {
+            return { type: 'mention', value: mentionValue };
+          }
+          return item;
+        });
+        
+        const newInput = parsedDataToString(newCsvData);
+        setInput(newInput);
+        parseInput(newInput);
+        return;
+      }
+    }
+    
+    // Add new mention if none exists
+    const newCsvData = [...csvData, { type: 'mention', value: mentionValue }];
+    const newInput = parsedDataToString(newCsvData);
+    setInput(newInput);
+    parseInput(newInput);
+  };
+
+  if (isLoading) return <div>Loading tags...</div>;
+  if (error) return <div>Error loading tags</div>;
+
+  // Flatten tags and add namespace prefix
+  const flattenedTags = data?.public.map(tag => ({
+    ...tag,
+    displaySlug: tag.ns ? `${tag.ns}/${tag.slug}` : tag.slug
+  }))
+  // Sort by vote count (descending)
+  .sort((a, b) => (b.item_count || 0) - (a.item_count || 0)) || [];
 
   return (
     <>
       <div className="flex flex-col md:flex-row max-w-[200px] md:max-w-none gap-0 justify-start">
-        {/* Hashtags Square */}
-        <div className="w-[200px] h-[200px] bg-gray-200 p-4 flex flex-col">
+        <div className={`${
+          isExpanded 
+            ? 'w-[600px] h-[400px] overflow-y-auto' 
+            : 'w-[200px] h-[200px]'
+          } bg-gray-200 p-4 flex flex-col transition-all duration-300`}>
           <div className="space-y-2">
+            {!isExpanded ? (
+              // Collapsed view with hardcoded tags
+              <>
+                <div 
+                  onClick={() => handleTagClick('#songs')} 
+                  className="font-serif text-lg text-left hover:underline cursor-pointer"
+                >#songs</div>
+                <div 
+                  onClick={() => handleTagClick('#albums')} 
+                  className="font-serif text-lg text-left hover:underline cursor-pointer"
+                >#albums</div>
+                <div 
+                  onClick={() => handleTagClick('#artists')} 
+                  className="font-serif text-lg text-left hover:underline cursor-pointer"
+                >#artists</div>
+              </>
+            ) : (
+              // Expanded view with all tags
+              <div className="grid grid-cols-2 gap-2">
+                {flattenedTags.map(tag => (
+                  <div
+                    key={tag.id}
+                    onClick={() => handleTagClick('#' + tag.slug)}
+                    className="font-serif text-md text-left hover:underline cursor-pointer"
+                  >
+                    #{tag.displaySlug}
+                    <span className="text-sm text-gray-500 ml-2">
+                      ({tag.item_count || 0})
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
             <div 
-              onClick={() => handleTagClick('#songs')} 
-              className="font-serif text-lg text-left hover:underline cursor-pointer"
-            >#songs</div>
-            <div 
-              onClick={() => handleTagClick('#albums')} 
-              className="font-serif text-lg text-left hover:underline cursor-pointer"
-            >#albums</div>
-            <div 
-              onClick={() => handleTagClick('#artists')} 
-              className="font-serif text-lg text-left hover:underline cursor-pointer"
-            >#artists</div>
+              onClick={() => setIsExpanded(!isExpanded)} 
+              className="font-serif text-lg text-gray-500 text-left hover:underline cursor-pointer"
+            >
+              {isExpanded ? 'less...' : 'more...'}
+            </div>
           </div>
         </div>
 
-        {/* Commands Square */}
-        <div className="w-[200px] h-[200px] bg-purple-200 p-4 flex flex-col">
-          <div className="space-y-2">
-            <div 
-              onClick={handleVoteClick}
-              className="font-serif text-lg text-left hover:underline cursor-pointer"
-            >!vote</div>
-            <div 
-              onClick={handleVotesClick}
-              className="font-serif text-lg text-left hover:underline cursor-pointer"
-            >!votes</div>
-          </div>
-        </div>
+        {/* Only show these panels when not expanded */}
+        {!isExpanded && (
+          <>
+            {/* Commands Square */}
+            <div className="w-[200px] h-[200px] bg-red-200 p-4 flex flex-col">
+              <div className="space-y-2">
+                <div 
+                  onClick={handleVoteClick}
+                  className="font-serif text-lg text-left hover:underline cursor-pointer"
+                >!vote</div>
+                <div 
+                  onClick={handleVotesClick}
+                  className="font-serif text-lg text-left hover:underline cursor-pointer"
+                >!votes</div>
+              </div>
+            </div>
 
-        {/* Mentions Square */}
-        <div className="w-[200px] h-[200px] bg-purple-400 p-4 flex flex-col">
-          <div className="space-y-2">
-            <div className="font-serif text-lg text-left hover:underline cursor-pointer">@me</div>
-            <div className="font-serif text-lg text-left hover:underline cursor-pointer">@you</div>
-            <div className="font-serif text-lg text-left hover:underline cursor-pointer">@all</div>
-          </div>
-        </div>
+            {/* Mentions Square */}
+            <div className="w-[200px] h-[200px] bg-red-400 p-4 flex flex-col">
+              <div className="space-y-2">
+                <div 
+                  onClick={() => handleMentionClick('@me')}
+                  className="font-serif text-lg text-left hover:underline cursor-pointer"
+                >@me</div>
+                <div 
+                  onClick={() => handleMentionClick('@you')}
+                  className="font-serif text-lg text-left hover:underline cursor-pointer"
+                >@you</div>
+                <div 
+                  onClick={() => handleMentionClick('@all')}
+                  className="font-serif text-lg text-left hover:underline cursor-pointer"
+                >@all</div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
       <br/>
     </>
@@ -328,16 +502,42 @@ const GrammarDisplay = () => {
   const voteCommand = activeCommands.find(cmd => cmd.command === 'vote');
   const votesCommand = activeCommands.find(cmd => cmd.command === 'votes');
   const addCommand = activeCommands.find(cmd => cmd.command === 'add');
-  console.log('activeCommands', activeCommands);
   const selectedItem = itemCommand ? items_by_id?.[parseInt(itemCommand.itemId)] : null;
 
-  console.log('selectedItem', selectedItem);
-  console.log('items_by_id', items_by_id);
-  console.log('itemCommand', itemCommand);
 
   const handleItemClick = (itemId) => {
-    const { setInput, parseInput } = useStore.getState();
-    const newInput = `!item(${itemId})`;
+    const { setInput, parseInput, csvData, parsedDataToString } = useStore.getState();
+    
+    // Check if we're already looking at this item
+    const existingItem = csvData.find(item => 
+        item.type === 'action' && 
+        item.value === 'item' && 
+        item.itemId === itemId.toString()
+    );
+    
+    // If we are, remove the item command entirely
+    if (existingItem) {
+        const newCsvData = csvData.filter(item => 
+            !(item.type === 'action' && item.value === 'item')
+        );
+        const newInput = parsedDataToString(newCsvData);
+        setInput(newInput);
+        parseInput(newInput);
+        return;
+    }
+    
+    // If not, replace any existing item command with this one
+    const filteredData = csvData.filter(item => 
+        !(item.type === 'action' && item.value === 'item')
+    );
+    
+    const newCsvData = [...filteredData, { 
+        type: 'action', 
+        value: 'item',
+        itemId: itemId.toString()
+    }];
+    
+    const newInput = parsedDataToString(newCsvData);
     setInput(newInput);
     parseInput(newInput);
   };
@@ -398,7 +598,15 @@ const TextInput = () => {
     
     const tags = searchParams.get('t')?.split('.').map(tag => '#' + tag) || [];
     const mentions = searchParams.get('u')?.split('.').map(mention => '@' + mention) || [];
-    const actions = searchParams.get('a')?.split('.').map(action => '!' + action) || [];
+    const actions = searchParams.get('a')?.split('.').map(action => {
+      // Match action followed by optional numbers
+      const match = action.match(/^([a-zA-Z]+)(\d+)?$/);
+      if (match) {
+        const [_, command, itemId] = match;
+        return itemId ? `!${command}(${itemId})` : `!${command}`;
+      }
+      return '!' + action;
+    }) || [];
     
     const initialInput = [...tags, ...mentions, ...actions].join(' ');
 
@@ -491,7 +699,10 @@ const TextInput = () => {
             .join('.');
           const actions = parsedData
             .filter(item => item.type === 'action')
-            .map(item => item.value)
+            .map(item => item.itemId 
+              ? `${item.value}${item.itemId}`
+              : item.value
+            )
             .join('.');
 
           // Create new search params
@@ -594,7 +805,7 @@ export const Cli = () => {
             Find what you want to rank using hashtags. Type #songs #kendrick-lamar or click the tags below to narrow down your focus.
             <br/>
             <br/>
-            Type !vote or click vote to see two items at a time and pick your favorite. Each choice helps build the rankings.
+            Type or click !vote to see two items at a time and pick your favorite. Each choice helps build the rankings.
             <br/>
             <br/>
             Type @me to see your rankings, @username to find others' taste, or @all to see what everyone thinks.

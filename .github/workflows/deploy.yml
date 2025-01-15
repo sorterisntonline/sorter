@@ -186,7 +186,7 @@ jobs:
             echo -e "\033[3mBuilding forter...\033[0m"
             cd forter
             npm install
-            npm run build
+            npm run prod
             cd ..
 
             # Build clisorter

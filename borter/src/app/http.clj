@@ -38,6 +38,26 @@
   (:import
    [java.net URLEncoder]))
 
+(defn get-html-file [request]
+  (let [env (System/getenv "ENVIRONMENT")
+        is-prod (= env "production")
+        is-music (or (= "music.sorter.social" (-> request :headers (get "host")))
+                    (= "/music" (:uri request)))
+        html-file (cond
+                   ;; Music sorter routes
+                   (and is-music is-prod) "index2.html" ; for now these are the same
+                   (and is-music (not is-prod)) "index2.html"
+                   ;; Main sorter routes
+                   is-prod "index.prod.html"
+                   :else "index.dev.html")]
+    (str "public/" html-file)))
+
+;; Replace the existing test functions with a single handler
+(defn serve-index [request]
+  (-> (get-html-file request)
+      resp/resource-response
+      (resp/content-type "text/html")))
+
 (defn test [r]
   (if (= "music.sorter.social" (-> r :headers (get "host")))
     (resp/content-type (resp/resource-response "public/index2.html") "text/html")
@@ -322,7 +342,8 @@
          (:user_name (:session req))))
 
   (get-quota [self req]
-    (if (= "tommy" (get-in req [:session :user_name]))
+    (if (or (= "tommy" (get-in req [:session :user_name]))
+            (= "discord" (get-in req [:session :user_name])))
       Integer/MAX_VALUE  ; effectively no rate limit for tommy
       quota))
 
@@ -333,8 +354,8 @@
 (def one-per-minute {:storage storage :limit (UserRateLimit. 2 1 (java.time.Duration/ofMinutes 1))})
 
 
-(def routes [["/" {:handler #'test}]
-             ["/music" {:handler #'test-2}]
+(def routes [["/" {:handler #'serve-index}]
+             ["/music" {:handler #'serve-index}]
              ["/api" {:middleware []}
               ["/health" {:get {:handler #'health/check-health}}]
               ["/feed" {:get {:handler #'feed/get-feed}}]
