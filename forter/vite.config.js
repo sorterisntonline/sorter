@@ -3,7 +3,8 @@ import react from "@vitejs/plugin-react";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  const isDev = (mode === 'development') || (mode === 'dev') ;
+  const isDev = (mode === 'development') || (mode === 'dev');
+  const isProduction = process.env.ENVIRONMENT === 'production';
 
   return {
     plugins: [react()],
@@ -12,6 +13,15 @@ export default defineConfig(({ mode }) => {
       minify: !isDev,
       minifySyntax: !isDev,
       sourcemap: isDev,
+      rollupOptions: {
+        input: {
+          'index.dev.html': './index.dev.html',
+          'index.prod.html': './index.prod.html',
+        }
+      }
     },
+    define: {
+      __IS_PRODUCTION__: isProduction,
+    }
   };
 });
