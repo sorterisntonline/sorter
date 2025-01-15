@@ -1,6 +1,8 @@
 # sorter
 clojure, rust, and react based pair-wise staunchly democratic social media application  
 
+[![prod](https://github.com/sorterisntonline/sorter/actions/workflows/deploy.yml/badge.svg?branch=production)](https://github.com/sorterisntonline/sorter/actions/workflows/deploy.yml)
+
 ![sorter frontend screenshot](frontend_1.png)
 
 ## install
