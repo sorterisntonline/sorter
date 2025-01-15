@@ -14,8 +14,12 @@
 ;; https://developers.google.com/youtube/v3/guides/auth/server-side-web-apps#httprest_1
 
 
-(def api-key "AIzaSyDxIWzHlXK55Xi6Jgx1B47mDnRbn-zJSOI")
-(def secrets (json/read-str (slurp (io/resource "youtube_secret.json")) {:key-fn keyword}))
+(def api-key (System/getenv "BORTER_YOUTUBE_API_KEY"))
+
+(def youtube-client-id (System/getenv "BORTER_YOUTUBE_CLIENT_ID"))
+(def youtube-client-secret (System/getenv "BORTER_YOUTUBE_CLIENT_SECRET"))
+(def youtube-redirect-uris (System/getenv "BORTER_YOUTUBE_REDIRECT_URIS")) ;; May need to parse if multiple
+(def youtube-javascript-origins (System/getenv "BORTER_YOUTUBE_JAVASCRIPT_ORIGINS")) ;; May need to parse if multiple
 
 (def scope "https://www.googleapis.com/auth/youtube.readonly")
 
@@ -37,8 +41,8 @@
 (defn code->token [code]
   (hc/post (str "https://oauth2.googleapis.com/token?"
                 (codec/form-encode {:code code
-                                    :client_id (-> secrets :web :client_id)
-                                    :client_secret (-> secrets :web :client_secret)
+                                    :client_id youtube-client-id
+                                    :client_secret youtube-client-secret
                                     :redirect_uri (get-hostname)
                                     :grant_type "authorization_code"}))))
 (comment
@@ -126,7 +130,6 @@
 
 (def routes [["/callback" {:get {:handler #'handle-callback}}]
              ["/playlist" {:post {:handler #'start-tracking-liked}}]])
-
 
 
 

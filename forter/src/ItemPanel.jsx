@@ -2,7 +2,7 @@ import useSWR from "swr";
 import { current_session } from "./session";
 import { loadTag, makeRequest } from "./Network";
 import { signal } from "@preact/signals-react";
-
+import MarkdownRenderer from "./MarkdownRenderer";
 const createEmbedUrl = (item) => {
   const [code, time] = item["domain_pk"].split("?t=")
 
@@ -101,10 +101,9 @@ export const ItemFull = ({ item, right, skipped, mutate }) => {
       }
       {
         item["body"] && (
-          <div>
-            <div className="whitespace-pre-line text-left bg-gray-300 dark:bg-gray-900 text-sm">{item["body"]}</div>
+          <div className="markdown-body">
+            <MarkdownRenderer content={item["body"]} />
           </div>
-
         )
       }
       {
