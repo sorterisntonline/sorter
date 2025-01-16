@@ -183,10 +183,10 @@ jobs:
 
             # clear assets from previous builds
             cd borter
-            rm resources/public/assets/*.css
-            rm resources/public/assets/*.js
-            rm resources/public/new/assets/*.css
-            rm resources/public/new/assets/*.js
+            rm -rf resources/public/assets/*.css
+            rm -rf resources/public/assets/*.js
+            rm -rf resources/public/new/assets/*.css
+            rm -rf resources/public/new/assets/*.js
             cd ..
             echo -e "\033[1mDone clearing assets, building...\033[0m"
 
