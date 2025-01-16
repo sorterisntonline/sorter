@@ -54,9 +54,10 @@
 
 ;; Replace the existing test functions with a single handler
 (defn serve-index [request]
-  (-> (get-html-file request)
-      resp/resource-response
-      (resp/content-type "text/html")))
+  (let [html-file (get-html-file request)]
+    (-> (resp/resource-response html-file)
+        (resp/content-type "text/html")
+        (assoc :status 200))))
 
 (defn test [r]
   (if (= "music.sorter.social" (-> r :headers (get "host")))
