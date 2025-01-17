@@ -128,14 +128,35 @@ fn main() {
                     id_to_rank.insert(*item_id, rank);
                 }
                 
-                // Compare each item's actual rank with its expected rank (its ID)
-                for item_id in 0..num_letters as i32 {
-                    let actual_rank = *id_to_rank.get(&item_id).unwrap();
-                    let expected_rank = item_id as usize;
-                    error += ((actual_rank as i32 - expected_rank as i32).abs() as f32).powf(2.0);
+                // Instead of calculating squared error, calculate Kendall Tau correlation
+                let n = num_letters as usize;
+                let mut concordant = 0;
+                let mut discordant = 0;
+
+                // Compare each pair of items
+                for i in 0..n {
+                    for j in (i + 1)..n {
+                        let id1 = i as i32;
+                        let id2 = j as i32;
+                        
+                        let rank1 = *id_to_rank.get(&id1).unwrap();
+                        let rank2 = *id_to_rank.get(&id2).unwrap();
+                        
+                        // In the expected order, id1 should come before id2
+                        // Check if the actual ranking maintains this order
+                        if rank1 < rank2 {
+                            concordant += 1;
+                        } else {
+                            discordant += 1;
+                        }
+                    }
                 }
 
-                println!("{},{},{},{},{}", num_letters, num_votes, error, trial, ranked_alphabet);
+                // Calculate Kendall Tau coefficient
+                let total_pairs = (n * (n - 1)) / 2;
+                let kendall_tau = (concordant as f32 - discordant as f32) / total_pairs as f32;
+
+                println!("{},{},{},{},{}", num_letters, num_votes, kendall_tau, trial, ranked_alphabet);
             });
         }
     }
