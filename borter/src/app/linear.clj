@@ -9,8 +9,8 @@
             [honey.sql.helpers :as h]
             [sluj.core :refer [sluj]]))
 
-(def client-id "169f3f75ce5946ad42e0df47eb23c2eb")
-(def client-secret "e58279ba0c7231102f0af8eb0772f9ab")
+(def client-id (System/getenv "BORTER_LINEAR_CLIENT_ID"))
+(def client-secret (System/getenv "BORTER_LINEAR_CLIENT_SECRET"))
 
 (defn get-hostname []
   (case (.getCanonicalHostName (java.net.InetAddress/getLocalHost))
