@@ -103,9 +103,6 @@ fn main() {
 
                 let scores = rustsorter::pagerank::page_rank(&graph);
 
-                // Calculate error between actual and expected rankings
-                let mut error = 0.0;
-                
                 // Create a vector of (score, item_id) pairs for sorting
                 let mut ranked_items: Vec<_> = scores.iter()
                     .enumerate()
