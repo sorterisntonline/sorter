@@ -8,6 +8,11 @@ export default defineConfig({
     outDir: "../borter/resources/public/",
     minify: false,
     minifySyntax: false,
+    minifyIdentifiers: false,
+    terserOptions: {
+      compress: false,
+      mangle: false
+    },
     rollupOptions: {
       input: './index2.html'
     }
