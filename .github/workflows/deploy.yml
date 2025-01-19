@@ -181,6 +181,15 @@ jobs:
 
             echo -e "\033[1mDone writing env files, building...\033[0m"  
 
+            # clear assets from previous builds
+            cd borter
+            rm -rf resources/public/assets/*.css
+            rm -rf resources/public/assets/*.js
+            rm -rf resources/public/new/assets/*.css
+            rm -rf resources/public/new/assets/*.js
+            cd ..
+            echo -e "\033[1mDone clearing assets, building...\033[0m"
+
             # Install Dependencies and Build Frontends
             # Build forter
             echo -e "\033[3mBuilding forter...\033[0m"
@@ -199,10 +208,7 @@ jobs:
             # Build borter
             echo -e "\033[3mBuilding borter...\033[0m"
             cd borter
-            # rm resources/public/assets/*.css
-            # rm resources/public/assets/*.js
-            # rm resources/public/new/assets/*.css
-            # rm resources/public/new/assets/*.js
+            
             clojure -X:build build-client          # optimized release build
             clojure -X:build uberjar
             
