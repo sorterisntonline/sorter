@@ -344,8 +344,8 @@
 (def one-per-minute {:storage storage :limit (UserRateLimit. 2 1 (java.time.Duration/ofMinutes 1))})
 
 
-(def routes [["/" {:handler #'serve-index}]
-             ["/music" {:handler #'serve-index}]
+(def routes [["/" {:handler #'test}]
+             ["/music" {:handler #'test-2}]                                                                                                                                              
              ["/api" {:middleware []}
               ["/health" {:get {:handler #'health/check-health}}]
               ["/feed" {:get {:handler #'feed/get-feed}}]
@@ -405,4 +405,4 @@
 
 (defn start [{:keys [port]}]
   (jetty/run-jetty #'app {:port port :join? false :host "0.0.0.0"})
-  (println (str "http server running on port " port)))
+  (println (str "http server running on port " port)))                                                                                                                                                

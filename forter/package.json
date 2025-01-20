@@ -1,11 +1,11 @@
 {
   "name": "forter",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.124",
   "type": "module",
   "scripts": {
     "dev": "ENVIRONMENT=development vite build --watch --mode development",
-    "build": "vite build",
+    "build": "ENVIRONMENT=production vite build --mode production",
     "prod": "ENVIRONMENT=production vite build --mode production",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"

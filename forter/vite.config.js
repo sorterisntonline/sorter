@@ -14,10 +14,8 @@ export default defineConfig(({ mode }) => {
       minifySyntax: !isDev,
       sourcemap: isDev,
       rollupOptions: {
-        input: {
-          'index.html': './index.html',
-        }
-      }
+        input: './index.html'
+          }
     },
     define: {
       __IS_PRODUCTION__: isProduction,
