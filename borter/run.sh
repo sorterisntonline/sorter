@@ -1,3 +1,3 @@
-export ENVIRONMENT=production 
+export ENVIRONMENT=development 
 export DATABASE_URL=postgres://postgres:password@localhost:5432/postgres
 clj -J-Djdk.attach.allowAttachSelf -A:dev -X user/-main
