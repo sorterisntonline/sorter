@@ -70,7 +70,7 @@ jobs:
           NEW_NUM=$((DEPLOY_NUM + 1))
           NEW_TAG="d${NEW_NUM}"
           if [ "${{ steps.check_rust.outputs.skip_rust }}" == "true" ]; then
-            NEW_TAG="${NEW_TAG}-sr"
+            NEW_TAG="${NEW_TAG}sr"
           fi
           echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
 
@@ -93,16 +93,20 @@ jobs:
         run: |
           PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${{ github.sha }}^ 2>/dev/null || echo "")
           if [ -z "$PREVIOUS_TAG" ]; then
-            NOTES=$(git log --pretty=format:'*- %s' ${{ github.sha }})
+            NOTES=$(git log --pretty=format:'- %s' ${{ github.sha }})
           else
-            NOTES=$(git log $PREVIOUS_TAG..${{ github.sha }} --pretty=format:'*- %s')
+            NOTES=$(git log $PREVIOUS_TAG..${{ github.sha }} --pretty=format:'- %s')
           fi
           
+          # Format FORCE-FAIL consistently in notes
+          NOTES=$(echo "$NOTES" | sed 's/FORCE-FAIL: /🔴 [FORCE-FAIL] /gI' | sed 's/\[FORCE-FAIL\]/🔴 [FORCE-FAIL]/gI' | sed 's/(FORCE-FAIL)/🔴 [FORCE-FAIL]/gI' | sed 's/FORCE-FAIL/🔴 [FORCE-FAIL]/gI')
+          
           if [ "${{ steps.check_rust.outputs.skip_rust }}" == "true" ]; then
-            NOTES="${NOTES}
+            NOTES="⏭️ [SKIP-RUST] No changes detected in rustsorter - previous build retained.
 
-            **Note:** No changes detected in rustsorter - previous build retained."
+            ${NOTES}"
           fi
+          
           echo "notes<<EOF" >> $GITHUB_OUTPUT
           echo "$NOTES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -143,6 +147,12 @@ jobs:
           command_timeout: 44m
           port: 22
           script: |
+            # Check for force-fail first
+            if [ "${{ contains(github.event.head_commit.message, 'FORCE-FAIL') || contains(github.event.head_commit.message, 'force-fail') }}" == "true" ]; then
+              echo "Forcing workflow failure due to 'force-fail' in commit message..."
+              exit 1
+            fi
+            
             set -e
 
             # Clear the ~/sorter directory 
