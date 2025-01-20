@@ -53,6 +53,7 @@ jobs:
       # Step 4: Create and Push Tag
       - name: Create and Push Tag
         run: |
+          git remote set-url origin git@github.com:sorterisntonline/sorter.git
           git tag ${{ steps.new_tag.outputs.tag }}
           git push origin ${{ steps.new_tag.outputs.tag }}
 
