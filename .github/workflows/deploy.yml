@@ -18,16 +18,6 @@ jobs:
         with:
           fetch-depth: 0  # Needed for git history
 
-      # Add after checkout and before other steps
-      - name: Check commit message for force-fail
-        run: |
-          COMMIT_MSG=$(git log -1 --pretty=%B)
-          if echo "$COMMIT_MSG" | grep -iE "force-fail" > /dev/null; then
-            echo "Found FORCE-FAIL in commit message, adding force-fail tag..."
-            git tag force-fail || true  # Don't fail if tag already exists
-            git push origin force-fail || true  # Don't fail if tag already exists
-          fi
-
       # New step: Check for rustsorter changes
       - name: Check rustsorter changes
         id: check_rust
@@ -38,17 +28,6 @@ jobs:
             echo "skip_rust=true" >> $GITHUB_OUTPUT
           else
             echo "skip_rust=false" >> $GITHUB_OUTPUT
-          fi
-
-      # Add after the rustsorter check
-      - name: Check for force-fail tag
-        id: check_force_fail
-        run: |
-          FORCE_FAIL=$(git tag -l "force-fail" || echo "")
-          if [ ! -z "$FORCE_FAIL" ]; then
-            echo "should_fail=true" >> $GITHUB_OUTPUT
-          else
-            echo "should_fail=false" >> $GITHUB_OUTPUT
           fi
 
       # Step 2: Set up Git user for tagging
@@ -104,16 +83,6 @@ jobs:
             ${NOTES}"
           fi
           
-          # Add FORCE-FAIL note at top if present
-          if echo "$NOTES" | grep -iE "force-fail" > /dev/null; then
-            NOTES="🔴 [FORCE-FAIL] Testing deployment failure.
-
-            ${NOTES}"
-          fi
-          
-          # Clean up any other FORCE-FAIL mentions in commit messages
-          NOTES=$(echo "$NOTES" | sed 's/FORCE-FAIL: //gI' | sed 's/\[FORCE-FAIL\]//gI' | sed 's/(FORCE-FAIL)//gI' | sed 's/FORCE-FAIL//gI')
-          
           echo "notes<<EOF" >> $GITHUB_OUTPUT
           echo "$NOTES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -135,17 +104,9 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.DO_SSH_KEY }}
 
-      # Step 8: Force Failure (if requested)
-      - name: Force Failure (if requested)
-        if: steps.check_force_fail.outputs.should_fail == 'true'
-        run: |
-          echo "Forcing workflow failure due to 'force-fail' tag..."
-          exit 1
-
       # Step 9: Deploy to DigitalOcean
       - name: Deploy to DigitalOcean
         id: deploy
-        if: steps.check_force_fail.outputs.should_fail != 'true'
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.DO_SSH_HOST }}
@@ -154,12 +115,6 @@ jobs:
           command_timeout: 44m
           port: 22
           script: |
-            # Check for force-fail first
-            if [ "${{ contains(github.event.head_commit.message, 'FORCE-FAIL') || contains(github.event.head_commit.message, 'force-fail') }}" == "true" ]; then
-              echo "Forcing workflow failure due to 'force-fail' in commit message..."
-              exit 1
-            fi
-            
             set -e
 
             # Clear the ~/sorter directory 
@@ -314,28 +269,3 @@ jobs:
             sudo systemctl restart rustsorter.service
 
             exit 0
-
-      - name: Mark Release as Failed
-        if: failure() && steps.deploy.outcome == 'failure'
-        run: |
-          # Get the deploy number from the original tag
-          DEPLOY_NUM=$(echo "${{ steps.new_tag.outputs.tag }}" | sed 's/d-//' | sed 's/-sr//')
-          FAILED_TAG="d-${DEPLOY_NUM}"
-          if [ "${{ steps.check_rust.outputs.skip_rust }}" == "true" ]; then
-            FAILED_TAG="${FAILED_TAG}-sr"
-          fi
-          FAILED_TAG="${FAILED_TAG}-FAIL"
-          
-          # Create and push failed tag
-          git tag "$FAILED_TAG"
-          git push origin "$FAILED_TAG"
-
-          # Update release to mark as pre-release
-          gh release edit ${{ steps.new_tag.outputs.tag }} --prerelease --notes "$(cat << 'EOF'
-          ⚠️ **This deployment failed!**
-
-          ${{ steps.release_notes.outputs.notes }}
-          EOF
-          )"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
