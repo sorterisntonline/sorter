@@ -15,8 +15,7 @@ export default defineConfig(({ mode }) => {
       sourcemap: isDev,
       rollupOptions: {
         input: {
-          'index.dev.html': './index.dev.html',
-          'index.prod.html': './index.prod.html',
+          'index.html': './index.html',
         }
       }
     },
