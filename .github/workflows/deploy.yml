@@ -8,6 +8,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write    # This is needed for creating releases and tags
 
     steps:
       # Step 1: Checkout the repository
@@ -153,6 +155,7 @@ jobs:
             # we intentionally don't set ENVIRONMENT yet
             # ENVIRONMENT=${{ secrets.DEPLOYMENT_ENV }}
             
+            # TODO: don't think we use this anymore, should be set on prod only
             # we're in production, so we use the prod database url
             DATABASE_URL=${{ secrets.PROD_DATABASE_URL }}
             DISCORD_TOKEN=${{ secrets.RUSTSORTER_DISCORD_TOKEN }}
