@@ -24,8 +24,8 @@ jobs:
           COMMIT_MSG=$(git log -1 --pretty=%B)
           if echo "$COMMIT_MSG" | grep -iE "force-fail" > /dev/null; then
             echo "Found FORCE-FAIL in commit message, adding force-fail tag..."
-            git tag force-fail
-            git push origin force-fail
+            git tag force-fail || true  # Don't fail if tag already exists
+            git push origin force-fail || true  # Don't fail if tag already exists
           fi
 
       # New step: Check for rustsorter changes
