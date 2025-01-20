@@ -48,70 +48,68 @@
 
 (defn count-votes [tag]
   (let [subquery (-> (h/select :items_in_tags/item_id)
-                      (h/from :items_in_tags)
-                      (h/where [:= :items_in_tags/tag_id (:tags/id tag)]))
+                     (h/from :items_in_tags)
+                     (h/where [:= :items_in_tags/tag_id (:tags/id tag)]))
         votes (-> (h/select [[:count :votes/id]])
-                 (h/from :votes)
-                 (h/where [:or
-                           [:in :votes/left_item_id subquery]
-                           [:in :votes/right_item_id subquery]])
-                 db/exec! first :count)]
+                  (h/from :votes)
+                  (h/where [:or
+                            [:in :votes/left_item_id subquery]
+                            [:in :votes/right_item_id subquery]])
+                  db/exec! first :count)]
     (assoc tag :vote_count votes)))
 
 (defn query-tags [r]
-  {:status 200 :body 
+  {:status 200 :body
    {:public (->> (db/exec! (-> (h/select :tags/*
-                                          [[:count :items_in_tags/item_id] :item_count])
-                                (h/join :perms [:= :perms/tag_id :tags/id])
-                                (h/where [:and
-                                          [:= :perms/capability "view"]
-                                          [:= :perms/user_id "all"]
-                                          [:= :tags/unlisted false]])
-                                (h/from :tags)
+                                         [[:count :items_in_tags/item_id] :item_count])
+                               (h/join :perms [:= :perms/tag_id :tags/id])
+                               (h/where [:and
+                                         [:= :perms/capability "view"]
+                                         [:= :perms/user_id "all"]
+                                         [:= :tags/unlisted false]])
+                               (h/from :tags)
 
-                                (h/left-join :items_in_tags [:= :items_in_tags/tag_id :tags/id])
-                                (h/group-by :tags/id)))
-                  (map count-votes))
-      :private
-      (let [groups (map :users_in_usergroups/usergroup_id
-                        (db/exec! (-> {:select :* :from :users_in_usergroups
-                                       :where [:= :user_id (-> r :session :user_name)]})))]
-        (->> (db/exec! (-> (h/select :tags/*)
-                           (h/from :tags)
-                           (h/join :perms [:= :perms/tag_id :tags/id])
-                           (h/where [:or
-                                     [:and
-                                      [:= :perms/capability "view"]
-                                      (if (-> r :session :user_name)
-                                        [:or
-                                         [:like :perms/user_id (str "%" (-> r :session :user_name) "%")]
-                                         (into [:or] (map #(vector :like :perms/user_id (str "%" % "%")) groups))]
-                                        false)]
-                                     [:and
-                                      [:and
-                                       [:= :perms/capability "view"]
-                                       [:not [:= :perms/user_id "all"]]]
-                                      (if (-> r :session :user_name)
-                                        [:= :tags/owner (-> r :session :user_name)]
-                                        false)]])))
-             (map count-votes)))
-      :unlisted
+                               (h/left-join :items_in_tags [:= :items_in_tags/tag_id :tags/id])
+                               (h/group-by :tags/id)))
+                 (map count-votes))
+    :private
+    (let [groups (map :users_in_usergroups/usergroup_id
+                      (db/exec! (-> {:select :* :from :users_in_usergroups
+                                     :where [:= :user_id (-> r :session :user_name)]})))]
       (->> (db/exec! (-> (h/select :tags/*)
-                        (h/from :tags)
-                        (h/where [:and
-                                  [:= :tags/unlisted true]
-                                  (if (-> r :session :user_name)
-                                    [:= :tags/owner (-> r :session :user_name)]
-                                    false)])))
-           (map count-votes))
-      :namespaces (db/exec! "select domain_pk_namespace, count(*) from items group by domain_pk_namespace")}})
+                         (h/from :tags)
+                         (h/join :perms [:= :perms/tag_id :tags/id])
+                         (h/where [:or
+                                   [:and
+                                    [:= :perms/capability "view"]
+                                    (if (-> r :session :user_name)
+                                      [:or
+                                       [:like :perms/user_id (str "%" (-> r :session :user_name) "%")]
+                                       (into [:or] (map #(vector :like :perms/user_id (str "%" % "%")) groups))]
+                                      false)]
+                                   [:and
+                                    [:and
+                                     [:= :perms/capability "view"]
+                                     [:not [:= :perms/user_id "all"]]]
+                                    (if (-> r :session :user_name)
+                                      [:= :tags/owner (-> r :session :user_name)]
+                                      false)]])))
+           (map count-votes)))
+    :unlisted
+    (->> (db/exec! (-> (h/select :tags/*)
+                       (h/from :tags)
+                       (h/where [:and
+                                 [:= :tags/unlisted true]
+                                 (if (-> r :session :user_name)
+                                   [:= :tags/owner (-> r :session :user_name)]
+                                   false)])))
+         (map count-votes))
+    :namespaces (db/exec! "select domain_pk_namespace, count(*) from items group by domain_pk_namespace")}})
 
 (comment
   (db/exec! (-> (h/select :*)
                 (h/from :tags)
-                (h/where [:= :tags/domain_pk_namespace "spotify.playlist"])))
-  
-  )
+                (h/where [:= :tags/domain_pk_namespace "spotify.playlist"]))))
 
 
 
@@ -151,7 +149,7 @@
 (defn delete-tag [req]
   (let [tagid (-> req :params (get "id") Integer/parseInt)
         tag (first (db/exec! {:select :tags/* :from :tags :where [:= :tags/id tagid]}))]
-    
+
     (when-not (= (-> req :session :user_name)
                  (:tags/owner tag))
       (throw (ex-info "must own tag" {:status 401})))
@@ -232,7 +230,7 @@
                            {:membership
                             (db/exec! (-> (h/select :*)
                                           (h/from :items_in_tags)
-                                          (h/where [:= :item_id itemid])(h/join :tags [:= :items_in_tags.tag_id :tags.id])))
+                                          (h/where [:= :item_id itemid]) (h/join :tags [:= :items_in_tags.tag_id :tags.id])))
                             :skips
                             (db/exec! (-> (h/select :*)
                                           (h/from :skipped)
@@ -289,7 +287,7 @@
   (fn [request]
     (try (handler request)
          (catch Exception e
-           (def e e) 
+           (def e e)
            (let [message (ex-message e)]
              message)
            (merge {:status 500
