@@ -63,14 +63,14 @@ jobs:
         run: |
           git fetch --tags
           # Get latest successful deploy number
-          LATEST_TAG=$(git tag -l "d*" | grep -v "dF" | sort -V | tail -n1 || echo "d0")
+          LATEST_TAG=$(git tag -l "d-*" | grep -v "dF" | sort -V | tail -n1 || echo "d-0")
           echo "Latest tag: $LATEST_TAG"
 
-          DEPLOY_NUM=$(echo $LATEST_TAG | sed 's/d//')
+          DEPLOY_NUM=$(echo $LATEST_TAG | sed 's/d-//')
           NEW_NUM=$((DEPLOY_NUM + 1))
-          NEW_TAG="d${NEW_NUM}"
+          NEW_TAG="d-${NEW_NUM}"
           if [ "${{ steps.check_rust.outputs.skip_rust }}" == "true" ]; then
-            NEW_TAG="${NEW_TAG}sr"
+            NEW_TAG="${NEW_TAG}-sr"
           fi
           echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
 
@@ -98,14 +98,21 @@ jobs:
             NOTES=$(git log $PREVIOUS_TAG..${{ github.sha }} --pretty=format:'- %s')
           fi
           
-          # Format FORCE-FAIL consistently in notes
-          NOTES=$(echo "$NOTES" | sed 's/FORCE-FAIL: /🔴 [FORCE-FAIL] /gI' | sed 's/\[FORCE-FAIL\]/🔴 [FORCE-FAIL]/gI' | sed 's/(FORCE-FAIL)/🔴 [FORCE-FAIL]/gI' | sed 's/FORCE-FAIL/🔴 [FORCE-FAIL]/gI')
-          
           if [ "${{ steps.check_rust.outputs.skip_rust }}" == "true" ]; then
             NOTES="⏭️ [SKIP-RUST] No changes detected in rustsorter - previous build retained.
 
             ${NOTES}"
           fi
+          
+          # Add FORCE-FAIL note at top if present
+          if echo "$NOTES" | grep -iE "force-fail" > /dev/null; then
+            NOTES="🔴 [FORCE-FAIL] Testing deployment failure.
+
+            ${NOTES}"
+          fi
+          
+          # Clean up any other FORCE-FAIL mentions in commit messages
+          NOTES=$(echo "$NOTES" | sed 's/FORCE-FAIL: //gI' | sed 's/\[FORCE-FAIL\]//gI' | sed 's/(FORCE-FAIL)//gI' | sed 's/FORCE-FAIL//gI')
           
           echo "notes<<EOF" >> $GITHUB_OUTPUT
           echo "$NOTES" >> $GITHUB_OUTPUT
@@ -312,11 +319,12 @@ jobs:
         if: failure() && steps.deploy.outcome == 'failure'
         run: |
           # Get the deploy number from the original tag
-          DEPLOY_NUM=$(echo "${{ steps.new_tag.outputs.tag }}" | sed 's/d//' | sed 's/-sr//')
-          FAILED_TAG="dF${DEPLOY_NUM}"
+          DEPLOY_NUM=$(echo "${{ steps.new_tag.outputs.tag }}" | sed 's/d-//' | sed 's/-sr//')
+          FAILED_TAG="d-${DEPLOY_NUM}"
           if [ "${{ steps.check_rust.outputs.skip_rust }}" == "true" ]; then
             FAILED_TAG="${FAILED_TAG}-sr"
           fi
+          FAILED_TAG="${FAILED_TAG}-FAIL"
           
           # Create and push failed tag
           git tag "$FAILED_TAG"
