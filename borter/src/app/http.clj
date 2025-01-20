@@ -37,19 +37,10 @@
             [app.health :as health])
   (:import
    [java.net URLEncoder]))
-
-(defn get-html-file [request]
-  (let [env (System/getenv "ENVIRONMENT")
-        is-prod (= env "production")
-        is-music (or (= "music.sorter.social" (-> request :headers (get "host")))
-                    (= "/music" (:uri request)))
-        html-file (cond
-                   ;; Music sorter routes
-                   (and is-music is-prod) "index2.html" ; for now these are the same
-                   (and is-music (not is-prod)) "index2.html"
-                   ;; Main sorter routes
-                   is-prod "index.prod.html"
-                   :else "index.dev.html")]
+(defn get-html-file [request] ; revert this for now because it breaks everything
+  (let [is-music (or (= "music.sorter.social" (-> request :headers (get "host")))
+                     (= "/music" (:uri request)))
+        html-file (if is-music "index2.html" "index.html")]
     (str "public/" html-file)))
 
 ;; Replace the existing test functions with a single handler
