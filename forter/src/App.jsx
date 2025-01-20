@@ -11,6 +11,7 @@ import { ItemPanel, editing_item, pinned_left, pinned_right } from "./ItemPanel"
 import { loadTag } from "./Network";
 import { Modal } from "./Modal";
 import WarningPopup from './WarningPopup';
+import { MetaTags } from "./MetaTags";
 
 export const useElo = signal(false);
 export const tag = signal(false);
@@ -218,6 +219,16 @@ export const Tag = ({ showVote, isVoting, handleError }) => {
   const sorteditems = tag.value["sorted"];
   const unsorteditems = tag.value["unsorted"];
   const votes = tag.value["votes"];
+
+  // Create description from top 3 items
+  const topItemsDesc = sorteditems
+    .slice(0, 3)
+    .map((item, idx) => {
+      const medal = ['🥇', '🥈', '🥉'][idx];
+      return `${medal} ${item.title} (${item.elo.toFixed(2)})`;
+    })
+    .join(', ');
+
   const filteredVotes = votes.filter(v => v.attribute === selected_attribute.value.value.id);
 
   const [isFeed, setIsFeed] = useState(false);
@@ -328,58 +339,65 @@ export const Tag = ({ showVote, isVoting, handleError }) => {
     return votingRender;
   } else {
     return (
-      <div className="dark:text-white justify-start">
-        <IntegrationsPanel />
-        <TextSummary
-          can_vote={can_vote}
-          can_add={can_add}
+      <>
+        <MetaTags 
+          title={`sorter - #${tag.value.tag.slug}`}
+          description={topItemsDesc}
+          image="/logoanim_alt1.gif"
         />
-        {showVote && <VotePanel handleError={handleError}/>}
-        <div className="flex lg:flex-row flex-col">
-          {votesList}
-          <div className="flex flex-col">
-            <div
-              className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
-              onClick={() => toggle.value = !toggle.value}
-              role="button"
-            >
-              {toggle.value ? "[more space <-]" : "[less space ->]"}
-            </div>
-            <div
-              className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
-              onClick={() => {
-                useElo.value = !useElo.value;
-                loadTag(undefined);
-              }}
-              role="button"
-            >
-              {useElo.value ? "[use pagerank]" : "[use elo]"}
-            </div>
-            <div
-              className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
-              onClick={() => {
-                setLocation('/' + tag.value.tag.id + '/' + tag.value.tag.slug + '/graph');
-              }}
-              role="button"
-            >
-              [show graph]
-            </div>
-            <div
-              className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
-              onClick={() => {
-                showPin.value = !showPin.value;
-              }}
-              role="button"
-            >
-              {showPin.value ? "[hide pin]" : "[show pin]"}
-            </div>
+        <div className="dark:text-white justify-start">
+          <IntegrationsPanel />
+          <TextSummary
+            can_vote={can_vote}
+            can_add={can_add}
+          />
+          {showVote && <VotePanel handleError={handleError}/>}
+          <div className="flex lg:flex-row flex-col">
+            {votesList}
+            <div className="flex flex-col">
+              <div
+                className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
+                onClick={() => toggle.value = !toggle.value}
+                role="button"
+              >
+                {toggle.value ? "[more space <-]" : "[less space ->]"}
+              </div>
+              <div
+                className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
+                onClick={() => {
+                  useElo.value = !useElo.value;
+                  loadTag(undefined);
+                }}
+                role="button"
+              >
+                {useElo.value ? "[use pagerank]" : "[use elo]"}
+              </div>
+              <div
+                className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
+                onClick={() => {
+                  setLocation('/' + tag.value.tag.id + '/' + tag.value.tag.slug + '/graph');
+                }}
+                role="button"
+              >
+                [show graph]
+              </div>
+              <div
+                className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
+                onClick={() => {
+                  showPin.value = !showPin.value;
+                }}
+                role="button"
+              >
+                {showPin.value ? "[hide pin]" : "[show pin]"}
+              </div>
 
-          </div>
-          <div className={"p-3 " + (toggle.value ? "lg:w-1/3" : "lg:w-2/3")}>
-            <ItemPanel />
-          </div>
+            </div>
+            <div className={"p-3 " + (toggle.value ? "lg:w-1/3" : "lg:w-2/3")}>
+              <ItemPanel />
+            </div>
+          </div >
         </div >
-      </div >
+      </>
     );
   }
 };
