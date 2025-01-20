@@ -50,6 +50,12 @@ jobs:
           fi
           echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
 
+      # Set up SSH for Git operations
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.DO_SSH_KEY }}
+
       # Step 4: Create and Push Tag
       - name: Create and Push Tag
         run: |
