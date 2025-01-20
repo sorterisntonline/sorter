@@ -54,7 +54,7 @@ jobs:
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.7.0
         with:
-          ssh-private-key: ${{ secrets.DO_SSH_KEY }}
+          ssh-private-key: ${{ secrets.DO_SSH_KEY }} # hopefully this has been added as a deploy key
 
       # Step 4: Create and Push Tag
       - name: Create and Push Tag
