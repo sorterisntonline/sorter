@@ -18,6 +18,16 @@ jobs:
         with:
           fetch-depth: 0  # Needed for git history
 
+      # Add after checkout and before other steps
+      - name: Check commit message for force-fail
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          if echo "$COMMIT_MSG" | grep -iE "force-fail" > /dev/null; then
+            echo "Found FORCE-FAIL in commit message, adding force-fail tag..."
+            git tag force-fail
+            git push origin force-fail
+          fi
+
       # New step: Check for rustsorter changes
       - name: Check rustsorter changes
         id: check_rust
@@ -28,6 +38,17 @@ jobs:
             echo "skip_rust=true" >> $GITHUB_OUTPUT
           else
             echo "skip_rust=false" >> $GITHUB_OUTPUT
+          fi
+
+      # Add after the rustsorter check
+      - name: Check for force-fail tag
+        id: check_force_fail
+        run: |
+          FORCE_FAIL=$(git tag -l "force-fail" || echo "")
+          if [ ! -z "$FORCE_FAIL" ]; then
+            echo "should_fail=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_fail=false" >> $GITHUB_OUTPUT
           fi
 
       # Step 2: Set up Git user for tagging
@@ -41,14 +62,15 @@ jobs:
         id: new_tag
         run: |
           git fetch --tags
-          LATEST_TAG=$(git tag -l "d-*" | sort -V | tail -n1 || echo "d-0")
+          # Get latest successful deploy number
+          LATEST_TAG=$(git tag -l "d*" | grep -v "dF" | sort -V | tail -n1 || echo "d0")
           echo "Latest tag: $LATEST_TAG"
 
-          DEPLOY_NUM=$(echo $LATEST_TAG | cut -d'-' -f2)
+          DEPLOY_NUM=$(echo $LATEST_TAG | sed 's/d//')
           NEW_NUM=$((DEPLOY_NUM + 1))
-          NEW_TAG="d-${NEW_NUM}"
+          NEW_TAG="d${NEW_NUM}"
           if [ "${{ steps.check_rust.outputs.skip_rust }}" == "true" ]; then
-            NEW_TAG="${NEW_TAG}-skip-rust"
+            NEW_TAG="${NEW_TAG}-sr"
           fi
           echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
 
@@ -87,6 +109,7 @@ jobs:
 
       # Step 6: Create GitHub Release
       - name: Create GitHub Release
+        id: create_release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.new_tag.outputs.tag }}
@@ -101,8 +124,17 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.DO_SSH_KEY }}
 
-      # Step 8: Deploy to DigitalOcean
+      # Step 8: Force Failure (if requested)
+      - name: Force Failure (if requested)
+        if: steps.check_force_fail.outputs.should_fail == 'true'
+        run: |
+          echo "Forcing workflow failure due to 'force-fail' tag..."
+          exit 1
+
+      # Step 9: Deploy to DigitalOcean
       - name: Deploy to DigitalOcean
+        id: deploy
+        if: steps.check_force_fail.outputs.should_fail != 'true'
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.DO_SSH_HOST }}
@@ -243,7 +275,7 @@ jobs:
 
             # Conditional rustsorter build
             echo -e "\033[3mHandling rustsorter...\033[0m"
-            if [[ "${{ steps.new_tag.outputs.tag }}" == *"-skip-rust"* ]]; then
+            if [[ "${{ steps.new_tag.outputs.tag }}" == *"-sr"* ]]; then
               echo -e "\033[3mSkipping rustsorter build (no changes detected)...\033[0m"
             else
               echo -e "\033[3mBuilding rustsorter...\033[0m"
@@ -265,3 +297,27 @@ jobs:
             sudo systemctl restart rustsorter.service
 
             exit 0
+
+      - name: Mark Release as Failed
+        if: failure() && steps.deploy.outcome == 'failure'
+        run: |
+          # Get the deploy number from the original tag
+          DEPLOY_NUM=$(echo "${{ steps.new_tag.outputs.tag }}" | sed 's/d//' | sed 's/-sr//')
+          FAILED_TAG="dF${DEPLOY_NUM}"
+          if [ "${{ steps.check_rust.outputs.skip_rust }}" == "true" ]; then
+            FAILED_TAG="${FAILED_TAG}-sr"
+          fi
+          
+          # Create and push failed tag
+          git tag "$FAILED_TAG"
+          git push origin "$FAILED_TAG"
+
+          # Update release to mark as pre-release
+          gh release edit ${{ steps.new_tag.outputs.tag }} --prerelease --notes "$(cat << 'EOF'
+          ⚠️ **This deployment failed!**
+
+          ${{ steps.release_notes.outputs.notes }}
+          EOF
+          )"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
