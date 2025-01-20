@@ -13,63 +13,78 @@ jobs:
       # Step 1: Checkout the repository
       - name: Checkout Code
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Needed for git history
 
-    #   # Step 2: Set up Git user for tagging
-    #   - name: Set up Git
-    #     run: |
-    #       git config user.name "github-actions[bot]"
-    #       git config user.email "github-actions[bot]@users.noreply.github.com"
+      # New step: Check for rustsorter changes
+      - name: Check rustsorter changes
+        id: check_rust
+        run: |
+          git fetch origin production
+          RUST_CHANGED=$(git diff --name-only origin/production...HEAD | grep "^rustsorter/" || echo "")
+          if [ -z "$RUST_CHANGED" ]; then
+            echo "skip_rust=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip_rust=false" >> $GITHUB_OUTPUT
+          fi
 
-    #   # Step 3: Determine New Tag
-    #   - name: Determine New Tag
-    #     id: new_tag
-    #     run: |
-    #       git fetch --tags
-    #       # Get the latest tag or default to v0.0.0
-    #       LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-    #       echo "Latest tag: $LATEST_TAG"
+      # Step 2: Set up Git user for tagging
+      - name: Set up Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-    #       # Extract version numbers
-    #       VERSION_MAJOR=$(echo $LATEST_TAG | cut -d. -f1 | sed 's/v//')
-    #       VERSION_MINOR=$(echo $LATEST_TAG | cut -d. -f2)
-    #       VERSION_PATCH=$(echo $LATEST_TAG | cut -d. -f3)
+      # Step 3: Determine New Tag
+      - name: Determine New Tag
+        id: new_tag
+        run: |
+          git fetch --tags
+          LATEST_TAG=$(git tag -l "d-*" | sort -V | tail -n1 || echo "d-0")
+          echo "Latest tag: $LATEST_TAG"
 
-    #       # Increment patch version
-    #       NEW_PATCH=$((VERSION_PATCH + 1))
-    #       NEW_TAG="v${VERSION_MAJOR}.${VERSION_MINOR}.${NEW_PATCH}"
-    #       echo "New tag: $NEW_TAG"
+          DEPLOY_NUM=$(echo $LATEST_TAG | cut -d'-' -f2)
+          NEW_NUM=$((DEPLOY_NUM + 1))
+          NEW_TAG="d-${NEW_NUM}"
+          if [ "${{ steps.check_rust.outputs.skip_rust }}" == "true" ]; then
+            NEW_TAG="${NEW_TAG}-skip-rust"
+          fi
+          echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
 
-    #       # Set the new tag as output
-    #       echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
+      # Step 4: Create and Push Tag
+      - name: Create and Push Tag
+        run: |
+          git tag ${{ steps.new_tag.outputs.tag }}
+          git push origin ${{ steps.new_tag.outputs.tag }}
 
-    #   # Step 4: Create and Push Tag
-    #   - name: Create and Push Tag
-    #     run: |
-    #       git tag ${{ steps.new_tag.outputs.tag }}
-    #       git push origin ${{ steps.new_tag.outputs.tag }}
+      # Step 5: Generate Release Notes
+      - name: Generate Release Notes
+        id: release_notes
+        run: |
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${{ github.sha }}^ 2>/dev/null || echo "")
+          if [ -z "$PREVIOUS_TAG" ]; then
+            NOTES=$(git log --pretty=format:'*- %s' ${{ github.sha }})
+          else
+            NOTES=$(git log $PREVIOUS_TAG..${{ github.sha }} --pretty=format:'*- %s')
+          fi
+          
+          if [ "${{ steps.check_rust.outputs.skip_rust }}" == "true" ]; then
+            NOTES="${NOTES}
 
-    #   # Step 5: Generate Release Notes
-    #   - name: Generate Release Notes
-    #     id: release_notes
-    #     run: |
-    #       PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${{ github.sha }}^ 2>/dev/null || echo "")
-    #       if [ -z "$PREVIOUS_TAG" ]; then
-    #         # No previous tag exists, include all commits
-    #         NOTES=$(git log --pretty=format:'*- %s' ${{ github.sha }} )
-    #       else
-    #         NOTES=$(git log $PREVIOUS_TAG..${{ github.sha }} --pretty=format:'*- %s')
-    #       fi
-    #       echo "notes=$NOTES" >> $GITHUB_OUTPUT
+            **Note:** No changes detected in rustsorter - previous build retained."
+          fi
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
-    #   # Step 6: Create GitHub Release
-    #   - name: Create GitHub Release
-    #     uses: softprops/action-gh-release@v1
-    #     with:
-    #       tag_name: ${{ steps.new_tag.outputs.tag }}
-    #       release_name: "Release ${{ steps.new_tag.outputs.tag }}"
-    #       body: "${{ steps.release_notes.outputs.notes }}"
-    #     env:
-    #       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Step 6: Create GitHub Release
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.new_tag.outputs.tag }}
+          name: "Release ${{ steps.new_tag.outputs.tag }}"
+          body: "${{ steps.release_notes.outputs.notes }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Step 7: Set up SSH
       - name: Setup SSH
@@ -88,7 +103,6 @@ jobs:
           port: 22
           script: |
             set -e
-
 
             # Clear the ~/sorter directory 
             rm -rf ~/sorter
@@ -217,12 +231,16 @@ jobs:
             
             cd ..
 
-            # Build rustsorter 
-            echo -e "\033[3mBuilding rustsorter...\033[0m"
-            cd rustsorter
-            SQLX_OFFLINE=true cargo build --release
-            cd ..
-
+            # Conditional rustsorter build
+            echo -e "\033[3mHandling rustsorter...\033[0m"
+            if [[ "${{ steps.new_tag.outputs.tag }}" == *"-skip-rust"* ]]; then
+              echo -e "\033[3mSkipping rustsorter build (no changes detected)...\033[0m"
+            else
+              echo -e "\033[3mBuilding rustsorter...\033[0m"
+              cd rustsorter
+              SQLX_OFFLINE=true cargo build --release
+              cd ..
+            fi
 
             echo -e "\033[1mDone building, running (with systemctl)...\033[0m"
 
