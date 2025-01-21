@@ -111,13 +111,13 @@ jobs:
           fi
           
           if [ "${{ steps.check_rust.outputs.skip_rust }}" == "true" ]; then
-            NOTES="⏭️ [SKIP-RUST] No changes detected in rustsorter - previous build retained.
+            NOTES="⏭️🦀 [SKIP-RUST] No changes detected in rustsorter - previous build retained.
 
             ${NOTES}"
           fi
           
           if [ "${{ steps.check_bort.outputs.skip_bort }}" == "true" ]; then
-            NOTES="⏭️ [SKIP-BORT] No changes detected in borter components - previous builds retained.
+            NOTES="⏭️ƛ [SKIP-BORT] No changes detected in borter components - previous builds retained.
 
             ${NOTES}"
           fi
