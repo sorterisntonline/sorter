@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "ENVIRONMENT=development vite build --watch --mode development",
-    "build": "ENVIRONMENT=production vite build --mode production",
+    "build": "vite build",
+    "staging": "ENVIRONMENT=development vite build --mode staging",
     "prod": "ENVIRONMENT=production vite build --mode production",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
