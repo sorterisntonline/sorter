@@ -170,8 +170,7 @@ jobs:
             # ENVIRONMENT=${{ env.DEPLOY_ENV }}
             # DATABASE_URL=${{ github.ref_name == 'production' && secrets.PROD_DATABASE_URL || secrets.STAGING_DATABASE_URL }}
             # EOF
-
-            chmod 600 .env
+            # chmod 600 .env
 
             # Write forter/.env
             cat <<EOF > forter/.env
