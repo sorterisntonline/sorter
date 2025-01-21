@@ -297,7 +297,7 @@ jobs:
             else
               echo -e "\033[3mBuilding rustsorter...\033[0m"
               cd rustsorter
-              SQLX_OFFLINE=true cargo build --release
+              SQLX_OFFLINE=true /home/deployer/.cargo/bin/cargo build --release
               cd ..
             fi
 
