@@ -271,14 +271,14 @@ jobs:
               echo -e "\033[3mBuilding forter...\033[0m"
               cd forter
               npm install
-              npm run ${{ env.BUILD_MODE }}
+              npm run ${{ env.BRANCH }}
               cd ..
 
               # Build clisorter
               echo -e "\033[3mBuilding clisorter...\033[0m"
               cd clisorter
               npm install
-              npm run build --mode ${{ env.BUILD_MODE }}
+              npm run build # eventually this needs to include mode via branch or something like that
               cd ..
 
               # Build borter
