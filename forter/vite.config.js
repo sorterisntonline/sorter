@@ -13,7 +13,7 @@ export default defineConfig(({ mode }) => {
       outDir: "../borter/resources/public/",
       minify: !isDev,
       minifySyntax: !isDev,
-      sourcemap: isDev && !isStaging,
+      sourcemap: isDev || isStaging,
       rollupOptions: {
         input: './index.html'
           }
