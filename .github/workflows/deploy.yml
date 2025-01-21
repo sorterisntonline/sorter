@@ -252,7 +252,7 @@ jobs:
             BORTER_YOUTUBE_JAVASCRIPT_ORIGINS=${{ secrets.BORTER_YOUTUBE_JAVASCRIPT_ORIGINS }}
             EOF
 
-            chmod 600 borter/.env
+            chmod 600 borter/.env 
 
             echo -e "\033[1mDone writing env files, building...\033[0m"  
             
