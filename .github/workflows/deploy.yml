@@ -33,8 +33,13 @@ jobs:
           git fetch origin ${{ env.BRANCH }}
           RUST_CHANGED=$(git diff --name-only origin/${{ env.BRANCH }}...HEAD | grep "^rustsorter/" || echo "")
           COMMIT_MSG=$(git log -1 --pretty=%B)
-          if echo "$COMMIT_MSG" | grep -iE "(skip.?rust|skiprust)" > /dev/null; then
+          # Check for force build flags first (case insensitive)
+          if echo "$COMMIT_MSG" | grep -iE "(force-build(-rust)?|forcebuild(-rust)?)" > /dev/null; then
+            echo "skip_rust=false" >> $GITHUB_OUTPUT
+          # Then check for skip flags (case insensitive)
+          elif echo "$COMMIT_MSG" | grep -iE "(skip.?rust|skiprust)" > /dev/null; then
             echo "skip_rust=true" >> $GITHUB_OUTPUT
+          # Finally check for actual changes
           elif [ -z "$RUST_CHANGED" ]; then
             echo "skip_rust=true" >> $GITHUB_OUTPUT
           else
@@ -47,8 +52,13 @@ jobs:
         run: |
           BORT_CHANGED=$(git diff --name-only origin/${{ env.BRANCH }}...HEAD | grep -E "^(borter|forter|clisorter)/" || echo "")
           COMMIT_MSG=$(git log -1 --pretty=%B)
-          if echo "$COMMIT_MSG" | grep -iE "(skip.?bort|skipbort)" > /dev/null; then
+          # Check for force build flags first (case insensitive)
+          if echo "$COMMIT_MSG" | grep -iE "(force-build(-bort)?|forcebuild(-bort)?)" > /dev/null; then
+            echo "skip_bort=false" >> $GITHUB_OUTPUT
+          # Then check for skip flags (case insensitive)
+          elif echo "$COMMIT_MSG" | grep -iE "(skip.?bort|skipbort)" > /dev/null; then
             echo "skip_bort=true" >> $GITHUB_OUTPUT
+          # Finally check for actual changes
           elif [ -z "$BORT_CHANGED" ]; then
             echo "skip_bort=true" >> $GITHUB_OUTPUT
           else
