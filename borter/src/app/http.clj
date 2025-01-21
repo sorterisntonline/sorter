@@ -33,7 +33,6 @@
             [app.reddit :as reddit]
             [app.twitter :as twitter]
             [app.groups :as groups]
-            [app.discord :as discord]
             [app.health :as health])
   (:import
    [java.net URLEncoder]))
@@ -382,8 +381,7 @@
               ["/youtube" youtube/routes]
               ["/linear" linear/routes]
               ["/reddit" reddit/routes]
-              ["/twitter" twitter/routes]
-              ["/discord" discord/routes]
+              ["/twitter" twitter/routes] 
 
               ["/integrations" integrations/routes]
               ["/comments" comments/routes]

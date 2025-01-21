@@ -4,6 +4,7 @@
   "version": "0.1.201",
   "type": "module",
   "scripts": {
+    "build": "vite build",
     "dev": "ENVIRONMENT=development vite build --watch --mode development",
     "development": "ENVIRONMENT=development vite build --mode development",
     "staging": "ENVIRONMENT=production vite build --mode staging",
