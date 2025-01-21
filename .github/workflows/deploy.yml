@@ -34,7 +34,7 @@ jobs:
           RUST_CHANGED=$(git diff --name-only origin/${{ env.BRANCH }}...HEAD | grep "^rustsorter/" || echo "")
           COMMIT_MSG=$(git log -1 --pretty=%B)
           # Check for force build flags first (case insensitive)
-          if echo "$COMMIT_MSG" | grep -iE "(force-build-rust|forcebuild-rust|force-build$|forcebuild$)" > /dev/null; then
+          if echo "$COMMIT_MSG" | grep -iE "(force-build-rust|forcebuild-rust|force-build|forcebuild)" > /dev/null; then
             echo "skip_rust=false" >> $GITHUB_OUTPUT
           # Then check for skip flags (case insensitive)
           elif echo "$COMMIT_MSG" | grep -iE "(skip.?rust|skiprust)" > /dev/null; then
@@ -53,7 +53,7 @@ jobs:
           BORT_CHANGED=$(git diff --name-only origin/${{ env.BRANCH }}...HEAD | grep -E "^(borter|forter|clisorter)/" || echo "")
           COMMIT_MSG=$(git log -1 --pretty=%B)
           # Check for force build flags first (case insensitive)
-          if echo "$COMMIT_MSG" | grep -iE "(force-build-bort|forcebuild-bort|force-build$|forcebuild$)" > /dev/null; then
+          if echo "$COMMIT_MSG" | grep -iE "(force-build-bort|forcebuild-bort|force-build|forcebuild)" > /dev/null; then
             echo "skip_bort=false" >> $GITHUB_OUTPUT
           # Then check for skip flags (case insensitive)
           elif echo "$COMMIT_MSG" | grep -iE "(skip.?bort|skipbort)" > /dev/null; then
