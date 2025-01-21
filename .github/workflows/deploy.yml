@@ -291,12 +291,6 @@ jobs:
               cd ..
             fi
 
-            # Setup stunnel for staging environment if needed
-            if [[ "${{ env.BRANCH }}" == "staging" ]]; then
-              echo -e "\033[3mSetting up stunnel for staging environment...\033[0m"
-              sudo systemctl restart stunnel4.service
-            fi
-
             echo -e "\033[1mDone building, running (with systemctl)...\033[0m"
 
             # Reload systemd to recognize new services (if any changes)
