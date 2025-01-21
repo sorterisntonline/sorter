@@ -33,7 +33,7 @@ jobs:
           git fetch origin ${{ env.BRANCH }}
           RUST_CHANGED=$(git diff --name-only origin/${{ env.BRANCH }}...HEAD | grep "^rustsorter/" || echo "")
           COMMIT_MSG=$(git log -1 --pretty=%B)
-          if [[ "$COMMIT_MSG" =~ (SKIP|skip)[-._ ]?(RUST|rust) ]]; then
+          if echo "$COMMIT_MSG" | grep -iE "(skip.?rust|skiprust)" > /dev/null; then
             echo "skip_rust=true" >> $GITHUB_OUTPUT
           elif [ -z "$RUST_CHANGED" ]; then
             echo "skip_rust=true" >> $GITHUB_OUTPUT
@@ -47,7 +47,7 @@ jobs:
         run: |
           BORT_CHANGED=$(git diff --name-only origin/${{ env.BRANCH }}...HEAD | grep -E "^(borter|forter|clisorter)/" || echo "")
           COMMIT_MSG=$(git log -1 --pretty=%B)
-          if [[ "$COMMIT_MSG" =~ (SKIP|skip)[-._ ]?(BORT|bort) ]]; then
+          if echo "$COMMIT_MSG" | grep -iE "(skip.?bort|skipbort)" > /dev/null; then
             echo "skip_bort=true" >> $GITHUB_OUTPUT
           elif [ -z "$BORT_CHANGED" ]; then
             echo "skip_bort=true" >> $GITHUB_OUTPUT
