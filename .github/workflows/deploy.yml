@@ -161,7 +161,7 @@ jobs:
           host: ${{ github.ref_name == 'production' && secrets.DO_SSH_HOST || secrets.DO_SSH_HOST_STAGING }}
           username: deployer
           key: ${{ github.ref_name == 'production' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGING }}
-          command_timeout: 44m
+          command_timeout: 99m
           port: 22
           script: |
             set -e
