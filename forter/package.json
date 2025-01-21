@@ -1,11 +1,10 @@
 {
   "name": "forter",
   "private": true,
-  "version": "0.1.124",
+  "version": "0.1.201",
   "type": "module",
   "scripts": {
     "dev": "ENVIRONMENT=development vite build --watch --mode development",
-    "build": "vite build",
     "development": "ENVIRONMENT=development vite build --mode development",
     "staging": "ENVIRONMENT=production vite build --mode staging",
     "production": "ENVIRONMENT=production vite build --mode production",

@@ -3,7 +3,8 @@ import react from "@vitejs/plugin-react";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  const isDev = (mode === 'development') || (mode === 'dev') || (mode === 'staging');
+  const isDev = (mode === 'development') || (mode === 'dev');
+  const isStaging = (mode === 'staging');
   const isProduction = process.env.ENVIRONMENT === 'production';
 
   return {
@@ -12,7 +13,7 @@ export default defineConfig(({ mode }) => {
       outDir: "../borter/resources/public/",
       minify: !isDev,
       minifySyntax: !isDev,
-      sourcemap: isDev,
+      sourcemap: isDev && !isStaging,
       rollupOptions: {
         input: './index.html'
           }
