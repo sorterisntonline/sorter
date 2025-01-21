@@ -316,6 +316,10 @@ jobs:
             # Backup borter jar
             echo -e "\033[3mBacking up borter jar...\033[0m"
             BORTER_BACKUP_DIR="/home/deployer/backups/borter"
+
+            # Create the backup directory if it doesn't exist
+            mkdir -p "${BORTER_BACKUP_DIR}"
+
             BORTER_BACKUP_NAME="borter-$(date +%Y%m%d_%H%M%S).jar"
             cp borter/target/sorter-*-standalone.jar "${BORTER_BACKUP_DIR}/${BORTER_BACKUP_NAME}"
             
