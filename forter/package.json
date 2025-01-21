@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "ENVIRONMENT=development vite build --watch --mode development",
     "build": "vite build",
-    "staging": "ENVIRONMENT=development vite build --mode staging",
+    "development": "ENVIRONMENT=development vite build --mode development",
+    "staging": "ENVIRONMENT=production vite build --mode staging",
     "production": "ENVIRONMENT=production vite build --mode production",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
