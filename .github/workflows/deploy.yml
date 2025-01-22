@@ -56,7 +56,11 @@ jobs:
       - name: Check borter changes
         id: check_bort
         run: |
+          git fetch origin ${{ env.BRANCH }}
+          echo "Checking for changes in borter components..."
+          git diff --name-only origin/${{ env.BRANCH }}...HEAD
           BORT_CHANGED=$(git diff --name-only origin/${{ env.BRANCH }}...HEAD | grep -E "^(borter|forter|clisorter|public)/" || echo "")
+          echo "Changes detected: $BORT_CHANGED"
           COMMIT_MSG=$(git log -1 --pretty=%B)
           # Check for force build flags first (case insensitive)
           if echo "$COMMIT_MSG" | grep -iE "(force-build-bort|forcebuild-bort|force-build|forcebuild)" > /dev/null; then
