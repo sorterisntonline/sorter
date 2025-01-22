@@ -50,7 +50,7 @@ jobs:
       - name: Check borter changes
         id: check_bort
         run: |
-          BORT_CHANGED=$(git diff --name-only origin/${{ env.BRANCH }}...HEAD | grep -E "^(borter|forter|clisorter)/" || echo "")
+          BORT_CHANGED=$(git diff --name-only origin/${{ env.BRANCH }}...HEAD | grep -E "^(borter|forter|clisorter|public)/" || echo "")
           COMMIT_MSG=$(git log -1 --pretty=%B)
           # Check for force build flags first (case insensitive)
           if echo "$COMMIT_MSG" | grep -iE "(force-build-bort|forcebuild-bort|force-build|forcebuild)" > /dev/null; then
@@ -87,12 +87,16 @@ jobs:
           NEW_NUM=$((DEPLOY_NUM + 1))
           NEW_TAG="${PREFIX}-${NEW_NUM}"
           
-          # Add skip suffixes if needed
-          if [ "${{ steps.check_rust.outputs.skip_rust }}" == "true" ]; then
-            NEW_TAG="${NEW_TAG}-sr"
-          fi
-          if [ "${{ steps.check_bort.outputs.skip_bort }}" == "true" ]; then
-            NEW_TAG="${NEW_TAG}-sb"
+          # Add appropriate suffix based on skip flags
+          if [ "${{ steps.check_rust.outputs.skip_rust }}" == "true" ] && [ "${{ steps.check_bort.outputs.skip_bort }}" == "true" ]; then
+            NEW_TAG="${NEW_TAG}-NOBUILD"
+          else
+            if [ "${{ steps.check_rust.outputs.skip_rust }}" == "true" ]; then
+              NEW_TAG="${NEW_TAG}-sr"
+            fi
+            if [ "${{ steps.check_bort.outputs.skip_bort }}" == "true" ]; then
+              NEW_TAG="${NEW_TAG}-sb"
+            fi
           fi
           echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
 
@@ -153,7 +157,6 @@ jobs:
         with:
           ssh-private-key: ${{ github.ref_name == 'production' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGING }}
 
-      # Modified deployment step to handle stunnel for staging
       - name: Deploy to Server
         id: deploy
         uses: appleboy/ssh-action@v0.1.10
@@ -173,14 +176,6 @@ jobs:
             git clone git@github.com:sorterisntonline/sorter.git -b ${{ env.BRANCH }} ~/sorter
 
             cd ~/sorter || exit
-
-            # TODO: we shouldn't need this anymore
-            # Update Environment Variables with correct environment
-            # cat <<EOF > .env
-            # ENVIRONMENT=${{ env.DEPLOY_ENV }}
-            # DATABASE_URL=${{ github.ref_name == 'production' && secrets.PROD_DATABASE_URL || secrets.STAGING_DATABASE_URL }}
-            # EOF
-            # chmod 600 .env
 
             # Write forter/.env
             cat <<EOF > forter/.env
@@ -212,13 +207,6 @@ jobs:
             # Write borter/.env
             cat <<EOF > borter/.env
             # borter/.env
-            
-            # TODO: we shouldn't need this anymore ALSO
-            # we intentionally dont set ENVIRONMENT here
-            # ENVIRONMENT=${{ secrets.DEPLOYMENT_ENV }}
-            
-            # database URLs
-            # DATABASE_URL=${{ secrets.PROD_DATABASE_URL }}
 
             # Linear Integration
             BORTER_LINEAR_CLIENT_ID=${{ secrets.BORTER_LINEAR_CLIENT_ID }}
@@ -341,4 +329,49 @@ jobs:
               cd ~/sorter
             fi
 
+            # Create live directories and symlinks if they don't exist
+            mkdir -p /home/deployer/live/borter
+            mkdir -p /home/deployer/live/rustsorter
+
+            # Update symlinks after successful builds
+            if [[ "${{ steps.check_bort.outputs.skip_bort }}" != "true" ]]; then
+              ln -sf ~/sorter/borter/target/sorter-*-standalone.jar /home/deployer/live/borter/
+            fi
+
+            if [[ "${{ steps.new_tag.outputs.tag }}" != *"-sr"* ]]; then
+              ln -sf ~/sorter/rustsorter/target/release/* /home/deployer/live/rustsorter/
+            fi
+
             exit 0
+
+      # New fallback step that runs on deploy failure
+      - name: Fallback to Latest Backup
+        if: failure() && steps.deploy.outcome == 'failure'
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ github.ref_name == 'production' && secrets.DO_SSH_HOST || secrets.DO_SSH_HOST_STAGING }}
+          username: deployer
+          key: ${{ github.ref_name == 'production' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGING }}
+          script: |
+            set -e
+            
+            # Handle borter fallback if we were attempting to build it
+            if [[ "${{ steps.check_bort.outputs.skip_bort }}" != "true" ]] && [[ "${{ steps.new_tag.outputs.tag }}" != *"-NOBUILD"* ]]; then
+              echo "Falling back to latest borter backup..."
+              LATEST_BORTER=$(ls -t /home/deployer/backups/borter/borter-*.jar | head -n1)
+              if [ ! -z "$LATEST_BORTER" ]; then
+                ln -sf "$LATEST_BORTER" /home/deployer/live/borter/sorter-standalone.jar
+                sudo systemctl restart borter.service
+              fi
+            fi
+
+            # Handle rustsorter fallback if we were attempting to build it
+            if [[ "${{ steps.check_rust.outputs.skip_rust }}" != "true" ]] && [[ "${{ steps.new_tag.outputs.tag }}" != *"-NOBUILD"* ]]; then
+              echo "Falling back to latest rustsorter backup..."
+              LATEST_RUST=$(ls -t /home/deployer/backups/rustsorter | head -n1)
+              if [ ! -z "$LATEST_RUST" ]; then
+                rm -f /home/deployer/live/rustsorter/*
+                ln -sf /home/deployer/backups/rustsorter/"$LATEST_RUST"/* /home/deployer/live/rustsorter/
+                sudo systemctl restart rustsorter.service
+              fi
+            fi
