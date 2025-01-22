@@ -77,7 +77,7 @@ jobs:
         run: |
           git fetch --tags
           # Set prefix based on environment
-          PREFIX="${{ github.ref_name == 'production' && 'prod' || 'stage' }}"
+          PREFIX="${{ github.ref_name == 'production' && 'prod' || 'staging' }}"
           
           # Get latest successful deploy number
           LATEST_TAG=$(git tag -l "${PREFIX}-*" | grep -v "F" | sort -V | tail -n1 || echo "${PREFIX}-0")
@@ -161,7 +161,7 @@ jobs:
           host: ${{ github.ref_name == 'production' && secrets.DO_SSH_HOST || secrets.DO_SSH_HOST_STAGING }}
           username: deployer
           key: ${{ github.ref_name == 'production' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGING }}
-          command_timeout: 99m
+          command_timeout: 44m
           port: 22
           script: |
             set -e
@@ -198,20 +198,15 @@ jobs:
 
             chmod 600 forter/.env
 
-            # TODO: we shouldn't need this anymore either
-            # # Write rustsorter/.env
-            # cat <<EOF > rustsorter/.env
             
-            # # we intentionally don't set ENVIRONMENT yet
-            # # ENVIRONMENT=${{ secrets.DEPLOYMENT_ENV }}
-            
-            # -- don't think we use this anymore, should be set on prod only
-            # # we're in production, so we use the prod database url
-            # DATABASE_URL=${{ secrets.PROD_DATABASE_URL }}
-            # DISCORD_TOKEN=${{ secrets.RUSTSORTER_DISCORD_TOKEN }}
-            # EOF
+            # Write rustsorter/.env
+            cat <<EOF > rustsorter/.env
+            # rustsorter/.env
 
-            # chmod 600 rustsorter/.env
+            DISCORD_TOKEN=${{ secrets.RUSTSORTER_DISCORD_TOKEN }}
+            EOF
+
+            chmod 600 rustsorter/.env
 
 
             # Write borter/.env
@@ -297,7 +292,7 @@ jobs:
             else
               echo -e "\033[3mBuilding rustsorter...\033[0m"
               cd rustsorter
-              SQLX_OFFLINE=true /home/deployer/.cargo/bin/cargo build --release
+              SQLX_OFFLINE=true /home/deployer/.cargo/bin/cargo build --profile ${{ env.BUILD_MODE == 'prod' && 'release' || 'staging' }}  
               cd ..
             fi
 
