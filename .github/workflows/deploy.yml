@@ -341,15 +341,12 @@ jobs:
 
             # Update symlinks after successful builds
             if [[ "${{ steps.check_bort.outputs.skip_bort }}" != "true" ]]; then
-              ln -sf ~/sorter/borter/target/sorter-*-standalone.jar /home/deployer/live/borter/
+              ln -sf ~/sorter/borter/target/sorter-*-standalone.jar /home/deployer/live/borter/sorter.jar
             fi
 
-            if [[ "${{ steps.new_tag.outputs.tag }}" != *"-sr"* ]]; then
-              RUST_LIVE_DIR="/home/deployer/live/rustsorter/rustsorter-${{ steps.new_tag.outputs.tag }}"
-              mkdir -p "$RUST_LIVE_DIR"
-              ln -sf ~/sorter/rustsorter/target/${{ env.BUILD_MODE == 'prod' && 'release' || 'staging' }}/* "$RUST_LIVE_DIR/"
+            if [[ "${{ steps.check_rust.outputs.skip_rust }}" != "true" ]]; then
               rm -f /home/deployer/live/rustsorter/current
-              ln -sf "$RUST_LIVE_DIR" /home/deployer/live/rustsorter/current
+              ln -sf ~/sorter/rustsorter/target/${{ env.BUILD_MODE == 'prod' && 'release' || 'staging' }} /home/deployer/live/rustsorter/current
             fi
 
             exit 0
@@ -370,7 +367,7 @@ jobs:
               echo "Falling back to latest borter backup..."
               LATEST_BORTER=$(ls -t /home/deployer/backups/borter/borter-*.jar | head -n1)
               if [ ! -z "$LATEST_BORTER" ]; then
-                ln -sf "$LATEST_BORTER" /home/deployer/live/borter/sorter-standalone.jar
+                ln -sf "$LATEST_BORTER" /home/deployer/live/borter/sorter.jar
                 sudo systemctl restart borter.service
               fi
             fi
@@ -380,12 +377,8 @@ jobs:
               echo "Falling back to latest rustsorter backup..."
               LATEST_RUST=$(ls -t /home/deployer/backups/rustsorter | head -n1)
               if [ ! -z "$LATEST_RUST" ]; then
-                RUST_LIVE_DIR="/home/deployer/live/rustsorter/rustsorter-fallback"
-                mkdir -p "$RUST_LIVE_DIR"
-                rm -rf "$RUST_LIVE_DIR/*"
-                ln -sf /home/deployer/backups/rustsorter/"$LATEST_RUST"/* "$RUST_LIVE_DIR/"
                 rm -f /home/deployer/live/rustsorter/current
-                ln -sf "$RUST_LIVE_DIR" /home/deployer/live/rustsorter/current
+                ln -sf /home/deployer/backups/rustsorter/"$LATEST_RUST" /home/deployer/live/rustsorter/current
                 sudo systemctl restart rustsorter.service
               fi
             fi
