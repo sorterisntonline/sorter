@@ -320,8 +320,8 @@ jobs:
               # Create a new backup directory for this release
               mkdir -p "${RUST_BACKUP_DIR}/${RUST_BACKUP_NAME}"
               
-              # Copy the entire release directory
-              cp -r rustsorter/target/release/* "${RUST_BACKUP_DIR}/${RUST_BACKUP_NAME}/"
+              # Copy the entire release directory using the correct build profile
+              cp -r rustsorter/target/${{ env.BUILD_MODE == 'prod' && 'release' || 'staging' }}/* "${RUST_BACKUP_DIR}/${RUST_BACKUP_NAME}/"
               
               # Keep only the 4 most recent rustsorter backups
               cd "${RUST_BACKUP_DIR}"
@@ -339,7 +339,11 @@ jobs:
             fi
 
             if [[ "${{ steps.new_tag.outputs.tag }}" != *"-sr"* ]]; then
-              ln -sf ~/sorter/rustsorter/target/release/* /home/deployer/live/rustsorter/
+              RUST_LIVE_DIR="/home/deployer/live/rustsorter/rustsorter-${{ steps.new_tag.outputs.tag }}"
+              mkdir -p "$RUST_LIVE_DIR"
+              ln -sf ~/sorter/rustsorter/target/${{ env.BUILD_MODE == 'prod' && 'release' || 'staging' }}/* "$RUST_LIVE_DIR/"
+              rm -f /home/deployer/live/rustsorter/current
+              ln -sf "$RUST_LIVE_DIR" /home/deployer/live/rustsorter/current
             fi
 
             exit 0
@@ -370,8 +374,12 @@ jobs:
               echo "Falling back to latest rustsorter backup..."
               LATEST_RUST=$(ls -t /home/deployer/backups/rustsorter | head -n1)
               if [ ! -z "$LATEST_RUST" ]; then
-                rm -f /home/deployer/live/rustsorter/*
-                ln -sf /home/deployer/backups/rustsorter/"$LATEST_RUST"/* /home/deployer/live/rustsorter/
+                RUST_LIVE_DIR="/home/deployer/live/rustsorter/rustsorter-fallback"
+                mkdir -p "$RUST_LIVE_DIR"
+                rm -rf "$RUST_LIVE_DIR/*"
+                ln -sf /home/deployer/backups/rustsorter/"$LATEST_RUST"/* "$RUST_LIVE_DIR/"
+                rm -f /home/deployer/live/rustsorter/current
+                ln -sf "$RUST_LIVE_DIR" /home/deployer/live/rustsorter/current
                 sudo systemctl restart rustsorter.service
               fi
             fi
