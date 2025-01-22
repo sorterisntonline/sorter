@@ -302,23 +302,25 @@ jobs:
             echo -e "\033[3mRestarting rustsorter...\033[0m"
             sudo systemctl restart rustsorter.service
 
-            # Backup borter jar
-            echo -e "\033[3mBacking up borter jar...\033[0m"
-            BORTER_BACKUP_DIR="/home/deployer/backups/borter"
+            # Backup borter jar if we built it
+            if [[ "${{ steps.check_bort.outputs.skip_bort }}" != "true" ]]; then
+              echo -e "\033[3mBacking up borter jar...\033[0m"
+              BORTER_BACKUP_DIR="/home/deployer/backups/borter"
 
-            # Create the backup directory if it doesn't exist
-            mkdir -p "${BORTER_BACKUP_DIR}"
+              # Create the backup directory if it doesn't exist
+              mkdir -p "${BORTER_BACKUP_DIR}"
 
-            BORTER_BACKUP_NAME="borter-$(date +%Y%m%d_%H%M%S).jar"
-            cp borter/target/sorter-*-standalone.jar "${BORTER_BACKUP_DIR}/${BORTER_BACKUP_NAME}"
-            
-            # Keep only the 40 most recent borter backups (approximately 2GB worth)
-            cd "${BORTER_BACKUP_DIR}"
-            ls -t | tail -n +41 | xargs -r rm --
-            cd ~/sorter
+              BORTER_BACKUP_NAME="borter-$(date +%Y%m%d_%H%M%S).jar"
+              cp borter/target/sorter-*-standalone.jar "${BORTER_BACKUP_DIR}/${BORTER_BACKUP_NAME}"
+              
+              # Keep only the 40 most recent borter backups (approximately 2GB worth)
+              cd "${BORTER_BACKUP_DIR}"
+              ls -t | tail -n +41 | xargs -r rm --
+              cd ~/sorter
+            fi
 
             # Backup rustsorter release if we built it
-            if [[ "${{ steps.new_tag.outputs.tag }}" != *"-sr"* ]]; then
+            if [[ "${{ steps.check_rust.outputs.skip_rust }}" != "true" ]]; then
               echo -e "\033[3mBacking up rustsorter release...\033[0m"
               RUST_BACKUP_DIR="/home/deployer/backups/rustsorter"
               RUST_BACKUP_NAME="rustsorter-$(date +%Y%m%d_%H%M%S)"
@@ -377,8 +379,10 @@ jobs:
               echo "Falling back to latest rustsorter backup..."
               LATEST_RUST=$(ls -t /home/deployer/backups/rustsorter | head -n1)
               if [ ! -z "$LATEST_RUST" ]; then
-                rm -f /home/deployer/live/rustsorter/current
-                ln -sf /home/deployer/backups/rustsorter/"$LATEST_RUST" /home/deployer/live/rustsorter/current
+                RUST_LIVE_DIR="/home/deployer/live/rustsorter/${{ env.BUILD_MODE == 'prod' && 'release' || 'staging' }}"
+                mkdir -p "$RUST_LIVE_DIR"
+                rm -rf "$RUST_LIVE_DIR/*"
+                ln -sf /home/deployer/backups/rustsorter/"$LATEST_RUST"/* "$RUST_LIVE_DIR/"
                 sudo systemctl restart rustsorter.service
               fi
             fi
