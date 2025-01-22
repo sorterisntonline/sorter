@@ -6,6 +6,12 @@ on:
       - production
       - staging
 
+# Add concurrency group configuration
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: true  # This will cancel any in-progress workflow and start the new one
+  # Alternative: remove cancel-in-progress to queue instead of cancel
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -275,7 +281,7 @@ jobs:
 
             # Conditional rustsorter build
             echo -e "\033[3mHandling rustsorter...\033[0m"
-            if [[ "${{ steps.new_tag.outputs.tag }}" == *"-sr"* ]]; then
+            if [[ "${{ steps.check_rust.outputs.skip_rust }}" == "true" ]]; then
               echo -e "\033[3mSkipping rustsorter build (no changes detected)...\033[0m"
             else
               echo -e "\033[3mBuilding rustsorter...\033[0m"
