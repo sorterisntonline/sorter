@@ -339,7 +339,7 @@ jobs:
               cd "${RUST_BACKUP_DIR}"
               ls -t | tail -n +5 | xargs -r rm -rf --
               cd ~/sorter
-            fi
+            fi 
 
             # Create live directories and symlinks if they don't exist
             sudo mkdir -p /home/deployer/live/borter
