@@ -373,7 +373,7 @@ jobs:
             # Handle borter fallback if we were attempting to build it
             if [[ "${{ steps.check_bort.outputs.skip_bort }}" != "true" ]] && [[ "${{ steps.new_tag.outputs.tag }}" != *"-NOBUILD"* ]]; then
               echo "Falling back to latest borter backup..."
-              LATEST_BORTER=$(ls -t /home/deployer/backups/borter/borter-*.jar | head -n1)
+              LATEST_BORTER=$(ls -t /home/deployer/backups/borter/sorter-*.jar | head -n1)
               if [ ! -z "$LATEST_BORTER" ]; then
                 ln -sf "$LATEST_BORTER" /home/deployer/live/borter/sorter.jar
                 sudo systemctl restart borter.service
@@ -385,7 +385,7 @@ jobs:
               echo "Falling back to latest rustsorter backup..."
               LATEST_RUST=$(ls -t /home/deployer/backups/rustsorter | head -n1)
               if [ ! -z "$LATEST_RUST" ]; then
-                RUST_LIVE_DIR="/home/deployer/live/rustsorter/${{ env.BUILD_MODE == 'prod' && 'release' || 'staging' }}"
+                RUST_LIVE_DIR="/home/deployer/live/rustsorter/current"
                 mkdir -p "$RUST_LIVE_DIR"
                 rm -rf "$RUST_LIVE_DIR/*"
                 ln -sf /home/deployer/backups/rustsorter/"$LATEST_RUST"/* "$RUST_LIVE_DIR/"
