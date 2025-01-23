@@ -1,7 +1,7 @@
 {
   "name": "forter",
   "private": true,
-  "version": "0.1.201",
+  "version": "0.1.253",
   "type": "module",
   "scripts": {
     "build": "vite build",

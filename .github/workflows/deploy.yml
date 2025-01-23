@@ -58,8 +58,8 @@ jobs:
         run: |
           git fetch origin ${{ env.BRANCH }}
           echo "Checking for changes in borter components..."
-          git diff --name-only --diff-filter=ACDMRT --ignore-space-at-eol origin/${{ env.BRANCH }}...HEAD
-          BORT_CHANGED=$(git diff --name-only --diff-filter=ACDMRT --ignore-space-at-eol origin/${{ env.BRANCH }}...HEAD | grep -E "^(borter|forter|clisorter|public)/" || echo "")
+          git diff --name-only --diff-filter=ACDMRT HEAD^...HEAD
+          BORT_CHANGED=$(git diff --name-only --diff-filter=ACDMRT HEAD^...HEAD | grep -E "^(borter|forter|clisorter|public)/" || echo "")
           echo "Changes detected: $BORT_CHANGED"
           COMMIT_MSG=$(git log -1 --pretty=%B)
           # Check for force build flags first (case insensitive)
