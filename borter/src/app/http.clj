@@ -50,9 +50,12 @@
         (assoc :status 200))))
 
 (defn test [r]
-  (if (= "music.sorter.social" (-> r :headers (get "host")))
-    (resp/content-type (resp/resource-response "public/index2.html") "text/html")
-    (resp/content-type (resp/resource-response "public/index.html") "text/html")))
+  (let [host (-> r :headers (get "host"))
+        hostname (System/getenv "HOSTNAME")]
+    (if (and host hostname
+             (re-find (re-pattern (str "music.*\\." hostname "$")) host))
+      (resp/content-type (resp/resource-response "public/index2.html") "text/html")
+      (resp/content-type (resp/resource-response "public/index.html") "text/html"))))
 
 (defn test-2 [r]
   (resp/content-type (resp/resource-response "public/index2.html") "text/html"))

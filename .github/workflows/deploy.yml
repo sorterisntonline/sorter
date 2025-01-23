@@ -217,6 +217,7 @@ jobs:
             # Write borter/.env
             cat <<EOF > borter/.env
             # borter/.env
+            HOSTNAME=${{ secrets.HOSTNAME }}
 
             # Linear Integration
             BORTER_LINEAR_CLIENT_ID=${{ secrets.BORTER_LINEAR_CLIENT_ID }}
