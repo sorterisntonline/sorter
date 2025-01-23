@@ -342,8 +342,10 @@ jobs:
             fi
 
             # Create live directories and symlinks if they don't exist
-            mkdir -p /home/deployer/live/borter
-            mkdir -p /home/deployer/live/rustsorter
+            sudo mkdir -p /home/deployer/live/borter
+            sudo mkdir -p /home/deployer/live/rustsorter
+            sudo chown deployer:deployer /home/deployer/live/borter
+            sudo chown deployer:deployer /home/deployer/live/rustsorter
 
             # Update symlinks after successful builds
             if [[ "${{ steps.check_bort.outputs.skip_bort }}" != "true" ]]; then
