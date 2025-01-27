@@ -485,37 +485,15 @@ const ItemList = ({ items, onItemClick, isSorted }) => (
 const GrammarDisplay = () => {
   const { csvData, results, fetchResults, items_by_id } = useStore();
 
-  // Get active commands and their parameters from csvData
-  const activeCommands = csvData
-    .filter(item => item.type === 'action')
-    .map(item => ({
-      command: item.value,
-      itemId: item.itemId,
-      addValue: item.addValue
-    }));
-
-  if (!csvData.length) return null;
-  if (!results) return null;
-
-  // Find the item, vote, votes, and add commands
-  const itemCommand = activeCommands.find(cmd => cmd.command === 'item');
-  const voteCommand = activeCommands.find(cmd => cmd.command === 'vote');
-  const votesCommand = activeCommands.find(cmd => cmd.command === 'votes');
-  const addCommand = activeCommands.find(cmd => cmd.command === 'add');
-  const selectedItem = itemCommand ? items_by_id?.[parseInt(itemCommand.itemId)] : null;
-
-
   const handleItemClick = (itemId) => {
     const { setInput, parseInput, csvData, parsedDataToString } = useStore.getState();
     
-    // Check if we're already looking at this item
     const existingItem = csvData.find(item => 
         item.type === 'action' && 
         item.value === 'item' && 
         item.itemId === itemId.toString()
     );
     
-    // If we are, remove the item command entirely
     if (existingItem) {
         const newCsvData = csvData.filter(item => 
             !(item.type === 'action' && item.value === 'item')
@@ -526,7 +504,6 @@ const GrammarDisplay = () => {
         return;
     }
     
-    // If not, replace any existing item command with this one
     const filteredData = csvData.filter(item => 
         !(item.type === 'action' && item.value === 'item')
     );
@@ -542,6 +519,25 @@ const GrammarDisplay = () => {
     parseInput(newInput);
   };
 
+  // Always calculate these regardless of whether we have results
+  const activeCommands = csvData
+    .filter(item => item.type === 'action')
+    .map(item => ({
+      command: item.value,
+      itemId: item.itemId,
+      addValue: item.addValue
+    }));
+
+  const itemCommand = activeCommands.find(cmd => cmd.command === 'item');
+  const voteCommand = activeCommands.find(cmd => cmd.command === 'vote');
+  const votesCommand = activeCommands.find(cmd => cmd.command === 'votes');
+  const addCommand = activeCommands.find(cmd => cmd.command === 'add');
+  const selectedItem = itemCommand ? items_by_id?.[parseInt(itemCommand.itemId)] : null;
+
+  if (!csvData.length) {
+    return null;
+  }
+
   return (
     <div className="mt-4">
       {/* Show VotePanel if vote command is active */}
@@ -554,7 +550,7 @@ const GrammarDisplay = () => {
       {/* Show VotesPanel if votes command is active */}
       {votesCommand && (
         <div className="w-[800px] bg-purple-100 m-4">
-          <VotesPanel votes={results.votes} mutate={fetchResults} />
+          <VotesPanel votes={results?.votes} mutate={fetchResults} />
         </div>
       )}
 
@@ -572,14 +568,19 @@ const GrammarDisplay = () => {
         </div>
       )}
 
-      {/* Render unsorted items */}
-      {results.unsorted?.length > 0 && (
-        <ItemList items={results.unsorted} onItemClick={handleItemClick} isSorted={false} />
-      )}
+      {/* Only render item lists if we have results */}
+      {results && (
+        <>
+          {/* Render unsorted items */}
+          {results.unsorted?.length > 0 && (
+            <ItemList items={results.unsorted} onItemClick={handleItemClick} isSorted={false} />
+          )}
 
-      {/* Render sorted items */}
-      {results.sorted?.length > 0 && (
-        <ItemList items={results.sorted} onItemClick={handleItemClick} isSorted={true} />
+          {/* Render sorted items */}
+          {results.sorted?.length > 0 && (
+            <ItemList items={results.sorted} onItemClick={handleItemClick} isSorted={true} />
+          )}
+        </>
       )}
     </div>
   );
