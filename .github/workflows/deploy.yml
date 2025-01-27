@@ -63,7 +63,7 @@ jobs:
             echo "skip_rust=false" >> $GITHUB_OUTPUT
           fi
 
-      # Check borter/forter/clisorter changes
+      # Check borter/forter/clisorter changes 
       - name: Check borter changes
         id: check_bort
         run: |
