@@ -89,9 +89,6 @@ const TopNav = () => {
     >
       {/* Left side navigation links */}
       <div className="flex items-center space-x-2">
-        <MyLink to="/tags3">
-          <div className="p-0">Hierarchy</div>
-        </MyLink>
         <MyLink to="/tags2">
           <div className="p-0">Tags2</div>
         </MyLink>

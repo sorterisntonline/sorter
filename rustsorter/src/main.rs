@@ -13,13 +13,8 @@ async fn main() -> std::io::Result<()> {
     env_logger::init();
     dotenv().ok();
 
-    // Determine the environment and database URL
-    let environment = env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string());
-    let database_string = if environment == "production" {
-        env::var("PROD_DATABASE_URL").expect("PROD_DATABASE_URL must be set when ENVIRONMENT=production")
-    } else {
-        env::var("DATABASE_URL").expect("DATABASE_URL must be set")
-    };
+    // Retrieve the database URL from the environment
+    let database_string = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
     // Create the database pool
     let pool = sqlx::postgres::PgPoolOptions::new()
