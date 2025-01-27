@@ -121,11 +121,11 @@ jobs:
           fi
           echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
 
-      # Set up SSH for Git operations
+      # Update SSH setup to use environment-specific deploy keys
       - name: Setup SSH for GitHub
         uses: webfactory/ssh-agent@v0.7.0
         with:
-          ssh-private-key: ${{ secrets.GH_DEPLOY_KEY }}  # Different key for GitHub operations
+          ssh-private-key: ${{ (github.ref_name == 'production' || inputs.environment == 'production') && secrets.GH_DEPLOY_KEY_PROD || secrets.GH_DEPLOY_KEY }}
 
       # Step 4: Create and Push Tag
       - name: Create and Push Tag
