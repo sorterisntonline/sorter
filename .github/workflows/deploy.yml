@@ -27,7 +27,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write 
 
     # Set environment-specific variables
     env:
