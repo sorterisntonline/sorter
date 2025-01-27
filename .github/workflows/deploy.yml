@@ -5,6 +5,17 @@ on:
     branches:
       - production
       - staging
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment Environment'
+        required: true
+        type: choice
+        options:
+          - production
+          - staging
+          - development
+        default: 'staging'
 
 # Add concurrency group configuration
 concurrency:
@@ -20,9 +31,9 @@ jobs:
 
     # Set environment-specific variables
     env:
-      DEPLOY_ENV: ${{ github.ref_name == 'production' && 'production' || 'development' }}
-      BRANCH: ${{ github.ref_name }}
-      BUILD_MODE: ${{ github.ref_name == 'production' && 'prod' || 'development' }}
+      DEPLOY_ENV: ${{ (github.event_name == 'push' && github.ref_name == 'production') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'production') && 'production' || 'development' }}
+      BRANCH: ${{ github.event_name == 'push' && github.ref_name || inputs.environment }}
+      BUILD_MODE: ${{ (github.event_name == 'push' && github.ref_name == 'production') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'production') && 'prod' || 'development' }}
 
     steps:
       # Step 1: Checkout the repository
@@ -30,7 +41,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          ref: ${{ github.ref_name }}  # Explicitly checkout the triggering branch
+          ref: ${{ github.event_name == 'push' && github.ref_name || inputs.environment }}
 
       # Check rustsorter changes
       - name: Check rustsorter changes
