@@ -15,13 +15,33 @@ const calculateMargin = (magnitude) => {
 export const VotePanel = ({ mutate }) => {
   const { results: tag, magnitude, setMagnitude, pinned_left, pinned_right, setPinnedLeft, setPinnedRight } = useStore();
   
+  useEffect(() => {
+    if (!tag) return;
+    console.log('detected existing vote');
+    const existingVote = tag.votes.find(vote => vote.right_item_id === left?.id && vote.left_item_id === right?.id) ||
+      tag.votes.find(vote => vote.right_item_id === right?.id && vote.left_item_id === left?.id);
+
+    if (existingVote && existingVote.owner === current_session.value.user_name) {
+      if (existingVote.left_item_id === left?.id) {
+        setMagnitude(existingVote.magnitude);
+      } else {
+        setMagnitude(100 - existingVote.magnitude);
+      }
+    }
+  }, [tag?.votes]);
+
+  if (!tag) {
+    return null;
+  }
+
   console.log('tag', tag);
-  if (tag.pair == undefined)
+  if (tag.pair == undefined) {
     return (
       <div key="3" className="text-xl">
         no pair
       </div>
     );
+  }
 
   if (tag.pair[0] == null || tag.pair[1] == null) {
     return "no pair";
@@ -29,20 +49,6 @@ export const VotePanel = ({ mutate }) => {
 
   const left = tag.pair[0];
   const right = tag.pair[1];
-
-  useEffect(() => {
-    console.log('detected existing vote');
-    const existingVote = tag.votes.find(vote => vote.right_item_id === left.id && vote.left_item_id === right.id) ||
-      tag.votes.find(vote => vote.right_item_id === right.id && vote.left_item_id === left.id);
-
-    if (existingVote && existingVote.owner === current_session.value.user_name) {
-      if (existingVote.left_item_id === left.id) {
-        setMagnitude(existingVote.magnitude);
-      } else {
-        setMagnitude(100 - existingVote.magnitude);
-      }
-    }
-  }, [tag.votes]);
 
   console.log('magnitude', magnitude);
   console.log('left', left);

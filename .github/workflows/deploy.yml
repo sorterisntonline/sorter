@@ -5,6 +5,17 @@ on:
     branches:
       - production
       - staging
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment Environment'
+        required: true
+        type: choice
+        options:
+          - production
+          - staging
+          - development
+        default: 'staging'
 
 # Add concurrency group configuration
 concurrency:
@@ -16,13 +27,13 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write 
 
     # Set environment-specific variables
     env:
-      DEPLOY_ENV: ${{ github.ref_name == 'production' && 'production' || 'development' }}
-      BRANCH: ${{ github.ref_name }}
-      BUILD_MODE: ${{ github.ref_name == 'production' && 'prod' || 'development' }}
+      DEPLOY_ENV: ${{ (github.event_name == 'push' && github.ref_name == 'production') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'production') && 'production' || 'development' }}
+      BRANCH: ${{ github.event_name == 'push' && github.ref_name || inputs.environment }}
+      BUILD_MODE: ${{ (github.event_name == 'push' && github.ref_name == 'production') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'production') && 'prod' || 'development' }}
 
     steps:
       # Step 1: Checkout the repository
@@ -30,14 +41,14 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          ref: ${{ github.ref_name }}  # Explicitly checkout the triggering branch
+          ref: ${{ github.event_name == 'push' && github.ref_name || inputs.environment }}
 
       # Check rustsorter changes
       - name: Check rustsorter changes
         id: check_rust
         run: |
           git fetch origin ${{ env.BRANCH }}
-          RUST_CHANGED=$(git diff --name-only origin/${{ env.BRANCH }}...HEAD | grep "^rustsorter/" || echo "")
+          RUST_CHANGED=$(git diff --name-only HEAD^...HEAD | grep "^rustsorter/" || echo "")
           COMMIT_MSG=$(git log -1 --pretty=%B)
           # Check for force build flags first (case insensitive)
           if echo "$COMMIT_MSG" | grep -iE "(force-build-rust|forcebuild-rust|force-build|forcebuild)" > /dev/null; then
@@ -58,8 +69,7 @@ jobs:
         run: |
           git fetch origin ${{ env.BRANCH }}
           echo "Checking for changes in borter components..."
-          git diff --name-only --diff-filter=ACDMRT HEAD^...HEAD
-          BORT_CHANGED=$(git diff --name-only --diff-filter=ACDMRT HEAD^...HEAD | grep -E "^(borter|forter|clisorter|public)/" || echo "")
+          BORT_CHANGED=$(git diff --name-only HEAD^...HEAD | grep -E "^(borter|forter|clisorter|public)/" || echo "")
           echo "Changes detected: $BORT_CHANGED"
           COMMIT_MSG=$(git log -1 --pretty=%B)
           # Check for force build flags first (case insensitive)
@@ -110,11 +120,11 @@ jobs:
           fi
           echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
 
-      # Set up SSH for Git operations
+      # Update SSH setup to use environment-specific deploy keys
       - name: Setup SSH for GitHub
         uses: webfactory/ssh-agent@v0.7.0
         with:
-          ssh-private-key: ${{ secrets.GH_DEPLOY_KEY }}  # Different key for GitHub operations
+          ssh-private-key: ${{ (github.ref_name == 'production' || inputs.environment == 'production') && secrets.GH_DEPLOY_KEY_PROD || secrets.GH_DEPLOY_KEY }}
 
       # Step 4: Create and Push Tag
       - name: Create and Push Tag

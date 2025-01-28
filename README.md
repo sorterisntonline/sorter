@@ -1,16 +1,19 @@
 # sorter
 clojure, rust, and react based pair-wise staunchly democratic social media application  
 
-[![prod](https://github.com/sorterisntonline/sorter/actions/workflows/deploy.yml/badge.svg?branch=production)](https://github.com/sorterisntonline/sorter/actions/workflows/deploy.yml)   
-
-
-![sorter frontend screenshot](frontend_1.png)
-
-> ### Contributors
+> ### contributors  
 > `@thmorriss`  
 > [![wakatime](https://wakatime.com/badge/user/116b65a9-c932-4d5d-a682-331cd988d6f0/project/e7669bfe-a191-44f0-b3eb-02cdebe8c923.svg)](https://wakatime.com/badge/user/116b65a9-c932-4d5d-a682-331cd988d6f0/project/e7669bfe-a191-44f0-b3eb-02cdebe8c923)  
 > `@zudsniper`  
 > [![wakatime](https://wakatime.com/badge/user/72fdcd5a-a9d0-4016-b00f-3f3d6fb2514a/project/e1e0cfd8-9d79-4d5f-acdf-80064f6e2613.svg)](https://wakatime.com/badge/user/72fdcd5a-a9d0-4016-b00f-3f3d6fb2514a/project/e1e0cfd8-9d79-4d5f-acdf-80064f6e2613)  
+
+![sorter frontend screenshot](frontend_1.png)
+
+> ### deployments  
+> [![prod](https://github.com/sorterisntonline/sorter/actions/workflows/deploy.yml/badge.svg?branch=production)](https://github.com/sorterisntonline/sorter/actions/workflows/deploy.yml)<sub>prod</sub>  
+> [![staging](https://github.com/sorterisntonline/sorter/actions/workflows/deploy.yml/badge.svg?branch=staging)](https://github.com/sorterisntonline/sorter/actions/workflows/deploy.yml)<sub>staging</sub>  
+
+
 
 ## install
 1. install prereqs
@@ -28,6 +31,7 @@ $ cd sorter
 ```
 
 ## build
+
 1. (backend) run postgres database (with docker)  
 ```sh
 $ cd borter/database # you need to be in this directory! don't execute the script from somewhere else
