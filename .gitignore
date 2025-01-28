@@ -3,3 +3,6 @@
 .cursorrules
 .env
 .DS_Store
+
+# manage this ourselves i think 
+.cursorignore

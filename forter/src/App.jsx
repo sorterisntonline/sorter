@@ -215,6 +215,9 @@ const TextSummary = ({ can_vote, can_add }) => {
 export const toggle = signal(true);
 export const showPin = signal(false);
 
+export const showAllSorted = signal(false);
+export const showAllUnsorted = signal(false);
+
 export const Tag = ({ showVote, isVoting, handleError }) => {
   const sorteditems = tag.value["sorted"];
   const unsorteditems = tag.value["unsorted"];
@@ -232,39 +235,67 @@ export const Tag = ({ showVote, isVoting, handleError }) => {
     return <div> you do not have permission to view this tag </div>;
   }
 
-  const sortedtable = (
-    <div>
+  const SortedList = ({ items, showAll, setShowAll }) => {
+    const displayCount = 10; // Number of items to show initially
+    const hasMore = items?.length > displayCount;
+    const displayItems = showAll ? items : items?.slice(0, displayCount);
+
+    return (
       <div>
         <div>
-          <div colSpan="2">sorted items</div>
+          <div>
+            <div colSpan="2">sorted items</div>
+          </div>
         </div>
-      </div>
-      <ol className="list-decimal">
-        {sorteditems?.map((item) => (
-          <Item key={item["id"]} item={item} />
-        )) ?? [
+        <ol className="list-decimal">
+          {displayItems?.map((item) => (
+            <Item key={item["id"]} item={item} />
+          )) ?? [
             <div key="2">
               <div>no items </div>
             </div>,
           ]}
-      </ol>
-    </div>
-  );
+        </ol>
+        {hasMore && (
+          <button 
+            onClick={() => setShowAll(!showAll)}
+            className="w-full text-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+          >
+            {showAll ? '[show less]' : '... show more'}
+          </button>
+        )}
+      </div>
+    );
+  };
 
-  const unsortedtable = (
-    <div>
+  const UnsortedList = ({ items, showAll, setShowAll }) => {
+    const displayCount = 10; // Number of items to show initially
+    const hasMore = items?.length > displayCount;
+    const displayItems = showAll ? items : items?.slice(0, displayCount);
+
+    return (
       <div>
         <div>
-          <div colSpan="2">unsorted items</div>
+          <div>
+            <div colSpan="2">unsorted items</div>
+          </div>
         </div>
+        <ol className="list-disc ml-3">
+          {displayItems?.map((item) => (
+            <Item key={item["id"]} item={item} />
+          )) ?? [<tr key="2"></tr>]}
+        </ol>
+        {hasMore && (
+          <button 
+            onClick={() => setShowAll(!showAll)}
+            className="w-full text-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+          >
+            {showAll ? '[show less]' : '... show more'}
+          </button>
+        )}
       </div>
-      <ol className="list-disc ml-3">
-        {unsorteditems?.map((item) => (
-          <Item key={item["id"]} item={item} />
-        )) ?? [<tr key="2"></tr>]}
-      </ol>
-    </div>
-  );
+    );
+  };
 
   const skippedTable = (
     <div>
@@ -282,10 +313,26 @@ export const Tag = ({ showVote, isVoting, handleError }) => {
   );
 
   const votesList = (
-    <div className={" flex flex-col p-3 " + (toggle.value ? "lg:w-2/3" : "lg:w-1/3")}>
-      {unsorteditems?.length > 0 ? unsortedtable : <></>}
-      {sortedtable}
-      {tag.value.skipped.length > 0 ? skippedTable : <></>}
+    <div className={" p-3 " + (toggle.value ? "lg:w-2/3" : "lg:w-1/3")}>
+      <div className="lg:flex lg:space-x-4">
+        <div className="lg:w-1/2">
+          {unsorteditems?.length > 0 ? (
+            <UnsortedList 
+              items={unsorteditems} 
+              showAll={showAllUnsorted.value} 
+              setShowAll={(val) => showAllUnsorted.value = val} 
+            />
+          ) : null}
+        </div>
+        <div className="lg:w-1/2">
+          <SortedList 
+            items={sorteditems} 
+            showAll={showAllSorted.value} 
+            setShowAll={(val) => showAllSorted.value = val} 
+          />
+        </div>
+      </div>
+      {tag.value.skipped?.length > 0 ? skippedTable : null}
     </div>
   );
 

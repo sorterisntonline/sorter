@@ -84,7 +84,7 @@ const TopNav = () => {
 
   return (
     <div
-      className="top-0 right-0 flex flex-wrap items-center justify-between dark:bg-black text-black dark:text-white w-full px-4 py-2"
+      className="top-0 right-0 flex flex-wrap items-center justify-between bg-white dark:bg-black text-black dark:text-white w-full px-4 py-2"
       style={{ position: "fixed", top: 0, zIndex: 10 }}
     >
       {/* Left side navigation links */}
@@ -115,10 +115,7 @@ const TopNav = () => {
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
           >
-            <div
-              className="hover:text-blue-500 transition-colors cursor-pointer"
-              onClick={() => setLocation("/profile")}
-            >
+            <div className="cursor-default">
               {"@" + current_session.value.user_name}
             </div>
             {isHovered && (

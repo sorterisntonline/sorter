@@ -27,7 +27,10 @@ export const ProfileHoverPane = ({ onClose }) => {
     <div className="absolute right-0 top-6 w-48 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded shadow-lg p-4 z-20">
       <div className="flex flex-col items-center">
         {/* Profile Picture */}
-        <div className="w-16 h-16 rounded-full mb-4 bg-gray-200 dark:bg-gray-700 overflow-hidden">
+        <div 
+          className="w-16 h-16 rounded-full mb-4 bg-gray-200 dark:bg-gray-700 overflow-hidden cursor-pointer"
+          onClick={() => handleNavigation("/profile")}
+        >
           <img
             src={current_session.value.profile_picture || "/default-profile.png"}
             alt="Profile"
