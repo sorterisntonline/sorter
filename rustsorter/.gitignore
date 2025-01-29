@@ -1,5 +1,6 @@
 /target
 static/
 static/index.html
-data.txt
+data.csv
+ranking_error.png
 .env
