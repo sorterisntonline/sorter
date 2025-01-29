@@ -1,6 +1,8 @@
-use crate::tag::Vote;
-use graph::prelude::*;
 use std::collections::HashMap;
+
+use graph::prelude::*;
+
+use crate::tag::Vote;
 
 pub fn build_graph(
     filteredvotes: &Vec<Vote>,

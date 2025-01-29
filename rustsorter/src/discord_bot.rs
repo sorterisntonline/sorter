@@ -1,17 +1,21 @@
-use serenity::async_trait;
-use serenity::model::channel::Message;
-use serenity::prelude::*;
-use serenity::model::gateway::GatewayIntents;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
+
+use serenity::{
+    all::ReactionType,
+    async_trait,
+    model::{
+        channel::{Channel, GuildChannel, Message, Reaction},
+        gateway::GatewayIntents,
+        id::ChannelId,
+    },
+    prelude::*,
+};
+use tokio::sync::{RwLock, oneshot};
+
 use crate::AppState;
-use std::sync::Arc;
-use tokio::sync::oneshot;
-use serenity::model::channel::{Channel, GuildChannel};
-use serenity::model::id::ChannelId;
-use std::collections::HashSet;
-use tokio::sync::RwLock;
-use serenity::model::channel::Reaction;
-use serenity::all::ReactionType;
-use std::collections::HashMap;
 
 struct Handler {
     sorted_channels: Arc<RwLock<HashSet<ChannelId>>>,
@@ -33,15 +37,12 @@ impl Handler {
     async fn get_or_create_tag(&self, channel_name: &str) -> Option<i32> {
         let slug = channel_name.to_lowercase();
         println!("slug: {}", slug);
-        
+
         // Try to find existing tag
-        let existing_tag = sqlx::query!(
-            "SELECT id FROM tags WHERE slug = $1",
-            slug
-        )
-        .fetch_optional(&self.app_state.db)
-        .await
-        .ok()?;
+        let existing_tag = sqlx::query!("SELECT id FROM tags WHERE slug = $1", slug)
+            .fetch_optional(&self.app_state.db)
+            .await
+            .ok()?;
 
         if let Some(tag) = existing_tag {
             return Some(tag.id);
@@ -55,10 +56,12 @@ impl Handler {
             &slug,
             Some("Discord channel"),
             Some("discord.channel"),
-            None
-        ).await {
+            None,
+        )
+        .await
+        {
             Ok(tag_id) => Some(tag_id),
-            Err(_) => None
+            Err(_) => None,
         }
     }
 
@@ -79,9 +82,14 @@ impl Handler {
                         Ok(Channel::Guild(category)) => {
                             if category.name.to_lowercase() == "sorter" {
                                 // Get or create tag for this channel
-                                if let Some(tag_id) = self.get_or_create_tag(&guild_channel.name).await {
+                                if let Some(tag_id) =
+                                    self.get_or_create_tag(&guild_channel.name).await
+                                {
                                     // Cache the tag ID
-                                    self.channel_tag_ids.write().await.insert(channel_id, tag_id);
+                                    self.channel_tag_ids
+                                        .write()
+                                        .await
+                                        .insert(channel_id, tag_id);
                                     true
                                 } else {
                                     false
@@ -113,7 +121,13 @@ impl Handler {
         self.channel_tag_ids.read().await.get(&channel_id).copied()
     }
 
-    async fn create_item(&self, message: &Message, channel_id: ChannelId, guild_id: Option<String>, tag_id: i32) {
+    async fn create_item(
+        &self,
+        message: &Message,
+        channel_id: ChannelId,
+        guild_id: Option<String>,
+        tag_id: i32,
+    ) {
         let url = if let Some(embed) = message.embeds.first() {
             embed.url.as_deref().unwrap_or(&message.content)
         } else {
@@ -131,7 +145,8 @@ impl Handler {
 
         // TODO: Get URL from env
         let client = reqwest::Client::new();
-        let res = client.post("http://localhost:3000/api/item")
+        let res = client
+            .post("http://localhost:3000/api/item")
             .json(&body)
             .send()
             .await;
@@ -141,8 +156,8 @@ impl Handler {
                 if !response.status().is_success() {
                     println!("Error creating item: {:?}", response.text().await);
                 }
-            },
-            Err(e) => println!("Failed to create item: {}", e)
+            }
+            Err(e) => println!("Failed to create item: {}", e),
         }
     }
 }
@@ -158,8 +173,9 @@ async fn create_tag_with_permissions(
 ) -> Result<i32, sqlx::Error> {
     // Create the tag
     let tag = sqlx::query!(
-        "INSERT INTO tags (owner, title, slug, description, domain_pk_namespace, domain_pk, created_at, edited_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
+        "INSERT INTO tags (owner, title, slug, description, domain_pk_namespace, domain_pk, \
+         created_at, edited_at)
+         VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
          RETURNING id",
         owner,
         title,
@@ -172,11 +188,7 @@ async fn create_tag_with_permissions(
     .await?;
 
     // Insert default permissions
-    for perm in vec![
-        ("view", "all"),
-        ("vote", "all"),
-        ("add", "none"),
-    ] {
+    for perm in vec![("view", "all"), ("vote", "all"), ("add", "none")] {
         sqlx::query!(
             "INSERT INTO perms (tag_id, capability, user_id) VALUES ($1, $2, $3)",
             tag.id,
@@ -203,18 +215,22 @@ impl EventHandler for Handler {
             if let Ok(message) = reaction.message(&ctx).await {
                 if let Some(tag_id) = self.get_tag_id(reaction.channel_id).await {
                     let guild_id = message.guild_id.map(|g| g.to_string());
-                    self.create_item(&message, reaction.channel_id, guild_id, tag_id).await;
+                    self.create_item(&message, reaction.channel_id, guild_id, tag_id)
+                        .await;
                 }
             }
         }
     }
 }
 
-pub async fn run(state: Arc<AppState>, rx: oneshot::Receiver<()>) -> Result<(), Box<dyn std::error::Error>>{
+pub async fn run(
+    state: Arc<AppState>,
+    rx: oneshot::Receiver<()>,
+) -> Result<(), Box<dyn std::error::Error>> {
     // Create discord user if it doesn't exist
     let result = sqlx::query!(
-        "INSERT INTO users (user_name, created_at) 
-         VALUES ($1, CURRENT_TIMESTAMP) 
+        "INSERT INTO users (user_name, created_at)
+         VALUES ($1, CURRENT_TIMESTAMP)
          ON CONFLICT (user_name) DO NOTHING",
         "discord"
     )
@@ -226,15 +242,16 @@ pub async fn run(state: Arc<AppState>, rx: oneshot::Receiver<()>) -> Result<(), 
     let token = std::env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
 
     let intents = GatewayIntents::GUILD_MESSAGES
-    | GatewayIntents::DIRECT_MESSAGES
-    | GatewayIntents::MESSAGE_CONTENT
-    | GatewayIntents::GUILDS
-    | GatewayIntents::GUILD_MESSAGE_REACTIONS;
+        | GatewayIntents::DIRECT_MESSAGES
+        | GatewayIntents::MESSAGE_CONTENT
+        | GatewayIntents::GUILDS
+        | GatewayIntents::GUILD_MESSAGE_REACTIONS;
 
-    //Use state.db to access your database connection within commands
+    // Use state.db to access your database connection within commands
     let mut client = Client::builder(&token, intents)
         .event_handler(Handler::new(state))
-        .await.expect("Failed to create client");
+        .await
+        .expect("Failed to create client");
 
     tokio::select! {
       _ = client.start() => {println!("Discord bot gracefully shut down");}

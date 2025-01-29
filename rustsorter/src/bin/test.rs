@@ -1,9 +1,7 @@
 use std::ops::MulAssign;
 
 use rayon::prelude::*;
-use rustsorter::tag::Item;
-use rustsorter::tag::SortedItem;
-use rustsorter::tag::Vote;
+use rustsorter::tag::{Item, SortedItem, Vote};
 
 pub fn vote_correctly_alphabet(left: &Item, right: &Item) -> Vote {
     let diff = (left.id - right.id) as f32;

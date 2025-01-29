@@ -3,10 +3,10 @@ use std::{
     vec,
 };
 
-use actix_web::{get, web, HttpResponse, Responder};
+use actix_web::{HttpResponse, Responder, get, web};
 use sqlx::types::chrono;
 
-use crate::tag::{Vote, Item, SortedItem, Skip, Tag};
+use crate::tag::{Item, Skip, SortedItem, Tag, Vote};
 
 #[derive(serde::Deserialize, Debug)]
 struct TagInfo {
@@ -108,23 +108,28 @@ async fn get_tags_as_items(db: &sqlx::PgPool) -> Vec<Item> {
         // get item with domain_pk_namespace = "sorter.tag", and domain_pk = tag.id
         // if that doesn't exist, create it
         // return the item
-        let item = sqlx::query_as::<_, Item>("SELECT * FROM items WHERE domain_pk_namespace = 'sorter.tag' AND domain_pk = $1::text")
-            .bind(tag.id.to_string())
-            .fetch_optional(db)
-            .await
-            .expect("Unable to fetch data from database");
+        let item = sqlx::query_as::<_, Item>(
+            "SELECT * FROM items WHERE domain_pk_namespace = 'sorter.tag' AND domain_pk = $1::text",
+        )
+        .bind(tag.id.to_string())
+        .fetch_optional(db)
+        .await
+        .expect("Unable to fetch data from database");
 
         if item.is_none() {
             // create it
-            let item = sqlx::query_as::<_, Item>("INSERT INTO items (owner, title, slug, domain_pk, domain_pk_namespace) VALUES ($1, $2, $3, $4::text, $5) RETURNING *")
-                .bind("---")
-                .bind(tag.title.clone())
-                .bind(tag.slug.clone())
-                .bind(tag.id.to_string())
-                .bind("sorter.tag")
-                .fetch_one(db)
-                .await
-                .expect("Unable to insert data into database");
+            let item = sqlx::query_as::<_, Item>(
+                "INSERT INTO items (owner, title, slug, domain_pk, domain_pk_namespace) VALUES \
+                 ($1, $2, $3, $4::text, $5) RETURNING *",
+            )
+            .bind("---")
+            .bind(tag.title.clone())
+            .bind(tag.slug.clone())
+            .bind(tag.id.to_string())
+            .bind("sorter.tag")
+            .fetch_one(db)
+            .await
+            .expect("Unable to insert data into database");
             items.push(item);
         } else {
             items.push(item.unwrap());
@@ -135,22 +140,24 @@ async fn get_tags_as_items(db: &sqlx::PgPool) -> Vec<Item> {
 
 #[get("/api/tag/page2")]
 pub async fn hello2(data: web::Data<crate::AppState>, info: web::Query<TagInfo>) -> impl Responder {
-    let tag_strings: Vec<String> = info.t
+    let tag_strings: Vec<String> = info
+        .t
         .as_ref()
         .map(|t| t.split(',').map(|s| s.to_string()).collect())
         .unwrap_or_default();
-        
+
     let mut tag_ids = Vec::new();
     for tag_str in tag_strings {
         if let Some(tag) = sqlx::query_as::<_, Tag>("SELECT * FROM tags WHERE slug = $1")
             .bind(tag_str)
             .fetch_optional(&data.db)
             .await
-            .expect("Unable to fetch tag") {
+            .expect("Unable to fetch tag")
+        {
             tag_ids.push(tag.id);
         }
     }
-    
+
     let items = if info.namespace == Some("tag-hierarchy".to_string()) {
         get_tags_as_items(&data.db).await
     } else {
@@ -160,7 +167,7 @@ pub async fn hello2(data: web::Data<crate::AppState>, info: web::Query<TagInfo>)
     let votes = {
         let item_ids: Vec<i32> = items.iter().map(|item| item.id).collect();
         let query_str_votes = format!(
-            "SELECT * FROM votes WHERE 
+            "SELECT * FROM votes WHERE
                    (left_item_id = ANY($1) AND right_item_id = ANY($1))
                 ORDER BY edited_at DESC"
         );
@@ -190,10 +197,10 @@ pub async fn hello2(data: web::Data<crate::AppState>, info: web::Query<TagInfo>)
     }
     attributes.sort_by(|a, b| b.votes.cmp(&a.votes));
 
-
     let selected_attribute = match info.atr.clone() {
         Some(attribute) => {
-            // TODO make new attribute if it doesn't exist/ or just filter out all votes if it doesn't exist
+            // TODO make new attribute if it doesn't exist/ or just filter out all votes if
+            // it doesn't exist
             sqlx::query_as::<_, Attribute>("SELECT * FROM attributes WHERE title = $1")
                 .bind(attribute.clone())
                 .fetch_one(&data.db)
@@ -235,7 +242,8 @@ pub async fn hello2(data: web::Data<crate::AppState>, info: web::Query<TagInfo>)
         for user in users {
             let maybe_group = sqlx::query_as!(
                 GroupUser,
-                "SELECT DISTINCT user_id, usergroup_id FROM users_in_usergroups WHERE usergroup_id = $1",
+                "SELECT DISTINCT user_id, usergroup_id FROM users_in_usergroups WHERE \
+                 usergroup_id = $1",
                 user
             )
             .fetch_all(&data.db)
@@ -278,7 +286,7 @@ pub async fn hello2(data: web::Data<crate::AppState>, info: web::Query<TagInfo>)
 
     if info.elo == None {
         let (item_id_to_index, index_to_item_id, graph) =
-         crate::pagerank::build_graph(&filteredvotes);
+            crate::pagerank::build_graph(&filteredvotes);
 
         let scores = crate::pagerank::page_rank(&graph);
         let item_id_to_elo = item_id_to_index
@@ -318,7 +326,7 @@ pub async fn hello2(data: web::Data<crate::AppState>, info: web::Query<TagInfo>)
         let mut idx_to_item_id = std::collections::HashMap::new();
 
         let mut elos = vec![];
-        for (_, _) in items.iter().enumerate() {
+        for (..) in items.iter().enumerate() {
             elos.push(1600.0);
         }
 
@@ -382,9 +390,16 @@ pub async fn hello2(data: web::Data<crate::AppState>, info: web::Query<TagInfo>)
 
     let groups_who_voted = sqlx::query_as!(
         UserDb,
-        "SELECT DISTINCT user_name, owner FROM users_in_usergroups INNER JOIN usergroups ON user_name = usergroup_id WHERE user_id = ANY($1)",
-        &users_who_voted.iter().map(|x| x.user_name.clone()).collect::<Vec<String>>()
-    ).fetch_all(&data.db).await.expect("Unable to fetch data from database");
+        "SELECT DISTINCT user_name, owner FROM users_in_usergroups INNER JOIN usergroups ON \
+         user_name = usergroup_id WHERE user_id = ANY($1)",
+        &users_who_voted
+            .iter()
+            .map(|x| x.user_name.clone())
+            .collect::<Vec<String>>()
+    )
+    .fetch_all(&data.db)
+    .await
+    .expect("Unable to fetch data from database");
 
     users_who_voted.extend(groups_who_voted.iter().map(|x| User {
         user_name: x.user_name.clone(),
@@ -399,26 +414,40 @@ pub async fn hello2(data: web::Data<crate::AppState>, info: web::Query<TagInfo>)
                 "SELECT * FROM skipped WHERE owner = $1 AND item_id = ANY($2)",
                 user_name,
                 &item_ids
-            ).fetch_all(&data.db).await.expect("Unable to fetch data from database")
+            )
+            .fetch_all(&data.db)
+            .await
+            .expect("Unable to fetch data from database")
         }
-        None => vec![]
+        None => vec![],
     };
 
     let mut pair = vec![];
     let mut count = 0;
     loop {
         count += 1;
-        pair = crate::pair::pair(&sorted, &unsorted, &skips, &votes, info.pinned_left, info.pinned_right);
+        pair = crate::pair::pair(
+            &sorted,
+            &unsorted,
+            &skips,
+            &votes,
+            info.pinned_left,
+            info.pinned_right,
+        );
         // check if pair has been voted on for this user
         if pair.len() < 2 {
             break;
         }
         let existing_pair = sqlx::query!(
-            "SELECT * FROM votes WHERE owner = $1 AND (left_item_id = $2 AND right_item_id = $3) OR (left_item_id = $3 AND right_item_id = $2)",
+            "SELECT * FROM votes WHERE owner = $1 AND (left_item_id = $2 AND right_item_id = $3) \
+             OR (left_item_id = $3 AND right_item_id = $2)",
             info.user_name,
             pair[0].id,
             pair[1].id
-        ).fetch_optional(&data.db).await.expect("Unable to fetch data from database");
+        )
+        .fetch_optional(&data.db)
+        .await
+        .expect("Unable to fetch data from database");
 
         if count > 10 {
             break;
@@ -433,7 +462,8 @@ pub async fn hello2(data: web::Data<crate::AppState>, info: web::Query<TagInfo>)
             }
         }
     }
-    let tag_strings2: Vec<String> = info.t
+    let tag_strings2: Vec<String> = info
+        .t
         .as_ref()
         .map(|t| t.split(',').map(|s| s.to_string()).collect())
         .unwrap_or_default();

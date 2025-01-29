@@ -3,7 +3,7 @@ use std::{
     vec,
 };
 
-use actix_web::{get, web, HttpResponse, Responder};
+use actix_web::{HttpResponse, Responder, get, web};
 use sqlx::types::chrono;
 
 #[derive(serde::Deserialize, Debug)]
@@ -172,7 +172,6 @@ struct GroupUser {
 }
 
 async fn get_items_from_tagid(tag_id: i32, db: &sqlx::PgPool) -> Vec<Item> {
-
     let query_str = format!(
         "SELECT
             i.*,
@@ -211,23 +210,28 @@ async fn get_tags_as_items(db: &sqlx::PgPool) -> Vec<Item> {
         // get item with domain_pk_namespace = "sorter.tag", and domain_pk = tag.id
         // if that doesn't exist, create it
         // return the item
-        let item = sqlx::query_as::<_, Item>("SELECT * FROM items WHERE domain_pk_namespace = 'sorter.tag' AND domain_pk = $1::text")
-            .bind(tag.id.to_string())
-            .fetch_optional(db)
-            .await
-            .expect("Unable to fetch data from database");
+        let item = sqlx::query_as::<_, Item>(
+            "SELECT * FROM items WHERE domain_pk_namespace = 'sorter.tag' AND domain_pk = $1::text",
+        )
+        .bind(tag.id.to_string())
+        .fetch_optional(db)
+        .await
+        .expect("Unable to fetch data from database");
 
         if item.is_none() {
             // create it
-            let item = sqlx::query_as::<_, Item>("INSERT INTO items (owner, title, slug, domain_pk, domain_pk_namespace) VALUES ($1, $2, $3, $4::text, $5) RETURNING *")
-                .bind("---")
-                .bind(tag.title.clone())
-                .bind(tag.slug.clone())
-                .bind(tag.id.to_string())
-                .bind("sorter.tag")
-                .fetch_one(db)
-                .await
-                .expect("Unable to insert data into database");
+            let item = sqlx::query_as::<_, Item>(
+                "INSERT INTO items (owner, title, slug, domain_pk, domain_pk_namespace) VALUES \
+                 ($1, $2, $3, $4::text, $5) RETURNING *",
+            )
+            .bind("---")
+            .bind(tag.title.clone())
+            .bind(tag.slug.clone())
+            .bind(tag.id.to_string())
+            .bind("sorter.tag")
+            .fetch_one(db)
+            .await
+            .expect("Unable to insert data into database");
             items.push(item);
         } else {
             items.push(item.unwrap());
@@ -238,13 +242,16 @@ async fn get_tags_as_items(db: &sqlx::PgPool) -> Vec<Item> {
 
 #[get("/api/tag/page")]
 pub async fn hello(data: web::Data<crate::AppState>, info: web::Query<TagInfo>) -> impl Responder {
-
     let items = if info.namespace == None {
         get_items_from_tagid(info.id.expect("Tag ID should be present"), &data.db).await
     } else if info.namespace == Some("tag-hierarchy".to_string()) {
         get_tags_as_items(&data.db).await
     } else {
-        get_items_from_namespace(info.namespace.clone().expect("Namespace should be present"), &data.db).await
+        get_items_from_namespace(
+            info.namespace.clone().expect("Namespace should be present"),
+            &data.db,
+        )
+        .await
     };
 
     let tag = if info.namespace == None {
@@ -275,7 +282,7 @@ pub async fn hello(data: web::Data<crate::AppState>, info: web::Query<TagInfo>) 
     let votes = {
         let item_ids: Vec<i32> = items.iter().map(|item| item.id).collect();
         let query_str_votes = format!(
-            "SELECT * FROM votes WHERE 
+            "SELECT * FROM votes WHERE
                    (left_item_id = ANY($1) AND right_item_id = ANY($1))
                 ORDER BY edited_at DESC"
         );
@@ -307,7 +314,8 @@ pub async fn hello(data: web::Data<crate::AppState>, info: web::Query<TagInfo>) 
 
     let selected_attribute = match info.attribute.clone() {
         Some(attribute) => {
-            // TODO make new attribute if it doesn't exist/ or just filter out all votes if it doesn't exist
+            // TODO make new attribute if it doesn't exist/ or just filter out all votes if
+            // it doesn't exist
             sqlx::query_as::<_, Attribute>("SELECT * FROM attributes WHERE title = $1")
                 .bind(attribute.clone())
                 .fetch_one(&data.db)
@@ -349,7 +357,8 @@ pub async fn hello(data: web::Data<crate::AppState>, info: web::Query<TagInfo>) 
         for user in users {
             let maybe_group = sqlx::query_as!(
                 GroupUser,
-                "SELECT DISTINCT user_id, usergroup_id FROM users_in_usergroups WHERE usergroup_id = $1",
+                "SELECT DISTINCT user_id, usergroup_id FROM users_in_usergroups WHERE \
+                 usergroup_id = $1",
                 user
             )
             .fetch_all(&data.db)
@@ -432,7 +441,7 @@ pub async fn hello(data: web::Data<crate::AppState>, info: web::Query<TagInfo>) 
         let mut idx_to_item_id = std::collections::HashMap::new();
 
         let mut elos = vec![];
-        for (_, _) in items.iter().enumerate() {
+        for (..) in items.iter().enumerate() {
             elos.push(1600.0);
         }
 
@@ -496,9 +505,16 @@ pub async fn hello(data: web::Data<crate::AppState>, info: web::Query<TagInfo>) 
 
     let groups_who_voted = sqlx::query_as!(
         UserDb,
-        "SELECT DISTINCT user_name, owner FROM users_in_usergroups INNER JOIN usergroups ON user_name = usergroup_id WHERE user_id = ANY($1)",
-        &users_who_voted.iter().map(|x| x.user_name.clone()).collect::<Vec<String>>()
-    ).fetch_all(&data.db).await.expect("Unable to fetch data from database");
+        "SELECT DISTINCT user_name, owner FROM users_in_usergroups INNER JOIN usergroups ON \
+         user_name = usergroup_id WHERE user_id = ANY($1)",
+        &users_who_voted
+            .iter()
+            .map(|x| x.user_name.clone())
+            .collect::<Vec<String>>()
+    )
+    .fetch_all(&data.db)
+    .await
+    .expect("Unable to fetch data from database");
 
     users_who_voted.extend(groups_who_voted.iter().map(|x| User {
         user_name: x.user_name.clone(),
@@ -513,26 +529,40 @@ pub async fn hello(data: web::Data<crate::AppState>, info: web::Query<TagInfo>) 
                 "SELECT * FROM skipped WHERE owner = $1 AND item_id = ANY($2)",
                 user_name,
                 &item_ids
-            ).fetch_all(&data.db).await.expect("Unable to fetch data from database")
+            )
+            .fetch_all(&data.db)
+            .await
+            .expect("Unable to fetch data from database")
         }
-        None => vec![]
+        None => vec![],
     };
 
     let mut pair = vec![];
     let mut count = 0;
     loop {
         count += 1;
-        pair = crate::pair::pair(&sorted, &unsorted, &skips, &votes, info.pinned_left, info.pinned_right);
+        pair = crate::pair::pair(
+            &sorted,
+            &unsorted,
+            &skips,
+            &votes,
+            info.pinned_left,
+            info.pinned_right,
+        );
         // check if pair has been voted on for this user
         if pair.len() < 2 {
             break;
         }
         let existing_pair = sqlx::query!(
-            "SELECT * FROM votes WHERE owner = $1 AND (left_item_id = $2 AND right_item_id = $3) OR (left_item_id = $3 AND right_item_id = $2)",
+            "SELECT * FROM votes WHERE owner = $1 AND (left_item_id = $2 AND right_item_id = $3) \
+             OR (left_item_id = $3 AND right_item_id = $2)",
             info.user_name,
             pair[0].id,
             pair[1].id
-        ).fetch_optional(&data.db).await.expect("Unable to fetch data from database");
+        )
+        .fetch_optional(&data.db)
+        .await
+        .expect("Unable to fetch data from database");
 
         if count > 10 {
             break;
@@ -547,7 +577,7 @@ pub async fn hello(data: web::Data<crate::AppState>, info: web::Query<TagInfo>) 
             }
         }
     }
-    //let pair = vec![];
+    // let pair = vec![];
 
     let perms = if info.id.is_none() {
         Perms {

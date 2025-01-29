@@ -1,9 +1,10 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::tag::{Item, Skip, SortedItem, Vote};
 use graph::wcc::UnionFind;
-use graph_builder::{index::Idx, DirectedCsrGraph, Graph};
+use graph_builder::{DirectedCsrGraph, Graph, index::Idx};
 use rand::seq::{IteratorRandom, SliceRandom};
+
+use crate::tag::{Item, Skip, SortedItem, Vote};
 
 // TODO check for pinned
 // TODO check for A A or B B pairs
@@ -14,7 +15,7 @@ pub fn pair<'a>(
     skips: &'a Vec<Skip>,
     votes: &'a Vec<Vote>,
     pinned_left: Option<i32>,
-    pinned_right: Option<i32>
+    pinned_right: Option<i32>,
 ) -> Vec<Item> {
     let mut sorted = sorted.clone();
     let mut unsorted = unsorted.clone();
@@ -68,9 +69,7 @@ pub fn pair<'a>(
                     return vec![pinned_left_item.clone().into(), sample[0].clone()];
                 }
                 (None, None) => {
-                    let sample = unsorted
-                        .iter()
-                        .choose_multiple(&mut rand::thread_rng(), 2);
+                    let sample = unsorted.iter().choose_multiple(&mut rand::thread_rng(), 2);
                     return sample.into_iter().map(|x| x.clone().into()).collect();
                 }
             }
@@ -79,12 +78,8 @@ pub fn pair<'a>(
         match (pinned_left, pinned_right) {
             (Some(pinned_left), Some(pinned_right)) => {
                 // both pinned
-                let pinned_left_item = unsorted
-                    .iter()
-                    .find(|x| x.id == pinned_left);
-                let pinned_right_item = unsorted
-                    .iter()
-                    .find(|x| x.id == pinned_right);
+                let pinned_left_item = unsorted.iter().find(|x| x.id == pinned_left);
+                let pinned_right_item = unsorted.iter().find(|x| x.id == pinned_right);
 
                 match (pinned_left_item, pinned_right_item) {
                     (Some(pinned_left_item), Some(pinned_right_item)) => {

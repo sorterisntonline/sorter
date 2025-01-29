@@ -1,11 +1,9 @@
-use actix_web::middleware::Logger;
-use actix_web::{web, App, HttpServer};
+use std::{env, sync::Arc};
+
+use actix_web::{App, HttpServer, middleware::Logger, web};
 use dotenv::dotenv;
-use std::env;
-use std::sync::Arc;
+use rustsorter::{AppState, discord_bot};
 use tokio::sync::oneshot; // For clean shutdown
-use rustsorter::discord_bot;
-use rustsorter::AppState;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
