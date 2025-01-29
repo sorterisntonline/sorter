@@ -1,114 +1,201 @@
-name: Deploy to Production
+name: Deploy to Environment
 
 on:
   push:
     branches:
       - production
+      - staging
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment Environment'
+        required: true
+        type: choice
+        options:
+          - production
+          - staging
+          - development
+        default: 'staging'
+
+# Add concurrency group configuration
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: true  # This will cancel any in-progress workflow and start the new one
+  # Alternative: remove cancel-in-progress to queue instead of cancel
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write 
+
+    # Set environment-specific variables
+    env:
+      DEPLOY_ENV: ${{ (github.event_name == 'push' && github.ref_name == 'production') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'production') && 'production' || 'development' }}
+      BRANCH: ${{ github.event_name == 'push' && github.ref_name || inputs.environment }}
+      BUILD_MODE: ${{ (github.event_name == 'push' && github.ref_name == 'production') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'production') && 'prod' || 'development' }}
 
     steps:
       # Step 1: Checkout the repository
       - name: Checkout Code
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'push' && github.ref_name || inputs.environment }}
 
-    #   # Step 2: Set up Git user for tagging
-    #   - name: Set up Git
-    #     run: |
-    #       git config user.name "github-actions[bot]"
-    #       git config user.email "github-actions[bot]@users.noreply.github.com"
+      # Check rustsorter changes
+      - name: Check rustsorter changes
+        id: check_rust
+        run: |
+          git fetch origin ${{ env.BRANCH }}
+          RUST_CHANGED=$(git diff --name-only HEAD^...HEAD | grep "^rustsorter/" || echo "")
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          # Check for force build flags first (case insensitive)
+          if echo "$COMMIT_MSG" | grep -iE "(force-build-rust|forcebuild-rust|force-build|forcebuild)" > /dev/null; then
+            echo "skip_rust=false" >> $GITHUB_OUTPUT
+          # Then check for skip flags (case insensitive)
+          elif echo "$COMMIT_MSG" | grep -iE "(skip.?rust|skiprust)" > /dev/null; then
+            echo "skip_rust=true" >> $GITHUB_OUTPUT
+          # Finally check for actual changes
+          elif [ -z "$RUST_CHANGED" ]; then
+            echo "skip_rust=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip_rust=false" >> $GITHUB_OUTPUT
+          fi
 
-    #   # Step 3: Determine New Tag
-    #   - name: Determine New Tag
-    #     id: new_tag
-    #     run: |
-    #       git fetch --tags
-    #       # Get the latest tag or default to v0.0.0
-    #       LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-    #       echo "Latest tag: $LATEST_TAG"
+      # Check borter/forter/clisorter changes
+      - name: Check borter changes
+        id: check_bort
+        run: |
+          git fetch origin ${{ env.BRANCH }}
+          echo "Checking for changes in borter components..."
+          BORT_CHANGED=$(git diff --name-only HEAD^...HEAD | grep -E "^(borter|forter|clisorter|public)/" || echo "")
+          echo "Changes detected: $BORT_CHANGED"
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          # Check for force build flags first (case insensitive)
+          if echo "$COMMIT_MSG" | grep -iE "(force-build-bort|forcebuild-bort|force-build|forcebuild)" > /dev/null; then
+            echo "skip_bort=false" >> $GITHUB_OUTPUT
+          # Then check for skip flags (case insensitive)
+          elif echo "$COMMIT_MSG" | grep -iE "(skip.?bort|skipbort)" > /dev/null; then
+            echo "skip_bort=true" >> $GITHUB_OUTPUT
+          # Finally check for actual changes
+          elif [ -z "$BORT_CHANGED" ]; then
+            echo "skip_bort=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip_bort=false" >> $GITHUB_OUTPUT
+          fi
 
-    #       # Extract version numbers
-    #       VERSION_MAJOR=$(echo $LATEST_TAG | cut -d. -f1 | sed 's/v//')
-    #       VERSION_MINOR=$(echo $LATEST_TAG | cut -d. -f2)
-    #       VERSION_PATCH=$(echo $LATEST_TAG | cut -d. -f3)
+      # Step 2: Set up Git user for tagging
+      - name: Set up Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-    #       # Increment patch version
-    #       NEW_PATCH=$((VERSION_PATCH + 1))
-    #       NEW_TAG="v${VERSION_MAJOR}.${VERSION_MINOR}.${NEW_PATCH}"
-    #       echo "New tag: $NEW_TAG"
+      # Step 3: Determine New Tag
+      - name: Determine New Tag
+        id: new_tag
+        run: |
+          git fetch --tags
+          # Set prefix based on environment
+          PREFIX="${{ github.ref_name == 'production' && 'prod' || 'staging' }}"
+          
+          # Get latest successful deploy number
+          LATEST_TAG=$(git tag -l "${PREFIX}-*" | grep -v "F" | sort -V | tail -n1 || echo "${PREFIX}-0")
+          echo "Latest tag: $LATEST_TAG"
 
-    #       # Set the new tag as output
-    #       echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
+          DEPLOY_NUM=$(echo $LATEST_TAG | sed "s/${PREFIX}-//")
+          NEW_NUM=$((DEPLOY_NUM + 1))
+          NEW_TAG="${PREFIX}-${NEW_NUM}"
+          
+          # Add appropriate suffix based on skip flags
+          if [ "${{ steps.check_rust.outputs.skip_rust }}" == "true" ] && [ "${{ steps.check_bort.outputs.skip_bort }}" == "true" ]; then
+            NEW_TAG="${NEW_TAG}-NOBUILD"
+          else
+            if [ "${{ steps.check_rust.outputs.skip_rust }}" == "true" ]; then
+              NEW_TAG="${NEW_TAG}-sr"
+            fi
+            if [ "${{ steps.check_bort.outputs.skip_bort }}" == "true" ]; then
+              NEW_TAG="${NEW_TAG}-sb"
+            fi
+          fi
+          echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
 
-    #   # Step 4: Create and Push Tag
-    #   - name: Create and Push Tag
-    #     run: |
-    #       git tag ${{ steps.new_tag.outputs.tag }}
-    #       git push origin ${{ steps.new_tag.outputs.tag }}
-
-    #   # Step 5: Generate Release Notes
-    #   - name: Generate Release Notes
-    #     id: release_notes
-    #     run: |
-    #       PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${{ github.sha }}^ 2>/dev/null || echo "")
-    #       if [ -z "$PREVIOUS_TAG" ]; then
-    #         # No previous tag exists, include all commits
-    #         NOTES=$(git log --pretty=format:'*- %s' ${{ github.sha }} )
-    #       else
-    #         NOTES=$(git log $PREVIOUS_TAG..${{ github.sha }} --pretty=format:'*- %s')
-    #       fi
-    #       echo "notes=$NOTES" >> $GITHUB_OUTPUT
-
-    #   # Step 6: Create GitHub Release
-    #   - name: Create GitHub Release
-    #     uses: softprops/action-gh-release@v1
-    #     with:
-    #       tag_name: ${{ steps.new_tag.outputs.tag }}
-    #       release_name: "Release ${{ steps.new_tag.outputs.tag }}"
-    #       body: "${{ steps.release_notes.outputs.notes }}"
-    #     env:
-    #       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # Step 7: Set up SSH
-      - name: Setup SSH
+      # Update SSH setup to use environment-specific deploy keys
+      - name: Setup SSH for GitHub
         uses: webfactory/ssh-agent@v0.7.0
         with:
-          ssh-private-key: ${{ secrets.DO_SSH_KEY }}
+          ssh-private-key: ${{ (github.ref_name == 'production' || inputs.environment == 'production') && secrets.GH_DEPLOY_KEY_PROD || secrets.GH_DEPLOY_KEY }}
 
-      # Step 8: Deploy to DigitalOcean
-      - name: Deploy to DigitalOcean
+      # Step 4: Create and Push Tag
+      - name: Create and Push Tag
+        run: |
+          git remote set-url origin git@github.com:sorterisntonline/sorter.git
+          git tag ${{ steps.new_tag.outputs.tag }}
+          git push origin ${{ steps.new_tag.outputs.tag }}
+
+      # Step 5: Generate Release Notes
+      - name: Generate Release Notes
+        id: release_notes
+        run: |
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${{ github.sha }}^ 2>/dev/null || echo "")
+          if [ -z "$PREVIOUS_TAG" ]; then
+            NOTES=$(git log --pretty=format:'- %s' ${{ github.sha }})
+          else
+            NOTES=$(git log $PREVIOUS_TAG..${{ github.sha }} --pretty=format:'- %s')
+          fi
+          
+          if [ "${{ steps.check_rust.outputs.skip_rust }}" == "true" ]; then
+            NOTES="⏭️🦀 [SKIP-RUST] No changes detected in rustsorter - previous build retained.
+
+            ${NOTES}"
+          fi
+          
+          if [ "${{ steps.check_bort.outputs.skip_bort }}" == "true" ]; then
+            NOTES="⏭️ƛ [SKIP-BORT] No changes detected in borter components - previous builds retained.
+
+            ${NOTES}"
+          fi
+          
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      # Step 6: Create GitHub Release
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.new_tag.outputs.tag }}
+          name: "Release ${{ steps.new_tag.outputs.tag }}"
+          body: "${{ steps.release_notes.outputs.notes }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Step 7: Setup SSH for Deployment
+      - name: Setup SSH for Deployment
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ github.ref_name == 'production' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGING }}
+
+      - name: Deploy to Server
+        id: deploy
         uses: appleboy/ssh-action@v0.1.10
         with:
-          host: ${{ secrets.DO_SSH_HOST }}
+          host: ${{ github.ref_name == 'production' && secrets.DO_SSH_HOST || secrets.DO_SSH_HOST_STAGING }}
           username: deployer
-          key: ${{ secrets.DO_SSH_KEY }}
+          key: ${{ github.ref_name == 'production' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGING }}
           command_timeout: 44m
           port: 22
           script: |
             set -e
 
-
             # Clear the ~/sorter directory 
             rm -rf ~/sorter
 
-            # Clone the sorter monorepo from the production branch using gh cli
-            git clone git@github.com:sorterisntonline/sorter.git -b production ~/sorter
+            # Clone from the appropriate branch
+            git clone git@github.com:sorterisntonline/sorter.git -b ${{ env.BRANCH }} ~/sorter
 
             cd ~/sorter || exit
-
-            # Update Environment Variables
-            # Write root .env
-            cat <<EOF > .env
-            
-            # intentionally omitted for now
-            # ENVIRONMENT=${{ secrets.DEPLOYMENT_ENV }} 
-            # DATABASE_URL=${{ secrets.DATABASE_URL }}
-            
-            EOF
-
-            chmod 600 .env
 
             # Write forter/.env
             cat <<EOF > forter/.env
@@ -126,14 +213,11 @@ jobs:
 
             chmod 600 forter/.env
 
+            
             # Write rustsorter/.env
             cat <<EOF > rustsorter/.env
-            
-            # we intentionally don't set ENVIRONMENT yet
-            # ENVIRONMENT=${{ secrets.DEPLOYMENT_ENV }}
-            
-            # we're in production, so we use the prod database url
-            DATABASE_URL=${{ secrets.PROD_DATABASE_URL }}
+            # rustsorter/.env
+
             DISCORD_TOKEN=${{ secrets.RUSTSORTER_DISCORD_TOKEN }}
             EOF
 
@@ -143,12 +227,7 @@ jobs:
             # Write borter/.env
             cat <<EOF > borter/.env
             # borter/.env
-            
-            # we intentionally dont set ENVIRONMENT here
-            # ENVIRONMENT=${{ secrets.DEPLOYMENT_ENV }}
-            
-            # database URLs
-            DATABASE_URL=${{ secrets.PROD_DATABASE_URL }}
+            HOSTNAME=${{ secrets.HOSTNAME }}
 
             # Linear Integration
             BORTER_LINEAR_CLIENT_ID=${{ secrets.BORTER_LINEAR_CLIENT_ID }}
@@ -177,46 +256,54 @@ jobs:
             BORTER_YOUTUBE_JAVASCRIPT_ORIGINS=${{ secrets.BORTER_YOUTUBE_JAVASCRIPT_ORIGINS }}
             EOF
 
-            chmod 600 borter/.env
+            chmod 600 borter/.env 
 
             echo -e "\033[1mDone writing env files, building...\033[0m"  
-
-            # Install Dependencies and Build Frontends
-            # Build forter
-            echo -e "\033[3mBuilding forter...\033[0m"
-            cd forter
-            npm install
-            npm run prod
-            cd ..
-
-            # Build clisorter
-            echo -e "\033[3mBuilding clisorter...\033[0m"
-            cd clisorter
-            npm install
-            npm run build
-            cd ..
-
-            # Build borter
-            echo -e "\033[3mBuilding borter...\033[0m"
-            cd borter
-            # rm resources/public/assets/*.css
-            # rm resources/public/assets/*.js
-            # rm resources/public/new/assets/*.css
-            # rm resources/public/new/assets/*.js
-            clojure -X:build build-client          # optimized release build
-            clojure -X:build uberjar
             
-            # builds to sorter/borter/target/sorter-*-standalone.jar
-            chmod +x target/sorter-*-standalone.jar 
-            
-            cd ..
+            # Modified build steps to respect skip flags
+            if [[ "${{ steps.check_bort.outputs.skip_bort }}" != "true" ]]; then
+              # clear assets from previous builds
+              cd borter
+              rm -rf resources/public/assets/*.css
+              rm -rf resources/public/assets/*.js
+              rm -rf resources/public/new/assets/*.css
+              rm -rf resources/public/new/assets/*.js
+              cd ..
+              echo -e "\033[1mDone clearing assets, building...\033[0m"
 
-            # Build rustsorter 
-            echo -e "\033[3mBuilding rustsorter...\033[0m"
-            cd rustsorter
-            SQLX_OFFLINE=true cargo build --release
-            cd ..
+              # Build forter
+              echo -e "\033[3mBuilding forter...\033[0m"
+              cd forter
+              npm install
+              npm run ${{ env.BRANCH }}
+              cd ..
 
+              # Build clisorter
+              echo -e "\033[3mBuilding clisorter...\033[0m"
+              cd clisorter
+              npm install
+              npm run build # eventually this needs to include mode via branch or something like that
+              cd ..
+
+              # Build borter
+              echo -e "\033[3mBuilding borter...\033[0m"
+              cd borter
+              clojure -X:build build-client
+              clojure -X:build uberjar
+              chmod +x target/sorter-*-standalone.jar 
+              cd ..
+            fi
+
+            # Conditional rustsorter build
+            echo -e "\033[3mHandling rustsorter...\033[0m"
+            if [[ "${{ steps.check_rust.outputs.skip_rust }}" == "true" ]]; then
+              echo -e "\033[3mSkipping rustsorter build (no changes detected)...\033[0m"
+            else
+              echo -e "\033[3mBuilding rustsorter...\033[0m"
+              cd rustsorter
+              SQLX_OFFLINE=true /home/deployer/.cargo/bin/cargo build --profile ${{ env.BUILD_MODE == 'prod' && 'release' || 'staging' }}  
+              cd ..
+            fi
 
             echo -e "\033[1mDone building, running (with systemctl)...\033[0m"
 
@@ -230,4 +317,89 @@ jobs:
             echo -e "\033[3mRestarting rustsorter...\033[0m"
             sudo systemctl restart rustsorter.service
 
+            # Backup borter jar if we built it
+            if [[ "${{ steps.check_bort.outputs.skip_bort }}" != "true" ]]; then
+              echo -e "\033[3mBacking up borter jar...\033[0m"
+              BORTER_BACKUP_DIR="/home/deployer/backups/borter"
+
+              # Create the backup directory if it doesn't exist
+              mkdir -p "${BORTER_BACKUP_DIR}"
+
+              BORTER_BACKUP_NAME="borter-$(date +%Y%m%d_%H%M%S).jar"
+              cp borter/target/sorter-*-standalone.jar "${BORTER_BACKUP_DIR}/${BORTER_BACKUP_NAME}"
+              
+              # Keep only the 40 most recent borter backups (approximately 2GB worth)
+              cd "${BORTER_BACKUP_DIR}"
+              ls -t | tail -n +41 | xargs -r rm --
+              cd ~/sorter
+            fi
+
+            # Backup rustsorter release if we built it
+            if [[ "${{ steps.check_rust.outputs.skip_rust }}" != "true" ]]; then
+              echo -e "\033[3mBacking up rustsorter release...\033[0m"
+              RUST_BACKUP_DIR="/home/deployer/backups/rustsorter"
+              RUST_BACKUP_NAME="rustsorter-$(date +%Y%m%d_%H%M%S)"
+              
+              # Create a new backup directory for this release
+              mkdir -p "${RUST_BACKUP_DIR}/${RUST_BACKUP_NAME}"
+              
+              # Copy the entire release directory using the correct build profile
+              cp -r rustsorter/target/${{ env.BUILD_MODE == 'prod' && 'release' || 'staging' }}/* "${RUST_BACKUP_DIR}/${RUST_BACKUP_NAME}/"
+              
+              # Keep only the 4 most recent rustsorter backups
+              cd "${RUST_BACKUP_DIR}"
+              ls -t | tail -n +5 | xargs -r rm -rf --
+              cd ~/sorter
+            fi 
+
+            # Create live directories and symlinks if they don't exist
+            sudo mkdir -p /home/deployer/live/borter
+            sudo mkdir -p /home/deployer/live/rustsorter
+            sudo chown deployer:deployer /home/deployer/live/borter
+            sudo chown deployer:deployer /home/deployer/live/rustsorter
+
+            # Update symlinks after successful builds
+            if [[ "${{ steps.check_bort.outputs.skip_bort }}" != "true" ]]; then
+              ln -sf ~/sorter/borter/target/sorter-*-standalone.jar /home/deployer/live/borter/sorter.jar
+            fi
+
+            if [[ "${{ steps.check_rust.outputs.skip_rust }}" != "true" ]]; then
+              rm -f /home/deployer/live/rustsorter/current
+              ln -sf ~/sorter/rustsorter/target/${{ env.BUILD_MODE == 'prod' && 'release' || 'staging' }} /home/deployer/live/rustsorter/current
+            fi
+
             exit 0
+
+      # New fallback step that runs on deploy failure
+      - name: Fallback to Latest Backup
+        if: failure() && steps.deploy.outcome == 'failure'
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ github.ref_name == 'production' && secrets.DO_SSH_HOST || secrets.DO_SSH_HOST_STAGING }}
+          username: deployer
+          key: ${{ github.ref_name == 'production' && secrets.DO_SSH_KEY || secrets.DO_SSH_KEY_STAGING }}
+          script: |
+            set -e
+            
+            # Handle borter fallback if we were attempting to build it
+            if [[ "${{ steps.check_bort.outputs.skip_bort }}" != "true" ]] && [[ "${{ steps.new_tag.outputs.tag }}" != *"-NOBUILD"* ]]; then
+              echo "Falling back to latest borter backup..."
+              LATEST_BORTER=$(ls -t /home/deployer/backups/borter/sorter-*.jar | head -n1)
+              if [ ! -z "$LATEST_BORTER" ]; then
+                ln -sf "$LATEST_BORTER" /home/deployer/live/borter/sorter.jar
+                sudo systemctl restart borter.service
+              fi
+            fi
+
+            # Handle rustsorter fallback if we were attempting to build it
+            if [[ "${{ steps.check_rust.outputs.skip_rust }}" != "true" ]] && [[ "${{ steps.new_tag.outputs.tag }}" != *"-NOBUILD"* ]]; then
+              echo "Falling back to latest rustsorter backup..."
+              LATEST_RUST=$(ls -t /home/deployer/backups/rustsorter | head -n1)
+              if [ ! -z "$LATEST_RUST" ]; then
+                RUST_LIVE_DIR="/home/deployer/live/rustsorter/current"
+                mkdir -p "$RUST_LIVE_DIR"
+                rm -rf "$RUST_LIVE_DIR/*"
+                ln -sf /home/deployer/backups/rustsorter/"$LATEST_RUST"/* "$RUST_LIVE_DIR/"
+                sudo systemctl restart rustsorter.service
+              fi
+            fi

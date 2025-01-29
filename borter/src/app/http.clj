@@ -33,105 +33,97 @@
             [app.reddit :as reddit]
             [app.twitter :as twitter]
             [app.groups :as groups]
-            [app.discord :as discord]
             [app.health :as health])
   (:import
    [java.net URLEncoder]))
-
-(defn get-html-file [request]
-  (let [env (System/getenv "ENVIRONMENT")
-        is-prod (= env "production")
-        is-music (or (= "music.sorter.social" (-> request :headers (get "host")))
-                    (= "/music" (:uri request)))
-        html-file (cond
-                   ;; Music sorter routes
-                   (and is-music is-prod) "index2.html" ; for now these are the same
-                   (and is-music (not is-prod)) "index2.html"
-                   ;; Main sorter routes
-                   is-prod "index.prod.html"
-                   :else "index.dev.html")]
+(defn get-html-file [request] ; revert this for now because it breaks everything
+  (let [is-music (or (= "music.sorter.social" (-> request :headers (get "host")))
+                     (= "/music" (:uri request)))
+        html-file (if is-music "index2.html" "index.html")]
     (str "public/" html-file)))
 
 ;; Replace the existing test functions with a single handler
 (defn serve-index [request]
-  (-> (get-html-file request)
-      resp/resource-response
-      (resp/content-type "text/html")))
+  (let [html-file (get-html-file request)]
+    (-> (resp/resource-response html-file)
+        (resp/content-type "text/html")
+        (assoc :status 200))))
 
 (defn test [r]
-  (if (= "music.sorter.social" (-> r :headers (get "host")))
-    (resp/content-type (resp/resource-response "public/index2.html") "text/html")
-    (resp/content-type (resp/resource-response "public/index.html") "text/html")))
+  (let [host (-> r :headers (get "host"))
+        hostname (System/getenv "HOSTNAME")]
+    (if (and host hostname
+             (re-find (re-pattern (str "music.*\\." hostname "$")) host))
+      (resp/content-type (resp/resource-response "public/index2.html") "text/html")
+      (resp/content-type (resp/resource-response "public/index.html") "text/html"))))
 
 (defn test-2 [r]
   (resp/content-type (resp/resource-response "public/index2.html") "text/html"))
 
 (defn count-votes [tag]
   (let [subquery (-> (h/select :items_in_tags/item_id)
-                      (h/from :items_in_tags)
-                      (h/where [:= :items_in_tags/tag_id (:tags/id tag)]))
+                     (h/from :items_in_tags)
+                     (h/where [:= :items_in_tags/tag_id (:tags/id tag)]))
         votes (-> (h/select [[:count :votes/id]])
-                 (h/from :votes)
-                 (h/where [:or
-                           [:in :votes/left_item_id subquery]
-                           [:in :votes/right_item_id subquery]])
-                 db/exec! first :count)]
+                  (h/from :votes)
+                  (h/where [:or
+                            [:in :votes/left_item_id subquery]
+                            [:in :votes/right_item_id subquery]])
+                  db/exec! first :count)]
     (assoc tag :vote_count votes)))
 
 (defn query-tags [r]
-  {:status 200 :body 
+  {:status 200 :body
    {:public (->> (db/exec! (-> (h/select :tags/*
-                                          [[:count :items_in_tags/item_id] :item_count])
-                                (h/join :perms [:= :perms/tag_id :tags/id])
-                                (h/where [:and
-                                          [:= :perms/capability "view"]
-                                          [:= :perms/user_id "all"]
-                                          [:= :tags/unlisted false]])
-                                (h/from :tags)
+                                         [[:count :items_in_tags/item_id] :item_count])
+                               (h/join :perms [:= :perms/tag_id :tags/id])
+                               (h/where [:and
+                                         [:= :perms/capability "view"]
+                                         [:= :perms/user_id "all"]
+                                         [:= :tags/unlisted false]])
+                               (h/from :tags)
 
-                                (h/left-join :items_in_tags [:= :items_in_tags/tag_id :tags/id])
-                                (h/group-by :tags/id)))
-                  (map count-votes))
-      :private
-      (let [groups (map :users_in_usergroups/usergroup_id
-                        (db/exec! (-> {:select :* :from :users_in_usergroups
-                                       :where [:= :user_id (-> r :session :user_name)]})))]
-        (->> (db/exec! (-> (h/select :tags/*)
-                           (h/from :tags)
-                           (h/join :perms [:= :perms/tag_id :tags/id])
-                           (h/where [:or
-                                     [:and
-                                      [:= :perms/capability "view"]
-                                      (if (-> r :session :user_name)
-                                        [:or
-                                         [:like :perms/user_id (str "%" (-> r :session :user_name) "%")]
-                                         (into [:or] (map #(vector :like :perms/user_id (str "%" % "%")) groups))]
-                                        false)]
-                                     [:and
-                                      [:and
-                                       [:= :perms/capability "view"]
-                                       [:not [:= :perms/user_id "all"]]]
-                                      (if (-> r :session :user_name)
-                                        [:= :tags/owner (-> r :session :user_name)]
-                                        false)]])))
-             (map count-votes)))
-      :unlisted
+                               (h/left-join :items_in_tags [:= :items_in_tags/tag_id :tags/id])
+                               (h/group-by :tags/id)))
+                 (map count-votes))
+    :private
+    (let [groups (map :users_in_usergroups/usergroup_id
+                      (db/exec! (-> {:select :* :from :users_in_usergroups
+                                     :where [:= :user_id (-> r :session :user_name)]})))]
       (->> (db/exec! (-> (h/select :tags/*)
-                        (h/from :tags)
-                        (h/where [:and
-                                  [:= :tags/unlisted true]
-                                  (if (-> r :session :user_name)
-                                    [:= :tags/owner (-> r :session :user_name)]
-                                    false)])))
-           (map count-votes))
-      :namespaces (db/exec! "select domain_pk_namespace, count(*) from items group by domain_pk_namespace")}})
+                         (h/from :tags)
+                         (h/join :perms [:= :perms/tag_id :tags/id])
+                         (h/where [:or
+                                   [:and
+                                    [:= :perms/capability "view"]
+                                    (if (-> r :session :user_name)
+                                      [:or
+                                       [:like :perms/user_id (str "%" (-> r :session :user_name) "%")]
+                                       (into [:or] (map #(vector :like :perms/user_id (str "%" % "%")) groups))]
+                                      false)]
+                                   [:and
+                                    [:and
+                                     [:= :perms/capability "view"]
+                                     [:not [:= :perms/user_id "all"]]]
+                                    (if (-> r :session :user_name)
+                                      [:= :tags/owner (-> r :session :user_name)]
+                                      false)]])))
+           (map count-votes)))
+    :unlisted
+    (->> (db/exec! (-> (h/select :tags/*)
+                       (h/from :tags)
+                       (h/where [:and
+                                 [:= :tags/unlisted true]
+                                 (if (-> r :session :user_name)
+                                   [:= :tags/owner (-> r :session :user_name)]
+                                   false)])))
+         (map count-votes))
+    :namespaces (db/exec! "select domain_pk_namespace, count(*) from items group by domain_pk_namespace")}})
 
 (comment
   (db/exec! (-> (h/select :*)
                 (h/from :tags)
-                (h/where [:= :tags/domain_pk_namespace "spotify.playlist"])))
-  
-  )
+                (h/where [:= :tags/domain_pk_namespace "spotify.playlist"]))))
 
 
 
@@ -171,7 +163,7 @@
 (defn delete-tag [req]
   (let [tagid (-> req :params (get "id") Integer/parseInt)
         tag (first (db/exec! {:select :tags/* :from :tags :where [:= :tags/id tagid]}))]
-    
+
     (when-not (= (-> req :session :user_name)
                  (:tags/owner tag))
       (throw (ex-info "must own tag" {:status 401})))
@@ -252,7 +244,7 @@
                            {:membership
                             (db/exec! (-> (h/select :*)
                                           (h/from :items_in_tags)
-                                          (h/where [:= :item_id itemid])(h/join :tags [:= :items_in_tags.tag_id :tags.id])))
+                                          (h/where [:= :item_id itemid]) (h/join :tags [:= :items_in_tags.tag_id :tags.id])))
                             :skips
                             (db/exec! (-> (h/select :*)
                                           (h/from :skipped)
@@ -309,7 +301,7 @@
   (fn [request]
     (try (handler request)
          (catch Exception e
-           (def e e) 
+           (def e e)
            (let [message (ex-message e)]
              message)
            (merge {:status 500
@@ -354,8 +346,8 @@
 (def one-per-minute {:storage storage :limit (UserRateLimit. 2 1 (java.time.Duration/ofMinutes 1))})
 
 
-(def routes [["/" {:handler #'serve-index}]
-             ["/music" {:handler #'serve-index}]
+(def routes [["/" {:handler #'test}]
+             ["/music" {:handler #'test-2}]                                                                                                                                              
              ["/api" {:middleware []}
               ["/health" {:get {:handler #'health/check-health}}]
               ["/feed" {:get {:handler #'feed/get-feed}}]
@@ -392,8 +384,7 @@
               ["/youtube" youtube/routes]
               ["/linear" linear/routes]
               ["/reddit" reddit/routes]
-              ["/twitter" twitter/routes]
-              ["/discord" discord/routes]
+              ["/twitter" twitter/routes] 
 
               ["/integrations" integrations/routes]
               ["/comments" comments/routes]
@@ -415,4 +406,4 @@
 
 (defn start [{:keys [port]}]
   (jetty/run-jetty #'app {:port port :join? false :host "0.0.0.0"})
-  (println (str "http server running on port " port)))
+  (println (str "http server running on port " port)))                                                                                                                                                
