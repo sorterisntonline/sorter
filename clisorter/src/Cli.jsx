@@ -202,105 +202,99 @@ const TagCategories = () => {
     ...tag,
     displaySlug: tag.ns ? `${tag.ns}/${tag.slug}` : tag.slug
   }))
-  // Sort by vote count (descending)
   .sort((a, b) => (b.item_count || 0) - (a.item_count || 0)) || [];
 
   return (
-    <>
-      <div className="flex flex-col md:flex-row max-w-[200px] md:max-w-none gap-0 justify-start">
-        <div className={`${
-          isExpanded 
-            ? 'w-[600px] h-[400px] overflow-y-auto' 
-            : 'w-[200px] h-[200px]'
-          } bg-gray-200 p-4 flex flex-col transition-all duration-300`}>
-          <div className="space-y-2">
-            {!isExpanded ? (
-              // Show selected tags with remove buttons
-              <>
-                {selectedTags.length === 0 ? (
-                  <div className="text-gray-500 italic">No tags selected</div>
-                ) : (
-                  selectedTags.map((tag, index) => (
-                    <div 
-                      key={index}
-                      className="flex justify-between items-center"
-                    >
-                      <span className="font-serif text-lg">#{tag.value}</span>
-                      <button
-                        onClick={() => handleRemoveTag(tag.value)}
-                        className="text-gray-500 hover:text-red-500"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))
-                )}
-              </>
-            ) : (
-              // Expanded view with all tags
-              <div className="grid grid-cols-2 gap-2">
-                {flattenedTags.map(tag => (
-                  <div
-                    key={tag.id}
-                    onClick={() => handleTagClick('#' + tag.slug)}
-                    className="font-serif text-md text-left hover:underline cursor-pointer"
+    <div className="flex flex-col md:flex-row max-w-[200px] md:max-w-none gap-0 justify-start">
+      {/* Left panel - Selected Tags */}
+      <div className="w-[200px] h-[200px] bg-gray-200 p-4 flex flex-col">
+        <div className="space-y-2">
+          {selectedTags.length === 0 ? (
+            <div className="text-gray-500 italic">No tags selected</div>
+          ) : (
+            selectedTags.map((tag, index) => (
+              <div 
+                key={index}
+                className="flex justify-between items-center"
+              >
+                <div className="flex justify-start w-full">
+                  <span className="font-serif text-lg">#{tag.value}</span>
+                  <button
+                    onClick={() => handleRemoveTag(tag.value)}
+                    className="text-gray-500 hover:text-red-500 ml-2"
                   >
-                    #{tag.displaySlug}
-                    <span className="text-sm text-gray-500 ml-2">
-                      ({tag.item_count || 0})
-                    </span>
-                  </div>
-                ))}
+                    ×
+                  </button>
+                </div>
               </div>
-            )}
-            <div 
-              onClick={() => setIsExpanded(!isExpanded)} 
-              className="font-serif text-lg text-gray-500 text-left hover:underline cursor-pointer"
-            >
-              {isExpanded ? 'less...' : 'more...'}
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Middle panel - All Tags */}
+      <div className={`${
+        isExpanded 
+          ? 'w-[600px] h-[400px] overflow-y-auto' 
+          : 'w-[200px] h-[200px]'
+        } bg-red-200 p-4 flex flex-col transition-all duration-300`}>
+        <div className="space-y-2">
+          {!isExpanded ? (
+            <div className="grid grid-cols-1 gap-2">
+              {flattenedTags.slice(0, 5).map(tag => (
+                <div
+                  key={tag.id}
+                  onClick={() => handleTagClick('#' + tag.slug)}
+                  className="font-serif text-md text-left hover:underline cursor-pointer"
+                >
+                  #{tag.displaySlug}
+                  <span className="text-sm text-gray-500 ml-2">
+                    ({tag.item_count || 0})
+                  </span>
+                </div>
+              ))}
             </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              {flattenedTags.map(tag => (
+                <div
+                  key={tag.id}
+                  onClick={() => handleTagClick('#' + tag.slug)}
+                  className="font-serif text-md text-left hover:underline cursor-pointer"
+                >
+                  #{tag.displaySlug}
+                  <span className="text-sm text-gray-500 ml-2">
+                    ({tag.item_count || 0})
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div 
+            onClick={() => setIsExpanded(!isExpanded)} 
+            className="font-serif text-lg text-gray-500 text-left hover:underline cursor-pointer"
+          >
+            {isExpanded ? 'less...' : 'more...'}
           </div>
         </div>
-
-        {/* Only show these panels when not expanded */}
-        {!isExpanded && (
-          <>
-            {/* Commands Square */}
-            <div className="w-[200px] h-[200px] bg-red-200 p-4 flex flex-col">
-              <div className="space-y-2">
-                <div 
-                  onClick={handleVoteClick}
-                  className="font-serif text-lg text-left hover:underline cursor-pointer"
-                >!vote</div>
-                <div 
-                  onClick={handleVotesClick}
-                  className="font-serif text-lg text-left hover:underline cursor-pointer"
-                >!votes</div>
-              </div>
-            </div>
-
-            {/* Mentions Square */}
-            <div className="w-[200px] h-[200px] bg-red-400 p-4 flex flex-col">
-              <div className="space-y-2">
-                <div 
-                  onClick={() => handleMentionClick('@me')}
-                  className="font-serif text-lg text-left hover:underline cursor-pointer"
-                >@me</div>
-                <div 
-                  onClick={() => handleMentionClick('@you')}
-                  className="font-serif text-lg text-left hover:underline cursor-pointer"
-                >@you</div>
-                <div 
-                  onClick={() => handleMentionClick('@all')}
-                  className="font-serif text-lg text-left hover:underline cursor-pointer"
-                >@all</div>
-              </div>
-            </div>
-          </>
-        )}
       </div>
-      <br/>
-    </>
+
+      {/* Right panel - Commands */}
+      {!isExpanded && (
+        <div className="w-[200px] h-[200px] bg-red-400 p-4 flex flex-col">
+          <div className="space-y-2">
+            <div 
+              onClick={() => handleMentionClick('@me')}
+              className="font-serif text-lg text-left hover:underline cursor-pointer"
+            >@me</div>
+            <div 
+              onClick={() => handleMentionClick('@all')}
+              className="font-serif text-lg text-left hover:underline cursor-pointer"
+            >@all</div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 
