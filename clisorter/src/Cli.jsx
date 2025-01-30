@@ -102,17 +102,19 @@ const TagCategories = () => {
   const { queryState, updateQueryState } = useQueryState();
   const [isExpanded, setIsExpanded] = useState(false);
   const { data, error, isLoading } = useSWR("/api/tag", fetcher);
+  const [hasInitialized, setHasInitialized] = useState(false);
 
-  // Update useEffect to set default tags when URL is empty
+  // Modified useEffect to only set default tags on first load
   useEffect(() => {
-    if (!queryState.length) {
+    if (!hasInitialized && !queryState.length) {
       const defaultTags = [
         { type: 'hashtag', value: 'albums' },
         { type: 'hashtag', value: 'kendrick-lamar' }
       ];
       updateQueryState(defaultTags);
+      setHasInitialized(true);
     }
-  }, [queryState.length, updateQueryState]);
+  }, [queryState.length, updateQueryState, hasInitialized]);
 
   // Get currently selected tags from queryState
   const selectedTags = queryState.filter(item => item.type === 'hashtag');
