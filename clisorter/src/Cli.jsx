@@ -10,26 +10,19 @@ import { ItemPanel } from './ItemPanel';
 // TODO make /item command pop up when you click on an item
 
 export const useStore = create((set, get) => ({
-  csvData: [],
   results: null,
   magnitude: 50,
   items_by_id: {},
   tagData: null,
   setTagData: (data) => set({ tagData: data }),
-  setCsvData: (csvData) => set({ csvData }),
   setResults: (results) => {
     const items_by_id = {};
     if (results) {
-      if (results.unsorted) {
-        results.unsorted.forEach(item => {
+      ['unsorted', 'sorted'].forEach(key => {
+        results[key]?.forEach(item => {
           items_by_id[item.id] = item;
         });
-      }
-      if (results.sorted) {
-        results.sorted.forEach(item => {
-          items_by_id[item.id] = item;
-        });
-      }
+      });
     }
     set({ results, items_by_id });
   },
@@ -49,148 +42,154 @@ export const useStore = create((set, get) => ({
       console.error('Failed to fetch results:', error);
       get().setResults(null);
     }
-  },
-  updateURL: (csvData) => {
-    // Build query params from csvData
-    const tags = csvData
-      .filter(item => item.type === 'hashtag')
-      .map(item => item.value)
-      .join('.');
-    const mentions = csvData
-      .filter(item => item.type === 'mention')
-      .map(item => item.value)
-      .join('.');
-    const actions = csvData
-      .filter(item => item.type === 'action')
-      .map(item => item.itemId 
-        ? `${item.value}${item.itemId}`
-        : item.value
-      )
-      .join('.');
-
-    // Update URL params
-    const params = new URLSearchParams();
-    if (tags.length) params.set('t', tags);
-    if (mentions.length) params.set('u', mentions);
-    if (actions.length) params.set('a', actions);
-
-    // Update URL without page reload
-    window.history.replaceState({}, '', `${window.location.pathname}?${params}`);
   }
 }));
 
+// New hook to parse URL into structured data
+const useQueryState = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  
+  const parseParams = () => {
+    const tags = searchParams.get('t')?.split('.').map(tag => ({ 
+      type: 'hashtag', 
+      value: tag 
+    })) || [];
+    const mentions = searchParams.get('u')?.split('.').map(mention => ({ 
+      type: 'mention', 
+      value: mention 
+    })) || [];
+    const actions = searchParams.get('a')?.split('.').map(action => {
+      const match = action.match(/^(\w+)(\d+)?$/);
+      return {
+        type: 'action',
+        value: match[1],
+        itemId: match[2]
+      };
+    }) || [];
+
+    return [...tags, ...mentions, ...actions];
+  };
+
+  const updateParams = (updates) => {
+    const newParams = new URLSearchParams(searchParams);
+    
+    // Clear existing params
+    ['t', 'u', 'a'].forEach(param => newParams.delete(param));
+    
+    // Group and set new params
+    const tags = updates.filter(item => item.type === 'hashtag')
+      .map(item => item.value).join('.');
+    const mentions = updates.filter(item => item.type === 'mention')
+      .map(item => item.value).join('.');
+    const actions = updates.filter(item => item.type === 'action')
+      .map(item => item.itemId ? `${item.value}${item.itemId}` : item.value)
+      .join('.');
+
+    if (tags) newParams.set('t', tags);
+    if (mentions) newParams.set('u', mentions);
+    if (actions) newParams.set('a', actions);
+
+    setSearchParams(newParams, { replace: true });
+  };
+
+  return {
+    queryState: parseParams(),
+    updateQueryState: updateParams
+  };
+};
+
 const TagCategories = () => {
-  const { csvData } = useStore();
+  const { queryState, updateQueryState } = useQueryState();
   const [isExpanded, setIsExpanded] = useState(false);
   const { data, error, isLoading } = useSWR("/api/tag", fetcher);
 
-  // Get currently selected tags from csvData
-  const selectedTags = csvData.filter(item => item.type === 'hashtag');
+  // Update useEffect to set default tags when URL is empty
+  useEffect(() => {
+    if (!queryState.length) {
+      const defaultTags = [
+        { type: 'hashtag', value: 'albums' },
+        { type: 'hashtag', value: 'kendrick-lamar' }
+      ];
+      updateQueryState(defaultTags);
+    }
+  }, [queryState.length, updateQueryState]);
+
+  // Get currently selected tags from queryState
+  const selectedTags = queryState.filter(item => item.type === 'hashtag');
 
   const handleRemoveTag = (tagToRemove) => {
-    const { setCsvData, csvData } = useStore.getState();
-    const newCsvData = csvData.filter(item => 
+    const newState = queryState.filter(item => 
       !(item.type === 'hashtag' && item.value === tagToRemove)
     );
-    setCsvData(newCsvData);
-    useStore.getState().updateURL(newCsvData);
+    updateQueryState(newState);
   };
 
   const handleTagClick = (tag) => {
-    const { setCsvData, csvData } = useStore.getState();
     const tagValue = tag.startsWith('#') ? tag.slice(1) : tag;
+    const existingHashtags = queryState.filter(item => item.type === 'hashtag');
     
-    if (csvData.length) {
-      const existingHashtags = csvData.filter(item => item.type === 'hashtag');
-      
-      if (existingHashtags.length > 0) {
-        const newCsvData = csvData.map(item => {
-          if (item === existingHashtags[existingHashtags.length - 1]) {
-            return { type: 'hashtag', value: tagValue };
-          }
-          return item;
-        });
-        setCsvData(newCsvData);
-        useStore.getState().updateURL(newCsvData);
-        return;
-      }
+    if (existingHashtags.length > 0) {
+      const newState = queryState.map(item => {
+        if (item === existingHashtags[existingHashtags.length - 1]) {
+          return { type: 'hashtag', value: tagValue };
+        }
+        return item;
+      });
+      updateQueryState(newState);
+      return;
     }
     
-    const newCsvData = [{ type: 'hashtag', value: tagValue }];
-    setCsvData(newCsvData);
-    useStore.getState().updateURL(newCsvData);
+    updateQueryState([{ type: 'hashtag', value: tagValue }]);
   };
 
   const handleVoteClick = () => {
-    const { setCsvData, csvData } = useStore.getState();
+    const hasVote = queryState.some(item => 
+      item.type === 'action' && item.value === 'vote'
+    );
     
-    if (csvData.length) {
-      const hasVote = csvData.some(item => 
-        item.type === 'action' && item.value === 'vote'
+    if (hasVote) {
+      const newState = queryState.filter(item => 
+        !(item.type === 'action' && item.value === 'vote')
       );
-      
-      if (hasVote) {
-        const newCsvData = csvData.filter(item => 
-          !(item.type === 'action' && item.value === 'vote')
-        );
-        setCsvData(newCsvData);
-        useStore.getState().updateURL(newCsvData);
-        return;
-      }
+      updateQueryState(newState);
+      return;
     }
     
-    const newCsvData = [...csvData, { type: 'action', value: 'vote' }];
-    setCsvData(newCsvData);
-    useStore.getState().updateURL(newCsvData);
+    updateQueryState([...queryState, { type: 'action', value: 'vote' }]);
   };
 
   const handleVotesClick = () => {
-    const { setCsvData, csvData } = useStore.getState();
+    const hasVotes = queryState.some(item => 
+      item.type === 'action' && item.value === 'votes'
+    );
     
-    if (csvData.length) {
-      const hasVotes = csvData.some(item => 
-        item.type === 'action' && item.value === 'votes'
+    if (hasVotes) {
+      const newState = queryState.filter(item => 
+        !(item.type === 'action' && item.value === 'votes')
       );
-      
-      if (hasVotes) {
-        const newCsvData = csvData.filter(item => 
-          !(item.type === 'action' && item.value === 'votes')
-        );
-        setCsvData(newCsvData);
-        useStore.getState().updateURL(newCsvData);
-        return;
-      }
+      updateQueryState(newState);
+      return;
     }
     
-    const newCsvData = [...csvData, { type: 'action', value: 'votes' }];
-    setCsvData(newCsvData);
-    useStore.getState().updateURL(newCsvData);
+    updateQueryState([...queryState, { type: 'action', value: 'votes' }]);
   };
 
   const handleMentionClick = (mention) => {
-    const { setCsvData, csvData } = useStore.getState();
     const mentionValue = mention.startsWith('@') ? mention.slice(1) : mention;
+    const existingMentions = queryState.filter(item => item.type === 'mention');
     
-    if (csvData.length) {
-      const existingMentions = csvData.filter(item => item.type === 'mention');
-      
-      if (existingMentions.length > 0) {
-        const newCsvData = csvData.map(item => {
-          if (item === existingMentions[existingMentions.length - 1]) {
-            return { type: 'mention', value: mentionValue };
-          }
-          return item;
-        });
-        
-        setCsvData(newCsvData);
-        useStore.getState().updateURL(newCsvData);
-        return;
-      }
+    if (existingMentions.length > 0) {
+      const newState = queryState.map(item => {
+        if (item === existingMentions[existingMentions.length - 1]) {
+          return { type: 'mention', value: mentionValue };
+        }
+        return item;
+      });
+      updateQueryState(newState);
+      return;
     }
     
-    const newCsvData = [...csvData, { type: 'mention', value: mentionValue }];
-    setCsvData(newCsvData);
-    useStore.getState().updateURL(newCsvData);
+    updateQueryState([...queryState, { type: 'mention', value: mentionValue }]);
   };
 
   if (isLoading) return <div>Loading tags...</div>;
@@ -307,7 +306,7 @@ const fetcher = (url) => fetch(url).then(res => res.json());
 
 const HashtagItem = ({ value }) => {
   const { data, error, isLoading } = useSWR("/api/tag", fetcher);
-  const { setCsvData, csvData } = useStore();
+  const { queryState, updateQueryState } = useQueryState();
   
   if (isLoading) return <h1> loading... </h1>;
   if (error) return <h1> error </h1>;
@@ -318,13 +317,11 @@ const HashtagItem = ({ value }) => {
       <div 
         className="bg-yellow-100 w-full h-[100px] p-2 rounded flex items-center justify-center cursor-pointer"
         onClick={() => {
-          const newCsvData = [...csvData, { 
+          updateQueryState([...queryState, { 
             type: 'action', 
             value: 'add',
             addValue: value 
-          }];
-          setCsvData(newCsvData);
-          useStore.getState().updateURL(newCsvData);
+          }]);
         }}
       >
         <span>Missing tag? Click to import new song/album/artist</span>
@@ -379,42 +376,37 @@ const ItemList = ({ items, onItemClick, isSorted }) => (
 );
 
 const GrammarDisplay = () => {
-  const { csvData, results, fetchResults, items_by_id } = useStore();
+  const { queryState, updateQueryState } = useQueryState();
+  const { results, fetchResults, items_by_id } = useStore();
 
   const handleItemClick = (itemId) => {
-    const { setCsvData, csvData } = useStore.getState();
-    
-    const existingItem = csvData.find(item => 
-        item.type === 'action' && 
-        item.value === 'item' && 
-        item.itemId === itemId.toString()
+    const existingItem = queryState.find(item => 
+      item.type === 'action' && 
+      item.value === 'item' && 
+      item.itemId === itemId.toString()
     );
     
     if (existingItem) {
-        const newCsvData = csvData.filter(item => 
-            !(item.type === 'action' && item.value === 'item')
-        );
-        setCsvData(newCsvData);
-        useStore.getState().updateURL(newCsvData);
-        return;
+      const newState = queryState.filter(item => 
+        !(item.type === 'action' && item.value === 'item')
+      );
+      updateQueryState(newState);
+      return;
     }
     
-    const filteredData = csvData.filter(item => 
-        !(item.type === 'action' && item.value === 'item')
+    const filteredState = queryState.filter(item => 
+      !(item.type === 'action' && item.value === 'item')
     );
     
-    const newCsvData = [...filteredData, { 
-        type: 'action', 
-        value: 'item',
-        itemId: itemId.toString()
-    }];
-    
-    setCsvData(newCsvData);
-    useStore.getState().updateURL(newCsvData);
+    updateQueryState([...filteredState, { 
+      type: 'action', 
+      value: 'item',
+      itemId: itemId.toString()
+    }]);
   };
 
-  // Always calculate these regardless of whether we have results
-  const activeCommands = csvData
+  // Calculate active commands from queryState instead of csvData
+  const activeCommands = queryState
     .filter(item => item.type === 'action')
     .map(item => ({
       command: item.value,
@@ -428,7 +420,7 @@ const GrammarDisplay = () => {
   const addCommand = activeCommands.find(cmd => cmd.command === 'add');
   const selectedItem = itemCommand ? items_by_id?.[parseInt(itemCommand.itemId)] : null;
 
-  if (!csvData.length) {
+  if (!queryState.length) {
     return null;
   }
 
