@@ -80,17 +80,24 @@ export const useStore = create((set, get) => ({
 }));
 
 const TagCategories = () => {
-  const { input, setInput, parseInput, csvData, parsedDataToString } = useStore();
+  const { csvData } = useStore();
   const [isExpanded, setIsExpanded] = useState(false);
   const { data, error, isLoading } = useSWR("/api/tag", fetcher);
 
-  useEffect(() => {
-    if (data) {
-      useStore.getState().setTagData(data);
-    }
-  }, [data]);
+  // Get currently selected tags from csvData
+  const selectedTags = csvData.filter(item => item.type === 'hashtag');
+
+  const handleRemoveTag = (tagToRemove) => {
+    const { setCsvData, csvData } = useStore.getState();
+    const newCsvData = csvData.filter(item => 
+      !(item.type === 'hashtag' && item.value === tagToRemove)
+    );
+    setCsvData(newCsvData);
+    useStore.getState().updateURL(newCsvData);
+  };
 
   const handleTagClick = (tag) => {
+    const { setCsvData, csvData } = useStore.getState();
     const tagValue = tag.startsWith('#') ? tag.slice(1) : tag;
     
     if (csvData.length) {
@@ -103,81 +110,71 @@ const TagCategories = () => {
           }
           return item;
         });
-        
-        const newInput = parsedDataToString(newCsvData);
-        setInput(newInput);
-        parseInput(newInput);
+        setCsvData(newCsvData);
+        useStore.getState().updateURL(newCsvData);
         return;
       }
     }
     
-    const newInput = '#' + tagValue;
-    setInput(newInput);
-    parseInput(newInput);
+    const newCsvData = [{ type: 'hashtag', value: tagValue }];
+    setCsvData(newCsvData);
+    useStore.getState().updateURL(newCsvData);
   };
 
   const handleVoteClick = () => {
+    const { setCsvData, csvData } = useStore.getState();
+    
     if (csvData.length) {
-      // Check if !vote already exists
       const hasVote = csvData.some(item => 
         item.type === 'action' && item.value === 'vote'
       );
       
       if (hasVote) {
-        // Remove !vote if it exists
         const newCsvData = csvData.filter(item => 
           !(item.type === 'action' && item.value === 'vote')
         );
-        const newInput = parsedDataToString(newCsvData);
-        setInput(newInput);
-        parseInput(newInput);
+        setCsvData(newCsvData);
+        useStore.getState().updateURL(newCsvData);
         return;
       }
     }
     
-    // Add !vote if it doesn't exist
     const newCsvData = [...csvData, { type: 'action', value: 'vote' }];
-    const newInput = parsedDataToString(newCsvData);
-    setInput(newInput);
-    parseInput(newInput);
+    setCsvData(newCsvData);
+    useStore.getState().updateURL(newCsvData);
   };
 
   const handleVotesClick = () => {
+    const { setCsvData, csvData } = useStore.getState();
+    
     if (csvData.length) {
-      // Check if !votes already exists
       const hasVotes = csvData.some(item => 
         item.type === 'action' && item.value === 'votes'
       );
       
       if (hasVotes) {
-        // Remove !votes if it exists
         const newCsvData = csvData.filter(item => 
           !(item.type === 'action' && item.value === 'votes')
         );
-        const newInput = parsedDataToString(newCsvData);
-        setInput(newInput);
-        parseInput(newInput);
+        setCsvData(newCsvData);
+        useStore.getState().updateURL(newCsvData);
         return;
       }
     }
     
-    // Add !votes if it doesn't exist
     const newCsvData = [...csvData, { type: 'action', value: 'votes' }];
-    const newInput = parsedDataToString(newCsvData);
-    setInput(newInput);
-    parseInput(newInput);
+    setCsvData(newCsvData);
+    useStore.getState().updateURL(newCsvData);
   };
 
   const handleMentionClick = (mention) => {
-    // Remove @ from the mention if present
+    const { setCsvData, csvData } = useStore.getState();
     const mentionValue = mention.startsWith('@') ? mention.slice(1) : mention;
     
     if (csvData.length) {
-      // Check if @mention already exists
       const existingMentions = csvData.filter(item => item.type === 'mention');
       
       if (existingMentions.length > 0) {
-        // Replace the last mention
         const newCsvData = csvData.map(item => {
           if (item === existingMentions[existingMentions.length - 1]) {
             return { type: 'mention', value: mentionValue };
@@ -185,18 +182,15 @@ const TagCategories = () => {
           return item;
         });
         
-        const newInput = parsedDataToString(newCsvData);
-        setInput(newInput);
-        parseInput(newInput);
+        setCsvData(newCsvData);
+        useStore.getState().updateURL(newCsvData);
         return;
       }
     }
     
-    // Add new mention if none exists
     const newCsvData = [...csvData, { type: 'mention', value: mentionValue }];
-    const newInput = parsedDataToString(newCsvData);
-    setInput(newInput);
-    parseInput(newInput);
+    setCsvData(newCsvData);
+    useStore.getState().updateURL(newCsvData);
   };
 
   if (isLoading) return <div>Loading tags...</div>;
@@ -220,20 +214,26 @@ const TagCategories = () => {
           } bg-gray-200 p-4 flex flex-col transition-all duration-300`}>
           <div className="space-y-2">
             {!isExpanded ? (
-              // Collapsed view with hardcoded tags
+              // Show selected tags with remove buttons
               <>
-                <div 
-                  onClick={() => handleTagClick('#songs')} 
-                  className="font-serif text-lg text-left hover:underline cursor-pointer"
-                >#songs</div>
-                <div 
-                  onClick={() => handleTagClick('#albums')} 
-                  className="font-serif text-lg text-left hover:underline cursor-pointer"
-                >#albums</div>
-                <div 
-                  onClick={() => handleTagClick('#artists')} 
-                  className="font-serif text-lg text-left hover:underline cursor-pointer"
-                >#artists</div>
+                {selectedTags.length === 0 ? (
+                  <div className="text-gray-500 italic">No tags selected</div>
+                ) : (
+                  selectedTags.map((tag, index) => (
+                    <div 
+                      key={index}
+                      className="flex justify-between items-center"
+                    >
+                      <span className="font-serif text-lg">#{tag.value}</span>
+                      <button
+                        onClick={() => handleRemoveTag(tag.value)}
+                        className="text-gray-500 hover:text-red-500"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))
+                )}
               </>
             ) : (
               // Expanded view with all tags
@@ -307,7 +307,7 @@ const fetcher = (url) => fetch(url).then(res => res.json());
 
 const HashtagItem = ({ value }) => {
   const { data, error, isLoading } = useSWR("/api/tag", fetcher);
-  const { input, setInput, parseInput } = useStore();
+  const { setCsvData, csvData } = useStore();
   
   if (isLoading) return <h1> loading... </h1>;
   if (error) return <h1> error </h1>;
@@ -318,9 +318,13 @@ const HashtagItem = ({ value }) => {
       <div 
         className="bg-yellow-100 w-full h-[100px] p-2 rounded flex items-center justify-center cursor-pointer"
         onClick={() => {
-          const newInput = '!add(' + value + ')';
-          setInput(newInput);
-          parseInput(newInput);
+          const newCsvData = [...csvData, { 
+            type: 'action', 
+            value: 'add',
+            addValue: value 
+          }];
+          setCsvData(newCsvData);
+          useStore.getState().updateURL(newCsvData);
         }}
       >
         <span>Missing tag? Click to import new song/album/artist</span>
@@ -328,7 +332,7 @@ const HashtagItem = ({ value }) => {
     );
   }
   if (filtered.length === 1 && filtered[0].slug === value) return null;
-  // render filtered as a table
+  
   return (
     <table>
       <tbody className="flex flex-col">
