@@ -103,18 +103,21 @@ const TagCategories = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const { data, error, isLoading } = useSWR("/api/tag", fetcher);
   const [hasInitialized, setHasInitialized] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  // Modified useEffect to only set default tags on first load
+  // Modified useEffect to only set default tags on first mount
   useEffect(() => {
-    if (!hasInitialized && !queryState.length) {
+    if (!hasInitialized && !queryState.length && window.location.search === '') {
       const defaultTags = [
-        { type: 'hashtag', value: 'albums' },
-        { type: 'hashtag', value: 'kendrick-lamar' }
+        { type: 'hashtag', value: 'kendrick-lamar' },
+        { type: 'hashtag', value: 'albums' }
       ];
       updateQueryState(defaultTags);
       setHasInitialized(true);
+    } else if (!hasInitialized) {
+      setHasInitialized(true);
     }
-  }, [queryState.length, updateQueryState, hasInitialized]);
+  }, []);  // Only run on mount
 
   // Get currently selected tags from queryState
   const selectedTags = queryState.filter(item => item.type === 'hashtag');
@@ -128,20 +131,25 @@ const TagCategories = () => {
 
   const handleTagClick = (tag) => {
     const tagValue = tag.startsWith('#') ? tag.slice(1) : tag;
-    const existingHashtags = queryState.filter(item => item.type === 'hashtag');
+    const specialTags = ['songs', 'albums', 'artists'];
     
-    if (existingHashtags.length > 0) {
-      const newState = queryState.map(item => {
-        if (item === existingHashtags[existingHashtags.length - 1]) {
-          return { type: 'hashtag', value: tagValue };
-        }
-        return item;
-      });
-      updateQueryState(newState);
+    // If it's a special tag, replace any existing special tags
+    if (specialTags.includes(tagValue)) {
+      const newState = queryState.filter(item => 
+        !(item.type === 'hashtag' && specialTags.includes(item.value))
+      );
+      updateQueryState([...newState, { type: 'hashtag', value: tagValue }]);
       return;
     }
     
-    updateQueryState([{ type: 'hashtag', value: tagValue }]);
+    // For non-special tags, add to existing tags
+    const hasTag = queryState.some(item => 
+      item.type === 'hashtag' && item.value === tagValue
+    );
+    
+    if (!hasTag) {
+      updateQueryState([...queryState, { type: 'hashtag', value: tagValue }]);
+    }
   };
 
   const handleVoteClick = () => {
@@ -194,6 +202,17 @@ const TagCategories = () => {
     updateQueryState([...queryState, { type: 'mention', value: mentionValue }]);
   };
 
+  // Add new function to handle search
+  const handleSearch = (e) => {
+    const value = e.target.value;
+    setSearchTerm(value);
+    if (value) {
+      setIsExpanded(true);
+    } else {
+      setIsExpanded(false);
+    }
+  };
+
   if (isLoading) return <div>Loading tags...</div>;
   if (error) return <div>Error loading tags</div>;
 
@@ -203,6 +222,11 @@ const TagCategories = () => {
     displaySlug: tag.ns ? `${tag.ns}/${tag.slug}` : tag.slug
   }))
   .sort((a, b) => (b.item_count || 0) - (a.item_count || 0)) || [];
+
+  // Filter tags based on search term
+  const filteredTags = flattenedTags?.filter(tag => 
+    tag.displaySlug.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="flex flex-col md:flex-row max-w-[200px] md:max-w-none gap-0 justify-start">
@@ -235,13 +259,33 @@ const TagCategories = () => {
       {/* Middle panel - All Tags */}
       <div className={`${
         isExpanded 
-          ? 'w-[600px] h-[400px] overflow-y-auto' 
+          ? 'w-[600px] h-[400px]' 
           : 'w-[200px] h-[200px]'
-        } bg-red-200 p-4 flex flex-col transition-all duration-300`}>
-        <div className="space-y-2">
-          {!isExpanded ? (
-            <div className="grid grid-cols-1 gap-2">
-              {flattenedTags.slice(0, 5).map(tag => (
+        } bg-red-300 p-0 flex flex-col transition-all duration-300`}>
+        <div className="flex items-center bg-red-200">
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={handleSearch}
+            placeholder=""
+            className="flex-1 p-2 bg-red-200 focus:outline-none focus:border-red-500"
+          />
+          {isExpanded && (
+            <button
+              onClick={() => {
+                setIsExpanded(false);
+                setSearchTerm('');
+              }}
+              className="p-2 font-serif text-lg text-gray-600 hover:underline cursor-pointer"
+            >
+              less...
+            </button>
+          )}
+        </div>
+        <div className="space-y-2 overflow-y-auto p-4">
+          {isExpanded ? (
+            <div className="grid grid-cols-2 gap-2">
+              {filteredTags.map(tag => (
                 <div
                   key={tag.id}
                   onClick={() => handleTagClick('#' + tag.slug)}
@@ -255,27 +299,36 @@ const TagCategories = () => {
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-2">
-              {flattenedTags.map(tag => (
-                <div
-                  key={tag.id}
-                  onClick={() => handleTagClick('#' + tag.slug)}
-                  className="font-serif text-md text-left hover:underline cursor-pointer"
-                >
-                  #{tag.displaySlug}
-                  <span className="text-sm text-gray-500 ml-2">
-                    ({tag.item_count || 0})
-                  </span>
-                </div>
-              ))}
+            <div className="flex flex-col gap-2">
+              <div
+                onClick={() => handleTagClick('songs')}
+                className="font-serif text-lg text-left hover:underline cursor-pointer"
+              >
+                #songs
+              </div>
+              <div
+                onClick={() => handleTagClick('albums')}
+                className="font-serif text-lg text-left hover:underline cursor-pointer"
+              >
+                #albums
+              </div>
+              <div
+                onClick={() => handleTagClick('artists')}
+                className="font-serif text-lg text-left hover:underline cursor-pointer"
+              >
+                #artists
+              </div>
+              <button
+                onClick={() => {
+                  setIsExpanded(!isExpanded);
+                  setSearchTerm('');
+                }}
+                className="font-serif text-lg text-left hover:underline cursor-pointer text-gray-600"
+              >
+                {isExpanded ? 'less...' : 'more...'}
+              </button>
             </div>
           )}
-          <div 
-            onClick={() => setIsExpanded(!isExpanded)} 
-            className="font-serif text-lg text-gray-500 text-left hover:underline cursor-pointer"
-          >
-            {isExpanded ? 'less...' : 'more...'}
-          </div>
         </div>
       </div>
 
@@ -376,29 +429,50 @@ const GrammarDisplay = () => {
   const { results, fetchResults, items_by_id } = useStore();
 
   const handleItemClick = (itemId) => {
-    const existingItem = queryState.find(item => 
-      item.type === 'action' && 
-      item.value === 'item' && 
-      item.itemId === itemId.toString()
-    );
+    const item = items_by_id[itemId];
+    if (!item) return;
+
+    // Add the item's tag to queryState
+    const itemTag = { type: 'hashtag', value: item.slug };
     
-    if (existingItem) {
-      const newState = queryState.filter(item => 
-        !(item.type === 'action' && item.value === 'item')
+    // Check if we already have this tag
+    const hasTag = queryState.some(q => 
+      q.type === 'hashtag' && q.value === item.slug
+    );
+
+    if (hasTag) {
+      // If we already have this tag, just toggle the item panel
+      const existingItem = queryState.find(item => 
+        item.type === 'action' && 
+        item.value === 'item' && 
+        item.itemId === itemId.toString()
       );
-      updateQueryState(newState);
+      
+      if (existingItem) {
+        const newState = queryState.filter(item => 
+          !(item.type === 'action' && item.value === 'item')
+        );
+        updateQueryState(newState);
+      } else {
+        const filteredState = queryState.filter(item => 
+          !(item.type === 'action' && item.value === 'item')
+        );
+        updateQueryState([...filteredState, { 
+          type: 'action', 
+          value: 'item',
+          itemId: itemId.toString()
+        }]);
+      }
       return;
     }
-    
-    const filteredState = queryState.filter(item => 
-      !(item.type === 'action' && item.value === 'item')
-    );
-    
-    updateQueryState([...filteredState, { 
+
+    // Add the new tag and toggle item panel
+    const newState = [...queryState, itemTag, { 
       type: 'action', 
       value: 'item',
       itemId: itemId.toString()
-    }]);
+    }];
+    updateQueryState(newState);
   };
 
   // Calculate active commands from queryState instead of csvData
