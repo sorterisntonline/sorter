@@ -48,7 +48,7 @@ jobs:
         id: check_rust
         run: |
           git fetch origin ${{ env.BRANCH }}
-          RUST_CHANGED=$(git diff --name-only origin/${{ env.BRANCH }}...HEAD | grep "^rustsorter/" || echo "")
+          RUST_CHANGED=$(git diff --name-only HEAD^...HEAD | grep "^rustsorter/" || echo "")
           COMMIT_MSG=$(git log -1 --pretty=%B)
           # Check for force build flags first (case insensitive)
           if echo "$COMMIT_MSG" | grep -iE "(force-build-rust|forcebuild-rust|force-build|forcebuild)" > /dev/null; then
@@ -69,8 +69,7 @@ jobs:
         run: |
           git fetch origin ${{ env.BRANCH }}
           echo "Checking for changes in borter components..."
-          git diff --name-only --diff-filter=ACDMRT HEAD^...HEAD
-          BORT_CHANGED=$(git diff --name-only --diff-filter=ACDMRT HEAD^...HEAD | grep -E "^(borter|forter|clisorter|public)/" || echo "")
+          BORT_CHANGED=$(git diff --name-only HEAD^...HEAD | grep -E "^(borter|forter|clisorter|public)/" || echo "")
           echo "Changes detected: $BORT_CHANGED"
           COMMIT_MSG=$(git log -1 --pretty=%B)
           # Check for force build flags first (case insensitive)
