@@ -14,8 +14,17 @@ on:
         options:
           - production
           - staging
-          - development
         default: 'staging'
+      build_borter:
+        description: 'Build borter'
+        required: true
+        type: boolean
+        default: true
+      build_rustsorter:
+        description: 'Build rustsorter'
+        required: true
+        type: boolean
+        default: true
 
 # Add concurrency group configuration
 concurrency:
@@ -47,45 +56,60 @@ jobs:
       - name: Check rustsorter changes
         id: check_rust
         run: |
-          git fetch origin ${{ env.BRANCH }}
-          # Get the latest commit on the branch before the current one
-          PREVIOUS_COMMIT=$(git rev-parse origin/${{ env.BRANCH }}^)
-          RUST_CHANGED=$(git diff --name-only $PREVIOUS_COMMIT HEAD | grep "^rustsorter/" || echo "")
-          COMMIT_MSG=$(git log -1 --pretty=%B)
-          # Check for force build flags first (case insensitive)
-          if echo "$COMMIT_MSG" | grep -iE "(force-build-rust|forcebuild-rust|force-build|forcebuild)" > /dev/null; then
-            echo "skip_rust=false" >> $GITHUB_OUTPUT
-          # Then check for skip flags (case insensitive)
-          elif echo "$COMMIT_MSG" | grep -iE "(skip.?rust|skiprust)" > /dev/null; then
-            echo "skip_rust=true" >> $GITHUB_OUTPUT
-          # Finally check for actual changes
-          elif [ -z "$RUST_CHANGED" ]; then
-            echo "skip_rust=true" >> $GITHUB_OUTPUT
+          # If this is a workflow dispatch, respect only the input setting
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ inputs.build_rustsorter }}" = "true" ]; then
+              echo "skip_rust=false" >> $GITHUB_OUTPUT
+            else
+              echo "skip_rust=true" >> $GITHUB_OUTPUT
+            fi
           else
-            echo "skip_rust=false" >> $GITHUB_OUTPUT
+            # Normal push-triggered behavior
+            git fetch origin ${{ env.BRANCH }}
+            PREVIOUS_COMMIT=$(git rev-parse origin/${{ env.BRANCH }}^)
+            RUST_CHANGED=$(git diff --name-only $PREVIOUS_COMMIT HEAD | grep "^rustsorter/" || echo "")
+            COMMIT_MSG=$(git log -1 --pretty=%B)
+            
+            if echo "$COMMIT_MSG" | grep -iE "(force-build-rust|forcebuild-rust|force-build|forcebuild)" > /dev/null; then
+              echo "skip_rust=false" >> $GITHUB_OUTPUT
+            elif echo "$COMMIT_MSG" | grep -iE "(skip.?rust|skiprust)" > /dev/null; then
+              echo "skip_rust=true" >> $GITHUB_OUTPUT
+            elif [ -z "$RUST_CHANGED" ]; then
+              echo "skip_rust=true" >> $GITHUB_OUTPUT
+            else
+              echo "skip_rust=false" >> $GITHUB_OUTPUT
+            fi
           fi
 
       # Check borter/forter/clisorter changes
       - name: Check borter changes
         id: check_bort
         run: |
-          git fetch origin ${{ env.BRANCH }}
-          echo "Checking for changes in borter components..."
-          PREVIOUS_COMMIT=$(git rev-parse origin/${{ env.BRANCH }}^)
-          BORT_CHANGED=$(git diff --name-only $PREVIOUS_COMMIT HEAD | grep -E "^(borter|forter|clisorter|public)/" || echo "")
-          echo "Changes detected: $BORT_CHANGED"
-          COMMIT_MSG=$(git log -1 --pretty=%B)
-          # Check for force build flags first (case insensitive)
-          if echo "$COMMIT_MSG" | grep -iE "(force-build-bort|forcebuild-bort|force-build|forcebuild)" > /dev/null; then
-            echo "skip_bort=false" >> $GITHUB_OUTPUT
-          # Then check for skip flags (case insensitive)
-          elif echo "$COMMIT_MSG" | grep -iE "(skip.?bort|skipbort)" > /dev/null; then
-            echo "skip_bort=true" >> $GITHUB_OUTPUT
-          # Finally check for actual changes
-          elif [ -z "$BORT_CHANGED" ]; then
-            echo "skip_bort=true" >> $GITHUB_OUTPUT
+          # If this is a workflow dispatch, respect only the input setting
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ inputs.build_borter }}" = "true" ]; then
+              echo "skip_bort=false" >> $GITHUB_OUTPUT
+            else
+              echo "skip_bort=true" >> $GITHUB_OUTPUT
+            fi
           else
-            echo "skip_bort=false" >> $GITHUB_OUTPUT
+            # Normal push-triggered behavior
+            git fetch origin ${{ env.BRANCH }}
+            echo "Checking for changes in borter components..."
+            PREVIOUS_COMMIT=$(git rev-parse origin/${{ env.BRANCH }}^)
+            BORT_CHANGED=$(git diff --name-only $PREVIOUS_COMMIT HEAD | grep -E "^(borter|forter|clisorter|public)/" || echo "")
+            echo "Changes detected: $BORT_CHANGED"
+            COMMIT_MSG=$(git log -1 --pretty=%B)
+            
+            if echo "$COMMIT_MSG" | grep -iE "(force-build-bort|forcebuild-bort|force-build|forcebuild)" > /dev/null; then
+              echo "skip_bort=false" >> $GITHUB_OUTPUT
+            elif echo "$COMMIT_MSG" | grep -iE "(skip.?bort|skipbort)" > /dev/null; then
+              echo "skip_bort=true" >> $GITHUB_OUTPUT
+            elif [ -z "$BORT_CHANGED" ]; then
+              echo "skip_bort=true" >> $GITHUB_OUTPUT
+            else
+              echo "skip_bort=false" >> $GITHUB_OUTPUT
+            fi
           fi
 
       # Step 2: Set up Git user for tagging
@@ -356,18 +380,40 @@ jobs:
             sudo chown deployer:deployer /home/deployer/live/borter
             sudo chown deployer:deployer /home/deployer/live/rustsorter
 
-            # Update symlinks after successful builds
+            # Update symlinks - if we didn't build a component, link to its most recent backup
+            echo -e "\033[3mUpdating live symlinks...\033[0m"
+            
+            # Handle borter symlinks
             if [[ "${{ steps.check_bort.outputs.skip_bort }}" != "true" ]]; then
+              echo "Linking newly built borter jar..."
               ln -sf ~/sorter/borter/target/sorter-*-standalone.jar /home/deployer/live/borter/sorter.jar
+            else
+              echo "Linking most recent borter backup..."
+              LATEST_BORTER=$(ls -t /home/deployer/backups/borter/borter-*.jar | head -n1)
+              if [ ! -z "$LATEST_BORTER" ]; then
+                ln -sf "$LATEST_BORTER" /home/deployer/live/borter/sorter.jar
+              else
+                echo "WARNING: No borter backup found!"
+              fi
             fi
 
+            # Handle rustsorter symlinks
             if [[ "${{ steps.check_rust.outputs.skip_rust }}" != "true" ]]; then
+              echo "Linking newly built rustsorter..."
               rm -f /home/deployer/live/rustsorter/current
               ln -sf ~/sorter/rustsorter/target/${{ env.BUILD_MODE == 'prod' && 'release' || 'staging' }} /home/deployer/live/rustsorter/current
+            else
+              echo "Linking most recent rustsorter backup..."
+              LATEST_RUST=$(ls -t /home/deployer/backups/rustsorter | head -n1)
+              if [ ! -z "$LATEST_RUST" ]; then
+                rm -f /home/deployer/live/rustsorter/current
+                ln -sf "/home/deployer/backups/rustsorter/$LATEST_RUST" /home/deployer/live/rustsorter/current
+              else
+                echo "WARNING: No rustsorter backup found!"
+              fi
             fi
 
             # Restart services
-            # TODO: moved these here so we have time to set live and shit
             echo -e "\033[3mRestarting borter...\033[0m"
             sudo systemctl restart borter.service
             echo -e "\033[3mRestarting rustsorter...\033[0m"
