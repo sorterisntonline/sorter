@@ -484,8 +484,6 @@ const GrammarDisplay = () => {
   const selectedItem = selectedItemId ? items_by_id[parseInt(selectedItemId)] : null;
 
   // Get active commands (vote/votes)
-  const voteCommand = queryState.some(q => q.type === 'action' && q.value === 'vote');
-  const votesCommand = queryState.some(q => q.type === 'action' && q.value === 'votes');
   const addCommand = queryState.some(q => q.type === 'action' && q.value === 'add');
 
   if (!queryState.length) {
@@ -493,22 +491,28 @@ const GrammarDisplay = () => {
   }
 
   return (
-    <div className="mt-4">
-      {voteCommand && (
-        <div className="w-[800px] bg-purple-100 m-4">
-          <VotePanel mutate={fetchResults} />
-        </div>
+
+    <div className="mt-4 flex flex-col items-center">
+
+      {results && (
+        <>
+          <div className="w-[800px] bg-purple-100 m-4">
+            <VotePanel mutate={fetchResults} />
+          </div>
+          <div className="w-[800px] bg-purple-100 m-4">
+            <VotesPanel votes={results?.votes} mutate={fetchResults} />
+          </div>
+        </>
       )}
 
-      {votesCommand && (
-        <div className="w-[800px] bg-purple-100 m-4">
-          <VotesPanel votes={results?.votes} mutate={fetchResults} />
-        </div>
-      )}
-
-      <div className="flex justify-center">
+      <div className="w-[800px] m-4 flex">
+        {selectedItem && (
+          <div className="w-[400px] bg-red-100">
+            <ItemPanel item={selectedItem} mutate={fetchResults} />
+          </div>
+        )}
         {results && (
-          <div className={`${selectedItem ? 'w-[500px]' : 'w-[800px]'} mx-auto`}>
+          <div className={selectedItem ? 'ml-6' : 'w-[800px]'}>
             {results.unsorted?.length > 0 && (
               <div className="mb-8">
                 <ItemList 
@@ -528,12 +532,6 @@ const GrammarDisplay = () => {
                 />
               </div>
             )}
-          </div>
-        )}
-
-        {selectedItem && (
-          <div className="w-[300px] bg-red-100">
-            <ItemPanel item={selectedItem} mutate={fetchResults} />
           </div>
         )}
       </div>
