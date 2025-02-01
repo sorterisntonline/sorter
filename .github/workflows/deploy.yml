@@ -15,16 +15,16 @@ on:
           - production
           - staging
         default: 'staging'
-      force_build_borter:
-        description: 'Force build borter'
-        required: false
+      build_borter:
+        description: 'Build borter'
+        required: true
         type: boolean
-        default: false
-      force_build_rustsorter:
-        description: 'Force build rustsorter'
-        required: false
+        default: true
+      build_rustsorter:
+        description: 'Build rustsorter'
+        required: true
         type: boolean
-        default: false
+        default: true
 
 # Add concurrency group configuration
 concurrency:
@@ -56,51 +56,60 @@ jobs:
       - name: Check rustsorter changes
         id: check_rust
         run: |
-          git fetch origin ${{ env.BRANCH }}
-          # Get the latest commit on the branch before the current one
-          PREVIOUS_COMMIT=$(git rev-parse origin/${{ env.BRANCH }}^)
-          RUST_CHANGED=$(git diff --name-only $PREVIOUS_COMMIT HEAD | grep "^rustsorter/" || echo "")
-          COMMIT_MSG=$(git log -1 --pretty=%B)
-          # Check workflow_dispatch force build first
-          if [ "${{ github.event_name == 'workflow_dispatch' && inputs.force_build_rustsorter == 'true' }}" = "true" ]; then
-            echo "skip_rust=false" >> $GITHUB_OUTPUT
-          # Then check for force build flags in commit (case insensitive)
-          elif echo "$COMMIT_MSG" | grep -iE "(force-build-rust|forcebuild-rust|force-build|forcebuild)" > /dev/null; then
-            echo "skip_rust=false" >> $GITHUB_OUTPUT
-          # Then check for skip flags (case insensitive)
-          elif echo "$COMMIT_MSG" | grep -iE "(skip.?rust|skiprust)" > /dev/null; then
-            echo "skip_rust=true" >> $GITHUB_OUTPUT
-          # Finally check for actual changes
-          elif [ -z "$RUST_CHANGED" ]; then
-            echo "skip_rust=true" >> $GITHUB_OUTPUT
+          # If this is a workflow dispatch, respect only the input setting
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ inputs.build_rustsorter }}" = "true" ]; then
+              echo "skip_rust=false" >> $GITHUB_OUTPUT
+            else
+              echo "skip_rust=true" >> $GITHUB_OUTPUT
+            fi
           else
-            echo "skip_rust=false" >> $GITHUB_OUTPUT
+            # Normal push-triggered behavior
+            git fetch origin ${{ env.BRANCH }}
+            PREVIOUS_COMMIT=$(git rev-parse origin/${{ env.BRANCH }}^)
+            RUST_CHANGED=$(git diff --name-only $PREVIOUS_COMMIT HEAD | grep "^rustsorter/" || echo "")
+            COMMIT_MSG=$(git log -1 --pretty=%B)
+            
+            if echo "$COMMIT_MSG" | grep -iE "(force-build-rust|forcebuild-rust|force-build|forcebuild)" > /dev/null; then
+              echo "skip_rust=false" >> $GITHUB_OUTPUT
+            elif echo "$COMMIT_MSG" | grep -iE "(skip.?rust|skiprust)" > /dev/null; then
+              echo "skip_rust=true" >> $GITHUB_OUTPUT
+            elif [ -z "$RUST_CHANGED" ]; then
+              echo "skip_rust=true" >> $GITHUB_OUTPUT
+            else
+              echo "skip_rust=false" >> $GITHUB_OUTPUT
+            fi
           fi
 
       # Check borter/forter/clisorter changes
       - name: Check borter changes
         id: check_bort
         run: |
-          git fetch origin ${{ env.BRANCH }}
-          echo "Checking for changes in borter components..."
-          PREVIOUS_COMMIT=$(git rev-parse origin/${{ env.BRANCH }}^)
-          BORT_CHANGED=$(git diff --name-only $PREVIOUS_COMMIT HEAD | grep -E "^(borter|forter|clisorter|public)/" || echo "")
-          echo "Changes detected: $BORT_CHANGED"
-          COMMIT_MSG=$(git log -1 --pretty=%B)
-          # Check workflow_dispatch force build first
-          if [ "${{ github.event_name == 'workflow_dispatch' && inputs.force_build_borter == 'true' }}" = "true" ]; then
-            echo "skip_bort=false" >> $GITHUB_OUTPUT
-          # Then check for force build flags in commit (case insensitive)
-          elif echo "$COMMIT_MSG" | grep -iE "(force-build-bort|forcebuild-bort|force-build|forcebuild)" > /dev/null; then
-            echo "skip_bort=false" >> $GITHUB_OUTPUT
-          # Then check for skip flags (case insensitive)
-          elif echo "$COMMIT_MSG" | grep -iE "(skip.?bort|skipbort)" > /dev/null; then
-            echo "skip_bort=true" >> $GITHUB_OUTPUT
-          # Finally check for actual changes
-          elif [ -z "$BORT_CHANGED" ]; then
-            echo "skip_bort=true" >> $GITHUB_OUTPUT
+          # If this is a workflow dispatch, respect only the input setting
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ inputs.build_borter }}" = "true" ]; then
+              echo "skip_bort=false" >> $GITHUB_OUTPUT
+            else
+              echo "skip_bort=true" >> $GITHUB_OUTPUT
+            fi
           else
-            echo "skip_bort=false" >> $GITHUB_OUTPUT
+            # Normal push-triggered behavior
+            git fetch origin ${{ env.BRANCH }}
+            echo "Checking for changes in borter components..."
+            PREVIOUS_COMMIT=$(git rev-parse origin/${{ env.BRANCH }}^)
+            BORT_CHANGED=$(git diff --name-only $PREVIOUS_COMMIT HEAD | grep -E "^(borter|forter|clisorter|public)/" || echo "")
+            echo "Changes detected: $BORT_CHANGED"
+            COMMIT_MSG=$(git log -1 --pretty=%B)
+            
+            if echo "$COMMIT_MSG" | grep -iE "(force-build-bort|forcebuild-bort|force-build|forcebuild)" > /dev/null; then
+              echo "skip_bort=false" >> $GITHUB_OUTPUT
+            elif echo "$COMMIT_MSG" | grep -iE "(skip.?bort|skipbort)" > /dev/null; then
+              echo "skip_bort=true" >> $GITHUB_OUTPUT
+            elif [ -z "$BORT_CHANGED" ]; then
+              echo "skip_bort=true" >> $GITHUB_OUTPUT
+            else
+              echo "skip_bort=false" >> $GITHUB_OUTPUT
+            fi
           fi
 
       # Step 2: Set up Git user for tagging
