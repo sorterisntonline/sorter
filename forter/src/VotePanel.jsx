@@ -25,7 +25,7 @@ export const VotePanel = ({ handleError }) => {
     );
 
   if (tag.value.pair[0] == null || tag.value.pair[1] == null) {
-    return "no pair";
+    return <div>no pair</div>;
   }
 
   const left = tag.value.pair[0];

@@ -88,21 +88,11 @@ pub fn page_rank(graph: &DirectedCsrGraph<i32, (), i32>) -> Vec<f32> {
     }
 
     let mut scores = vec![init_score; node_count as usize];
-    let mut prev_scores: Vec<f32>;
-    let convergence_threshold = 1e-5;  // Adjust this value as needed
-
-    loop {
-        prev_scores = scores.clone();
+    
+    // Run exactly 100 iterations
+    for _ in 0..100 {
         page_rank_iteration(graph, &mut scores, &out_degrees, max_out_degree);
-
-        // Check for convergence
-        let max_diff = prev_scores.iter()
-            .zip(scores.iter())
-            .map(|(prev, curr)| (prev - curr).abs())
-            .fold(0.0, f32::max);
-
-        if max_diff < convergence_threshold {
-            return scores;
-        }
     }
+
+    scores
 }

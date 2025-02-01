@@ -28,27 +28,28 @@ const buildQueryParams = ({ tagid }) => {
   }
 
   const currentUrl = new URL(window.location.href);
-  const addition =
-    urlForHistory.toString() === "" ? "" : "?" + urlForHistory.toString();
+  const addition = urlForHistory.toString() === "" ? "" : "?" + urlForHistory.toString();
   const newUrl = currentUrl.origin + currentUrl.pathname + addition;
-  window.history.replaceState({}, "", newUrl);
+  
+  // Add preventScroll option
+  window.history.replaceState({}, "", newUrl, { preventScroll: true });
 
   return url;
 };
 
 export const loadTag = async (id) => {
-  // add tagid to query params
   console.log("loadTag", {id});
 
   if (tag.value) {
     id = id || tag.value.tag["id"];
   }
 
-  if (!id && !namespace.value) return; // called sometimes from profile page when no tag is loaded
+  if (!id && !namespace.value) return;
 
   const url = buildQueryParams({ tagid: id });
 
   try {
+    window.scrollTo(0, 0);  // Force scroll to top before loading
     const res = await fetch("/api/tag/page?" + url.toString(), {
       credentials: "include",
     });

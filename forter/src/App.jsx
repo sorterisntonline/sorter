@@ -12,6 +12,7 @@ import { loadTag } from "./Network";
 import { Modal } from "./Modal";
 import WarningPopup from './WarningPopup';
 import { MetaTags } from "./MetaTags";
+import AnnouncementBar, { showAnnouncement } from './AnnouncementBar';
 
 export const useElo = signal(false);
 export const tag = signal(false);
@@ -61,8 +62,8 @@ effect(() => {
   const url = new URLSearchParams(window.location.search);
   if (selected_item.value) {
     url.set("item", selected_item.value["id"]);
+    window.history.replaceState({}, "", window.location.pathname + "?" + url.toString(), { preventScroll: true });
   }
-  window.history.replaceState({}, "", window.location.pathname + "?" + url.toString());
 })
 
 const truncateText = (text, length) => {
@@ -88,6 +89,7 @@ export const Item = ({ item }) => {
   return (
     <>
       <li
+        id={`item-${item.id}`}
         className={
           `cursor-pointer text-left border-b border-dashed ml-4 border-gray-200 dark:border-gray-800 dark:hover:border-gray-200 ` +
           (item === selected_item.value ? "bg-gray-300 dark:bg-gray-700" : "")
@@ -215,6 +217,9 @@ const TextSummary = ({ can_vote, can_add }) => {
 export const toggle = signal(true);
 export const showPin = signal(false);
 
+export const showAllSorted = signal(true);
+export const showAllUnsorted = signal(true);
+
 export const Tag = ({ showVote, isVoting, handleError }) => {
   const sorteditems = tag.value["sorted"];
   const unsorteditems = tag.value["unsorted"];
@@ -232,39 +237,67 @@ export const Tag = ({ showVote, isVoting, handleError }) => {
     return <div> you do not have permission to view this tag </div>;
   }
 
-  const sortedtable = (
-    <div>
+  const SortedList = ({ items, showAll, setShowAll }) => {
+    const displayCount = 25;
+    const hasMore = items?.length > displayCount;
+    const displayItems = !showAll && hasMore ? items?.slice(0, displayCount) : items;
+
+    return (
       <div>
         <div>
-          <div colSpan="2">sorted items</div>
+          <div>
+            <div colSpan="2">sorted items</div>
+          </div>
         </div>
-      </div>
-      <ol className="list-decimal">
-        {sorteditems?.map((item) => (
-          <Item key={item["id"]} item={item} />
-        )) ?? [
+        <ol className="list-decimal">
+          {displayItems?.map((item) => (
+            <Item key={item["id"]} item={item} />
+          )) ?? [
             <div key="2">
               <div>no items </div>
             </div>,
           ]}
-      </ol>
-    </div>
-  );
+        </ol>
+        {hasMore && (
+          <button 
+            onClick={() => setShowAll(!showAll)}
+            className="w-full text-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+          >
+            {showAll ? '[show less]' : '[show more]'}
+          </button>
+        )}
+      </div>
+    );
+  };
 
-  const unsortedtable = (
-    <div>
+  const UnsortedList = ({ items, showAll, setShowAll }) => {
+    const displayCount = 25;
+    const hasMore = items?.length > displayCount;
+    const displayItems = !showAll && hasMore ? items?.slice(0, displayCount) : items;
+
+    return (
       <div>
         <div>
-          <div colSpan="2">unsorted items</div>
+          <div>
+            <div colSpan="2">unsorted items</div>
+          </div>
         </div>
+        <ol className="list-disc ml-3">
+          {displayItems?.map((item) => (
+            <Item key={item["id"]} item={item} />
+          )) ?? [<tr key="2"></tr>]}
+        </ol>
+        {hasMore && (
+          <button 
+            onClick={() => setShowAll(!showAll)}
+            className="w-full text-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+          >
+            {showAll ? '[show less]' : '[show more]'}
+          </button>
+        )}
       </div>
-      <ol className="list-disc ml-3">
-        {unsorteditems?.map((item) => (
-          <Item key={item["id"]} item={item} />
-        )) ?? [<tr key="2"></tr>]}
-      </ol>
-    </div>
-  );
+    );
+  };
 
   const skippedTable = (
     <div>
@@ -282,10 +315,28 @@ export const Tag = ({ showVote, isVoting, handleError }) => {
   );
 
   const votesList = (
-    <div className={" flex flex-col p-3 " + (toggle.value ? "lg:w-2/3" : "lg:w-1/3")}>
-      {unsorteditems?.length > 0 ? unsortedtable : <></>}
-      {sortedtable}
-      {tag.value.skipped.length > 0 ? skippedTable : <></>}
+    <div className={" p-3 " + (toggle.value ? "lg:w-2/3" : "lg:w-1/3")}>
+      <div className="lg:flex lg:space-x-4">
+        {sorteditems?.length > 0 && (
+          <div className={unsorteditems?.length > 0 ? "lg:w-1/2" : "lg:w-full"}>
+            <SortedList 
+              items={sorteditems} 
+              showAll={showAllSorted.value} 
+              setShowAll={(val) => showAllSorted.value = val} 
+            />
+          </div>
+        )}
+        {unsorteditems?.length > 0 && (
+          <div className={sorteditems?.length > 0 ? "lg:w-1/2" : "lg:w-full"}>
+            <UnsortedList 
+              items={unsorteditems} 
+              showAll={showAllUnsorted.value} 
+              setShowAll={(val) => showAllUnsorted.value = val} 
+            />
+          </div>
+        )}
+      </div>
+      {tag.value.skipped?.length > 0 ? skippedTable : null}
     </div>
   );
 
@@ -382,8 +433,10 @@ export const Tag = ({ showVote, isVoting, handleError }) => {
               </div>
 
             </div>
-            <div className={"p-3 " + (toggle.value ? "lg:w-1/3" : "lg:w-2/3")}>
-              <ItemPanel />
+            <div className={"p-3 " + (toggle.value ? "lg:w-1/4" : "lg:w-2/3")}>
+                <div className="sticky top-0 z-10">
+                    <ItemPanel />
+                </div>
             </div>
           </div >
         </div >
@@ -396,6 +449,8 @@ export const Tag = ({ showVote, isVoting, handleError }) => {
 function App({ tagid, isVoting }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [initialLoad, setInitialLoad] = useState(true);
+  const [location] = useLocation();
 
   const handleError = (error) => {
     console.log("handler called");
@@ -406,19 +461,52 @@ function App({ tagid, isVoting }) {
   };
 
   useEffect(() => {
+    // Clear selected item on initial load unless there's an item parameter
+    const params = new URLSearchParams(window.location.search);
+    const itemId = params.get('item');
+    if (!itemId) {
+      selected_item.value = null;
+    }
     loadTag(tagid);
   }, []);
+
+  useEffect(() => {
+    // Only scroll if it's the initial load with an item parameter
+    const params = new URLSearchParams(window.location.search);
+    const itemId = params.get('item');
+    if (selected_item.value && initialLoad && itemId) {
+      const element = document.getElementById(`item-${selected_item.value.id}`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+    setInitialLoad(false);
+
+    // TODO: decide if we want this 
+    /* Original auto-scrolling behavior (scrolls on every item selection):
+    if (selected_item.value) {
+      const element = document.getElementById(`item-${selected_item.value.id}`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+    */
+  }, [selected_item.value]);
+
   return (
-    <>
-      {tag.value && <Tag isVoting={isVoting} handleError={handleError}/>}
-      <ErrorPanel />
-      <WarningPopup isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
-        <div className="p-4">
-          <h2 className="text-lg font-bold">login required</h2>
-          <p>{errorMessage}</p>
-        </div>
-      </WarningPopup>
-    </>
+    <div className="min-h-screen flex flex-col">
+      <AnnouncementBar />
+      <div className="flex-1">
+        {tag.value && <Tag isVoting={isVoting} handleError={handleError}/>}
+        <ErrorPanel />
+        <WarningPopup isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
+          <div className="p-4">
+            <h2 className="text-lg font-bold">login required</h2>
+            <p>{errorMessage}</p>
+          </div>
+        </WarningPopup>
+      </div>
+    </div>
   );
 }
 
