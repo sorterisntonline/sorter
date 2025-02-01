@@ -137,6 +137,7 @@ export const SingleTag = ({ tagg }) => {
   return (
     <div
       onClick={() => {
+        window.scrollTo(0, 0);  // Force scroll to top before navigation
         navigate("/" + tagg.id + "/" + tagg.slug);
       }}
       key={tagg.d}
@@ -170,8 +171,8 @@ export const TagList = () => {
   const [location, navigate] = useLocation();
   const [search, setSearch] = useState("");
 
-  if (isLoading) return <h1> loading... </h1>;
-  if (error) return <h1> error </h1>;
+  if (isLoading) return <h1 className="pt-4"> loading... </h1>;
+  if (error) return <h1 className="pt-4"> error </h1>;
 
   const sortedArray = data.public.sort(
     (a, b) => b.item_count + b.vote_count - (a.item_count + a.vote_count)
@@ -198,7 +199,7 @@ export const TagList = () => {
   }
 
   return (
-    <div className="flex flex-col py-3">
+    <div className="flex flex-col pt-4">
       <div className="dark:text-white flex">
         <TagButton mutate={mutate} />
         <Spotify refreshFrontpage={mutate} />

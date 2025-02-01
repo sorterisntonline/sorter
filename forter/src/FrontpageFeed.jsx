@@ -154,7 +154,7 @@ export const FrontpageFeed = () => {
     const addDay = () => setDays(prev => [...prev, prev.length]);
 
     return (
-        <div>
+        <div className="pt-4">
             {days.map((day) => (
                 <FrontpageFeedDay
                     key={day}
@@ -174,7 +174,6 @@ export const FrontpageFeed = () => {
             )}
             <button className="border-2 border-gray-500 dark:text-white"
                 onClick={addDay}>load more</button>
-
         </div>
     );
 };

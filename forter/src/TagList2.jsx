@@ -289,7 +289,7 @@ export const TagList2 = () => {
   );
 
   return (
-    <div className="flex flex-col py-3">
+    <div className="flex flex-col pt-4">
       <div className="dark:text-white flex">
         <TagButton mutate={mutate} />
         <Spotify refreshFrontpage={mutate} />

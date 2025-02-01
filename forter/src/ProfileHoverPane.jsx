@@ -40,16 +40,16 @@ export const ProfileHoverPane = ({ onClose }) => {
 
         {/* Buttons */}
         <button
-          className="w-full text-left py-2 px-4 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-          onClick={() => handleNavigation("/settings")}
+          className="w-full text-left py-2 px-4 rounded text-gray-400 dark:text-gray-500 cursor-not-allowed"
+          disabled
         >
-          settings
+          settings (coming soon)
         </button>
         <button
-          className="w-full text-left py-2 px-4 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-          onClick={() => handleNavigation("/groups")}
+          className="w-full text-left py-2 px-4 rounded text-gray-400 dark:text-gray-500 cursor-not-allowed"
+          disabled
         >
-          groups
+          groups (coming soon)
         </button>
         <button
           className="w-full text-left py-2 px-4 rounded text-red-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors mt-2"
