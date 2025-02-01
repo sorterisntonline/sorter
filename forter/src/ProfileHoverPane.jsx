@@ -30,9 +30,10 @@ export const ProfileHoverPane = ({ onClose }) => {
         <div 
           className="w-16 h-16 rounded-full mb-4 bg-gray-200 dark:bg-gray-700 overflow-hidden cursor-pointer"
           onClick={() => handleNavigation("/profile")}
+          title="change profile picture (not implemented yet)"
         >
           <img
-            src={current_session.value.profile_picture || "/default-profile.png"}
+            src={current_session.value.profile_picture || "/tommyy_hla.jpeg"}
             alt="Profile"
             className="w-full h-full object-cover"
           />
@@ -40,16 +41,24 @@ export const ProfileHoverPane = ({ onClose }) => {
 
         {/* Buttons */}
         <button
-          className="w-full text-left py-2 px-4 rounded text-gray-400 dark:text-gray-500 cursor-not-allowed"
-          disabled
+          className="w-full text-left py-2 px-4 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+          onClick={() => handleNavigation("/profile")}
         >
-          settings (coming soon)
+          profile
         </button>
         <button
           className="w-full text-left py-2 px-4 rounded text-gray-400 dark:text-gray-500 cursor-not-allowed"
           disabled
+          title="we haven't gotten to implementing this yet!"
         >
-          groups (coming soon)
+          settings
+        </button>
+        <button
+          className="w-full text-left py-2 px-4 rounded text-gray-400 dark:text-gray-500 cursor-not-allowed"
+          disabled
+          title="we haven't gotten to implementing this yet!"
+        >
+          groups
         </button>
         <button
           className="w-full text-left py-2 px-4 rounded text-red-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors mt-2"

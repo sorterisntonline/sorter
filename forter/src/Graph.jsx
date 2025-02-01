@@ -4,7 +4,9 @@ import { tag } from "./App";
 import { loadTag } from "./Network";
 import Select from "react-select"
 import ChartDataLabels from 'chartjs-plugin-datalabels';
+import zoomPlugin from 'chartjs-plugin-zoom';
 Chart.register(ChartDataLabels);
+Chart.register(zoomPlugin);
 
 const AttributePanel = ({ value, setValue, options }) => {
     return (
@@ -81,6 +83,7 @@ const GraphInner = () => {
     const [attribute1, setAttribute1] = useState(options[0]);
     const [attribute2, setAttribute2] = useState(options[1]);
     const [location, setLocation] = useLocation();
+    const [isZoomed, setIsZoomed] = useState(false);
 
     useEffect(() => {
         var chart;
@@ -100,7 +103,12 @@ const GraphInner = () => {
             const data = []
             for (let item of data2.sorted) {
                 if (data1_by_id[item.id]) {
-                    data.push({ x: data1_by_id[item.id].elo, y: item.elo, label: item.title });
+                    data.push({ 
+                        x: data1_by_id[item.id].elo, 
+                        y: item.elo, 
+                        label: item.title,
+                        id: item.id
+                    });
                 }
             }
             const ctx = document.getElementById('myChart');
@@ -118,18 +126,28 @@ const GraphInner = () => {
                     }]
                 },
                 options: {
+                    onClick: (event, elements) => {
+                        if (elements.length > 0) {
+                            const dataIndex = elements[0].index;
+                            const clickedPoint = data[dataIndex];
+                            window.location.href = `/${tag.value.tag.id}/${tag.value.tag.slug}?item=${clickedPoint.id}`;
+                        }
+                    },
                     onHover: (event, elements) => {
                         document.body.style.cursor = elements.length ? 'pointer' : 'default';
                     },
                     plugins: {
                         tooltip: {
                             itemSort: function(a, b) {
-                                if (a.element.getCenterPoint && b.element.getCenterPoint) {
-                                    const distA = a.element.getCenterPoint().getDistance(a.chart.tooltip.caretX, a.chart.tooltip.caretY);
-                                    const distB = b.element.getCenterPoint().getDistance(b.chart.tooltip.caretX, b.chart.tooltip.caretY);
-                                    return distA - distB;
-                                }
-                                return 0;
+                                const distA = Math.sqrt(
+                                    Math.pow(a.chart.tooltip.caretX - a.element.x, 2) + 
+                                    Math.pow(a.chart.tooltip.caretY - a.element.y, 2)
+                                );
+                                const distB = Math.sqrt(
+                                    Math.pow(b.chart.tooltip.caretX - b.element.x, 2) + 
+                                    Math.pow(b.chart.tooltip.caretY - b.element.y, 2)
+                                );
+                                return distA - distB;
                             },
                             callbacks: {
                                 title: function(tooltipItems) {
@@ -141,7 +159,12 @@ const GraphInner = () => {
                                 },
                             },
                             filter: function(tooltipItem) {
-                                return tooltipItem.dataIndex === tooltipItem.dataset.data.indexOf(tooltipItem.dataset.data[tooltipItem.dataIndex]);
+                                const dx = tooltipItem.chart.tooltip.caretX - tooltipItem.element.x;
+                                const dy = tooltipItem.chart.tooltip.caretY - tooltipItem.element.y;
+                                const distance = Math.sqrt(dx * dx + dy * dy);
+                                
+                                return distance < 50 && 
+                                    tooltipItem.dataIndex === tooltipItem.dataset.data.indexOf(tooltipItem.dataset.data[tooltipItem.dataIndex]);
                             },
                             displayColors: false,
                             backgroundColor: 'rgba(0, 0, 0, 0.8)',
@@ -153,7 +176,9 @@ const GraphInner = () => {
                             bodyFont: {
                                 size: 13
                             },
-                            bodySpacing: 4
+                            bodySpacing: 4,
+                            mode: 'nearest',
+                            intersect: false
                         },
                         datalabels: {
                             display: function(context) {
@@ -183,6 +208,30 @@ const GraphInner = () => {
                             },
                             anchor: 'end',
                             align: 'top'
+                        },
+                        zoom: {
+                            limits: {
+                                x: {min: 'original', max: 'original'},
+                                y: {min: 'original', max: 'original'}
+                            },
+                            pan: {
+                                enabled: true,
+                                mode: 'xy',
+                            },
+                            zoom: {
+                                wheel: {
+                                    enabled: true,
+                                },
+                                pinch: {
+                                    enabled: true,
+                                    speed: 0.05,
+                                    threshold: 10
+                                },
+                                mode: 'xy',
+                                onZoomComplete: ({ chart }) => {
+                                    setIsZoomed(true);
+                                }
+                            }
                         }
                     }
                 },
@@ -209,7 +258,21 @@ const GraphInner = () => {
             <AttributePanel value={attribute2} setValue={setAttribute2} options={options} />
         </div>
 
-        <canvas id="myChart" className="max-w-full" />
+        <div className="relative w-full">
+            <canvas id="myChart" className="max-w-full" />
+            {isZoomed && (
+                <button
+                    onClick={() => {
+                        const chart = Chart.getChart("myChart");
+                        chart.resetZoom();
+                        setIsZoomed(false);
+                    }}
+                    className="absolute bottom-4 right-4 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-black dark:text-white px-3 py-1 rounded-md text-sm transition-colors"
+                >
+                    reset zoom
+                </button>
+            )}
+        </div>
     </div>;
 }
 

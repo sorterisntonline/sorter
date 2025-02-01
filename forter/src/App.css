@@ -60,3 +60,7 @@
 .dark .markdown-body code {
   background-color: #1e1e1e;
 }
+
+.page-padding-top {
+  padding-top: 1.5rem;
+}

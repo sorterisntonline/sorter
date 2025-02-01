@@ -51,7 +51,7 @@ export const VotePanel = ({ handleError }) => {
 
   const { leftMargin, rightMargin } = calculateMargin(magnitude.value);
   return (
-    <div className="w-full justify-center">
+    <div className="w-full justify-center page-padding-top">
       <div className="text-xl flex flex-row items-end">
         <div
           className="flex-1"

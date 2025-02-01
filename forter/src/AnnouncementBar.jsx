@@ -7,7 +7,7 @@ export const showAnnouncement = signal(true);
 const ANNOUNCEMENT_VERSION = "2";
 
 const AnnouncementBar = ({ 
-  message = 'check out music.sorter.social to preview the new aesthetic!',
+  message = 'check out music.sorter.social to preview our experimental new look!',
   link = 'https://music.sorter.social',
   baseColor = '#ff4d4d'
 }) => {
@@ -46,7 +46,7 @@ const AnnouncementBar = ({
 
   return (
     <div 
-      className="fixed top-0 left-0 right-0 z-50 w-full"
+      className="fixed top-0 left-0 right-0 z-50 w-full h-8"
       style={{
         background: `linear-gradient(90deg, ${baseColor} 0%, ${lighterColor} 100%)`,
       }}
@@ -55,7 +55,7 @@ const AnnouncementBar = ({
         href={link}
         target="_blank"
         rel="noopener noreferrer"
-        className="block w-full text-center py-2 text-white font-medium hover:opacity-90"
+        className="block w-full h-full text-center py-1.5 text-white font-medium hover:opacity-90"
       >
         {message}
       </a>
