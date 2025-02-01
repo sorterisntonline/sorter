@@ -31,16 +31,18 @@ export const useStore = create((set, get) => ({
     const params = new URLSearchParams(window.location.search);
     if (!params.has('t')) {
       set({ results: null });
-      return;
+      return null;
     }
     
     try {
       const response = await fetch(`/api/tag/page2?${params.toString()}`);
       const data = await response.json();
       get().setResults(data);
+      return data;
     } catch (error) {
       console.error('Failed to fetch results:', error);
       get().setResults(null);
+      return null;
     }
   }
 }));
@@ -104,9 +106,18 @@ const TagCategories = () => {
   const { data, error, isLoading } = useSWR("/api/tag", fetcher);
   const [hasInitialized, setHasInitialized] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const { fetchResults } = useStore();
+
+ // Add this useEffect for initial fetch
+ useEffect(() => {
+    if (hasInitialized) {
+      fetchResults();
+    }
+  }, [hasInitialized]);
 
   // Modified useEffect to only set default tags on first mount
   useEffect(() => {
+    console.log('queryState', queryState);
     if (!hasInitialized && !queryState.length && window.location.search === '') {
       const defaultTags = [
         { type: 'hashtag', value: 'kendrick-lamar' },
@@ -129,7 +140,7 @@ const TagCategories = () => {
     updateQueryState(newState);
   };
 
-  const handleTagClick = (tag) => {
+  const handleTagClick = async (tag) => {
     const tagValue = tag.startsWith('#') ? tag.slice(1) : tag;
     const specialTags = ['songs', 'albums', 'artists'];
     
@@ -139,16 +150,27 @@ const TagCategories = () => {
         !(item.type === 'hashtag' && specialTags.includes(item.value))
       );
       updateQueryState([...newState, { type: 'hashtag', value: tagValue }]);
+      fetchResults();
       return;
     }
     
-    // For non-special tags, add to existing tags
+    // For non-special tags, try adding to existing tags
     const hasTag = queryState.some(item => 
       item.type === 'hashtag' && item.value === tagValue
     );
     
     if (!hasTag) {
-      updateQueryState([...queryState, { type: 'hashtag', value: tagValue }]);
+      const newState = [...queryState, { type: 'hashtag', value: tagValue }];
+      
+      // Update URL and fetch results
+      updateQueryState(newState);
+      const results = await fetchResults();
+      
+      // If no results, make this tag the only selected tag
+      if (!results?.sorted?.length && !results?.unsorted?.length) {
+        updateQueryState([{ type: 'hashtag', value: tagValue }]);
+        fetchResults();
+      }
     }
   };
 
@@ -427,11 +449,6 @@ const ItemList = ({ items, onItemClick, isSorted }) => (
 const GrammarDisplay = () => {
   const { queryState, updateQueryState } = useQueryState();
   const { results, fetchResults, items_by_id } = useStore();
-
-  // Add this useEffect to fetch results when queryState changes
-  useEffect(() => {
-    fetchResults();
-  }, [queryState]); // Re-fetch when queryState changes
 
   const handleItemClick = (itemId) => {
     const item = items_by_id[itemId];
