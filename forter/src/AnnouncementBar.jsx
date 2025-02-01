@@ -4,7 +4,7 @@ import { signal } from "@preact/signals-react";
 export const showAnnouncement = signal(true);
 
 // Add a version number to the announcement
-const ANNOUNCEMENT_VERSION = "1";
+const ANNOUNCEMENT_VERSION = "2";
 
 const AnnouncementBar = ({ 
   message = 'check out music.sorter.social to preview our experimental new look!',

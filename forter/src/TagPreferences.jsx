@@ -69,6 +69,34 @@ export const TagPreferences = ({ onSubmit }) => {
   const [unlisted, setUnlisted] = useState(tag.value.tag.unlisted);
   const [nsfw, setNsfw] = useState(tag.value.tag.nsfw);
   const [hideAuthor, setHideAuthor] = useState(tag.value.tag.hide_item_authors);
+  const [description, setDescription] = useState(tag.value.tag.description || "");
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  // Track initial values for comparison
+  const initialValues = {
+    namespace: tag.value.tag.ns,
+    unlisted: tag.value.tag.unlisted,
+    nsfw: tag.value.tag.nsfw,
+    hideAuthor: tag.value.tag.hide_item_authors,
+    description: tag.value.tag.description || "",
+  };
+
+  // Check for changes whenever any value changes
+  useEffect(() => {
+    const hasChanges = 
+      namespace !== initialValues.namespace ||
+      unlisted !== initialValues.unlisted ||
+      nsfw !== initialValues.nsfw ||
+      hideAuthor !== initialValues.hideAuthor ||
+      description !== initialValues.description ||
+      JSON.stringify(newPerm) !== JSON.stringify(
+        Object.fromEntries(
+          perms.map((perm) => [perm["capability"], perm["user_id"]])
+        )
+      );
+    
+    setHasUnsavedChanges(hasChanges);
+  }, [namespace, unlisted, nsfw, hideAuthor, description, newPerm]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -167,6 +195,7 @@ export const TagPreferences = ({ onSubmit }) => {
       nsfw: nsfw,
       unlisted: unlisted,
       hide_item_authors: hideAuthor,
+      description: description,
     }
 
     const r_perms = await fetch("/api/tag/permissions", {
@@ -234,6 +263,11 @@ export const TagPreferences = ({ onSubmit }) => {
 
   return (
     <div className="text-sm flex flex-col border-2 border-purple-400">
+      {hasUnsavedChanges && (
+        <div className="bg-yellow-100 dark:bg-yellow-900 p-2 text-center">
+          You have unsaved changes
+        </div>
+      )}
       <table>
         <tbody>
           <tr>
@@ -250,14 +284,21 @@ export const TagPreferences = ({ onSubmit }) => {
               @{tag.value.tag["owner"]}
             </td>
           </tr>
-          {tag.value.tag["description"] === undefined ? (
-            <></>
-          ) : (
-            <tr>
-              <td>description</td>
-              <td className="text-xl">{tag.value.tag["description"]}</td>
-            </tr>
-          )}
+          <tr>
+            <td>description</td>
+            <td>
+              {canEditPerms ? (
+                <input
+                  type="text"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="dark:text-black"
+                />
+              ) : (
+                <span className="text-xl">{tag.value.tag["description"]}</span>
+              )}
+            </td>
+          </tr>
           <tr>
             <td className="">namespace</td>
             <td className="dark:text-black">
@@ -290,10 +331,10 @@ export const TagPreferences = ({ onSubmit }) => {
 
       {canEditPerms ? (
         <button
-          className={"border-2 " + (error ? " text-red-600" : "")}
+          className={`border-2 ${hasUnsavedChanges ? "border-yellow-500" : ""} ${error ? "text-red-600" : ""}`}
           onClick={onSubmitForm}
         >
-          {error ? error : "Save Changes"}
+          {error ? error : (hasUnsavedChanges ? "save changes*" : "save changes")}
         </button>
       ) : (
         <></>

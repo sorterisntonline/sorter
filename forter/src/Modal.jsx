@@ -10,7 +10,7 @@ export const Modal = ({ isOpen, onClose, children }) => {
           <div className="absolute inset-0 bg-slate-300 dark:bg-black opacity-50"></div>
         </div>
 
-        <div className="inline-block align-bottom bg-slate-300 dark:bg-black text-left shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full overflow-visible">
+        <div className="inline-block align-bottom bg-slate-300 dark:bg-black text-left shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full overflow-visible page-padding-top">
           <div className="">
             <div className="sm:flex sm:items-start">
               <div className="mt-3 text-center sm:mt-0 sm:text-left w-full">

@@ -85,7 +85,7 @@ const TopNav = () => {
 
   return (
     <div
-      className="fixed top-0 right-0 flex flex-wrap items-center justify-between bg-white dark:bg-black text-black dark:text-white w-full px-4 pt-2.5 z-40"
+      className="fixed top-0 right-0 flex flex-wrap items-center justify-between bg-white dark:bg-black text-black dark:text-white w-full px-4 p-2.5 z-40"
       style={{ 
         top: showAnnouncement.value ? '32px' : '0',
         transition: 'top 0.3s'

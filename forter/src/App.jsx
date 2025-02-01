@@ -384,7 +384,7 @@ export const Tag = ({ showVote, isVoting, handleError }) => {
       <>
         <MetaTags 
           title={`sorter - #${tag.value.tag.slug}`}
-          image="/logoanim_alt1.gif"
+          image="/logoanim.gif"
         />
         <div className="dark:text-white justify-start">
           <IntegrationsPanel />
@@ -495,7 +495,7 @@ function App({ tagid, isVoting }) {
   return (
     <div className="min-h-screen flex flex-col">
       <AnnouncementBar />
-      <div className="flex-1">
+      <div className="flex-1 page-padding-top">
         {tag.value && <Tag isVoting={isVoting} handleError={handleError}/>}
         <ErrorPanel />
         <WarningPopup isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
