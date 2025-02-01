@@ -1,34 +1,39 @@
 import { useState, useEffect } from 'react';
 import { signal } from "@preact/signals-react";
 
-export const showAnnouncement = signal(true);
+const ANNOUNCEMENT_VERSION = "5";
 
-// Add a version number to the announcement
-const ANNOUNCEMENT_VERSION = "2";
+// Initialize the signal based on localStorage
+const storedVersion = localStorage.getItem('announcementBarVersion');
+const isClosed = localStorage.getItem('announcementBarClosed');
+export const showAnnouncement = signal(
+  storedVersion !== ANNOUNCEMENT_VERSION || !isClosed
+);
 
 const AnnouncementBar = ({ 
   message = 'check out music.sorter.social to preview our experimental new look!',
   link = 'https://music.sorter.social',
   baseColor = '#ff4d4d'
 }) => {
-  const [isVisible, setIsVisible] = useState(true);
+  const [isVisible, setIsVisible] = useState(false);  // Start as hidden
+  const [shouldRender, setShouldRender] = useState(showAnnouncement.value);
 
   useEffect(() => {
     // Check localStorage on mount, including version check
-    const storedVersion = localStorage.getItem('announcementBarVersion');
-    const isClosed = localStorage.getItem('announcementBarClosed');
-    
-    // If version doesn't match or doesn't exist, reset the closed state
     if (storedVersion !== ANNOUNCEMENT_VERSION) {
       localStorage.removeItem('announcementBarClosed');
       localStorage.setItem('announcementBarVersion', ANNOUNCEMENT_VERSION);
-      setIsVisible(true);
       showAnnouncement.value = true;
-    } else if (isClosed) {
-      setIsVisible(false);
-      showAnnouncement.value = false;
+      setShouldRender(true);
     }
-  }, []);
+
+    // Delay the visibility
+    const timer = setTimeout(() => {
+      setIsVisible(shouldRender);
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [shouldRender]);
 
   const handleClose = (e) => {
     e.preventDefault();
@@ -39,14 +44,16 @@ const AnnouncementBar = ({
     localStorage.setItem('announcementBarVersion', ANNOUNCEMENT_VERSION);
   };
 
-  if (!isVisible) return null;
+  if (!shouldRender) return null;
 
   // Calculate lighter version of the color for gradient
   const lighterColor = baseColor + '99'; // Using alpha channel for lighter effect
 
   return (
     <div 
-      className="fixed top-0 left-0 right-0 z-50 w-full h-8"
+      className={`fixed top-0 left-0 right-0 z-50 w-full h-8 transition-opacity duration-300 ease-in-out ${
+        isVisible ? 'opacity-100' : 'opacity-0'
+      }`}
       style={{
         background: `linear-gradient(90deg, ${baseColor} 0%, ${lighterColor} 100%)`,
       }}
