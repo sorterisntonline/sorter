@@ -68,15 +68,19 @@ const useQueryState = () => {
         itemId: match[2]
       };
     }) || [];
+    const item = searchParams.get('item') ? [{
+      type: 'item',
+      value: searchParams.get('item')
+    }] : [];
 
-    return [...tags, ...mentions, ...actions];
+    return [...tags, ...mentions, ...actions, ...item];
   };
 
   const updateParams = (updates) => {
     const newParams = new URLSearchParams(searchParams);
     
     // Clear existing params
-    ['t', 'u', 'a'].forEach(param => newParams.delete(param));
+    ['t', 'u', 'a', 'item'].forEach(param => newParams.delete(param));
     
     // Group and set new params
     const tags = updates.filter(item => item.type === 'hashtag')
@@ -86,10 +90,12 @@ const useQueryState = () => {
     const actions = updates.filter(item => item.type === 'action')
       .map(item => item.itemId ? `${item.value}${item.itemId}` : item.value)
       .join('.');
+    const item = updates.find(item => item.type === 'item')?.value;
 
     if (tags) newParams.set('t', tags);
     if (mentions) newParams.set('u', mentions);
     if (actions) newParams.set('a', actions);
+    if (item) newParams.set('item', item);
 
     setSearchParams(newParams, { replace: true });
   };
@@ -454,63 +460,33 @@ const GrammarDisplay = () => {
     const item = items_by_id[itemId];
     if (!item) return;
 
-    // Add the item's tag to queryState
-    const itemTag = { type: 'hashtag', value: item.slug };
-    
-    // Check if we already have this tag
-    const hasTag = queryState.some(q => 
-      q.type === 'hashtag' && q.value === item.slug
+    // Check if this item is already selected
+    const hasItem = queryState.some(q => 
+      q.type === 'item' && q.value === itemId.toString()
     );
 
-    if (hasTag) {
-      // If we already have this tag, just toggle the item panel
-      const existingItem = queryState.find(item => 
-        item.type === 'action' && 
-        item.value === 'item' && 
-        item.itemId === itemId.toString()
-      );
-      
-      if (existingItem) {
-        const newState = queryState.filter(item => 
-          !(item.type === 'action' && item.value === 'item')
-        );
-        updateQueryState(newState);
-      } else {
-        const filteredState = queryState.filter(item => 
-          !(item.type === 'action' && item.value === 'item')
-        );
-        updateQueryState([...filteredState, { 
-          type: 'action', 
-          value: 'item',
-          itemId: itemId.toString()
-        }]);
-      }
-      return;
+    if (hasItem) {
+      // Remove the item if it exists
+      const newState = queryState.filter(q => q.type !== 'item');
+      updateQueryState(newState);
+    } else {
+      // Add or replace item
+      const newState = queryState.filter(q => q.type !== 'item');
+      updateQueryState([...newState, {
+        type: 'item',
+        value: itemId.toString()
+      }]);
     }
-
-    // Add the new tag and toggle item panel
-    const newState = [...queryState, itemTag, { 
-      type: 'action', 
-      value: 'item',
-      itemId: itemId.toString()
-    }];
-    updateQueryState(newState);
   };
 
-  // Calculate active commands from queryState
-  const activeCommands = queryState
-    .filter(item => item.type === 'action')
-    .map(item => ({
-      command: item.value,
-      itemId: item.itemId,
-      addValue: item.addValue
-    }));
+  // Get selected item from query state
+  const selectedItemId = queryState.find(q => q.type === 'item')?.value;
+  const selectedItem = selectedItemId ? items_by_id[parseInt(selectedItemId)] : null;
 
-  const itemCommand = activeCommands.find(cmd => cmd.command === 'item');
-  const voteCommand = activeCommands.find(cmd => cmd.command === 'vote');
-  const votesCommand = activeCommands.find(cmd => cmd.command === 'votes');
-  const addCommand = activeCommands.find(cmd => cmd.command === 'add');
-  const selectedItem = itemCommand ? items_by_id?.[parseInt(itemCommand.itemId)] : null;
+  // Get active commands (vote/votes)
+  const voteCommand = queryState.some(q => q.type === 'action' && q.value === 'vote');
+  const votesCommand = queryState.some(q => q.type === 'action' && q.value === 'votes');
+  const addCommand = queryState.some(q => q.type === 'action' && q.value === 'add');
 
   if (!queryState.length) {
     return null;
@@ -518,91 +494,53 @@ const GrammarDisplay = () => {
 
   return (
     <div className="mt-4">
-      {/* Show VotePanel if vote command is active */}
       {voteCommand && (
         <div className="w-[800px] bg-purple-100 m-4">
           <VotePanel mutate={fetchResults} />
         </div>
       )}
 
-      {/* Show VotesPanel if votes command is active */}
       {votesCommand && (
         <div className="w-[800px] bg-purple-100 m-4">
           <VotesPanel votes={results?.votes} mutate={fetchResults} />
         </div>
       )}
 
-      {/* Show ItemPanel if item command is active */}
-      {selectedItem && (
-        <div className="w-[800px] bg-red-100 m-4">
-          <ItemPanel item={selectedItem} mutate={fetchResults} />
-        </div>
-      )}
+      <div className="flex justify-center">
+        {results && (
+          <div className={`${selectedItem ? 'w-[500px]' : 'w-[800px]'} mx-auto`}>
+            {results.unsorted?.length > 0 && (
+              <div className="mb-8">
+                <ItemList 
+                  items={results.unsorted}
+                  onItemClick={handleItemClick}
+                  isSorted={false}
+                />
+              </div>
+            )}
 
-      {/* Show AddPanel if add command is active */}
+            {results.sorted?.length > 0 && (
+              <div>
+                <ItemList 
+                  items={results.sorted}
+                  onItemClick={handleItemClick}
+                  isSorted={true}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {selectedItem && (
+          <div className="w-[300px] bg-red-100">
+            <ItemPanel item={selectedItem} mutate={fetchResults} />
+          </div>
+        )}
+      </div>
+
       {addCommand && (
         <div className="w-[800px] bg-green-100 m-4">
           <AddPanel addValue={addCommand.addValue} mutate={fetchResults} />
-        </div>
-      )}
-
-      {/* Rankings Display */}
-      {results && (
-        <div className="w-[800px] mx-auto">
-          {/* Unsorted Items */}
-          {results.unsorted?.length > 0 && (
-            <div className="mb-8">
-              <ol className="list-disc ml-4">
-                {results.unsorted.map(item => (
-                  <li 
-                    key={item.id}
-                    onClick={() => handleItemClick(item.id)}
-                    className="cursor-pointer text-left border-b border-dashed border-gray-200 dark:border-gray-800"
-                  >
-                    <div className="flex justify-between">
-                      <span>{item.title}</span>
-                      {item.vote_count > 0 && (
-                        <span className="text-gray-500">
-                          {item.vote_count} votes
-                        </span>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          )}
-
-          {/* Sorted Items */}
-          {results.sorted?.length > 0 && (
-            <div>
-              <ol className="list-decimal ml-4">
-                {results.sorted.map(item => (
-                  <li 
-                    key={item.id}
-                    onClick={() => handleItemClick(item.id)}
-                    className="cursor-pointer text-left border-b border-dashed border-gray-200 dark:border-gray-800"
-                    style={{ backgroundColor: `rgba(255, 0, 0, ${item.elo ? item.elo / 8.0 : 0})` }}
-                  >
-                    <div className="flex justify-between">
-                      <div>
-                        {item.elo !== undefined && (
-                          <span className="px-4">{Math.round(item.elo * 100) / 100}</span>
-                        )}
-                        {item.title}
-                      </div>
-                      {item.vote_count > 0 && (
-                        <span className="text-gray-500">
-                          {item.num_comments > 0 && `${item.num_comments} comments `}
-                          {item.vote_count} votes
-                        </span>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          )}
         </div>
       )}
     </div>
