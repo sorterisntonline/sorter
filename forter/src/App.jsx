@@ -472,25 +472,24 @@ function App({ tagid, isVoting }) {
 
   useEffect(() => {
     // Only scroll if it's the initial load with an item parameter
-    const params = new URLSearchParams(window.location.search);
-    const itemId = params.get('item');
-    if (selected_item.value && initialLoad && itemId) {
-      const element = document.getElementById(`item-${selected_item.value.id}`);
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }
-    setInitialLoad(false);
+    // const params = new URLSearchParams(window.location.search);
+    // const itemId = params.get('item');
+    // if (selected_item.value && initialLoad && itemId) {
+    //   const element = document.getElementById(`item-${selected_item.value.id}`);
+    //   if (element) {
+    //     element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    //   }
+    // }
+    // setInitialLoad(false);
 
     // TODO: decide if we want this 
-    /* Original auto-scrolling behavior (scrolls on every item selection):
+    /* Original auto-scrolling behavior (scrolls on every item selection): */
     if (selected_item.value) {
       const element = document.getElementById(`item-${selected_item.value.id}`);
       if (element) {
         element.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     }
-    */
   }, [selected_item.value]);
 
   return (

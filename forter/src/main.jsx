@@ -85,9 +85,9 @@ const TopNav = () => {
 
   return (
     <div
-      className="fixed top-0 right-0 flex flex-wrap items-center justify-between bg-white dark:bg-black text-black dark:text-white w-full px-4 py-2 z-40"
+      className="fixed top-0 right-0 flex flex-wrap items-center justify-between bg-white dark:bg-black text-black dark:text-white w-full px-4 pt-2.5 z-40"
       style={{ 
-        top: showAnnouncement.value ? '32px' : '0', // Height of announcement bar
+        top: showAnnouncement.value ? '32px' : '0',
         transition: 'top 0.3s'
       }}
     >
@@ -112,7 +112,7 @@ const TopNav = () => {
       </div>
 
       {/* Right side authentication */}
-      <div className="flex items-center space-x-4">
+      <div className="flex items-center">
         {isLoggedIn ? (
           <div 
             className="relative"
@@ -128,15 +128,15 @@ const TopNav = () => {
           </div>
         ) : (
           !isAuthPage && (
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2">
               <button
-                className="bg-blue-200 dark:bg-blue-950 hover:bg-blue-300 dark:hover:bg-blue-900 text-black dark:text-white px-3 py-1 transition-colors"
+                className="bg-blue-200 dark:bg-blue-950 hover:bg-blue-300 dark:hover:bg-blue-900 text-black dark:text-white px-3 py-1 transition-colors border border-transparent"
                 onClick={() => setLocation("/login")}
               >
                 login
               </button>
               <button
-                className="bg-green-200 dark:bg-green-950 hover:bg-green-300 dark:hover:bg-green-900 text-black dark:text-white px-3 py-1 transition-colors"
+                className="bg-green-200 dark:bg-green-950 hover:bg-green-300 dark:hover:bg-green-900 text-black dark:text-white px-3 py-1 transition-colors border border-transparent"
                 onClick={() => setLocation("/register")}
               >
                 register
