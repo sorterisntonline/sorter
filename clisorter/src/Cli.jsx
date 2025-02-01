@@ -575,11 +575,11 @@ export const Cli = () => {
             className="text-left max-w-[600px] text-gray-700 hover:text-gray-500 cursor-pointer transition-colors duration-100"
             onClick={toggleTutorial}
           >
-            Click the tags below to find what you want to rank. oairestn aoirestn aoirestn aorisetn aroisetn arosietn aorstien 
+            The gray panel has currently selected tags. The pink panel has all tags. The red panel has which user's opinion is currently being shown.
             <br/><br/>
-            Click !vote to see two items at a time and pick your favorite.
+            The purple panel shows you two items. Slide towards which one you like more, and click vote.
             <br/><br/>
-            Click @me to see your rankings, or @all to see what everyone thinks.
+            The votes are calculated using PageRank, and the results are shown below.
           </p>
         )}
       </div>
