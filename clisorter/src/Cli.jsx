@@ -242,7 +242,7 @@ const TagCategories = () => {
                 className="flex justify-between items-center"
               >
                 <div className="flex justify-start w-full">
-                  <span className="font-serif text-lg">#{tag.value}</span>
+                  <span className="font-serif text-lg text-left">#{tag.value}</span>
                   <button
                     onClick={() => handleRemoveTag(tag.value)}
                     className="text-gray-500 hover:text-red-500 ml-2"
@@ -428,6 +428,11 @@ const GrammarDisplay = () => {
   const { queryState, updateQueryState } = useQueryState();
   const { results, fetchResults, items_by_id } = useStore();
 
+  // Add this useEffect to fetch results when queryState changes
+  useEffect(() => {
+    fetchResults();
+  }, [queryState]); // Re-fetch when queryState changes
+
   const handleItemClick = (itemId) => {
     const item = items_by_id[itemId];
     if (!item) return;
@@ -475,7 +480,7 @@ const GrammarDisplay = () => {
     updateQueryState(newState);
   };
 
-  // Calculate active commands from queryState instead of csvData
+  // Calculate active commands from queryState
   const activeCommands = queryState
     .filter(item => item.type === 'action')
     .map(item => ({
@@ -510,7 +515,7 @@ const GrammarDisplay = () => {
         </div>
       )}
 
-      {/* Show ItemPanel if item command is active and item exists */}
+      {/* Show ItemPanel if item command is active */}
       {selectedItem && (
         <div className="w-[800px] bg-red-100 m-4">
           <ItemPanel item={selectedItem} mutate={fetchResults} />
@@ -524,19 +529,64 @@ const GrammarDisplay = () => {
         </div>
       )}
 
-      {/* Only render item lists if we have results */}
+      {/* Rankings Display */}
       {results && (
-        <>
-          {/* Render unsorted items */}
+        <div className="w-[800px] mx-auto">
+          {/* Unsorted Items */}
           {results.unsorted?.length > 0 && (
-            <ItemList items={results.unsorted} onItemClick={handleItemClick} isSorted={false} />
+            <div className="mb-8">
+              <ol className="list-disc ml-4">
+                {results.unsorted.map(item => (
+                  <li 
+                    key={item.id}
+                    onClick={() => handleItemClick(item.id)}
+                    className="cursor-pointer text-left border-b border-dashed border-gray-200 dark:border-gray-800"
+                  >
+                    <div className="flex justify-between">
+                      <span>{item.title}</span>
+                      {item.vote_count > 0 && (
+                        <span className="text-gray-500">
+                          {item.vote_count} votes
+                        </span>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
           )}
 
-          {/* Render sorted items */}
+          {/* Sorted Items */}
           {results.sorted?.length > 0 && (
-            <ItemList items={results.sorted} onItemClick={handleItemClick} isSorted={true} />
+            <div>
+              <ol className="list-decimal ml-4">
+                {results.sorted.map(item => (
+                  <li 
+                    key={item.id}
+                    onClick={() => handleItemClick(item.id)}
+                    className="cursor-pointer text-left border-b border-dashed border-gray-200 dark:border-gray-800"
+                    style={{ backgroundColor: `rgba(255, 0, 0, ${item.elo ? item.elo / 8.0 : 0})` }}
+                  >
+                    <div className="flex justify-between">
+                      <div>
+                        {item.elo !== undefined && (
+                          <span className="px-4">{Math.round(item.elo * 100) / 100}</span>
+                        )}
+                        {item.title}
+                      </div>
+                      {item.vote_count > 0 && (
+                        <span className="text-gray-500">
+                          {item.num_comments > 0 && `${item.num_comments} comments `}
+                          {item.vote_count} votes
+                        </span>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );
