@@ -308,14 +308,9 @@ jobs:
             echo -e "\033[1mDone building, running (with systemctl)...\033[0m"
 
             # Reload systemd to recognize new services (if any changes)
+            # TODO: we shouldn't need to do this? 
             echo -e "\033[3mReloading systemd...\033[0m"
             sudo systemctl daemon-reload
-
-            # Restart services
-            echo -e "\033[3mRestarting borter...\033[0m"
-            sudo systemctl restart borter.service
-            echo -e "\033[3mRestarting rustsorter...\033[0m"
-            sudo systemctl restart rustsorter.service
 
             # Backup borter jar if we built it
             if [[ "${{ steps.check_bort.outputs.skip_bort }}" != "true" ]]; then
@@ -367,6 +362,13 @@ jobs:
               rm -f /home/deployer/live/rustsorter/current
               ln -sf ~/sorter/rustsorter/target/${{ env.BUILD_MODE == 'prod' && 'release' || 'staging' }} /home/deployer/live/rustsorter/current
             fi
+
+            # Restart services
+            # TODO: moved these here so we have time to set live and shit
+            echo -e "\033[3mRestarting borter...\033[0m"
+            sudo systemctl restart borter.service
+            echo -e "\033[3mRestarting rustsorter...\033[0m"
+            sudo systemctl restart rustsorter.service
 
             exit 0
 
