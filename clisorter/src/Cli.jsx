@@ -31,16 +31,18 @@ export const useStore = create((set, get) => ({
     const params = new URLSearchParams(window.location.search);
     if (!params.has('t')) {
       set({ results: null });
-      return;
+      return null;
     }
     
     try {
       const response = await fetch(`/api/tag/page2?${params.toString()}`);
       const data = await response.json();
       get().setResults(data);
+      return data;
     } catch (error) {
       console.error('Failed to fetch results:', error);
       get().setResults(null);
+      return null;
     }
   }
 }));
@@ -66,15 +68,19 @@ const useQueryState = () => {
         itemId: match[2]
       };
     }) || [];
+    const item = searchParams.get('item') ? [{
+      type: 'item',
+      value: searchParams.get('item')
+    }] : [];
 
-    return [...tags, ...mentions, ...actions];
+    return [...tags, ...mentions, ...actions, ...item];
   };
 
   const updateParams = (updates) => {
     const newParams = new URLSearchParams(searchParams);
     
     // Clear existing params
-    ['t', 'u', 'a'].forEach(param => newParams.delete(param));
+    ['t', 'u', 'a', 'item'].forEach(param => newParams.delete(param));
     
     // Group and set new params
     const tags = updates.filter(item => item.type === 'hashtag')
@@ -84,10 +90,12 @@ const useQueryState = () => {
     const actions = updates.filter(item => item.type === 'action')
       .map(item => item.itemId ? `${item.value}${item.itemId}` : item.value)
       .join('.');
+    const item = updates.find(item => item.type === 'item')?.value;
 
     if (tags) newParams.set('t', tags);
     if (mentions) newParams.set('u', mentions);
     if (actions) newParams.set('a', actions);
+    if (item) newParams.set('item', item);
 
     setSearchParams(newParams, { replace: true });
   };
@@ -104,9 +112,18 @@ const TagCategories = () => {
   const { data, error, isLoading } = useSWR("/api/tag", fetcher);
   const [hasInitialized, setHasInitialized] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const { fetchResults } = useStore();
+
+ // Add this useEffect for initial fetch
+ useEffect(() => {
+    if (hasInitialized) {
+      fetchResults();
+    }
+  }, [hasInitialized]);
 
   // Modified useEffect to only set default tags on first mount
   useEffect(() => {
+    console.log('queryState', queryState);
     if (!hasInitialized && !queryState.length && window.location.search === '') {
       const defaultTags = [
         { type: 'hashtag', value: 'kendrick-lamar' },
@@ -129,7 +146,7 @@ const TagCategories = () => {
     updateQueryState(newState);
   };
 
-  const handleTagClick = (tag) => {
+  const handleTagClick = async (tag) => {
     const tagValue = tag.startsWith('#') ? tag.slice(1) : tag;
     const specialTags = ['songs', 'albums', 'artists'];
     
@@ -139,16 +156,27 @@ const TagCategories = () => {
         !(item.type === 'hashtag' && specialTags.includes(item.value))
       );
       updateQueryState([...newState, { type: 'hashtag', value: tagValue }]);
+      fetchResults();
       return;
     }
     
-    // For non-special tags, add to existing tags
+    // For non-special tags, try adding to existing tags
     const hasTag = queryState.some(item => 
       item.type === 'hashtag' && item.value === tagValue
     );
     
     if (!hasTag) {
-      updateQueryState([...queryState, { type: 'hashtag', value: tagValue }]);
+      const newState = [...queryState, { type: 'hashtag', value: tagValue }];
+      
+      // Update URL and fetch results
+      updateQueryState(newState);
+      const results = await fetchResults();
+      
+      // If no results, make this tag the only selected tag
+      if (!results?.sorted?.length && !results?.unsorted?.length) {
+        updateQueryState([{ type: 'hashtag', value: tagValue }]);
+        fetchResults();
+      }
     }
   };
 
@@ -242,7 +270,7 @@ const TagCategories = () => {
                 className="flex justify-between items-center"
               >
                 <div className="flex justify-start w-full">
-                  <span className="font-serif text-lg">#{tag.value}</span>
+                  <span className="font-serif text-lg text-left">#{tag.value}</span>
                   <button
                     onClick={() => handleRemoveTag(tag.value)}
                     className="text-gray-500 hover:text-red-500 ml-2"
@@ -432,111 +460,86 @@ const GrammarDisplay = () => {
     const item = items_by_id[itemId];
     if (!item) return;
 
-    // Add the item's tag to queryState
-    const itemTag = { type: 'hashtag', value: item.slug };
-    
-    // Check if we already have this tag
-    const hasTag = queryState.some(q => 
-      q.type === 'hashtag' && q.value === item.slug
+    // Check if this item is already selected
+    const hasItem = queryState.some(q => 
+      q.type === 'item' && q.value === itemId.toString()
     );
 
-    if (hasTag) {
-      // If we already have this tag, just toggle the item panel
-      const existingItem = queryState.find(item => 
-        item.type === 'action' && 
-        item.value === 'item' && 
-        item.itemId === itemId.toString()
-      );
-      
-      if (existingItem) {
-        const newState = queryState.filter(item => 
-          !(item.type === 'action' && item.value === 'item')
-        );
-        updateQueryState(newState);
-      } else {
-        const filteredState = queryState.filter(item => 
-          !(item.type === 'action' && item.value === 'item')
-        );
-        updateQueryState([...filteredState, { 
-          type: 'action', 
-          value: 'item',
-          itemId: itemId.toString()
-        }]);
-      }
-      return;
+    if (hasItem) {
+      // Remove the item if it exists
+      const newState = queryState.filter(q => q.type !== 'item');
+      updateQueryState(newState);
+    } else {
+      // Add or replace item
+      const newState = queryState.filter(q => q.type !== 'item');
+      updateQueryState([...newState, {
+        type: 'item',
+        value: itemId.toString()
+      }]);
     }
-
-    // Add the new tag and toggle item panel
-    const newState = [...queryState, itemTag, { 
-      type: 'action', 
-      value: 'item',
-      itemId: itemId.toString()
-    }];
-    updateQueryState(newState);
   };
 
-  // Calculate active commands from queryState instead of csvData
-  const activeCommands = queryState
-    .filter(item => item.type === 'action')
-    .map(item => ({
-      command: item.value,
-      itemId: item.itemId,
-      addValue: item.addValue
-    }));
+  // Get selected item from query state
+  const selectedItemId = queryState.find(q => q.type === 'item')?.value;
+  const selectedItem = selectedItemId ? items_by_id[parseInt(selectedItemId)] : null;
 
-  const itemCommand = activeCommands.find(cmd => cmd.command === 'item');
-  const voteCommand = activeCommands.find(cmd => cmd.command === 'vote');
-  const votesCommand = activeCommands.find(cmd => cmd.command === 'votes');
-  const addCommand = activeCommands.find(cmd => cmd.command === 'add');
-  const selectedItem = itemCommand ? items_by_id?.[parseInt(itemCommand.itemId)] : null;
+  // Get active commands (vote/votes)
+  const addCommand = queryState.some(q => q.type === 'action' && q.value === 'add');
 
   if (!queryState.length) {
     return null;
   }
 
   return (
-    <div className="mt-4">
-      {/* Show VotePanel if vote command is active */}
-      {voteCommand && (
-        <div className="w-[800px] bg-purple-100 m-4">
-          <VotePanel mutate={fetchResults} />
-        </div>
+
+    <div className="mt-4 flex flex-col items-center">
+
+      {results && (
+        <>
+          <div className="w-[800px] bg-purple-100 m-4">
+            <VotePanel mutate={fetchResults} />
+          </div>
+          <div className="w-[800px] bg-purple-100 m-4">
+            <VotesPanel votes={results?.votes} mutate={fetchResults} />
+          </div>
+        </>
       )}
 
-      {/* Show VotesPanel if votes command is active */}
-      {votesCommand && (
-        <div className="w-[800px] bg-purple-100 m-4">
-          <VotesPanel votes={results?.votes} mutate={fetchResults} />
-        </div>
-      )}
+      <div className="w-[800px] m-4 flex">
+        {selectedItem && (
+          <div className="w-[400px] bg-red-100">
+            <ItemPanel item={selectedItem} mutate={fetchResults} />
+          </div>
+        )}
+        {results && (
+          <div className={selectedItem ? 'ml-6' : 'w-[800px]'}>
+            {results.unsorted?.length > 0 && (
+              <div className="mb-8">
+                <ItemList 
+                  items={results.unsorted}
+                  onItemClick={handleItemClick}
+                  isSorted={false}
+                />
+              </div>
+            )}
 
-      {/* Show ItemPanel if item command is active and item exists */}
-      {selectedItem && (
-        <div className="w-[800px] bg-red-100 m-4">
-          <ItemPanel item={selectedItem} mutate={fetchResults} />
-        </div>
-      )}
+            {results.sorted?.length > 0 && (
+              <div>
+                <ItemList 
+                  items={results.sorted}
+                  onItemClick={handleItemClick}
+                  isSorted={true}
+                />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
-      {/* Show AddPanel if add command is active */}
       {addCommand && (
         <div className="w-[800px] bg-green-100 m-4">
           <AddPanel addValue={addCommand.addValue} mutate={fetchResults} />
         </div>
-      )}
-
-      {/* Only render item lists if we have results */}
-      {results && (
-        <>
-          {/* Render unsorted items */}
-          {results.unsorted?.length > 0 && (
-            <ItemList items={results.unsorted} onItemClick={handleItemClick} isSorted={false} />
-          )}
-
-          {/* Render sorted items */}
-          {results.sorted?.length > 0 && (
-            <ItemList items={results.sorted} onItemClick={handleItemClick} isSorted={true} />
-          )}
-        </>
       )}
     </div>
   );
