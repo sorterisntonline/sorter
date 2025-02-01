@@ -380,18 +380,40 @@ jobs:
             sudo chown deployer:deployer /home/deployer/live/borter
             sudo chown deployer:deployer /home/deployer/live/rustsorter
 
-            # Update symlinks after successful builds
+            # Update symlinks - if we didn't build a component, link to its most recent backup
+            echo -e "\033[3mUpdating live symlinks...\033[0m"
+            
+            # Handle borter symlinks
             if [[ "${{ steps.check_bort.outputs.skip_bort }}" != "true" ]]; then
+              echo "Linking newly built borter jar..."
               ln -sf ~/sorter/borter/target/sorter-*-standalone.jar /home/deployer/live/borter/sorter.jar
+            else
+              echo "Linking most recent borter backup..."
+              LATEST_BORTER=$(ls -t /home/deployer/backups/borter/borter-*.jar | head -n1)
+              if [ ! -z "$LATEST_BORTER" ]; then
+                ln -sf "$LATEST_BORTER" /home/deployer/live/borter/sorter.jar
+              else
+                echo "WARNING: No borter backup found!"
+              fi
             fi
 
+            # Handle rustsorter symlinks
             if [[ "${{ steps.check_rust.outputs.skip_rust }}" != "true" ]]; then
+              echo "Linking newly built rustsorter..."
               rm -f /home/deployer/live/rustsorter/current
               ln -sf ~/sorter/rustsorter/target/${{ env.BUILD_MODE == 'prod' && 'release' || 'staging' }} /home/deployer/live/rustsorter/current
+            else
+              echo "Linking most recent rustsorter backup..."
+              LATEST_RUST=$(ls -t /home/deployer/backups/rustsorter | head -n1)
+              if [ ! -z "$LATEST_RUST" ]; then
+                rm -f /home/deployer/live/rustsorter/current
+                ln -sf "/home/deployer/backups/rustsorter/$LATEST_RUST" /home/deployer/live/rustsorter/current
+              else
+                echo "WARNING: No rustsorter backup found!"
+              fi
             fi
 
             # Restart services
-            # TODO: moved these here so we have time to set live and shit
             echo -e "\033[3mRestarting borter...\033[0m"
             sudo systemctl restart borter.service
             echo -e "\033[3mRestarting rustsorter...\033[0m"
