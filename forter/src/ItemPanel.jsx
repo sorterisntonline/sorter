@@ -77,7 +77,7 @@ export const ItemFull = ({ item, right, skipped, mutate }) => {
   }
 
   return (
-    <div className={"p-3 flex flex-col w-full " + (right ? "text-right" : "text-left")}>
+    <div className={"page-padding-top flex flex-col w-full " + (right ? "text-right" : "text-left")}>
       <a className="cursor-pointer" href={"/" + tag.value.tag.id + '/' + tag.value.tag.slug + '?item=' + item.id} target="_blank">
         {
           item["title"] && (
@@ -128,7 +128,7 @@ export const ItemFull = ({ item, right, skipped, mutate }) => {
         item["domain_pk_namespace"] === "youtube.video" && (
           <iframe
             width="100%" height="500px"
-            className="p-3"
+            className="page-padding-top"
             src={createEmbedUrl(item)}>
           </iframe>
         )
