@@ -433,7 +433,7 @@ export const Tag = ({ showVote, isVoting, handleError }) => {
               </div>
 
             </div>
-            <div className={"p-3 " + (toggle.value ? "lg:w-1/4" : "lg:w-2/3")}>
+            <div className={"page-padding-top " + (toggle.value ? "lg:w-1/4" : "lg:w-2/3")}>
                 <div className="sticky top-0 z-10">
                     <ItemPanel />
                 </div>
