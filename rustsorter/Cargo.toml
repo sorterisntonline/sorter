@@ -1,5 +1,4 @@
 [package]
-default-run = "rustsorter"
 edition = "2021"
 name = "rustsorter"
 version = "0.1.0"
@@ -120,24 +119,3 @@ sqlx = { version = "0.8.2", features = [
     "runtime-async-std-native-tls",
     "uuid",
 ] }
-
-[[bin]]
-name = "test"
-path = "src/bin/test.rs"
-
-[profile.dev]
-debug = true
-opt-level = 0
-
-[profile.release]
-codegen-units = 1
-debug = false
-lto = true
-opt-level = 3
-panic = "abort"
-strip = true
-
-[profile.staging]
-debug = false
-inherits = "release"
-strip = true
