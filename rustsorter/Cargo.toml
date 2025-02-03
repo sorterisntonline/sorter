@@ -25,7 +25,6 @@ meta-variable-misuse = "warn"
 missing-abi = "warn"
 missing-copy-implementations = "warn"
 missing-debug-implementations = "warn"
-missing-docs = "warn"
 missing-unsafe-on-extern = "warn"
 non-ascii-idents = "warn"
 or-patterns-back-compat = "warn"
@@ -40,7 +39,6 @@ rust-2024-incompatible-pat = "warn"
 rust-2024-prelude-collisions = "warn"
 single-use-lifetime = "warn"
 single-use-lifetimes = "warn"
-tail-expr-drop-order = "warn"
 trivial-casts = "warn"
 trivial-numeric-casts = "warn"
 unit-bindings = "warn"
@@ -64,6 +62,7 @@ blanket-clippy-restriction-lints = "allow"
 cargo = { level = "warn", priority = -1 }
 implicit-return = "allow"
 missing-docs-in-private-items = "allow"
+missing-errors-doc = "allow"
 missing-trait-methods = "allow"
 module-name-repetitions = "allow"
 multiple-crate-versions = "allow"
@@ -71,6 +70,7 @@ multiple-inherent-impl = "allow"
 non-ascii-literal = "allow"
 nursery = { level = "warn", priority = -1 }
 partial-pub-fields = "allow"
+pattern-type-mismatch = "allow"
 pedantic = { level = "warn", priority = -1 }
 print-stderr = "allow"
 print-stdout = "allow"
@@ -88,6 +88,7 @@ wildcard-enum-match-arm = "allow"
 actix-files = "0.6.5"
 actix-session = { version = "0.9.0", features = ["cookie-session"] }
 actix-web = { version = "4", features = ["rustls-0_21"] }
+anyhow = "1.0"
 bcrypt = "0.15.0"
 chrono = { version = "^0", features = ["serde"] }
 dotenv = "0.15.0"
@@ -102,7 +103,6 @@ rayon = "1.9.0"
 reqwest = { version = "0.11", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1"
-serenity = "0.12"
 slug = "0.1.5"
 sqlx = { version = "0.8.2", features = [
     "chrono",
@@ -111,6 +111,24 @@ sqlx = { version = "0.8.2", features = [
     "uuid",
 ] }
 tokio = { version = "1.21.2", features = ["macros", "rt-multi-thread"] }
+twilight-gateway = { version = "0.16", default-features = false, features = [
+    "rustls-aws_lc_rs",
+    "rustls-webpki-roots",
+    "simd-json",
+    "twilight-http",
+    "zlib-simd",
+] }
+twilight-http = { version = "0.16", default-features = false, features = [
+    "decompression",
+    "hickory",
+    "rustls-aws_lc_rs",
+    "rustls-webpki-roots",
+    "simd-json",
+] }
+twilight-model = "0.16"
+twilight-util = { version = "0.16", default-features = false, features = [
+    "builder",
+] }
 
 [dev-dependencies]
 sqlx = { version = "0.8.2", features = [
@@ -119,3 +137,8 @@ sqlx = { version = "0.8.2", features = [
     "runtime-async-std-native-tls",
     "uuid",
 ] }
+
+[profile.release]
+
+[profile.staging]
+inherits = "dev"

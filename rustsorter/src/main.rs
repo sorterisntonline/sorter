@@ -19,7 +19,7 @@ use dotenv::dotenv;
 use tokio::sync::oneshot; // For clean shutdown
 
 #[actix_web::main]
-async fn main() -> std::io::Result<()> {
+async fn main() -> Result<(), anyhow::Error> {
     // Initialize logging and dotenv
     env_logger::init();
     dotenv().ok();
@@ -36,6 +36,9 @@ async fn main() -> std::io::Result<()> {
 
     // Shared application state
     let app_state = Arc::new(AppState { db: pool.clone() });
+
+    // Start the Discord bot
+    discord::start(&env::var("DISCORD_TOKEN").unwrap()).await?;
 
     // Graceful shutdown handling
     let (tx, rx) = oneshot::channel();
