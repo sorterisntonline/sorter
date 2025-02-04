@@ -126,6 +126,56 @@ const GraphInner = () => {
                     }]
                 },
                 options: {
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        datalabels: {
+                            color: 'var(--text-color)',
+                            font: {
+                                size: 11
+                            },
+                            formatter: function(value, context) {
+                                return value.label.length > 20 ? value.label.substring(0, 20) + '...' : value.label;
+                            },
+                            anchor: 'end',
+                            align: 'top'
+                        },
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                color: 'var(--border-color)'
+                            },
+                            ticks: {
+                                color: 'var(--text-color)'
+                            },
+                            title: {
+                                display: true,
+                                text: attribute1.value.title,
+                                color: 'var(--text-color)',
+                                font: {
+                                    size: 14
+                                }
+                            }
+                        },
+                        y: {
+                            grid: {
+                                color: 'var(--border-color)'
+                            },
+                            ticks: {
+                                color: 'var(--text-color)'
+                            },
+                            title: {
+                                display: true,
+                                text: attribute2.value.title,
+                                color: 'var(--text-color)',
+                                font: {
+                                    size: 14
+                                }
+                            }
+                        }
+                    },
                     onClick: (event, elements) => {
                         if (elements.length > 0) {
                             const dataIndex = elements[0].index;
@@ -179,35 +229,6 @@ const GraphInner = () => {
                             bodySpacing: 4,
                             mode: 'nearest',
                             intersect: false
-                        },
-                        datalabels: {
-                            display: function(context) {
-                                const index = context.dataIndex;
-                                const dataset = context.dataset;
-                                const currentPoint = dataset.data[index];
-                                let showLabel = true;
-                                
-                                dataset.data.forEach((point, i) => {
-                                    if (i !== index) {
-                                        const dx = point.x - currentPoint.x;
-                                        const dy = point.y - currentPoint.y;
-                                        const distance = Math.sqrt(dx * dx + dy * dy);
-                                        if (distance < 0.2) {
-                                            showLabel = false;
-                                        }
-                                    }
-                                });
-                                return showLabel;
-                            },
-                            color: 'rgba(0, 0, 0, 0.7)',
-                            font: {
-                                size: 11
-                            },
-                            formatter: function(value, context) {
-                                return value.label.length > 20 ? value.label.substring(0, 20) + '...' : value.label;
-                            },
-                            anchor: 'end',
-                            align: 'top'
                         },
                         zoom: {
                             limits: {

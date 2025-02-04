@@ -85,10 +85,9 @@ const TopNav = () => {
 
   return (
     <div
-      className="fixed top-0 right-0 flex flex-wrap items-center justify-between bg-white dark:bg-black text-black dark:text-white w-full px-4 p-2.5 z-40"
+      className="fixed top-0 right-0 flex flex-wrap items-center justify-between bg-white dark:bg-black text-black dark:text-white w-full px-4 p-2.5 z-40 transition-[top] duration-300 ease-in"
       style={{ 
         top: showAnnouncement.value ? '32px' : '0',
-        transition: 'top 0.3s'
       }}
     >
       {/* Left side navigation links */}
@@ -187,7 +186,10 @@ const Root = () => {
     <React.StrictMode>
       <div className="min-h-screen flex flex-col">
         <AnnouncementBar />
-        <div className="flex-1" style={{ marginTop: showAnnouncement.value ? '40px' : '0' }}>
+        <div 
+          className="flex-1 transition-[margin] duration-300 ease-in-out"
+          style={{ marginTop: showAnnouncement.value ? '40px' : '0' }}
+        >
           <Router>
             <TopNav />
             <Switch>
