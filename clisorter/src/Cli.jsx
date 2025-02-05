@@ -1,13 +1,25 @@
 import * as ohm from 'ohm-js';
 import useSWR from "swr";
 import { create } from "zustand";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { VotePanel } from "./VotePanel";
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { VotesPanel } from './VotesPanel';
 import { ItemPanel } from './ItemPanel';
+import { current_session, fetchSession } from "./session";
+import { redirectToLogin, redirectToRegister } from './authUtils';
+import WarningPopup from './WarningPopup';
+import { initiateOAuth } from './oauth/useOAuth';
+import { SpotifyAuthButton } from './oauth/OAuthButton';
 
-// TODO make /item command pop up when you click on an item
+const SpotifyIcon = () => (
+  <img
+    width="18"
+    className="m-1"
+    src="https://upload.wikimedia.org/wikipedia/commons/1/19/Spotify_logo_without_text.svg"
+    alt="Spotify"
+  />
+);
 
 export const useStore = create((set, get) => ({
   results: null,
@@ -44,10 +56,11 @@ export const useStore = create((set, get) => ({
       get().setResults(null);
       return null;
     }
-  }
+  },
+  spotifyConnected: false,
+  setSpotifyConnected: (connected) => set({ spotifyConnected: connected }),
 }));
 
-// New hook to parse URL into structured data
 const useQueryState = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   
@@ -79,10 +92,8 @@ const useQueryState = () => {
   const updateParams = (updates) => {
     const newParams = new URLSearchParams(searchParams);
     
-    // Clear existing params
     ['t', 'u', 'a', 'item'].forEach(param => newParams.delete(param));
     
-    // Group and set new params
     const tags = updates.filter(item => item.type === 'hashtag')
       .map(item => item.value).join('.');
     const mentions = updates.filter(item => item.type === 'mention')
@@ -106,24 +117,67 @@ const useQueryState = () => {
   };
 };
 
+const useSpotifyStatus = () => {
+  const { data, error, mutate } = useSWR('/api/spotify/status', async (url) => {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Failed to fetch Spotify status');
+    return res.json();
+  });
+
+  return {
+    isConnected: data?.connected ?? false,
+    isLoading: !error && !data,
+    error,
+    mutate
+  };
+};
+
+const TagSuggestion = ({ suggestion, onSelect }) => {
+  const getIcon = () => {
+    switch (suggestion.domain_pk_namespace) {
+      case 'spotify.artist':
+      case 'spotify.album':
+      case 'spotify.track':
+        return <SpotifyIcon />;
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div
+      onClick={() => onSelect(suggestion)}
+      className="flex items-center p-2 cursor-pointer hover:bg-red-400 transition-colors"
+    >
+      {getIcon()}
+      <span className="ml-2 font-serif">{suggestion.tag}</span>
+      <span className="ml-2 text-sm text-gray-600">
+        ({suggestion.domain_pk_namespace?.split('.')[1]})
+      </span>
+    </div>
+  );
+};
+
 const TagCategories = () => {
   const { queryState, updateQueryState } = useQueryState();
   const [isExpanded, setIsExpanded] = useState(false);
   const { data, error, isLoading } = useSWR("/api/tag", fetcher);
   const [hasInitialized, setHasInitialized] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [suggestions, setSuggestions] = useState([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  const searchTimeoutRef = useRef(null);
   const { fetchResults } = useStore();
+  const [showSpotifyPrompt, setShowSpotifyPrompt] = useState(false);
+  const { isConnected: spotifyConnected, mutate: refreshSpotifyStatus } = useSpotifyStatus();
 
- // Add this useEffect for initial fetch
- useEffect(() => {
+  useEffect(() => {
     if (hasInitialized) {
       fetchResults();
     }
   }, [hasInitialized]);
 
-  // Modified useEffect to only set default tags on first mount
   useEffect(() => {
-    console.log('queryState', queryState);
     if (!hasInitialized && !queryState.length && window.location.search === '') {
       const defaultTags = [
         { type: 'hashtag', value: 'kendrick-lamar' },
@@ -134,9 +188,22 @@ const TagCategories = () => {
     } else if (!hasInitialized) {
       setHasInitialized(true);
     }
-  }, []);  // Only run on mount
+  }, []);
 
-  // Get currently selected tags from queryState
+  useEffect(() => {
+    // Check if user has Spotify connected on component mount
+    const checkSpotifyConnection = async () => {
+      try {
+        const response = await fetch('/api/spotify/status');
+        const { connected } = await response.json();
+        useStore.getState().setSpotifyConnected(connected);
+      } catch (error) {
+        console.error('Failed to check Spotify status:', error);
+      }
+    };
+    checkSpotifyConnection();
+  }, []);
+
   const selectedTags = queryState.filter(item => item.type === 'hashtag');
 
   const handleRemoveTag = (tagToRemove) => {
@@ -150,7 +217,6 @@ const TagCategories = () => {
     const tagValue = tag.startsWith('#') ? tag.slice(1) : tag;
     const specialTags = ['songs', 'albums', 'artists'];
     
-    // If it's a special tag, replace any existing special tags
     if (specialTags.includes(tagValue)) {
       const newState = queryState.filter(item => 
         !(item.type === 'hashtag' && specialTags.includes(item.value))
@@ -160,19 +226,15 @@ const TagCategories = () => {
       return;
     }
     
-    // For non-special tags, try adding to existing tags
     const hasTag = queryState.some(item => 
       item.type === 'hashtag' && item.value === tagValue
     );
     
     if (!hasTag) {
       const newState = [...queryState, { type: 'hashtag', value: tagValue }];
-      
-      // Update URL and fetch results
       updateQueryState(newState);
       const results = await fetchResults();
       
-      // If no results, make this tag the only selected tag
       if (!results?.sorted?.length && !results?.unsorted?.length) {
         updateQueryState([{ type: 'hashtag', value: tagValue }]);
         fetchResults();
@@ -180,36 +242,55 @@ const TagCategories = () => {
     }
   };
 
-  const handleVoteClick = () => {
-    const hasVote = queryState.some(item => 
-      item.type === 'action' && item.value === 'vote'
-    );
+  const handleSearch = (e) => {
+    const value = e.target.value;
+    setSearchTerm(value);
     
-    if (hasVote) {
-      const newState = queryState.filter(item => 
-        !(item.type === 'action' && item.value === 'vote')
-      );
-      updateQueryState(newState);
-      return;
+    if (value.trim()) {
+      setIsExpanded(true);
+      
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+
+      searchTimeoutRef.current = setTimeout(async () => {
+        if (value.trim().length < 3) {  // Require at least 3 characters
+          setSuggestions([]);
+          setIsLoadingSuggestions(false);
+          return;
+        }
+
+        setIsLoadingSuggestions(true);
+        try {
+          console.log('Fetching suggestions for:', value);
+          const response = await fetch(`/api/tags/suggest?query=${encodeURIComponent(value)}`);
+          
+          if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          console.log('Suggestions response:', data);
+          setSuggestions(data.suggestions || []);
+        } catch (error) {
+          console.error('Suggestion error:', error);
+          setSuggestions([]);
+        } finally {
+          setIsLoadingSuggestions(false);
+        }
+      }, 800);  // Increased from 300ms to 800ms
+    } else {
+      setIsExpanded(false);
+      setSuggestions([]);
+      setIsLoadingSuggestions(false);
     }
-    
-    updateQueryState([...queryState, { type: 'action', value: 'vote' }]);
   };
 
-  const handleVotesClick = () => {
-    const hasVotes = queryState.some(item => 
-      item.type === 'action' && item.value === 'votes'
-    );
-    
-    if (hasVotes) {
-      const newState = queryState.filter(item => 
-        !(item.type === 'action' && item.value === 'votes')
-      );
-      updateQueryState(newState);
-      return;
-    }
-    
-    updateQueryState([...queryState, { type: 'action', value: 'votes' }]);
+  const handleSuggestionSelect = (suggestion) => {
+    handleTagClick(suggestion.tag);
+    setSearchTerm('');
+    setSuggestions([]);
+    setIsLoadingSuggestions(false);
   };
 
   const handleMentionClick = (mention) => {
@@ -230,150 +311,205 @@ const TagCategories = () => {
     updateQueryState([...queryState, { type: 'mention', value: mentionValue }]);
   };
 
-  // Add new function to handle search
-  const handleSearch = (e) => {
-    const value = e.target.value;
-    setSearchTerm(value);
-    if (value) {
-      setIsExpanded(true);
-    } else {
-      setIsExpanded(false);
+  const handleTagSearch = async (searchTerm) => {
+    if (searchTerm.length < 2) {
+      setSuggestions([]);
+      return;
+    }
+
+    setIsLoadingSuggestions(true);
+    try {
+      const response = await fetch(`/api/tags/suggest?query=${encodeURIComponent(searchTerm)}`);
+      if (response.status === 401) {
+        if (!spotifyConnected) {
+          setShowSpotifyPrompt(true);
+          return;
+        }
+        // If we get 401 but we thought we were connected, refresh the status
+        await refreshSpotifyStatus();
+        return;
+      }
+      const data = await response.json();
+      setSuggestions(data.suggestions);
+    } catch (error) {
+      console.error('Failed to fetch suggestions:', error);
+    } finally {
+      setIsLoadingSuggestions(false);
     }
   };
 
   if (isLoading) return <div>Loading tags...</div>;
   if (error) return <div>Error loading tags</div>;
 
-  // Flatten tags and add namespace prefix
-  const flattenedTags = data?.public.map(tag => ({
-    ...tag,
-    displaySlug: tag.ns ? `${tag.ns}/${tag.slug}` : tag.slug
-  }))
-  .sort((a, b) => (b.item_count || 0) - (a.item_count || 0)) || [];
-
-  // Filter tags based on search term
-  const filteredTags = flattenedTags?.filter(tag => 
-    tag.displaySlug.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
   return (
-    <div className="flex flex-col md:flex-row max-w-[200px] md:max-w-none gap-0 justify-start">
-      {/* Left panel - Selected Tags */}
-      <div className="w-[200px] h-[200px] bg-gray-200 p-4 flex flex-col">
-        <div className="space-y-2">
-          {selectedTags.length === 0 ? (
-            <div className="text-gray-500 italic">No tags selected</div>
-          ) : (
-            selectedTags.map((tag, index) => (
-              <div 
-                key={index}
-                className="flex justify-between items-center"
-              >
-                <div className="flex justify-start w-full">
-                  <span className="font-serif text-lg text-left">#{tag.value}</span>
-                  <button
-                    onClick={() => handleRemoveTag(tag.value)}
-                    className="text-gray-500 hover:text-red-500 ml-2"
-                  >
-                    ×
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
+    <div className="flex flex-col gap-0">
+      {/* Spotify Link - Now above the squares */}
+      {current_session.value?.user_name && !spotifyConnected && (
+        <div 
+          onClick={() => initiateOAuth('spotify')}
+          className="font-serif text-sm text-right text-gray-600 italic hover:underline cursor-pointer mb-2 mr-1"
+        >
+          link spotify account
         </div>
-      </div>
-
-      {/* Middle panel - All Tags */}
-      <div className={`${
-        isExpanded 
-          ? 'w-[600px] h-[400px]' 
-          : 'w-[200px] h-[200px]'
-        } bg-red-300 p-0 flex flex-col transition-all duration-300`}>
-        <div className="flex items-center bg-red-200">
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={handleSearch}
-            placeholder=""
-            className="flex-1 p-2 bg-red-200 focus:outline-none focus:border-red-500"
-          />
-          {isExpanded && (
-            <button
-              onClick={() => {
-                setIsExpanded(false);
-                setSearchTerm('');
-              }}
-              className="p-2 font-serif text-lg text-gray-600 hover:underline cursor-pointer"
-            >
-              less...
-            </button>
-          )}
-        </div>
-        <div className="space-y-2 overflow-y-auto p-4">
-          {isExpanded ? (
-            <div className="grid grid-cols-2 gap-2">
-              {filteredTags.map(tag => (
-                <div
-                  key={tag.id}
-                  onClick={() => handleTagClick('#' + tag.slug)}
-                  className="font-serif text-md text-left hover:underline cursor-pointer"
-                >
-                  #{tag.displaySlug}
-                  <span className="text-sm text-gray-500 ml-2">
-                    ({tag.item_count || 0})
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              <div
-                onClick={() => handleTagClick('songs')}
-                className="font-serif text-lg text-left hover:underline cursor-pointer"
-              >
-                #songs
-              </div>
-              <div
-                onClick={() => handleTagClick('albums')}
-                className="font-serif text-lg text-left hover:underline cursor-pointer"
-              >
-                #albums
-              </div>
-              <div
-                onClick={() => handleTagClick('artists')}
-                className="font-serif text-lg text-left hover:underline cursor-pointer"
-              >
-                #artists
-              </div>
-              <button
-                onClick={() => {
-                  setIsExpanded(!isExpanded);
-                  setSearchTerm('');
-                }}
-                className="font-serif text-lg text-left hover:underline cursor-pointer text-gray-600"
-              >
-                {isExpanded ? 'less...' : 'more...'}
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Right panel - Commands */}
-      {!isExpanded && (
-        <div className="w-[200px] h-[200px] bg-red-400 p-4 flex flex-col">
+      )}
+      
+      {/* Squares Container */}
+      <div className="flex flex-col md:flex-row max-w-[200px] md:max-w-none gap-0 justify-start">
+        {/* Left panel - Selected Tags */}
+        <div className="w-[200px] h-[200px] bg-gray-200 p-4 flex flex-col">
           <div className="space-y-2">
-            <div 
-              onClick={() => handleMentionClick('@me')}
-              className="font-serif text-lg text-left hover:underline cursor-pointer"
-            >@me</div>
-            <div 
-              onClick={() => handleMentionClick('@all')}
-              className="font-serif text-lg text-left hover:underline cursor-pointer"
-            >@all</div>
+            {selectedTags.length === 0 ? (
+              <div className="text-gray-500 italic">No tags selected</div>
+            ) : (
+              selectedTags.map((tag, index) => (
+                <div 
+                  key={index}
+                  className="flex justify-between items-center"
+                >
+                  <div className="flex justify-start w-full">
+                    <span className="font-serif text-lg text-left">#{tag.value}</span>
+                    <button
+                      onClick={() => handleRemoveTag(tag.value)}
+                      className="text-gray-500 hover:text-red-500 ml-2"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
+
+        {/* Middle panel - Search and Suggestions */}
+        <div className={`${
+          isExpanded 
+            ? 'w-[600px] h-[400px]' 
+            : 'w-[200px] h-[200px]'
+          } bg-red-300 p-0 flex flex-col transition-all duration-300`}>
+          <div className="flex items-center bg-red-200">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={handleSearch}
+              placeholder="Search or type to get suggestions..."
+              className="flex-1 p-2 bg-red-200 focus:outline-none focus:border-red-500"
+            />
+            {isExpanded && (
+              <button
+                onClick={() => {
+                  setIsExpanded(false);
+                  setSearchTerm('');
+                  setSuggestions([]);
+                }}
+                className="p-2 font-serif text-lg text-gray-600 hover:underline cursor-pointer"
+              >
+                less...
+              </button>
+            )}
+          </div>
+          <div className="space-y-2 overflow-y-auto p-4">
+            {isLoadingSuggestions ? (
+              <div className="text-center p-4 text-gray-600">Loading suggestions...</div>
+            ) : suggestions.length > 0 ? (
+              <div className="flex flex-col gap-2">
+                {suggestions.map((suggestion, index) => (
+                  <TagSuggestion
+                    key={index}
+                    suggestion={suggestion}
+                    onSelect={handleSuggestionSelect}
+                  />
+                ))}
+              </div>
+            ) : isExpanded ? (
+              <div className="grid grid-cols-2 gap-2">
+                {data.public.map(tag => (
+                  <div
+                    key={tag.id}
+                    onClick={() => handleTagClick('#' + tag.slug)}
+                    className="font-serif text-md text-left hover:underline cursor-pointer"
+                  >
+                    #{tag.ns ? `${tag.ns}/${tag.slug}` : tag.slug}
+                    <span className="text-sm text-gray-500 ml-2">
+                      ({tag.item_count || 0})
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <div
+                  onClick={() => handleTagClick('songs')}
+                  className="font-serif text-lg text-left hover:underline cursor-pointer"
+                >
+                  #songs
+                </div>
+                <div
+                  onClick={() => handleTagClick('albums')}
+                  className="font-serif text-lg text-left hover:underline cursor-pointer"
+                >
+                  #albums
+                </div>
+                <div
+                  onClick={() => handleTagClick('artists')}
+                  className="font-serif text-lg text-left hover:underline cursor-pointer"
+                >
+                  #artists
+                </div>
+                <button
+                  onClick={() => {
+                    setIsExpanded(!isExpanded);
+                    setSearchTerm('');
+                  }}
+                  className="font-serif text-lg text-left hover:underline cursor-pointer text-gray-600"
+                >
+                  {isExpanded ? 'less...' : 'more...'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right panel - Commands */}
+        {!isExpanded && (
+          <div className="w-[200px] h-[200px] bg-red-400 p-4 flex flex-col">
+            <div className="space-y-2">
+              <div 
+                onClick={() => handleMentionClick('@me')}
+                className="font-serif text-lg text-left hover:underline cursor-pointer"
+              >@me</div>
+              <div 
+                onClick={() => handleMentionClick('@all')}
+                className="font-serif text-lg text-left hover:underline cursor-pointer"
+              >@all</div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {showSpotifyPrompt && !spotifyConnected && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md">
+            <h2 className="text-xl font-bold mb-4">Connect Spotify</h2>
+            <p className="mb-6">
+              To get music suggestions and create playlists, you'll need to connect your Spotify account.
+            </p>
+            <div className="flex justify-end gap-4">
+              <button
+                onClick={() => setShowSpotifyPrompt(false)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+              <SpotifyAuthButton />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Spotify auth button if user is logged in but not connected */}
+      {current_session.value?.user_name && (
+        <SpotifyAuthButton className="absolute bottom-0 left-0 right-0 text-center p-2 bg-black bg-opacity-80 text-white hover:bg-opacity-90" />
       )}
     </div>
   );
@@ -414,7 +550,7 @@ const HashtagItem = ({ value }) => {
       </tbody>
     </table>
   );
-}
+};
 
 const MentionItem = ({ value }) => (
   <span className="px-2 py-1 rounded bg-green-100">
@@ -460,17 +596,14 @@ const GrammarDisplay = () => {
     const item = items_by_id[itemId];
     if (!item) return;
 
-    // Check if this item is already selected
     const hasItem = queryState.some(q => 
       q.type === 'item' && q.value === itemId.toString()
     );
 
     if (hasItem) {
-      // Remove the item if it exists
       const newState = queryState.filter(q => q.type !== 'item');
       updateQueryState(newState);
     } else {
-      // Add or replace item
       const newState = queryState.filter(q => q.type !== 'item');
       updateQueryState([...newState, {
         type: 'item',
@@ -479,11 +612,8 @@ const GrammarDisplay = () => {
     }
   };
 
-  // Get selected item from query state
   const selectedItemId = queryState.find(q => q.type === 'item')?.value;
   const selectedItem = selectedItemId ? items_by_id[parseInt(selectedItemId)] : null;
-
-  // Get active commands (vote/votes)
   const addCommand = queryState.some(q => q.type === 'action' && q.value === 'add');
 
   if (!queryState.length) {
@@ -491,9 +621,7 @@ const GrammarDisplay = () => {
   }
 
   return (
-
     <div className="mt-4 flex flex-col items-center">
-
       {results && (
         <>
           <div className="w-[800px] bg-purple-100 m-4">
@@ -547,6 +675,8 @@ const GrammarDisplay = () => {
 
 export const Cli = () => {
   const [isTutorialVisible, setIsTutorialVisible] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
     const stored = localStorage.getItem('tutorialVisible');
@@ -555,38 +685,99 @@ export const Cli = () => {
     }
   }, []);
 
+  useEffect(() => {
+    fetchSession();
+  }, []);
+
   const toggleTutorial = () => {
     const newValue = !isTutorialVisible;
     setIsTutorialVisible(newValue);
     localStorage.setItem('tutorialVisible', newValue);
   };
 
-  return (
-    <div className="font-serif">
-      <div className="flex flex-col items-center mb-8">
-        <p 
-          className="text-left text-4xl max-w-[600px] min-w-[600px] font-bold mb-4 cursor-pointer hover:text-gray-700"
-          onClick={toggleTutorial}
+  const handleError = (error) => {
+    if (error.status === 401) {  // unauthorized
+      setErrorMessage(error.message);
+      setIsModalOpen(true);
+    }
+  };
+
+  const AuthSection = () => {
+    if (current_session.value && current_session.value.user_name) {
+      return (
+        <div
+          className="fixed top-0 right-0 p-2 dark:text-white z-50 bg-white dark:bg-black bg-opacity-90"
         >
-          :) sorter
-        </p>
-        {isTutorialVisible && (
+          logged in as {current_session.value.user_name}{" "}
+          <button
+            className="border-2 cursor-pointer px-2 hover:bg-gray-200 dark:hover:bg-gray-700"
+            onClick={async () => {
+              await fetch("/api/logout", {
+                method: "POST",
+                credentials: "include",
+              });
+              await fetchSession();
+            }}
+          >
+            logout
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="fixed top-0 right-0 p-2 space-x-2 z-50 bg-white dark:bg-black bg-opacity-90">
+        <button
+          className="border-2 cursor-pointer px-2 hover:bg-gray-200 dark:hover:bg-gray-700 dark:text-white"
+          onClick={() => redirectToLogin()}
+        >
+          login
+        </button>
+        <button
+          className="border-2 cursor-pointer px-2 hover:bg-gray-200 dark:hover:bg-gray-700 dark:text-white"
+          onClick={() => redirectToRegister()}
+        >
+          register
+        </button>
+      </div>
+    );
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      <AuthSection />
+      <div className="font-serif">
+        <div className="flex flex-col items-center mb-8">
           <p 
-            className="text-left max-w-[600px] text-gray-700 hover:text-gray-500 cursor-pointer transition-colors duration-100"
+            className="text-left text-4xl max-w-[600px] min-w-[600px] font-bold mb-4 cursor-pointer hover:text-gray-700"
             onClick={toggleTutorial}
           >
-            Click the tags below to find what you want to rank. oairestn aoirestn aoirestn aorisetn aroisetn arosietn aorstien 
-            <br/><br/>
-            Click !vote to see two items at a time and pick your favorite.
-            <br/><br/>
-            Click @me to see your rankings, or @all to see what everyone thinks.
+            :) sorter
           </p>
-        )}
+          {isTutorialVisible && (
+            <p 
+              className="text-left max-w-[600px] text-gray-700 hover:text-gray-500 cursor-pointer transition-colors duration-100"
+              onClick={toggleTutorial}
+            >
+              Type in the search box to get smart suggestions for music content. Click tags to find what you want to rank.
+              <br/><br/>
+              Click !vote to see two items at a time and pick your favorite.
+              <br/><br/>
+              Click @me to see your rankings, or @all to see what everyone thinks.
+            </p>
+          )}
+        </div>
+        <div className="flex flex-col md:flex-row max-w-[200px] md:max-w-none gap-0 justify-center">
+          <TagCategories />
+        </div>
+        <GrammarDisplay />
       </div>
-      <div className="flex flex-col md:flex-row max-w-[200px] md:max-w-none gap-0 justify-center">
-        <TagCategories />
-      </div>
-      <GrammarDisplay />
+      <WarningPopup isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
+        <div className="p-4">
+          <h2 className="text-lg font-bold">login required</h2>
+          <p>{errorMessage}</p>
+        </div>
+      </WarningPopup>
     </div>
   );
-}
+};

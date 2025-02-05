@@ -22,6 +22,7 @@
             [app.login :as login]
             [app.spotify :as spotify]
             [app.item :as item]
+            [app.query :as query]
 
             [app.vote :as vote]
             [app.permissions :as perms]
@@ -36,6 +37,7 @@
             [app.health :as health])
   (:import
    [java.net URLEncoder]))
+
 (defn get-html-file [request] ; revert this for now because it breaks everything
   (let [is-music (or (= "music.sorter.social" (-> request :headers (get "host")))
                      (= "/music" (:uri request)))
@@ -46,7 +48,7 @@
 (defn serve-index [request]
   (let [html-file (get-html-file request)]
     (-> (resp/resource-response html-file)
-        (resp/content-type "text/html")
+        (resp/content-type)
         (assoc :status 200))))
 
 (defn test [r]
@@ -124,10 +126,6 @@
   (db/exec! (-> (h/select :*)
                 (h/from :tags)
                 (h/where [:= :tags/domain_pk_namespace "spotify.playlist"]))))
-
-
-
-
 
 (defn post-tag [r]
   (when (nil? (-> r :session :user_name))
@@ -346,49 +344,55 @@
 (def one-per-minute {:storage storage :limit (UserRateLimit. 2 1 (java.time.Duration/ofMinutes 1))})
 
 
-(def routes [["/" {:handler #'test}]
-             ["/music" {:handler #'test-2}]                                                                                                                                              
-             ["/api" {:middleware []}
-              ["/health" {:get {:handler #'health/check-health}}]
-              ["/feed" {:get {:handler #'feed/get-feed}}]
-              ["/frontpage" {:get {:handler #'feed/get-frontpage-feed}}]
-              ["/hierarchy" {:get {:handler #'feed/get-heirarchy}}]
-              ["/leaderboard" {:get {:handler #'get-leaderboard}}]
-              ["/tag" {:get {:handler #'query-tags}
-                       :post {:middleware [[wrap-rate-limit one-per-minute]]
-                              :handler #'post-tag}
-                       :delete {:handler #'delete-tag}}]
-              ["/users" {:get {:handler #'get-users}}]
-              ["/tag/exists" {:get {:handler #'tag-slug-check}}]
-              ["/tag/page" {:get {:handler #'tag-info-request}}]
-              ["/tag/page2" {:get {:handler #'tag-info-request2}}]
-              ["/tag/permissions" {:get {:handler #'perms/get-perms}
-                                   :post {:middleware [[wrap-rate-limit one-per-minute]]
-                                          :handler #'perms/post-perms}}]
-              ["/vote" {:post {:middleware [[wrap-rate-limit one-per-second]]
-                               :handler #'vote/vote-post}
-                        :delete {:handler #'vote-delete}}]
-              ["/item" {:middleware [[wrap-rate-limit one-per-second]]
-                        :post {:handler #'item-post}}]
-              ["/item/membership" {:get {:handler #'item-m-get}
-                                   :delete {:handler #'item-m-delete}
-                                   :post {:handler #'item-m-post}}]
-              ["/item/skip" {:post {:handler #'item-skip}
-                             :delete {:handler #'item-skip-delete}}]
-              ["/register" {:post {:handler #'login/handle-register}}]
-              ["/login" {:post {:handler #'login/handle-login}
-                         :get {:handler #'login/current-session}}]
-              ["/logout" {:post {:handler #'login/handle-logout}}]
+(def routes
+  [["/" {:handler #'test}]
+   ["/music" {:handler #'test-2}]
+   ["/music/*" {:handler #'test-2}]
+   ["/api"
+    ["/health" {:get {:handler #'health/check-health}}]
+    ["/feed" {:get {:handler #'feed/get-feed}}]
+    ["/frontpage" {:get {:handler #'feed/get-frontpage-feed}}]
+    ["/hierarchy" {:get {:handler #'feed/get-heirarchy}}]
+    ["/leaderboard" {:get {:handler #'get-leaderboard}}]
+    ["/tag" {:get {:handler #'query-tags}
+             :post {:middleware [[wrap-rate-limit one-per-minute]]
+                                :handler #'post-tag}
+             :delete {:handler #'delete-tag}}]
+    ["/users" {:get {:handler #'get-users}}]
+    ["/tag/exists" {:get {:handler #'tag-slug-check}}]
+    ["/tag/page" {:get {:handler #'tag-info-request}}]
+    ["/tag/page2" {:get {:handler #'tag-info-request2}}]
+    ["/tags/suggest" {:get {:handler (fn [req]
+                                          (when-not (-> req :session :user_name)
+                                            (throw (ex-info "Must be logged in to get suggestions" {:status 401})))
+                                            (query/handle-tag-query req))}}]
+    ["/tag/permissions" {:get {:handler #'perms/get-perms}
+                         :post {:middleware [[wrap-rate-limit one-per-minute]]
+                                :handler #'perms/post-perms}}]
+    ["/vote" {:post {:middleware [[wrap-rate-limit one-per-second]]
+                     :handler #'vote/vote-post}
+              :delete {:handler #'vote-delete}}]
+    ["/item" {:middleware [[wrap-rate-limit one-per-second]]
+              :post {:handler #'item-post}}]
+    ["/item/membership" {:get {:handler #'item-m-get}
+                         :delete {:handler #'item-m-delete}
+                         :post {:handler #'item-m-post}}]
+    ["/item/skip" {:post {:handler #'item-skip}
+                   :delete {:handler #'item-skip-delete}}]
+    ["/register" {:post {:handler #'login/handle-register}}]
+    ["/login" {:post {:handler #'login/handle-login}
+               :get {:handler #'login/current-session}}]
+    ["/logout" {:post {:handler #'login/handle-logout}}]
 
-              ["/spotify" spotify/routes]
-              ["/youtube" youtube/routes]
-              ["/linear" linear/routes]
-              ["/reddit" reddit/routes]
-              ["/twitter" twitter/routes] 
+    ["/spotify" spotify/route-data]
+    ["/youtube" youtube/routes]
+    ["/linear" linear/routes]
+    ["/reddit" reddit/routes]
+    ["/twitter" twitter/routes] 
 
-              ["/integrations" integrations/routes]
-              ["/comments" comments/routes]
-              ["/user_group" groups/routes]]])
+    ["/integrations" integrations/routes]
+    ["/comments" comments/routes]
+    ["/user_group" groups/routes]]])
 
 (def app
   (-> (ring/ring-handler
@@ -406,4 +410,4 @@
 
 (defn start [{:keys [port]}]
   (jetty/run-jetty #'app {:port port :join? false :host "0.0.0.0"})
-  (println (str "http server running on port " port)))                                                                                                                                                
+  (println (str "http server running on port " port)))

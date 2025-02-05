@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { current_session, fetchSession } from "./session"; // Updated import
+import { handleAuthReturn } from './authUtils';
 
 export const Register = () => {
   const [location, setLocation] = useLocation();
@@ -12,30 +13,35 @@ export const Register = () => {
   const [username_r, setUsername_r] = useState("");
   const [password_r, setPassword_r] = useState("");
   const [password2_r, setPassword2_r] = useState("");
+  const [error, setError] = useState("");
 
   const handleUsername_rChange = (event) => setUsername_r(event.target.value);
   const handlePassword_rChange = (event) => setPassword_r(event.target.value);
   const handlePassword2_rChange = (event) => setPassword2_r(event.target.value);
 
-  const handleRegister = async (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
     if (password_r !== password2_r) {
       alert("Passwords do not match");
       return;
     }
 
-    const response = await fetch("/api/register", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_name: username_r, password: password_r }),
-    });
-    if (!response.ok) {
-      const msg = await response.text();
-      alert(msg);
-    } else {
-      await fetchSession();
-      setLocation("/");
+    try {
+      const response = await fetch("/api/register", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_name: username_r, password: password_r }),
+      });
+      if (!response.ok) {
+        const msg = await response.text();
+        setError(msg);
+      } else {
+        await fetchSession();
+        handleAuthReturn();
+      }
+    } catch (error) {
+      setError("Registration failed");
     }
   };
 
@@ -53,7 +59,7 @@ export const Register = () => {
         logged in as {current_session.value.user_name}{" "}
         <button
           className="border-2 cursor-pointer"
-          onClick={async () => {
+          onClick={async () => { 
             await fetch("/api/logout", {
               method: "POST",
               credentials: "include",
@@ -71,7 +77,7 @@ export const Register = () => {
   return (
     <div className="flex items-center justify-center min-h-screen bg-white dark:bg-black">
       <form
-        onSubmit={handleRegister}
+        onSubmit={handleSubmit}
         className="bg-gray-100 dark:bg-gray-800 p-6 shadow-md w-80"
       >
         <h2 className="text-2xl mb-4 text-center text-black dark:text-white">register</h2>
