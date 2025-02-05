@@ -4,6 +4,8 @@ import { create } from "zustand";
 import { useState, useEffect } from 'react';
 import { VotePanel } from "./VotePanel";
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { current_session, fetchSession } from "./session";
+import { redirectToLogin, redirectToRegister } from './authUtils';
 import { VotesPanel } from './VotesPanel';
 import { ItemPanel } from './ItemPanel';
 
@@ -255,6 +257,8 @@ const TagCategories = () => {
   const filteredTags = flattenedTags?.filter(tag => 
     tag.displaySlug.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  
 
   return (
     <div className="flex flex-col md:flex-row max-w-[200px] md:max-w-none gap-0 justify-start">
@@ -555,38 +559,86 @@ export const Cli = () => {
     }
   }, []);
 
+  useEffect(() => {
+    fetchSession();
+  }, []);
+
   const toggleTutorial = () => {
     const newValue = !isTutorialVisible;
     setIsTutorialVisible(newValue);
     localStorage.setItem('tutorialVisible', newValue);
   };
 
-  return (
-    <div className="font-serif">
-      <div className="flex flex-col items-center mb-8">
-        <p 
-          className="text-left text-4xl max-w-[600px] min-w-[600px] font-bold mb-4 cursor-pointer hover:text-gray-700"
-          onClick={toggleTutorial}
+  const AuthSection = () => {
+    if (current_session.value && current_session.value.user_name) {
+      return (
+        <div
+          className="fixed top-0 right-0 p-2 dark:text-white z-50 bg-white dark:bg-black bg-opacity-90"
         >
-          :) sorter
-        </p>
-        {isTutorialVisible && (
+          logged in as {current_session.value.user_name}{" "}
+          <button
+            className="border-2 cursor-pointer px-2 hover:bg-gray-200 dark:hover:bg-gray-700"
+            onClick={async () => {
+              await fetch("/api/logout", {
+                method: "POST",
+                credentials: "include",
+              });
+              await fetchSession();
+            }}
+          >
+            logout
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="fixed top-0 right-0 p-2 space-x-2 z-50 bg-white dark:bg-black bg-opacity-90">
+        <button
+          className="border-2 cursor-pointer px-2 hover:bg-gray-200 dark:hover:bg-gray-700 dark:text-white"
+          onClick={() => redirectToLogin()}
+        >
+          login
+        </button>
+        <button
+          className="border-2 cursor-pointer px-2 hover:bg-gray-200 dark:hover:bg-gray-700 dark:text-white"
+          onClick={() => redirectToRegister()}
+        >
+          register
+        </button>
+      </div>
+    );
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      <AuthSection />
+      <div className="font-serif">
+        <div className="flex flex-col items-center mb-8">
           <p 
-            className="text-left max-w-[600px] text-gray-700 hover:text-gray-500 cursor-pointer transition-colors duration-100"
+            className="text-left text-4xl max-w-[600px] min-w-[600px] font-bold mb-4 cursor-pointer hover:text-gray-700"
             onClick={toggleTutorial}
           >
-            Click the tags below to find what you want to rank. oairestn aoirestn aoirestn aorisetn aroisetn arosietn aorstien 
-            <br/><br/>
-            Click !vote to see two items at a time and pick your favorite.
-            <br/><br/>
-            Click @me to see your rankings, or @all to see what everyone thinks.
+            :) sorter
           </p>
-        )}
+          {isTutorialVisible && (
+            <p 
+              className="text-left max-w-[600px] text-gray-700 hover:text-gray-500 cursor-pointer transition-colors duration-100"
+              onClick={toggleTutorial}
+            >
+              Click the tags below to find what you want to rank. oairestn aoirestn aoirestn aorisetn aroisetn arosietn aorstien 
+              <br/><br/>
+              Click !vote to see two items at a time and pick your favorite.
+              <br/><br/>
+              Click @me to see your rankings, or @all to see what everyone thinks.
+            </p>
+          )}
+        </div>
+        <div className="flex flex-col md:flex-row max-w-[200px] md:max-w-none gap-0 justify-center">
+          <TagCategories />
+        </div>
+        <GrammarDisplay />
       </div>
-      <div className="flex flex-col md:flex-row max-w-[200px] md:max-w-none gap-0 justify-center">
-        <TagCategories />
-      </div>
-      <GrammarDisplay />
     </div>
   );
 }
