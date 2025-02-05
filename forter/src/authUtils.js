@@ -4,6 +4,9 @@ const getAuthDomain = () => {
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
       return 'http://localhost:3000';
     }
+    if (hostname === 'staging.sorter.social') {
+      return 'https://staging.sorter.social';
+    }
     return 'https://sorter.social';
   };
   
@@ -25,17 +28,23 @@ const getAuthDomain = () => {
     const returnPath = localStorage.getItem('authReturnPath');
     localStorage.removeItem('authReturnPath'); // Clean up
     
-    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const hostname = window.location.hostname;
+    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+    const isStaging = hostname === 'staging.sorter.social';
     
     if (returnPath && returnPath.includes('/music')) {
       if (isLocalhost) {
         window.location.href = `http://localhost:3000${returnPath}`;
+      } else if (isStaging) {
+        window.location.href = `https://staging.sorter.social${returnPath}`;
       } else {
         window.location.href = `https://music.sorter.social${returnPath.replace('/music', '')}`;
       }
     } else {
       if (isLocalhost) {
         window.location.href = 'http://localhost:3000';
+      } else if (isStaging) {
+        window.location.href = 'https://staging.sorter.social';
       } else {
         window.location.href = 'https://sorter.social';
       }
