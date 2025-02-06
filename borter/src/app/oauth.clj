@@ -25,11 +25,15 @@
       ;; Check if it's from clisorter
       (or (re-find #"music\.sorter\.social" (or origin ""))
           (re-find #"music\.sorter\.social" (or referer "")))
-      (if (= "production" (System/getenv "ENVIRONMENT"))
+      (cond 
+        (= "production" (System/getenv "ENVIRONMENT"))
         "https://music.sorter.social"
-        (if (= "staging" (System/getenv "ENVIRONMENT"))
-          "https://staging.sorter.social/music"
-          "http://localhost:3001"))
+        
+        (= "staging" (System/getenv "ENVIRONMENT"))
+        "https://staging.sorter.social/music"
+        
+        :else
+        "http://localhost:3000/music")
       
       ;; Default to main sorter hostname
       :else (get-hostname))))

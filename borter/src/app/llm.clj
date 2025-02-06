@@ -88,7 +88,6 @@
     "album" "spotify.album"
     "track" "spotify.track"
     "genre" "spotify.genre"
-    "label" "spotify.label"
     nil))
 
 (defn suggest-tags [input]

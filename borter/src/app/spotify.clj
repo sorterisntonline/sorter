@@ -96,6 +96,7 @@
 (defn get-hostname []
   (case (System/getenv "ENVIRONMENT")
     "production" "https://sorter.social"
+    "staging" "https://staging.sorter.social"
     "http://localhost:3000"))
 
 (defn get-spotify-auth-url [state]
@@ -236,6 +237,7 @@
         new-songs (->> playlist-songs
                       (filter #(not (contains? existing-songs-ids (-> % :track :id)))))]
     
+
     (add-songs-to-tag req (-> req :params :tagid) new-songs)
 
     {:status 200
@@ -271,29 +273,40 @@
   (redirect (-> req :params (get "state"))))
 
 (defn get-client-token []
-  (when (or (nil? @token) (-> @token :expires_at (< (System/currentTimeMillis))))
-    (let [response (hc/request {:url "https://accounts.spotify.com/api/token"
-                               :method :post
-                               :headers {"Authorization" (str "Basic " (oauth/encode-to-base64 (str client-id ":" client-secret)))}
-                               :form-params {:grant_type "client_credentials"}})
-          body (-> response :body (json/read-str {:key-fn keyword}))
-          expires-in (* (:expires_in body) 1000)]
-      (reset! token {:access_token (:access_token body)
-                     :expires_at (+ (System/currentTimeMillis) expires-in)})))
-  (:access_token @token))
+  (try
+    (when (or (nil? @token) 
+              (nil? (:expires_at @token))
+              (> (System/currentTimeMillis) (:expires_at @token)))
+      (let [response (hc/request {:url "https://accounts.spotify.com/api/token"
+                                :method :post
+                                :headers {"Authorization" (str "Basic " (oauth/encode-to-base64 (str client-id ":" client-secret)))}
+                                :form-params {:grant_type "client_credentials"}})
+            body (-> response :body (json/read-str {:key-fn keyword}))
+            expires-in (* (:expires_in body) 1000)]
+        (reset! token {:access_token (:access_token body)
+                      :expires_at (+ (System/currentTimeMillis) expires-in)})))
+    (or (:access_token @token)
+        (throw (ex-info "Failed to get client token" {:status 500})))
+    (catch Exception e
+      (println "Error getting client token:" (ex-message e))
+      (throw (ex-info "Failed to get client token" {:status 500 :cause e})))))
 
 (defn search
   "Search Spotify for items of a specific type (artist, album, or track)"
   [query type]
-  (let [access-token (get-client-token)
-        response (hc/request {:url "https://api.spotify.com/v1/search"
-                            :method :get
-                            :headers {"Authorization" (str "Bearer " access-token)}
-                            :query-params {"q" query
-                                         "type" type
-                                         "limit" 5}})
-        results (-> response :body (json/read-str {:key-fn keyword}))]
-    (get results (keyword (str type "s")) [])))
+  (try
+    (let [access-token (get-client-token)
+          response (hc/request {:url "https://api.spotify.com/v1/search"
+                              :method :get
+                              :headers {"Authorization" (str "Bearer " access-token)}
+                              :query-params {"q" query
+                                           "type" type
+                                           "limit" 5}})
+          results (-> response :body (json/read-str {:key-fn keyword}))]
+      (get results (keyword (str type "s")) []))
+    (catch Exception e
+      (println "Error searching Spotify:" (ex-message e))
+      [])))
 
 (defn check-spotify-status [req]
   (let [username (-> req :session :user_name)]
@@ -307,10 +320,39 @@
 
 ;; Create routes using the generic OAuth handler
 (def route-data 
-  (merge
-   (oauth/create-oauth-routes spotify-provider "spotify")
-   {"/playlists" {:get {:handler get-playlists}
-                  :post {:handler post-playlist}}}))
+  {"/api/spotify/auth" {:get {:handler 
+                             (fn [req]
+                               (let [return-path (get-in req [:params "redirect"] "/")
+                                     redirect-uri (str (oauth/get-hostname) "/api/spotify/callback")]
+                                 (redirect (.get-auth-url spotify-provider return-path redirect-uri))))}}
+   
+   "/api/spotify/callback" {:get {:handler 
+                                 (fn [req]
+                                   (let [code (get-in req [:params "code"])
+                                         return-path (get-in req [:params "state"] "/")
+                                         redirect-uri (str (oauth/get-hostname) "/api/spotify/callback")
+                                         tokens (.exchange-code spotify-provider code redirect-uri)
+                                         token-info (.get-token-info spotify-provider tokens)
+                                         expires-in (* (get tokens "expires_in") 1000)
+                                         expires-at (+ (System/currentTimeMillis) expires-in)]
+                                     
+                                     ;; Store tokens in database
+                                     (db/exec! 
+                                      (-> (h/insert-into :tokens)
+                                          (h/values [{:owner (-> req :session :user_name)
+                                                    :domain_pk_namespace "spotify"
+                                                    :access_token (get tokens "access_token")
+                                                    :refresh_token (get tokens "refresh_token")
+                                                    :expires_at expires-at
+                                                    :token_info (json/write-str token-info)}])
+                                          (h/on-conflict [:domain_pk_namespace :owner]
+                                                       (h/do-update-set :access_token :refresh_token :expires_at :token_info))))
+                                     
+                                     (redirect return-path)))}}
+   
+   "/api/spotify/status" {:get {:handler check-spotify-status}}
+   "/api/spotify/playlists" {:get {:handler get-playlists}
+                            :post {:handler post-playlist}}})
 
 (comment
   (get-playlist-tracks (first (get-playlists "Kanye West")) @token)

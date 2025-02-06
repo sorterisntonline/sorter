@@ -15,7 +15,6 @@ prompt:
     - #good-kid-maad-city (album)
     - #alright (track)
     - #hip-hop (genre)
-    - #tde (label)
 
     Return a structured response following the schema provided.
 
@@ -35,7 +34,7 @@ schema:
       type: "array"
       items:
         type: "string"
-        enum: ["artist", "album", "track", "genre", "decade", "label"]
+        enum: ["artist", "album", "track", "genre", "decade"]
       minItems: 1
       maxItems: 5
       description: "Types corresponding to each suggested tag"

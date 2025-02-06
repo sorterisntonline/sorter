@@ -38,6 +38,17 @@
         results (spotify/search query type)]
     (first results)))
 
+(defn create-generic-tag [tag-name domain-pk-namespace owner]
+  (when (and tag-name (not (str/blank? tag-name)))
+    (db/exec! (-> (h/insert-into :tags)
+                  (h/values [{:title tag-name
+                             :slug (sluj tag-name)
+                             :owner owner
+                             :domain_pk_namespace domain-pk-namespace}])
+                  (h/on-conflict [:title :domain_pk_namespace]
+                               (h/do-nothing))
+                  (h/returning :*)))))
+
 (defn process-tag-suggestion [suggestion owner]
   (println "Processing suggestion:" suggestion)
   (try
@@ -46,25 +57,31 @@
                     "namespace:" domain_pk_namespace 
                     "search:" spotify_search)
           
-          ;; Remove the '#' from the tag before processing
-          clean-tag (if (str/starts-with? tag "#")
+          clean-tag (if (and tag (str/starts-with? tag "#"))
                      (subs tag 1)
-                     tag)
-          
-          ;; Check if tag already exists
-          existing-tag (check-existing-tag clean-tag domain_pk_namespace)
-          
-          ;; If tag doesn't exist and we have a Spotify namespace, create it
-          tag-record (or existing-tag
-                        (when (str/starts-with? domain_pk_namespace "spotify.")
-                          (let [spotify-item (search-spotify spotify_search domain_pk_namespace)]
-                            (create-tag-from-spotify spotify-item domain_pk_namespace owner))))]
+                     tag)]
       
-      (when tag-record
-        {:tag clean-tag
-         :domain_pk_namespace domain_pk_namespace
-         :spotify_search spotify_search
-         :tag_record tag-record}))
+      (when clean-tag
+        (let [existing-tag (check-existing-tag clean-tag domain_pk_namespace)
+              
+              ;; Handle different types of tags
+              tag-record (or existing-tag
+                           (cond
+                             ;; Spotify-specific tags
+                             (and domain_pk_namespace 
+                                  (str/starts-with? domain_pk_namespace "spotify."))
+                             (let [spotify-item (search-spotify spotify_search domain_pk_namespace)]
+                               (create-tag-from-spotify spotify-item domain_pk_namespace owner))
+                             
+                             ;; Generic tags (genre, decade, etc)
+                             :else
+                             (create-generic-tag clean-tag domain_pk_namespace owner)))]
+          
+          (when tag-record
+            {:tag clean-tag
+             :domain_pk_namespace domain_pk_namespace
+             :spotify_search spotify_search
+             :tag_record tag-record}))))
     (catch Exception e
       (println "Error processing suggestion:" (ex-message e))
       (println "Full error details:" (ex-data e))
