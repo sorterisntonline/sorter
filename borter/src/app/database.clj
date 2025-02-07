@@ -111,10 +111,13 @@
       (exec! {:delete-from :votes :where [:= :right_item_id (:items_in_tags/item_id x)]})
       (exec! {:delete-from :items :where [:= :id (:items_in_tags/item_id x)]}))))
 
+;; (migratus/create (migratus-config) "add-tag-title-namespace-constraint")
+
 (comment
   ;; Example usage & debugging commands:
   ;; (exec! "SELECT column_name, data_type, is_nullable, column_default FROM information_schema.columns WHERE table_name = 'comments'")
   ;; (migratus/create (migratus-config) "discord-item-membership")
+  ;; 
   ;; (migratus/migrate (migratus-config))
   ;; (migratus/rollback (migratus-config))
   ;; (run-migrations)

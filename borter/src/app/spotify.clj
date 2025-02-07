@@ -7,12 +7,12 @@
             [honey.sql.helpers :as h]
             [sluj.core :refer [ sluj]]
             [ring.util.response :refer [redirect]]
-            [app.permissions :as perms])
+            [app.permissions :as perms]
+            [clojure.string :as str])
   (:import [java.util Base64]))
 
 (def client-id (System/getenv "BORTER_SPOTIFY_CLIENT_ID"))
 (def client-secret (System/getenv "BORTER_SPOTIFY_CLIENT_SECRET"))
-
 (defrecord SpotifyProvider []
   oauth/OAuthProvider
   (get-auth-url [_ state redirect-uri]
@@ -22,7 +22,11 @@
            :response_type "code"
            :redirect_uri redirect-uri
            :state state
-           :scope "playlist-read-private playlist-read-collaborative user-library-read"})))
+           :scope (str "playlist-read-private playlist-read-collaborative "
+                      "user-library-read playlist-modify-public playlist-modify-private "
+                      "app-remote-control streaming user-read-playback-position "
+                      "user-top-read user-read-recently-played user-read-playback-state "
+                      "user-modify-playback-state user-read-currently-playing")})))
   
   (exchange-code [_ code redirect-uri]
     (-> (hc/request 
@@ -98,15 +102,6 @@
     "production" "https://sorter.social"
     "staging" "https://staging.sorter.social"
     "http://localhost:3000"))
-
-(defn get-spotify-auth-url [state]
-  (str "https://accounts.spotify.com/authorize?"
-       (codec/form-encode
-        {:client_id client-id
-         :response_type "code"
-         :redirect_uri (str (get-hostname) "/api/spotify/callback")
-         :state state
-         :scope "playlist-read-private playlist-read-collaborative user-library-read"})))
 
 (defn token-expired? [token]
   (let [expires_at (:tokens/expires_at token)]
@@ -236,41 +231,12 @@
         playlist-song-ids (->> playlist-songs (map :track) (map :id) set)
         new-songs (->> playlist-songs
                       (filter #(not (contains? existing-songs-ids (-> % :track :id)))))]
-    
 
     (add-songs-to-tag req (-> req :params :tagid) new-songs)
 
     {:status 200
      :body {:done true}}))
 
-(defn api-callback [req]
-  (def req req)
-  (def code (-> req :params (get "code")))
-  
-  (def r (-> (hc/request {:as :json
-                          :url "https://accounts.spotify.com/api/token"
-                          :method :post
-                          :headers
-                          {"Authorization" (str "Basic " (oauth/encode-to-base64 (str client-id ":" client-secret)))
-                           "Content-Type" "application/x-www-form-urlencoded"}
-                          :body (str "grant_type=authorization_code"
-                                   "&code=" code
-                                   "&redirect_uri=" (get-hostname))
-                          })
-             :body json/read-str))
-  
-  (let [expires-in (* (get r "expires_in") 1000)  ; Convert to milliseconds
-        expires-at (+ (System/currentTimeMillis) expires-in)]
-    (db/exec! (-> {:insert-into :tokens
-                   :values [{:owner (-> req :session :user_name)
-                            :domain_pk_namespace "spotify"
-                            :access_token (get r "access_token")
-                            :refresh_token (get r "refresh_token")
-                            :expires_at expires-at}]}
-                  (h/on-conflict :owner :domain_pk_namespace)
-                  (h/do-update-set :access_token :refresh_token :expires_at))))
-  
-  (redirect (-> req :params (get "state"))))
 
 (defn get-client-token []
   (try
@@ -303,61 +269,224 @@
                                            "type" type
                                            "limit" 5}})
           results (-> response :body (json/read-str {:key-fn keyword}))]
-      (get results (keyword (str type "s")) []))
+      ;; The API returns results in a nested structure like {tracks: {items: [...]}}
+      ;; We need to extract the items from the appropriate key
+      (let [type-key (keyword (str type "s"))  ; converts "track" to :tracks
+            items (get-in results [type-key :items])]
+        items))
     (catch Exception e
       (println "Error searching Spotify:" (ex-message e))
       [])))
-
-(defn check-spotify-status [req]
-  (let [username (-> req :session :user_name)]
-    (if username
-      (let [token (get-valid-token username)]
-        {:status 200
-         :body {:connected (boolean token)}})
-      {:status 200
-       :body {:connected false
-              :reason "not_logged_in"}})))
-
-;; Create routes using the generic OAuth handler
-(def route-data 
-  {"/api/spotify/auth" {:get {:handler 
-                             (fn [req]
-                               (let [return-path (get-in req [:params "redirect"] "/")
-                                     redirect-uri (str (oauth/get-hostname) "/api/spotify/callback")]
-                                 (redirect (.get-auth-url spotify-provider return-path redirect-uri))))}}
-   
-   "/api/spotify/callback" {:get {:handler 
-                                 (fn [req]
-                                   (let [code (get-in req [:params "code"])
-                                         return-path (get-in req [:params "state"] "/")
-                                         redirect-uri (str (oauth/get-hostname) "/api/spotify/callback")
-                                         tokens (.exchange-code spotify-provider code redirect-uri)
-                                         token-info (.get-token-info spotify-provider tokens)
-                                         expires-in (* (get tokens "expires_in") 1000)
-                                         expires-at (+ (System/currentTimeMillis) expires-in)]
-                                     
-                                     ;; Store tokens in database
-                                     (db/exec! 
-                                      (-> (h/insert-into :tokens)
-                                          (h/values [{:owner (-> req :session :user_name)
-                                                    :domain_pk_namespace "spotify"
-                                                    :access_token (get tokens "access_token")
-                                                    :refresh_token (get tokens "refresh_token")
-                                                    :expires_at expires-at
-                                                    :token_info (json/write-str token-info)}])
-                                          (h/on-conflict [:domain_pk_namespace :owner]
-                                                       (h/do-update-set :access_token :refresh_token :expires_at :token_info))))
-                                     
-                                     (redirect return-path)))}}
-   
-   "/api/spotify/status" {:get {:handler check-spotify-status}}
-   "/api/spotify/playlists" {:get {:handler get-playlists}
-                            :post {:handler post-playlist}}})
 
 (comment
   (get-playlist-tracks (first (get-playlists "Kanye West")) @token)
   )
 
+;; Create the standard OAuth route handlers
+(def oauth-routes (oauth/create-oauth-routes spotify-provider "spotify"))
+
+;; Export the handlers for use in http.clj
+(def handle-auth (-> oauth-routes first second :get :handler))
+(def handle-callback (-> oauth-routes second second :get :handler))
+(def check-spotify-status (-> oauth-routes (nth 2) second :get :handler))
+(def handle-disconnect (-> oauth-routes (nth 3) second :post :handler))
+
+(defn create-spotify-tag
+  "Creates a tag for a Spotify entity (artist, album, track) if it doesn't exist"
+  [entity-type entity owner]
+  (println "Creating spotify tag with:"
+           "\nentity-type:" entity-type
+           "\nentity:" entity
+           "\nowner:" owner)
+  ;; First ensure spotify system user exists
+  (db/exec! 
+   ["INSERT INTO users (user_name, email, password_hash)
+     VALUES (?, ?, ?)
+     ON CONFLICT (user_name) DO NOTHING"
+    "spotify" "spotify@sorter.social" "not-a-real-password"])
+  
+  (let [title (:name entity)
+        slug (sluj title)
+        domain-pk-namespace (str "spotify." entity-type)
+        domain-pk (:id entity)]
+    (db/exec! 
+     ["INSERT INTO tags (title, slug, owner, domain_pk_namespace, domain_pk)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (domain_pk_namespace, domain_pk) DO NOTHING
+       RETURNING *"
+      title slug "spotify" domain-pk-namespace domain-pk])))
+
+(defn get-artist-tracks
+  "Get all tracks for an artist from Spotify API"
+  [artist-id token]
+  (try 
+    (let [response (hc/request 
+                    {:url (str "https://api.spotify.com/v1/artists/" artist-id "/top-tracks")
+                     :method :get
+                     :headers {"Authorization" (str "Bearer " token)}
+                     :query-params {"market" "US"}})
+          tracks (-> response :body (json/read-str {:key-fn keyword}) :tracks)]
+      tracks)
+    (catch Exception e
+      (println "Error getting artist tracks:" (ex-message e))
+      [])))
+
+(defn get-album-tracks
+  "Get all tracks from an album"
+  [album-id token]
+  (try
+    (let [response (hc/request 
+                    {:url (str "https://api.spotify.com/v1/albums/" album-id "/tracks")
+                     :method :get
+                     :headers {"Authorization" (str "Bearer " token)}})
+          tracks (-> response :body (json/read-str {:key-fn keyword}) :items)]
+      tracks)
+    (catch Exception e
+      (println "Error getting album tracks:" (ex-message e))
+      [])))
+
+(defn create-or-get-category-tag
+  "Creates or gets a tag for categories like genres, decades"
+  [category-name owner]
+  (db/exec! 
+   ["INSERT INTO tags (title, slug, owner, domain_pk_namespace)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT (title, domain_pk_namespace) 
+     DO UPDATE SET 
+       slug = EXCLUDED.slug,
+       owner = EXCLUDED.owner
+     RETURNING *"
+    (str "#" category-name)
+    (sluj category-name)
+    "spotify"
+    (case (first (str/split category-name #"-"))
+      "genre" "meta.genre"
+      "decade" "meta.decade")]))
+
+(defn get-artist-metadata
+  "Get full artist metadata including genres"
+  [artist-id token]
+  (try
+    (let [response (hc/request 
+                    {:url (str "https://api.spotify.com/v1/artists/" artist-id)
+                     :method :get
+                     :headers {"Authorization" (str "Bearer " token)}})
+          artist (-> response :body (json/read-str {:key-fn keyword}))]
+      artist)
+    (catch Exception e
+      (println "Error getting artist metadata:" (ex-message e))
+      nil)))
+
+(defn get-track-metadata
+  "Get full track metadata including album release date"
+  [track-id token]
+  (try
+    (let [response (hc/request 
+                    {:url (str "https://api.spotify.com/v1/tracks/" track-id)
+                     :method :get
+                     :headers {"Authorization" (str "Bearer " token)}})
+          track (-> response :body (json/read-str {:key-fn keyword}))
+          album-response (hc/request 
+                         {:url (str "https://api.spotify.com/v1/albums/" (-> track :album :id))
+                          :method :get
+                          :headers {"Authorization" (str "Bearer " token)}})
+          album (-> album-response :body (json/read-str {:key-fn keyword}))]
+      (assoc track :release_date (:release_date album)))
+    (catch Exception e
+      (println "Error getting track metadata:" (ex-message e))
+      nil)))
+
+(defn get-decade-from-date
+  "Convert a release date to a decade tag (e.g., '1970s')"
+  [release-date]
+  (when release-date
+    (let [year (Integer/parseInt (first (str/split release-date #"-")))
+          decade (* (quot year 10) 10)]
+      (str decade "s"))))
+
+(defn add-to-category-tags
+  "Add items to genre and decade tags"
+  [items owner metadata]
+  (let [token (get-client-token)]
+    ;; Handle genres
+    (when-let [genres (:genres metadata)]
+      (doseq [genre genres]
+        (let [genre-tag (first (create-or-get-category-tag (str "genre-" (sluj genre)) owner))]
+          (db/exec! 
+           (-> (h/insert-into :items_in_tags)
+               (h/values
+                (for [item items]
+                  {:item_id (:id item)
+                   :tag_id (:id genre-tag)})))))))
+    
+    ;; Handle decades
+    (when-let [release-date (:release_date metadata)]
+      (when-let [decade (get-decade-from-date release-date)]
+        (let [decade-tag (first (create-or-get-category-tag (str "decade-" decade) owner))]
+          (db/exec! 
+           (-> (h/insert-into :items_in_tags)
+               (h/values
+                (for [item items]
+                  {:item_id (:id item)
+                   :tag_id (:id decade-tag)})))))))))
+
+(defn retroactively-tag-artist-tracks
+  "Find all tracks by an artist and add them to appropriate genre tags"
+  [artist-id owner]
+  (let [token (get-client-token)
+        artist (get-artist-metadata artist-id token)
+        existing-tracks (db/exec! 
+                        (-> (h/select :items/*)
+                            (h/from :items)
+                            (h/where [:= :domain_pk_namespace "spotify.track"])))]
+    
+    ;; For each genre, create tag and add all artist's tracks
+    (doseq [genre (:genres artist)]
+      (let [genre-tag (first (create-or-get-category-tag (str "genre-" (sluj genre)) owner))]
+        (db/exec! 
+         (-> (h/insert-into :items_in_tags)
+             (h/values
+              (for [track existing-tracks]
+                {:item_id (:id track)
+                 :tag_id (:id genre-tag)}))))))))
+
+(defn import-spotify-entity
+  "Main function to handle importing any Spotify entity (artist, album, track)"
+  [entity-type entity owner]
+  (let [token (get-client-token)
+        entity-tag (first (create-spotify-tag entity-type entity owner))
+        
+        tracks (case entity-type
+                "artist" (get-artist-tracks (:id entity) token)
+                "album" (get-album-tracks (:id entity) token)
+                "track" [entity]
+                [])]
+    
+    (when (and entity-tag tracks)
+      (let [items (db/exec! 
+                   (-> (h/insert-into :items)
+                       (h/values
+                        (for [track tracks]
+                          {:title (:name track)
+                           :slug (sluj (:name track))
+                           :domain_pk (:id track)
+                           :domain_pk_namespace "spotify.track"
+                           :owner owner}))
+                       (h/on-conflict [:domain_pk :domain_pk_namespace]
+                                    (h/do-nothing))
+                       (h/returning :*)))]
+        
+        (when (seq items)
+          {:tag entity-tag
+           :items (db/exec! 
+                   (-> (h/insert-into :items_in_tags)
+                       (h/values
+                        (for [item items]
+                          {:item_id (:id item)
+                           :tag_id (:id entity-tag)}))
+                       (h/on-conflict [:item_id :tag_id]
+                                    (h/do-nothing))
+                       (h/returning :*)))})))))
 
 
 

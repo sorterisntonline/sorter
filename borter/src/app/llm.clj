@@ -87,7 +87,8 @@
     "artist" "spotify.artist"
     "album" "spotify.album"
     "track" "spotify.track"
-    "genre" "spotify.genre"
+    "genre" "meta.genre"
+    "decade" "meta.decade"
     nil))
 
 (defn suggest-tags [input]

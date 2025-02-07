@@ -34,7 +34,8 @@
             [app.reddit :as reddit]
             [app.twitter :as twitter]
             [app.groups :as groups]
-            [app.health :as health])
+            [app.health :as health]
+            [app.oauth :as oauth])
   (:import
    [java.net URLEncoder]))
 
@@ -384,7 +385,14 @@
                :get {:handler #'login/current-session}}]
     ["/logout" {:post {:handler #'login/handle-logout}}]
 
-    ["/spotify" spotify/route-data]
+    ["/spotify" 
+     ["/auth" {:get {:handler spotify/handle-auth}}]
+     ["/callback" {:get {:handler spotify/handle-callback}}]
+     ["/status" {:get {:handler spotify/check-spotify-status}}]
+     ["/disconnect" {:post {:handler spotify/handle-disconnect}}]
+     ["/playlists" {:get {:handler spotify/get-playlists}
+                    :post {:handler spotify/post-playlist}}]]
+
     ["/youtube" youtube/routes]
     ["/linear" linear/routes]
     ["/reddit" reddit/routes]
@@ -394,16 +402,24 @@
     ["/comments" comments/routes]
     ["/user_group" groups/routes]]])
 
+(defn wrap-dev-session
+  "Middleware that injects a dev session when AUTO_LOGIN=true"
+  [handler]
+  (fn [request]
+    (if (= (System/getenv "AUTO_LOGIN") "true")
+      (handler (assoc request :session {:user_name "admin"}))
+      (handler request))))
+
 (def app
   (-> (ring/ring-handler
        (ring/router routes)
        #'test)
 
-
       (wrap-exception)
       (mw/wrap-params)
       (params/wrap-params)
       (mw/wrap-format muntaja)
+      (wrap-dev-session)
       (session/wrap-session)
       (wrap-resource "public")
       (wrap-content-type)))
@@ -411,3 +427,4 @@
 (defn start [{:keys [port]}]
   (jetty/run-jetty #'app {:port port :join? false :host "0.0.0.0"})
   (println (str "http server running on port " port)))
+

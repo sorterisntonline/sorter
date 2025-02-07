@@ -33,13 +33,21 @@ export const OAuthButton = ({
 };
 
 // Specific implementation for Spotify
-export const SpotifyAuthButton = (props) => (
-  <OAuthButton
-    service="spotify"
-    brandColor="#1DB954"
-    brandName="spotify"
-    connectText="Link your"
-    connectedText="Spotify connected"
-    {...props}
-  />
-);
+export const SpotifyAuthButton = (props) => {
+  const { isConnected } = useOAuthStatus('spotify');
+  
+  if (isConnected) {
+    return null;
+  }
+
+  return (
+    <OAuthButton
+      service="spotify"
+      brandColor="#1DB954"
+      brandName="spotify"
+      connectText="Link your"
+      connectedText="Spotify connected"
+      {...props}
+    />
+  );
+};

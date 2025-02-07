@@ -34,5 +34,8 @@ export const useOAuthStatus = (service) => {
 };
 
 export const initiateOAuth = (service, returnPath = window.location.href) => {
-  window.location.href = `/api/${service}/auth?redirect=${encodeURIComponent(returnPath)}`;
+  const authUrl = `/api/${service}/auth?redirect=${encodeURIComponent(returnPath)}`;
+  console.log('Initiating OAuth with URL:', authUrl);
+  console.log('Current location:', window.location.href);
+  window.location.href = authUrl;
 };

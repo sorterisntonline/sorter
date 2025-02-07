@@ -150,7 +150,7 @@ const TagSuggestion = ({ suggestion, onSelect }) => {
       className="flex items-center p-2 cursor-pointer hover:bg-red-400 transition-colors"
     >
       {getIcon()}
-      <span className="ml-2 font-serif">{suggestion.tag}</span>
+      <span className="ml-2 font-serif">#{suggestion.tag}</span>
       <span className="ml-2 text-sm text-gray-600">
         ({suggestion.domain_pk_namespace?.split('.')[1]})
       </span>
