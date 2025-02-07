@@ -6,8 +6,7 @@
             [hato.client :as hc]
             [clj-async-profiler.core :as prof]
             [next.jdbc.types :as typ]
-            [borkdude.deflet :refer [deflet]]
-            [app.permissions :as perms])
+            [borkdude.deflet :refer [deflet]])
   (:import [java.util Date]))
 
 (defn get-feed [req]
