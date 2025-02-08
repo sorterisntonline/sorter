@@ -160,41 +160,9 @@ const SearchPanel = ({ searchQuery, setSearchQuery }) => {
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['search', searchQuery],
     queryFn: async () => {
-      if (!searchQuery.trim()) return { suggestions: [] };
+      if (!searchQuery.trim()) return { suggestions: {} };
       const response = await fetch(`/api/tag/query?query=${encodeURIComponent(searchQuery)}`);
-      const result = await response.json();
-      
-      // Flatten and transform the Spotify results
-      const suggestions = [];
-      
-      if (result.suggestions.artists) {
-        suggestions.push(...result.suggestions.artists.map(artist => ({
-          tag: artist.name,
-          domain_pk_namespace: 'spotify.artist',
-          domain_pk: artist.id,
-          image: artist.images?.[0]?.url // Get the first (largest) image
-        })));
-      }
-      
-      if (result.suggestions.albums) {
-        suggestions.push(...result.suggestions.albums.map(album => ({
-          tag: album.name,
-          domain_pk_namespace: 'spotify.album',
-          domain_pk: album.id,
-          image: album.images?.[0]?.url
-        })));
-      }
-      
-      if (result.suggestions.tracks) {
-        suggestions.push(...result.suggestions.tracks.map(track => ({
-          tag: track.name,
-          domain_pk_namespace: 'spotify.track',
-          domain_pk: track.id,
-          image: track.album?.images?.[0]?.url
-        })));
-      }
-
-      return { suggestions };
+      return response.json();
     },
     enabled: false,
     staleTime: 30000,
@@ -202,8 +170,8 @@ const SearchPanel = ({ searchQuery, setSearchQuery }) => {
   });
 
   console.log('Current data:', data);
-  const suggestions = data?.suggestions || [];
-  console.log('Suggestions array:', suggestions);
+  const suggestions = data?.suggestions || {};
+  console.log('Suggestions:', suggestions);
 
   useEffect(() => {
     debouncedQuery(searchQuery);
@@ -235,36 +203,102 @@ const SearchPanel = ({ searchQuery, setSearchQuery }) => {
           )}
         </div>
         
-        <div className="space-y-4">
-          {suggestions.length > 0 ? (
-            <div>
-              <h3 className="text-sm uppercase text-gray-500 dark:text-gray-400">Search Results</h3>
-              <div className="space-y-2 mt-2">
-                {suggestions.map((suggestion, index) => (
-                  <div
-                    key={`${suggestion.tag}-${index}`}
-                    onClick={() => handleTagClick(suggestion)}
-                    className="p-3 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer flex items-center gap-3"
-                  >
-                    {suggestion.image ? (
-                      <img 
-                        src={suggestion.image} 
-                        alt={suggestion.tag}
-                        className="w-12 h-12 object-cover rounded"
-                      />
-                    ) : (
-                      <div className="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded flex items-center justify-center">
-                        <SpotifyIcon />
+        <div className="space-y-6">
+          {Object.entries(suggestions).length > 0 ? (
+            <>
+              {suggestions.artists?.length > 0 && (
+                <div>
+                  <h3 className="text-sm uppercase text-gray-500 dark:text-gray-400 mb-2">Artists</h3>
+                  <div className="space-y-2">
+                    {suggestions.artists.map((artist, index) => (
+                      <div
+                        key={`artist-${artist.id}-${index}`}
+                        onClick={() => handleTagClick({
+                          tag: artist.name,
+                          domain_pk_namespace: 'spotify.artist',
+                          domain_pk: artist.id,
+                          image: artist.images?.[0]?.url
+                        })}
+                        className="p-3 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer flex items-center gap-3"
+                      >
+                        {artist.images?.[0]?.url ? (
+                          <img 
+                            src={artist.images[0].url} 
+                            alt={artist.name}
+                            className="w-12 h-12 object-cover rounded"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded" />
+                        )}
+                        <span>{artist.name}</span>
                       </div>
-                    )}
-                    <div className="flex items-center gap-2">
-                      <SpotifyIcon />
-                      <span>{suggestion.tag}</span>
-                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </div>
+                </div>
+              )}
+
+              {suggestions.albums?.length > 0 && (
+                <div>
+                  <h3 className="text-sm uppercase text-gray-500 dark:text-gray-400 mb-2">Albums</h3>
+                  <div className="space-y-2">
+                    {suggestions.albums.map((album, index) => (
+                      <div
+                        key={`album-${album.id}-${index}`}
+                        onClick={() => handleTagClick({
+                          tag: album.name,
+                          domain_pk_namespace: 'spotify.album',
+                          domain_pk: album.id,
+                          image: album.images?.[0]?.url
+                        })}
+                        className="p-3 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer flex items-center gap-3"
+                      >
+                        {album.images?.[0]?.url ? (
+                          <img 
+                            src={album.images[0].url} 
+                            alt={album.name}
+                            className="w-12 h-12 object-cover rounded"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded" />
+                        )}
+                        <span>{album.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {suggestions.tracks?.length > 0 && (
+                <div>
+                  <h3 className="text-sm uppercase text-gray-500 dark:text-gray-400 mb-2">Tracks</h3>
+                  <div className="space-y-2">
+                    {suggestions.tracks.map((track, index) => (
+                      <div
+                        key={`track-${track.id}-${index}`}
+                        onClick={() => handleTagClick({
+                          tag: track.name,
+                          domain_pk_namespace: 'spotify.track',
+                          domain_pk: track.id,
+                          image: track.album?.images?.[0]?.url
+                        })}
+                        className="p-3 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer flex items-center gap-3"
+                      >
+                        {track.album?.images?.[0]?.url ? (
+                          <img 
+                            src={track.album.images[0].url} 
+                            alt={track.name}
+                            className="w-12 h-12 object-cover rounded"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded" />
+                        )}
+                        <span>{track.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           ) : searchQuery.trim() ? (
             <div className="text-gray-500 dark:text-gray-400">
               No results found
