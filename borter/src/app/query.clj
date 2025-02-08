@@ -13,23 +13,10 @@
                    tag)
         slug (sluj clean-tag)]
     (first (db/exec! (-> (h/select :*)
-                        (h/from :tags)
-                        (h/where [:and
-                                 [:= :slug slug]
-                                 [:= :domain_pk_namespace domain-pk-namespace]]))))))
-
-(defn search-spotify [query domain-pk-namespace]
-  (let [type (case domain-pk-namespace
-               "spotify.artist" "artist"
-               "spotify.album" "album"
-               "spotify.track" "track"
-               nil)
-        _ (println "Searching Spotify for:" query "with type:" type)
-        results (when type
-                 (spotify/search query type))]
-    (when results
-      (println "Spotify search results:" (first results)))
-    (first results)))
+                         (h/from :tags)
+                         (h/where [:and
+                                   [:= :slug slug]
+                                   [:= :domain_pk_namespace domain-pk-namespace]]))))))
 
 (defn create-generic-tag [tag-name domain-pk-namespace owner]
   (when (and tag-name (not (str/blank? tag-name)))
@@ -104,33 +91,37 @@
 
 (defn handle-tag-query [req]
   (println "Handling tag query request:" req)
-  (try
-    (let [input (or (-> req :query-params (get "query"))
-                    (-> req :params (get "query")))
-          _ (println "Query input:" input)
-          owner (-> req :session :user_name)
-          _ (println "Owner:" owner)]
+  (let [input (or (-> req :query-params (get "query"))
+                  (-> req :params (get "query")))
+        _ (println "Query input:" input)
+        owner (-> req :session :user_name)
+        _ (println "Owner:" owner)]
+    
+    (if (str/blank? input)
+      (do
+        (println "Empty input, returning empty suggestions")
+        {:status 200 :body {:suggestions []}})
       
-      (if (str/blank? input)
-        (do
-          (println "Empty input, returning empty suggestions")
-          {:status 200 :body {:suggestions []}})
-        
-        (let [suggestions (llm/suggest-tags input)
-              _ (println "Got suggestions from LLM:" suggestions)
-              
-              processed-suggestions (->> suggestions
-                                       (map #(process-tag-suggestion % owner))
+      (let [spotify-results (spotify/search input)
+            _ (println "Got results from Spotify:" spotify-results)
+            
+            processed-suggestions (->> spotify-results
+                                       (map (fn [result]
+                                              (let [entity-type (cond
+                                                                  (:type/artist result) "spotify.artist"
+                                                                  (:type/album result) "spotify.album"
+                                                                  (:type/track result) "spotify.track")
+                                                    name (or (:name result) (:title result))]
+                                                {:tag (str "#" name)
+                                                 :domain_pk_namespace entity-type
+                                                 :spotify_search name
+                                                 :tag_record (spotify/import-spotify-entity 
+                                                              (last (str/split entity-type #"\."))
+                                                              result 
+                                                              owner)})))
                                        (remove nil?)
                                        vec)
-              _ (println "Processed suggestions:" processed-suggestions)]
-          
-          {:status 200
-           :body {:suggestions processed-suggestions}})))
-    (catch Exception e
-      (println "Error in handle-tag-query:" (ex-message e))
-      (println "Full error:")
-      (.printStackTrace e)
-      {:status 500
-       :body {:error "Failed to process tag suggestions"
-              :details (ex-message e)}})))
+            _ (println "Processed suggestions:" processed-suggestions)]
+        
+        {:status 200
+         :body {:suggestions processed-suggestions}}))))

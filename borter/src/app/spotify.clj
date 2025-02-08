@@ -258,27 +258,47 @@
       (throw (ex-info "Failed to get client token" {:status 500 :cause e})))))
 
 (defn search
-  "Search Spotify for items of a specific type (artist, album, or track)"
-  [query type]
-  (try
-    (let [access-token (get-client-token)
-          response (hc/request {:url "https://api.spotify.com/v1/search"
-                              :method :get
-                              :headers {"Authorization" (str "Bearer " access-token)}
-                              :query-params {"q" query
-                                           "type" type
-                                           "limit" 5}})
-          results (-> response :body (json/read-str {:key-fn keyword}))]
-      ;; The API returns results in a nested structure like {tracks: {items: [...]}}
-      ;; We need to extract the items from the appropriate key
-      (let [type-key (keyword (str type "s"))  ; converts "track" to :tracks
-            items (get-in results [type-key :items])]
-        items))
-    (catch Exception e
-      (println "Error searching Spotify:" (ex-message e))
-      [])))
+  "Search Spotify for items and merge with existing database records"
+  [query]
+  (let [access-token (get-client-token)
+        ;; Get results from Spotify API
+        response (hc/request 
+                  {:url "https://api.spotify.com/v1/search"
+                   :method :get
+                   :headers {"Authorization" (str "Bearer " access-token)}
+                   :query-params {"q" query
+                                  "type" "album,track,artist"
+                                  "limit" 5}})
+        results (-> response :body (json/read-str {:key-fn keyword}))
+        
+        ;; Extract all Spotify IDs
+        spotify-ids (concat 
+                     (map :id (get-in results [:artists :items]))
+                     (map :id (get-in results [:albums :items]))
+                     (map :id (get-in results [:tracks :items])))
+        
+        ;; Look up existing records
+        existing-records (when (seq spotify-ids)
+                           (db/exec! 
+                            (-> (h/select :*)
+                                (h/from :tags)
+                                (h/where [:and 
+                                          [:in :domain_pk spotify-ids]
+                                          [:like :domain_pk_namespace "spotify.%"]]))))]
+    
+    ;; Merge results with existing records
+    {:artists (map #(merge % (first (filter (fn [r] (= (:domain_pk r) (:id %))) 
+                                            existing-records)))
+                   (get-in results [:artists :items]))
+     :albums (map #(merge % (first (filter (fn [r] (= (:domain_pk r) (:id %))) 
+                                           existing-records)))
+                  (get-in results [:albums :items]))
+     :tracks (map #(merge % (first (filter (fn [r] (= (:domain_pk r) (:id %))) 
+                                           existing-records)))
+                  (get-in results [:tracks :items]))}))
 
 (comment
+  (search "kendrick-lamar")
   (get-playlist-tracks (first (get-playlists "Kanye West")) @token)
   )
 

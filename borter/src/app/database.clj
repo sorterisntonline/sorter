@@ -114,6 +114,8 @@
 ;; (migratus/create (migratus-config) "add-tag-title-namespace-constraint")
 
 (comment
+  ;; insert admin user
+  (exec! {:insert-into :users :values [{:user_name "admin" :password_hash "admin"}]})
   ;; Example usage & debugging commands:
   ;; (exec! "SELECT column_name, data_type, is_nullable, column_default FROM information_schema.columns WHERE table_name = 'comments'")
   ;; (migratus/create (migratus-config) "discord-item-membership")
