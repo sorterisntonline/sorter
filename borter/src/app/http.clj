@@ -301,6 +301,7 @@
     (try (handler request)
          (catch Exception e
            (def e e)
+           (println "Exception:" e)
            (let [message (ex-message e)]
              message)
            (merge {:status 500
@@ -363,10 +364,7 @@
     ["/tag/exists" {:get {:handler #'tag-slug-check}}]
     ["/tag/page" {:get {:handler #'tag-info-request}}]
     ["/tag/page2" {:get {:handler #'tag-info-request2}}]
-    ["/tags/suggest" {:get {:handler (fn [req]
-                                          (when-not (-> req :session :user_name)
-                                            (throw (ex-info "Must be logged in to get suggestions" {:status 401})))
-                                            (query/handle-tag-query req))}}]
+    ["/tag/query" {:get {:handler #'query/handle-tag-query}}]
     ["/tag/permissions" {:get {:handler #'perms/get-perms}
                          :post {:middleware [[wrap-rate-limit one-per-minute]]
                                 :handler #'perms/post-perms}}]

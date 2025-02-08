@@ -11,6 +11,8 @@ import { redirectToLogin, redirectToRegister } from './authUtils';
 import WarningPopup from './WarningPopup';
 import { initiateOAuth } from './oauth/useOAuth';
 import { SpotifyAuthButton } from './oauth/OAuthButton';
+import { useQuery } from '@tanstack/react-query';
+import debounce from 'lodash/debounce';  // For debouncing
 
 const SpotifyIcon = () => (
   <img
@@ -149,39 +151,140 @@ const PanelNav = ({ activePanel, setActivePanel }) => {
 };
 
 const SearchPanel = ({ searchQuery, setSearchQuery }) => {
+  const debouncedQuery = useRef(
+    debounce((query) => {
+      refetch();
+    }, 300)
+  ).current;
+
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['search', searchQuery],
+    queryFn: async () => {
+      if (!searchQuery.trim()) return { suggestions: [] };
+      const response = await fetch(`/api/tag/query?query=${encodeURIComponent(searchQuery)}`);
+      const result = await response.json();
+      
+      // Flatten and transform the Spotify results
+      const suggestions = [];
+      
+      if (result.suggestions.artists) {
+        suggestions.push(...result.suggestions.artists.map(artist => ({
+          tag: artist.name,
+          domain_pk_namespace: 'spotify.artist',
+          domain_pk: artist.id,
+          image: artist.images?.[0]?.url // Get the first (largest) image
+        })));
+      }
+      
+      if (result.suggestions.albums) {
+        suggestions.push(...result.suggestions.albums.map(album => ({
+          tag: album.name,
+          domain_pk_namespace: 'spotify.album',
+          domain_pk: album.id,
+          image: album.images?.[0]?.url
+        })));
+      }
+      
+      if (result.suggestions.tracks) {
+        suggestions.push(...result.suggestions.tracks.map(track => ({
+          tag: track.name,
+          domain_pk_namespace: 'spotify.track',
+          domain_pk: track.id,
+          image: track.album?.images?.[0]?.url
+        })));
+      }
+
+      return { suggestions };
+    },
+    enabled: false,
+    staleTime: 30000,
+    cacheTime: 3600000,
+  });
+
+  console.log('Current data:', data);
+  const suggestions = data?.suggestions || [];
+  console.log('Suggestions array:', suggestions);
+
+  useEffect(() => {
+    debouncedQuery(searchQuery);
+    return () => {
+      debouncedQuery.cancel();
+    };
+  }, [searchQuery, debouncedQuery]);
+
+  const handleTagClick = (tag) => {
+    // TODO: Implement tag selection logic
+    console.log('Selected tag:', tag);
+  };
+
   return (
     <div className="panel-content p-6 bg-white dark:bg-gray-800">
       <div className="max-w-2xl mx-auto">
-        <input
-          type="text"
-          placeholder="Search for music, artists, or tags..."
-          className="w-full p-4 text-lg border rounded-lg mb-6 dark:bg-gray-700 dark:text-white"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Search for music, artists, or tags..."
+            className="w-full p-4 text-lg border rounded-lg mb-6 dark:bg-gray-700 dark:text-white"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          {isLoading && (
+            <div className="absolute right-4 top-4">
+              <div className="animate-spin h-6 w-6 border-2 border-blue-500 rounded-full border-t-transparent"></div>
+            </div>
+          )}
+        </div>
         
         <div className="space-y-4">
-          <div className="border-b pb-2 dark:border-gray-600">
-            <h3 className="text-sm uppercase text-gray-500 dark:text-gray-400">Popular Tags</h3>
-            <div className="flex flex-wrap gap-2 mt-2">
-              {['#hip-hop', '#2023', '#indie', '#rock', '#electronic'].map(tag => (
-                <span key={tag} className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-sm cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600">
-                  {tag}
-                </span>
-              ))}
+          {suggestions.length > 0 ? (
+            <div>
+              <h3 className="text-sm uppercase text-gray-500 dark:text-gray-400">Search Results</h3>
+              <div className="space-y-2 mt-2">
+                {suggestions.map((suggestion, index) => (
+                  <div
+                    key={`${suggestion.tag}-${index}`}
+                    onClick={() => handleTagClick(suggestion)}
+                    className="p-3 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer flex items-center gap-3"
+                  >
+                    {suggestion.image ? (
+                      <img 
+                        src={suggestion.image} 
+                        alt={suggestion.tag}
+                        className="w-12 h-12 object-cover rounded"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded flex items-center justify-center">
+                        <SpotifyIcon />
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <SpotifyIcon />
+                      <span>{suggestion.tag}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-
-          <div>
-            <h3 className="text-sm uppercase text-gray-500 dark:text-gray-400">Suggested Results</h3>
-            <div className="space-y-2 mt-2">
-              {['Kendrick Lamar', 'The Beatles', 'Taylor Swift'].map(result => (
-                <div key={result} className="p-3 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
-                  {result}
-                </div>
-              ))}
+          ) : searchQuery.trim() ? (
+            <div className="text-gray-500 dark:text-gray-400">
+              No results found
             </div>
-          </div>
+          ) : (
+            <div className="border-b pb-2 dark:border-gray-600">
+              <h3 className="text-sm uppercase text-gray-500 dark:text-gray-400">Popular Tags</h3>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {['#hip-hop', '#2023', '#indie', '#rock', '#electronic'].map(tag => (
+                  <span 
+                    key={tag} 
+                    onClick={() => setSearchQuery(tag)}
+                    className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-sm cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
