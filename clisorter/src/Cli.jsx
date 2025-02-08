@@ -128,7 +128,147 @@ const useSpotifyStatus = () => {
   };
 };
 
+const PanelNav = ({ activePanel, setActivePanel }) => {
+  return (
+    <nav className="p-4 flex justify-center items-center">
+      <div className="flex w-64 h-5 bg-gray-300">
+        {[1, 2, 3].map(panel => (
+          <button 
+            key={panel}
+            onClick={() => setActivePanel(panel)}
+            className={`flex-1 h-full transition-colors duration-200 ${
+              activePanel === panel 
+                ? 'bg-blue-500' 
+                : 'bg-gray-300 hover:bg-gray-400'
+            }`}
+          />
+        ))}
+      </div>
+    </nav>
+  );
+};
+
+const SearchPanel = ({ searchQuery, setSearchQuery }) => {
+  return (
+    <div className="panel-content p-6 bg-white dark:bg-gray-800">
+      <div className="max-w-2xl mx-auto">
+        <input
+          type="text"
+          placeholder="Search for music, artists, or tags..."
+          className="w-full p-4 text-lg border rounded-lg mb-6 dark:bg-gray-700 dark:text-white"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+        
+        <div className="space-y-4">
+          <div className="border-b pb-2 dark:border-gray-600">
+            <h3 className="text-sm uppercase text-gray-500 dark:text-gray-400">Popular Tags</h3>
+            <div className="flex flex-wrap gap-2 mt-2">
+              {['#hip-hop', '#2023', '#indie', '#rock', '#electronic'].map(tag => (
+                <span key={tag} className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-sm cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-sm uppercase text-gray-500 dark:text-gray-400">Suggested Results</h3>
+            <div className="space-y-2 mt-2">
+              {['Kendrick Lamar', 'The Beatles', 'Taylor Swift'].map(result => (
+                <div key={result} className="p-3 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
+                  {result}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const RankingPanel = () => {
+  return (
+    <div className="panel-content p-6 bg-white dark:bg-gray-800">
+      <div className="max-w-4xl mx-auto">
+        <div className="mb-6">
+          <h3 className="text-sm uppercase text-gray-500 dark:text-gray-400 mb-2">Selected Tags</h3>
+          <div className="flex flex-wrap gap-2">
+            {['#hip-hop', '#2020s'].map(tag => (
+              <span key={tag} className="px-4 py-2 bg-blue-100 dark:bg-blue-900 rounded-full text-blue-800 dark:text-blue-200">
+                {tag} ×
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-6">
+          <div>
+            <h3 className="text-sm uppercase text-gray-500 dark:text-gray-400 mb-3">Current Rankings</h3>
+            <div className="space-y-2">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="p-3 border rounded-lg flex items-center">
+                  <span className="mr-3 text-gray-400">{i}.</span>
+                  <span>Item {i}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-sm uppercase text-gray-500 dark:text-gray-400 mb-3">Suggested Tags</h3>
+            <div className="flex flex-wrap gap-2">
+              {['#west-coast', '#conscious', '#grammy-winner'].map(tag => (
+                <span key={tag} className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-sm cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const VotingPanel = () => {
+  return (
+    <div className="panel-content p-6 bg-white dark:bg-gray-800">
+      <div className="max-w-4xl mx-auto">
+        <div className="grid md:grid-cols-2 gap-8">
+          <div className="border rounded-lg p-4">
+            <div className="aspect-square bg-gray-100 dark:bg-gray-700 rounded-lg mb-4"></div>
+            <h3 className="text-lg font-semibold mb-2">Item A</h3>
+            <p className="text-gray-600 dark:text-gray-400">Description for Item A</p>
+          </div>
+
+          <div className="border rounded-lg p-4">
+            <div className="aspect-square bg-gray-100 dark:bg-gray-700 rounded-lg mb-4"></div>
+            <h3 className="text-lg font-semibold mb-2">Item B</h3>
+            <p className="text-gray-600 dark:text-gray-400">Description for Item B</p>
+          </div>
+        </div>
+
+        <div className="mt-8 flex justify-center items-center space-x-4">
+          <button className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
+            Vote for A
+          </button>
+          <button className="px-6 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">
+            Skip
+          </button>
+          <button className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
+            Vote for B
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const Cli = () => {
+  const [activePanel, setActivePanel] = useState(1);
+  const [searchQuery, setSearchQuery] = useState('');
   const [isTutorialVisible, setIsTutorialVisible] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -198,37 +338,36 @@ export const Cli = () => {
     );
   };
 
+  const renderPanel = () => {
+    switch (activePanel) {
+      case 1:
+        return <SearchPanel searchQuery={searchQuery} setSearchQuery={setSearchQuery} />;
+      case 2:
+        return <RankingPanel />;
+      case 3:
+        return <VotingPanel />;
+      default:
+        return null;
+    }
+  };
+
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col dark:bg-gray-900 dark:text-white">
       <AuthSection />
-      <div className="font-serif">
-        <div className="flex flex-col items-center mb-8">
-          <p 
-            className="text-left text-4xl max-w-[600px] min-w-[600px] font-bold mb-4 cursor-pointer hover:text-gray-700"
-            onClick={toggleTutorial}
-          >
-            :) sorter
-          </p>
-          {isTutorialVisible && (
-            <p 
-              className="text-left max-w-[600px] text-gray-700 hover:text-gray-500 cursor-pointer transition-colors duration-100"
-              onClick={toggleTutorial}
-            >
-              Type in the search box to get smart suggestions for music content. Click tags to find what you want to rank.
-              <br/><br/>
-              Click !vote to see two items at a time and pick your favorite.
-              <br/><br/>
-              Click @me to see your rankings, or @all to see what everyone thinks.
-            </p>
-          )}
-        </div>
-      </div>
+      <PanelNav activePanel={activePanel} setActivePanel={setActivePanel} />
       <WarningPopup isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
         <div className="p-4">
           <h2 className="text-lg font-bold">login required</h2>
           <p>{errorMessage}</p>
         </div>
       </WarningPopup>
+      <main className="flex-grow p-4">
+        <div className="max-w-7xl mx-auto">
+          {renderPanel()}
+        </div>
+      </main>
     </div>
   );
 };
+
+export default Cli;
