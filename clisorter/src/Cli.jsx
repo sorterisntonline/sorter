@@ -2,8 +2,11 @@ import * as ohm from 'ohm-js';
 import useSWR from "swr";
 import { create } from "zustand";
 import { useState, useEffect, useRef } from 'react';
-import { VotePanel } from "./VotePanel";
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
+import debounce from 'lodash/debounce';  // For debouncing
+import { useQuery } from '@tanstack/react-query';
+
+import { VotePanel } from "./VotePanel";
 import { VotesPanel } from './VotesPanel';
 import { ItemPanel } from './ItemPanel';
 import { current_session, fetchSession } from "./session";
@@ -11,21 +14,27 @@ import { redirectToLogin, redirectToRegister } from './authUtils';
 import WarningPopup from './WarningPopup';
 import { initiateOAuth } from './oauth/useOAuth';
 import { SpotifyAuthButton } from './oauth/OAuthButton';
-import { useQuery } from '@tanstack/react-query';
-import debounce from 'lodash/debounce';  // For debouncing
 
+// Constants
+const SPOTIFY_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/1/19/Spotify_logo_without_text.svg";
+
+// Functional Components
 const SpotifyIcon = () => (
   <img
     width="18"
     className="m-1"
-    src="https://upload.wikimedia.org/wikipedia/commons/1/19/Spotify_logo_without_text.svg"
+    src={SPOTIFY_LOGO_URL}
     alt="Spotify"
   />
 );
 
+// Zustand Store
 export const useStore = create((set, get) => ({
   results: null,
   items_by_id: {},
+  spotifyConnected: false,
+  activePanel: 1,
+
   setResults: (results) => {
     const items_by_id = {};
     if (results) {
@@ -37,13 +46,14 @@ export const useStore = create((set, get) => ({
     }
     set({ results, items_by_id });
   },
+
   fetchResults: async () => {
     const params = new URLSearchParams(window.location.search);
     if (!params.has('t')) {
       set({ results: null });
       return null;
     }
-    
+
     try {
       const response = await fetch(`/api/tag/page2?${params.toString()}`);
       const data = await response.json();
@@ -55,58 +65,48 @@ export const useStore = create((set, get) => ({
       return null;
     }
   },
-  spotifyConnected: false,
+
   setSpotifyConnected: (connected) => set({ spotifyConnected: connected }),
-  activePanel: 1,
   setActivePanel: (panel) => set({ activePanel: panel }),
 }));
 
+// Custom Hooks
 const useQueryState = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  
-  const parseParams = () => {
-    const tags = searchParams.get('t')?.split('.').map(tag => ({ 
-      type: 'hashtag', 
-      value: tag 
-    })) || [];
-    const mentions = searchParams.get('u')?.split('.').map(mention => ({ 
-      type: 'mention', 
-      value: mention 
-    })) || [];
-    const actions = searchParams.get('a')?.split('.').map(action => {
-      const match = action.match(/^(\w+)(\d+)?$/);
-      return {
-        type: 'action',
-        value: match[1],
-        itemId: match[2]
-      };
-    }) || [];
-    const item = searchParams.get('item') ? [{
-      type: 'item',
-      value: searchParams.get('item')
-    }] : [];
 
-    return [...tags, ...mentions, ...actions, ...item];
+  const parseParams = () => {
+    const parseType = (param, type) => searchParams.get(param)?.split('.').map(value => ({ type, value })) || [];
+    const parseActions = () => searchParams.get('a')?.split('.').map(action => {
+      const match = action.match(/^(\w+)(\d+)?$/);
+      return { type: 'action', value: match[1], itemId: match[2] };
+    }) || [];
+    const parseItem = () => searchParams.get('item') ? [{ type: 'item', value: searchParams.get('item') }] : [];
+
+    return [
+      ...parseType('t', 'hashtag'),
+      ...parseType('u', 'mention'),
+      ...parseActions(),
+      ...parseItem()
+    ];
   };
 
   const updateParams = (updates) => {
-    const newParams = new URLSearchParams(searchParams);
-    
-    ['t', 'u', 'a', 'item'].forEach(param => newParams.delete(param));
-    
-    const tags = updates.filter(item => item.type === 'hashtag')
-      .map(item => item.value).join('.');
-    const mentions = updates.filter(item => item.type === 'mention')
-      .map(item => item.value).join('.');
-    const actions = updates.filter(item => item.type === 'action')
-      .map(item => item.itemId ? `${item.value}${item.itemId}` : item.value)
-      .join('.');
-    const item = updates.find(item => item.type === 'item')?.value;
+    const newParams = new URLSearchParams();
 
-    if (tags) newParams.set('t', tags);
-    if (mentions) newParams.set('u', mentions);
-    if (actions) newParams.set('a', actions);
-    if (item) newParams.set('item', item);
+    const serializeType = (type) => updates.filter(item => item.type === type).map(item => item.value).join('.');
+    const serializeActions = () => updates.filter(item => item.type === 'action').map(item => item.itemId ? `${item.value}${item.itemId}` : item.value).join('.');
+    const serializeItem = () => updates.find(item => item.type === 'item')?.value;
+
+    const params = {
+      't': serializeType('hashtag'),
+      'u': serializeType('mention'),
+      'a': serializeActions(),
+      'item': serializeItem()
+    };
+
+    Object.entries(params).forEach(([key, value]) => {
+      if (value) newParams.set(key, value);
+    });
 
     setSearchParams(newParams, { replace: true });
   };
@@ -132,42 +132,25 @@ const useSpotifyStatus = () => {
   };
 };
 
-const PanelNav = ({ activePanel, setActivePanel }) => {
-  return (
-    <nav className="p-4 flex justify-center items-center">
-      <div className="flex w-64 h-5 bg-gray-300">
-        {[1, 2, 3].map(panel => (
-          <button 
-            key={panel}
-            onClick={() => setActivePanel(panel)}
-            className={`flex-1 h-full transition-colors duration-200 ${
-              activePanel === panel 
-                ? 'bg-blue-500' 
-                : 'bg-gray-300 hover:bg-gray-400'
+// UI Components
+const PanelNav = ({ activePanel, setActivePanel }) => (
+  <nav className="p-4 flex justify-center items-center">
+    <div className="flex w-64 h-5 bg-gray-300">
+      {[1, 2, 3].map(panel => (
+        <button
+          key={panel}
+          onClick={() => setActivePanel(panel)}
+          className={`flex-1 h-full transition-colors duration-200 ${activePanel === panel ? 'bg-blue-500' : 'bg-gray-300 hover:bg-gray-400'
             }`}
-          />
-        ))}
-      </div>
-    </nav>
-  );
-};
-
-const slugify = (text) => {
-  return text
-    .toString()
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, '-')           // Replace spaces with -
-    .replace(/[^\w\-]+/g, '')       // Remove all non-word chars
-    .replace(/\-\-+/g, '-')         // Replace multiple - with single -
-    .replace(/^-+/, '')             // Trim - from start of text
-    .replace(/-+$/, '');            // Trim - from end of text
-};
+        />
+      ))}
+    </div>
+  </nav>
+);
 
 const SearchPanel = ({ searchQuery, setSearchQuery }) => {
   const { queryState, updateQueryState } = useQueryState();
   const setActivePanel = useStore(state => state.setActivePanel);
-  const results = useStore(state => state.results);
 
   const debouncedQuery = useRef(
     debounce((query) => {
@@ -197,191 +180,132 @@ const SearchPanel = ({ searchQuery, setSearchQuery }) => {
   }, [searchQuery, debouncedQuery]);
 
   const handleTagClick = async (tag) => {
-    // If it's a suggested tag from the popular tags section
-    if (typeof tag === 'string') {
-      const newTag = {
-        type: 'hashtag',
-        value: tag.replace('#', '') // Remove # if present
-      };
-      updateQueryState([...queryState, newTag]);
-      setSearchQuery(''); // Clear the search input
-      setActivePanel(2);
-      return;
-    }
+    const resolveSpotifyItem = async (tag) => {
+      try {
+        const response = await fetch('/api/spotify/resolve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            domain_pk: tag.domain_pk,
+            domain_pk_namespace: tag.domain_pk_namespace,
+            metadata: { name: tag.tag, image: tag.image }
+          })
+        });
 
-    // If it's a Spotify item, lookup or import it first
-    try {
-      const response = await fetch('/api/spotify/resolve', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          domain_pk: tag.domain_pk,
-          domain_pk_namespace: tag.domain_pk_namespace,
-          metadata: {
-            name: tag.tag,
-            image: tag.image
-          }
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to resolve Spotify item');
+        if (!response.ok) throw new Error('Failed to resolve Spotify item');
+        const data = await response.json();
+        return data;
+      } catch (error) {
+        console.error('Error resolving Spotify item:', error);
+        return null;
       }
+    };
 
-      const data = await response.json();
-      const newTag = {
+    let newTag = tag;
+
+    if (typeof tag !== 'string') {
+      const resolvedItem = await resolveSpotifyItem(tag);
+      if (!resolvedItem) return;
+
+      newTag = {
         type: tag.domain_pk_namespace.startsWith('spotify.') ? 'hashtag' : 'item',
-        value: data.tag, // Use the tag from the backend
+        value: resolvedItem.tag,
         domain_pk: tag.domain_pk,
         domain_pk_namespace: tag.domain_pk_namespace
       };
-      
+    } else {
+      newTag = {
+        type: 'hashtag',
+        value: tag.replace('#', '')
+      };
+    }
+
+    // Check for duplicates before adding
+    const isDuplicate = queryState.some(existingTag => 
+      existingTag.type === newTag.type && 
+      existingTag.value === newTag.value &&
+      existingTag.domain_pk === newTag.domain_pk &&
+      existingTag.domain_pk_namespace === newTag.domain_pk_namespace
+    );
+
+    if (!isDuplicate) {
       updateQueryState([...queryState, newTag]);
       setSearchQuery(''); // Clear the search input
       setActivePanel(2);
-    } catch (error) {
-      console.error('Error resolving Spotify item:', error);
-      // You might want to show an error message to the user here
+    }
+  };
+
+  const formatTagDisplay = (item) => {
+    switch (item.type) {
+      case 'hashtag':
+        return `#${item.value}`;
+      case 'mention':
+        return `@${item.value}`;
+      case 'action':
+        return `${item.value}${item.itemId ? ` ${item.itemId}` : ''}`;
+      case 'item':
+        return `item:${item.value}`;
+      default:
+        return item.value;
     }
   };
 
   return (
-    <div className="panel-content p-6 bg-white dark:bg-gray-800">
-      <div className="max-w-2xl mx-auto">
-        <div className="relative">
+    <div className="p-4">
+      <div className="mb-4">
+        <div className="flex flex-wrap gap-2">
+          {queryState.map((item, index) => (
+            <span
+              key={`${item.type}-${item.value}-${index}`}
+              className="px-3 py-1 bg-blue-100 dark:bg-blue-900 rounded-full text-blue-800 dark:text-blue-200 flex items-center"
+            >
+              {formatTagDisplay(item)}
+              <button
+                className="ml-2 text-blue-600 hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-100"
+                onClick={() => {
+                  const newQueryState = queryState.filter((_, idx) => idx !== index);
+                  updateQueryState(newQueryState);
+                }}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      </div>
+      
+      <div className="mb-4">
+        <div className="flex items-center bg-gray-200 rounded p-2">
+          <span className="mr-2">🔍</span>
           <input
             type="text"
-            placeholder="Search for music, artists, or tags..."
-            className="w-full p-4 text-lg border rounded-lg mb-6 dark:bg-gray-700 dark:text-white"
+            placeholder="search spotify/tags"
+            className="bg-transparent w-full outline-none"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
-          {isLoading && (
-            <div className="absolute right-4 top-4">
-              <div className="animate-spin h-6 w-6 border-2 border-blue-500 rounded-full border-t-transparent"></div>
-            </div>
-          )}
         </div>
-        
-        <div className="space-y-6">
-          {Object.entries(suggestions).length > 0 ? (
-            <>
-              {suggestions.artists?.length > 0 && (
-                <div>
-                  <h3 className="text-sm uppercase text-gray-500 dark:text-gray-400 mb-2">Artists</h3>
-                  <div className="space-y-2">
-                    {suggestions.artists.map((artist, index) => (
-                      <div
-                        key={`artist-${artist.id}-${index}`}
-                        onClick={() => handleTagClick({
-                          tag: artist.name,
-                          domain_pk_namespace: 'spotify.artist',
-                          domain_pk: artist.id,
-                          image: artist.images?.[0]?.url
-                        })}
-                        className="p-3 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer flex items-center gap-3"
-                      >
-                        {artist.images?.[0]?.url ? (
-                          <img 
-                            src={artist.images[0].url} 
-                            alt={artist.name}
-                            className="w-12 h-12 object-cover rounded"
-                          />
-                        ) : (
-                          <div className="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded" />
-                        )}
-                        <span>{artist.name}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+      </div>
 
-              {suggestions.albums?.length > 0 && (
-                <div>
-                  <h3 className="text-sm uppercase text-gray-500 dark:text-gray-400 mb-2">Albums</h3>
-                  <div className="space-y-2">
-                    {suggestions.albums.map((album, index) => (
-                      <div
-                        key={`album-${album.id}-${index}`}
-                        onClick={() => handleTagClick({
-                          tag: album.name,
-                          domain_pk_namespace: 'spotify.album',
-                          domain_pk: album.id,
-                          image: album.images?.[0]?.url
-                        })}
-                        className="p-3 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer flex items-center gap-3"
-                      >
-                        {album.images?.[0]?.url ? (
-                          <img 
-                            src={album.images[0].url} 
-                            alt={album.name}
-                            className="w-12 h-12 object-cover rounded"
-                          />
-                        ) : (
-                          <div className="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded" />
-                        )}
-                        <span>{album.name}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {suggestions.tracks?.length > 0 && (
-                <div>
-                  <h3 className="text-sm uppercase text-gray-500 dark:text-gray-400 mb-2">Tracks</h3>
-                  <div className="space-y-2">
-                    {suggestions.tracks.map((track, index) => (
-                      <div
-                        key={`track-${track.id}-${index}`}
-                        onClick={() => handleTagClick({
-                          tag: track.name,
-                          domain_pk_namespace: 'spotify.track',
-                          domain_pk: track.id,
-                          image: track.album?.images?.[0]?.url
-                        })}
-                        className="p-3 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer flex items-center gap-3"
-                      >
-                        {track.album?.images?.[0]?.url ? (
-                          <img 
-                            src={track.album.images[0].url} 
-                            alt={track.name}
-                            className="w-12 h-12 object-cover rounded"
-                          />
-                        ) : (
-                          <div className="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded" />
-                        )}
-                        <span>{track.name}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
-          ) : searchQuery.trim() ? (
-            <div className="text-gray-500 dark:text-gray-400">
-              No results found
+      <div className="mb-4">
+        <div className="font-bold mb-2">tags that narrow this down:</div>
+        <div className="space-y-1">
+          {['hiphop', '2010s'].map(tag => (
+            <div 
+              key={tag}
+              className="cursor-pointer hover:bg-gray-100 p-1"
+              onClick={() => handleTagClick(tag)}
+            >
+              #{tag}
             </div>
-          ) : (
-            <div className="border-b pb-2 dark:border-gray-600">
-              <h3 className="text-sm uppercase text-gray-500 dark:text-gray-400">Popular Tags</h3>
-              <div className="flex flex-wrap gap-2 mt-2">
-                {['hip-hop', '2023', 'indie', 'rock', 'electronic'].map(tag => (
-                  <span 
-                    key={tag} 
-                    onClick={() => handleTagClick(tag)}
-                    className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-sm cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600"
-                  >
-                    #{tag}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
+          ))}
         </div>
+      </div>
+
+      {/* Simplified search results section */}
+      <div>
+        <div className="font-bold mb-2">spotify search results:</div>
+        {/* Search results would go here */}
       </div>
     </div>
   );
@@ -417,12 +341,12 @@ const RankingPanel = () => {
           <h3 className="text-sm uppercase text-gray-500 dark:text-gray-400 mb-2">Selected Tags</h3>
           <div className="flex flex-wrap gap-2">
             {queryState.map((item, index) => (
-              <span 
+              <span
                 key={`${item.type}-${item.value}-${index}`}
                 className="px-3 py-1 bg-blue-100 dark:bg-blue-900 rounded-full text-blue-800 dark:text-blue-200 flex items-center"
               >
                 {formatTagDisplay(item)}
-                <button 
+                <button
                   className="ml-2 hover:text-blue-600"
                   onClick={() => handleRemoveTag(index)}
                 >
@@ -462,141 +386,42 @@ const RankingPanel = () => {
   );
 };
 
-const VotingPanel = () => {
-  return (
-    <div className="panel-content p-6 bg-white dark:bg-gray-800">
-      <div className="max-w-4xl mx-auto">
-        <div className="grid md:grid-cols-2 gap-8">
-          <div className="border rounded-lg p-4">
-            <div className="aspect-square bg-gray-100 dark:bg-gray-700 rounded-lg mb-4"></div>
-            <h3 className="text-lg font-semibold mb-2">Item A</h3>
-            <p className="text-gray-600 dark:text-gray-400">Description for Item A</p>
-          </div>
-
-          <div className="border rounded-lg p-4">
-            <div className="aspect-square bg-gray-100 dark:bg-gray-700 rounded-lg mb-4"></div>
-            <h3 className="text-lg font-semibold mb-2">Item B</h3>
-            <p className="text-gray-600 dark:text-gray-400">Description for Item B</p>
-          </div>
-        </div>
-
-        <div className="mt-8 flex justify-center items-center space-x-4">
-          <button className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
-            Vote for A
-          </button>
-          <button className="px-6 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">
-            Skip
-          </button>
-          <button className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
-            Vote for B
-          </button>
-        </div>
-      </div>
+const VotingPanel = () => (
+  <div className="p-4">
+    <div className="text-xl font-bold mb-4">
+      press here to vote
     </div>
-  );
-};
-
-export const Cli = () => {
-  const activePanel = useStore(state => state.activePanel);
-  const setActivePanel = useStore(state => state.setActivePanel);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isTutorialVisible, setIsTutorialVisible] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
-
-  useEffect(() => {
-    const stored = localStorage.getItem('tutorialVisible');
-    if (stored !== null) {
-      setIsTutorialVisible(stored === 'true');
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchSession();
-  }, []);
-
-  const toggleTutorial = () => {
-    const newValue = !isTutorialVisible;
-    setIsTutorialVisible(newValue);
-    localStorage.setItem('tutorialVisible', newValue);
-  };
-
-  const handleError = (error) => {
-    if (error.status === 401) {  // unauthorized
-      setErrorMessage(error.message);
-      setIsModalOpen(true);
-    }
-  };
-
-  const AuthSection = () => {
-    if (current_session.value && current_session.value.user_name) {
-      return (
+    
+    <div className="space-y-2">
+      {[
+        'HUMBLE.',
+        'Not Like Us',
+        'euphoria',
+        "Fuckin' Problems",
+        'm.A.A.d city',
+        'Swimming Pools (Drank)'
+      ].map(song => (
         <div
-          className="fixed top-0 right-0 p-2 dark:text-white z-50 bg-white dark:bg-black bg-opacity-90"
+          key={song}
+          className="p-2 bg-gray-200 rounded cursor-pointer hover:bg-gray-300"
         >
-          logged in as {current_session.value.user_name}{" "}
-          <button
-            className="border-2 cursor-pointer px-2 hover:bg-gray-200 dark:hover:bg-gray-700"
-            onClick={async () => {
-              await fetch("/api/logout", {
-                method: "POST",
-                credentials: "include",
-              });
-              await fetchSession();
-            }}
-          >
-            logout
-          </button>
+          {song}
         </div>
-      );
-    }
+      ))}
+    </div>
+  </div>
+);
 
-    return (
-      <div className="fixed top-0 right-0 p-2 space-x-2 z-50 bg-white dark:bg-black bg-opacity-90">
-        <button
-          className="border-2 cursor-pointer px-2 hover:bg-gray-200 dark:hover:bg-gray-700 dark:text-white"
-          onClick={() => redirectToLogin()}
-        >
-          login
-        </button>
-        <button
-          className="border-2 cursor-pointer px-2 hover:bg-gray-200 dark:hover:bg-gray-700 dark:text-white"
-          onClick={() => redirectToRegister()}
-        >
-          register
-        </button>
-      </div>
-    );
-  };
-
-  const renderPanel = () => {
-    switch (activePanel) {
-      case 1:
-        return <SearchPanel searchQuery={searchQuery} setSearchQuery={setSearchQuery} />;
-      case 2:
-        return <RankingPanel />;
-      case 3:
-        return <VotingPanel />;
-      default:
-        return null;
-    }
-  };
+// Main Component
+export const Cli = () => {
+  const [searchQuery, setSearchQuery] = useState('');
 
   return (
-    <div className="min-h-screen flex flex-col dark:bg-gray-900 dark:text-white">
-      <AuthSection />
-      <PanelNav activePanel={activePanel} setActivePanel={setActivePanel} />
-      <WarningPopup isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
-        <div className="p-4">
-          <h2 className="text-lg font-bold">login required</h2>
-          <p>{errorMessage}</p>
-        </div>
-      </WarningPopup>
-      <main className="flex-grow p-4">
-        <div className="max-w-7xl mx-auto">
-          {renderPanel()}
-        </div>
-      </main>
+    <div className="min-h-screen">
+      <div className="grid grid-cols-2 gap-4">
+        <SearchPanel searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
+        <VotingPanel />
+      </div>
     </div>
   );
 };
