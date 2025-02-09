@@ -21,6 +21,9 @@ import { current_session, fetchSession } from "./session"; // Ensure fetchSessio
 // import { Twitter } from "./Twitter.jsx";
 import { ProfileHoverPane } from "./ProfileHoverPane.jsx"; // Import the ProfileHoverPane component
 import AnnouncementBar, { showAnnouncement } from './AnnouncementBar';
+import { MobileNav } from './MobileNav';
+import { MobileNewTagChooser } from './MobileNewTagChooser';
+import { NAV_ITEMS } from './constants/navigation';
 
 export const namespace = signal(false);
 
@@ -85,28 +88,18 @@ const TopNav = () => {
 
   return (
     <div
-      className="fixed top-0 right-0 flex flex-wrap items-center justify-between bg-white dark:bg-black text-black dark:text-white w-full px-4 p-2.5 z-40 transition-[top] duration-300 ease-in"
+      className="fixed top-0 right-0 hidden lg:flex flex-wrap items-center justify-between bg-white dark:bg-black text-black dark:text-white w-full px-4 p-2.5 z-40 transition-[top] duration-300 ease-in"
       style={{ 
         top: showAnnouncement.value ? '32px' : '0',
       }}
     >
       {/* Left side navigation links */}
       <div className="flex items-center space-x-2">
-        <MyLink to="/tags2">
-          <div className="p-0">Tags2</div>
-        </MyLink>
-        <MyLink to="/">
-          <div className="p-0">Tags</div>
-        </MyLink>
-        <MyLink to="/feed">
-          <div className="p-0">Feed</div>
-        </MyLink>
-        <MyLink to="/faq">
-          <div className="p-0">FAQ</div>
-        </MyLink>
-        <MyLink to="/leaderboard">
-          <div className="p-0">Leaderboard</div>
-        </MyLink>
+        {NAV_ITEMS.map(item => (
+          <MyLink key={item.path} to={item.path}>
+            <div className="p-0">{item.name}</div>
+          </MyLink>
+        ))}
         <ShowLink to="/:tag/:slug" />
       </div>
 
@@ -184,7 +177,10 @@ const Root = () => {
 
   return (
     <React.StrictMode>
-      <div className="min-h-screen flex flex-col">
+      {/* Fixed height nav bar background with stronger constraints */}
+      <div className="fixed top-0 left-0 right-0 h-[56px] min-h-[56px] flex-none bg-white dark:bg-black z-[9996] lg:hidden" />
+      <MobileNav />
+      <div className="min-h-screen flex flex-col lg:pt-0"> {/* Add padding-top to account for fixed navbar */}
         <AnnouncementBar />
         <div 
           className="flex-1 transition-[margin] duration-300 ease-in-out"
@@ -286,6 +282,9 @@ const Root = () => {
             </Switch>
           </Router>
         </div>
+      </div>
+      <div className="fixed bottom-6 right-6 z-[99999] pointer-events-auto">
+        <MobileNewTagChooser />
       </div>
     </React.StrictMode>
   );

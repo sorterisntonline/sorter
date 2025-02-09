@@ -13,6 +13,7 @@ import { Modal } from "./Modal";
 import WarningPopup from './WarningPopup';
 import { MetaTags } from "./MetaTags";
 import AnnouncementBar, { showAnnouncement } from './AnnouncementBar';
+import { IntegrationsPanel } from './integrations/IntegrationsPanel';
 
 export const useElo = signal(false);
 export const tag = signal(false);
@@ -149,7 +150,6 @@ export const Item = ({ item }) => {
 
 import { useLocation, useParams } from "wouter";
 import { TagPreferences } from "./TagPreferences";
-import { IntegrationsPanel } from "./integrations/IntegrationsPanel";
 import { AttributePanel, selected_attribute } from "./AttributePanel";
 import { namespace } from "./main";
 const TextSummary = ({ can_vote, can_add }) => {
@@ -220,7 +220,12 @@ export const showPin = signal(false);
 export const showAllSorted = signal(true);
 export const showAllUnsorted = signal(true);
 
-export const Tag = ({ showVote, isVoting, handleError }) => {
+export const Tag = ({ isVoting, handleError }) => {
+  const [showVote, setShowVote] = useState(false);
+  const [showItemPanel, setShowItemPanel] = useState(false);
+  const [showAllSorted, setShowAllSorted] = useState(false);
+  const [showAllUnsorted, setShowAllUnsorted] = useState(false);
+
   const sorteditems = tag.value["sorted"];
   const unsorteditems = tag.value["unsorted"];
   const votes = tag.value["votes"];
@@ -342,38 +347,82 @@ export const Tag = ({ showVote, isVoting, handleError }) => {
 
   const votingRender = (
     <div className="dark:text-white flex flex-col py-3">
+      {/* Mobile-first layout */}
       <div className="items-center">
-        <div className="text-xl flex flex-row">
-          <div className="px-2">
-            voting on
-          </div>
+        {/* First row - tag, by, attribute */}
+        <div className="flex flex-wrap items-center mb-2">
+          <span className="text-xl">#{tag.value.tag.slug}</span>
+          <span className="px-2">by</span>
           <AttributePanel />
-          <div className="px-2">
-            according to
-          </div>
+        </div>
+        
+        {/* Second row - according to (mobile only) */}
+        <div className="lg:hidden text-center my-2">
+          <span className="text-xl">according to</span>
+        </div>
+        
+        {/* Third row - UserPanel (full width on mobile) */}
+        <div className="w-full lg:flex lg:items-center">
+          <div className="hidden lg:block px-2">according to</div>
           <UserPanel users={tag.value.users_who_voted} selected_users={selected_users} />
         </div>
-      </div>
-      <div className="flex lg:flex-row flex-col">
-        <button
-          className="border-2 border-red-500 lg:w-14 lg:h-56 w-full bigbutton"
-          onClick={() => {
-            if (namespace.value) {
-              setLocation('/namespace/' + namespace.value);
-            } else {
-              setLocation('/' + tag.value.tag.id + '/' + tag.value.tag.slug);
-            }
-          }}
-        >
-          Stop Voting
-        </button>
-        <div className="w-full flex justify-center flex-col">
-          <VotePanel handleError={handleError} />
-          <br />
-          <VotesPanel votes={filteredVotes} />
+
+        {/* Desktop-only text */}
+        <div className="hidden lg:block">
+          <TextSummary can_vote={can_vote} can_add={can_add} />
         </div>
       </div>
-      <div className="flex justify-center w-full">{votesList}</div>
+
+      {/* Mobile sticky buttons */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-black z-50">
+        <button 
+          onClick={() => setShowVote(true)}
+          className="w-full py-4 bg-purple-500 text-white font-bold"
+        >
+          Vote
+        </button>
+        <button 
+          onClick={() => setShowItemPanel(true)}
+          className="w-full py-2 bg-purple-300 text-white font-bold"
+        >
+          Add an item
+        </button>
+      </div>
+
+      {/* Adjust main content layout */}
+      <div className="flex lg:flex-row flex-col pb-24 lg:pb-0"> {/* Added padding bottom for mobile sticky buttons */}
+        {/* Show ItemPanel before lists on mobile when adding item */}
+        {showItemPanel && <div className="lg:hidden">
+          <ItemPanel />
+        </div>}
+        
+        {/* Lists section */}
+        <div className="lg:flex lg:space-x-4">
+          {sorteditems?.length > 0 && (
+            <div className={unsorteditems?.length > 0 ? "lg:w-1/2" : "lg:w-full"}>
+              <SortedList 
+                items={sorteditems} 
+                showAll={showAllSorted.value} 
+                setShowAll={(val) => showAllSorted.value = val} 
+              />
+            </div>
+          )}
+          {unsorteditems?.length > 0 && (
+            <div className={sorteditems?.length > 0 ? "lg:w-1/2" : "lg:w-full"}>
+              <UnsortedList 
+                items={unsorteditems} 
+                showAll={showAllUnsorted.value} 
+                setShowAll={(val) => showAllUnsorted.value = val} 
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Desktop ItemPanel */}
+        <div className="hidden lg:block">
+          <ItemPanel />
+        </div>
+      </div>
     </div>
   );
 
@@ -444,7 +493,6 @@ export const Tag = ({ showVote, isVoting, handleError }) => {
     );
   }
 };
-
 
 function App({ tagid, isVoting }) {
   const [isModalOpen, setIsModalOpen] = useState(false);

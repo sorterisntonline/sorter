@@ -3,6 +3,7 @@ import Creatable from "react-select/creatable"
 import { signal, computed } from "@preact/signals-react";
 import { loadTag } from "./Network";
 import { dark_mode } from "./Profile";
+import Select from "react-select";
 
 export const selected_attribute = computed(() => {
     return { value: tag.value.selected_attribute, label: ":" + tag.value.selected_attribute.title };
@@ -14,9 +15,9 @@ export const AttributePanel = () => {
     });
 
     return (
-        <div className="border-4 border-green-400"
+        <div className="border-4 border-purple-400 w-full lg:w-auto"
             style={{ borderStyle: 'double' }}>
-            <Creatable
+            <Select
                 options={options}
                 unstyled={true}
                 value={selected_attribute.value}
@@ -39,19 +40,20 @@ export const AttributePanel = () => {
                 styles={{
                     control: (base) => ({
                         ...base,
-                        height: 30,
                         minHeight: 30,
                         padding: 0,
                         margin: 0,
                         backgroundColor: dark_mode.value ? "#181a1b" : "white",
                         border: 2,
                         borderStyle: "none",
+                        width: '100%',
                     }),
                     menu: (base) => ({
                         ...base,
                         backgroundColor: dark_mode.value ? "#181a1b" : "white",
                         border: 2,
-                        width: 'max-content',
+                        width: '100%',
+                        maxWidth: '100vw',
                         borderStyle: "solid",
                         borderColor: "lavender",
                     }),
@@ -61,6 +63,7 @@ export const AttributePanel = () => {
                         margin: 0,
                     }),
                 }}
+                className="w-full lg:w-auto"
             />
         </div>
     );

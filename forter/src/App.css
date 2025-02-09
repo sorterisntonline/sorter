@@ -64,3 +64,37 @@
 .page-padding-top {
   padding-top: 1.5rem;
 }
+
+/* Mobile Navigation Styles */
+.mobile-nav-open {
+  overflow: hidden;
+}
+
+@media screen and (max-width: 768px) {
+  .desktop-nav {
+    display: none;
+  }
+}
+
+@media screen and (min-width: 769px) {
+  .mobile-nav {
+    display: none;
+  }
+}
+
+/* Add these styles */
+.mobile-nav-header {
+  height: 3.5rem; /* 56px - matches h-14 in Tailwind */
+  min-height: 3.5rem;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background-color: white;
+  z-index: 9996;
+}
+
+/* Dark mode support */
+.dark .mobile-nav-header {
+  background-color: black;
+}

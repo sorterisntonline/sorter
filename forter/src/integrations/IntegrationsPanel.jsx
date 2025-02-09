@@ -105,17 +105,22 @@ const RedditControls = () => {
 };
 
 export const IntegrationsPanel = () => {
+  // Early return conditions
   if (current_session.value !== null && !current_session.value.user_name === tag["owner"]) return <></>;
   if (!tag.value.tag["domain_pk_namespace"]) return <></>;
-  if (tag.value.tag["domain_pk_namespace"] === "spotify.playlist")
-    return <SpotifyControls />;
-  if (tag.value.tag["domain_pk_namespace"] === "youtube.liked")
-    return <YoutubeControls />;
-  if (tag.value.tag["domain_pk_namespace"] === "linear.project")
-    return <LinearControls />;
-  if (tag.value.tag["domain_pk_namespace"] === "reddit.sub")
-    return <RedditControls />;
-  return <div>unknown integration type</div>;
+
+  // Wrap the entire panel in a hidden-on-mobile div
+  return (
+    <div className="hidden lg:block">
+      {tag.value.tag["domain_pk_namespace"] === "spotify.playlist" && <SpotifyControls />}
+      {tag.value.tag["domain_pk_namespace"] === "youtube.liked" && <YoutubeControls />}
+      {tag.value.tag["domain_pk_namespace"] === "linear.project" && <LinearControls />}
+      {tag.value.tag["domain_pk_namespace"] === "reddit.sub" && <RedditControls />}
+      {!["spotify.playlist", "youtube.liked", "linear.project", "reddit.sub"].includes(tag.value.tag["domain_pk_namespace"]) && 
+        <div>unknown integration type</div>
+      }
+    </div>
+  );
 };
 
 const fetcher = (arg) => fetch(arg).then((res) => res.json());

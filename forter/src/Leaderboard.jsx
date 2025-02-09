@@ -9,8 +9,13 @@ export const Leaderboard = () => {
 
     const sortedData = data.sort((a, b) => b.count - a.count);
 
-    // FIXME: this is very hacky
-    return <table className="page-padding-top mt-5"> {data.map((user) => {
-        return <tr className="dark:text-white text-left">  <td>{user.user_name}</td> <td>{user.count} votes</td> </tr>;
-    })} </table>;
+    return (
+        <div className="page-padding-top mt-5 w-full max-w-full overflow-x-hidden">
+            <table className="w-full">
+                {data.map((user) => {
+                    return <tr className="dark:text-white text-left">  <td>{user.user_name}</td> <td>{user.count} votes</td> </tr>;
+                })}
+            </table>
+        </div>
+    );
 };

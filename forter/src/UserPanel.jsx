@@ -71,7 +71,7 @@ export const UserPanel = ({ users, selected_users }) => {
   };
 
   return (
-    <div className="border-4 border-blue-400 "
+    <div className="border-4 border-blue-400 w-full max-w-full overflow-x-hidden lg:w-auto"
       style={{ borderStyle: 'double' }}
     >
       <Select
@@ -89,12 +89,14 @@ export const UserPanel = ({ users, selected_users }) => {
             backgroundColor: dark_mode.value ? "#181a1b" : "white",
             border: 2,
             borderStyle: "none",
+            width: '100%',
           }),
           menu: (base) => ({
             ...base,
             backgroundColor: dark_mode.value ? "#181a1b" : "white",
             border: 2,
-            width: 'max-content',
+            width: '100%',
+            maxWidth: '100vw',
             borderStyle: "solid",
             borderColor: "lavender",
           }),
@@ -106,6 +108,7 @@ export const UserPanel = ({ users, selected_users }) => {
           }),
         }}
         isMulti={true}
+        className="w-full lg:w-auto"
       />
     </div>
   );
