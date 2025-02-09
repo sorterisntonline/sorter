@@ -161,8 +161,9 @@ const SearchPanel = ({ searchQuery, setSearchQuery }) => {
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['search', searchQuery],
     queryFn: async () => {
-      if (!searchQuery.trim()) return { suggestions: {} };
+      if (!searchQuery.trim()) return { suggestions: [] };
       const response = await fetch(`/api/tag/query?query=${encodeURIComponent(searchQuery)}`);
+      if (!response.ok) throw new Error('Failed to fetch search results');
       return response.json();
     },
     enabled: false,
@@ -170,7 +171,29 @@ const SearchPanel = ({ searchQuery, setSearchQuery }) => {
     cacheTime: 3600000,
   });
 
+
+  console.log('data', data);
   const suggestions = data?.suggestions || {};
+  const allResults = [
+    ...(suggestions.artists || []).map(item => ({
+      ...item,
+      domain_pk_namespace: 'spotify.artist',
+      tag: item.name,
+      image: item.images?.[0]?.url
+    })),
+    ...(suggestions.albums || []).map(item => ({
+      ...item,
+      domain_pk_namespace: 'spotify.album',
+      tag: item.name,
+      image: item.images?.[0]?.url
+    })),
+    ...(suggestions.tracks || []).map(item => ({
+      ...item,
+      domain_pk_namespace: 'spotify.track',
+      tag: item.name,
+      image: item.album?.images?.[0]?.url
+    }))
+  ];
 
   useEffect(() => {
     debouncedQuery(searchQuery);
@@ -302,10 +325,33 @@ const SearchPanel = ({ searchQuery, setSearchQuery }) => {
         </div>
       </div>
 
-      {/* Simplified search results section */}
+      {/* Updated search results section */}
       <div>
-        <div className="font-bold mb-2">spotify search results:</div>
-        {/* Search results would go here */}
+        <div className="font-bold mb-2">Search Results:</div>
+        {isLoading ? (
+          <div className="text-gray-500">Loading...</div>
+        ) : (
+          <div className="space-y-2">
+            {allResults.map((result) => (
+              <div
+                key={result.id}
+                className="cursor-pointer hover:bg-gray-100 p-2 rounded flex items-center"
+                onClick={() => handleTagClick({
+                  ...result,
+                  domain_pk: result.id
+                })}
+              >
+                {result.image && (
+                  <img src={result.image} alt="" className="w-8 h-8 mr-2 rounded" />
+                )}
+                <span>{result.tag}</span>
+                <span className="ml-2 text-sm text-gray-500">
+                  ({result.domain_pk_namespace.split('.')[1]})
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
