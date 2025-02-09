@@ -82,7 +82,7 @@ export const MobileNav = () => {
 
       {/* Mobile Menu */}
       <div 
-        className={`fixed inset-y-0 left-0 w-[70%] bg-white dark:bg-black transform 
+        className={`fixed inset-y-0 left-0 w-[66%] bg-white dark:bg-black transform 
           transition-transform duration-300 ease-in-out z-[9998] lg:hidden
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
