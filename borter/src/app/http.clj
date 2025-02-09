@@ -389,7 +389,8 @@
      ["/status" {:get {:handler spotify/check-spotify-status}}]
      ["/disconnect" {:post {:handler spotify/handle-disconnect}}]
      ["/playlists" {:get {:handler spotify/get-playlists}
-                    :post {:handler spotify/post-playlist}}]]
+                    :post {:handler spotify/post-playlist}}]
+     ["/resolve" {:post {:handler spotify/resolve-spotify-entity}}]]
 
     ["/youtube" youtube/routes]
     ["/linear" linear/routes]

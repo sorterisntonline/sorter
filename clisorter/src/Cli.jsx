@@ -57,6 +57,8 @@ export const useStore = create((set, get) => ({
   },
   spotifyConnected: false,
   setSpotifyConnected: (connected) => set({ spotifyConnected: connected }),
+  activePanel: 1,
+  setActivePanel: (panel) => set({ activePanel: panel }),
 }));
 
 const useQueryState = () => {
@@ -150,7 +152,23 @@ const PanelNav = ({ activePanel, setActivePanel }) => {
   );
 };
 
+const slugify = (text) => {
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')           // Replace spaces with -
+    .replace(/[^\w\-]+/g, '')       // Remove all non-word chars
+    .replace(/\-\-+/g, '-')         // Replace multiple - with single -
+    .replace(/^-+/, '')             // Trim - from start of text
+    .replace(/-+$/, '');            // Trim - from end of text
+};
+
 const SearchPanel = ({ searchQuery, setSearchQuery }) => {
+  const { queryState, updateQueryState } = useQueryState();
+  const setActivePanel = useStore(state => state.setActivePanel);
+  const results = useStore(state => state.results);
+
   const debouncedQuery = useRef(
     debounce((query) => {
       refetch();
@@ -169,9 +187,7 @@ const SearchPanel = ({ searchQuery, setSearchQuery }) => {
     cacheTime: 3600000,
   });
 
-  console.log('Current data:', data);
   const suggestions = data?.suggestions || {};
-  console.log('Suggestions:', suggestions);
 
   useEffect(() => {
     debouncedQuery(searchQuery);
@@ -180,9 +196,55 @@ const SearchPanel = ({ searchQuery, setSearchQuery }) => {
     };
   }, [searchQuery, debouncedQuery]);
 
-  const handleTagClick = (tag) => {
-    // TODO: Implement tag selection logic
-    console.log('Selected tag:', tag);
+  const handleTagClick = async (tag) => {
+    // If it's a suggested tag from the popular tags section
+    if (typeof tag === 'string') {
+      const newTag = {
+        type: 'hashtag',
+        value: tag.replace('#', '') // Remove # if present
+      };
+      updateQueryState([...queryState, newTag]);
+      setSearchQuery(''); // Clear the search input
+      setActivePanel(2);
+      return;
+    }
+
+    // If it's a Spotify item, lookup or import it first
+    try {
+      const response = await fetch('/api/spotify/resolve', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          domain_pk: tag.domain_pk,
+          domain_pk_namespace: tag.domain_pk_namespace,
+          metadata: {
+            name: tag.tag,
+            image: tag.image
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to resolve Spotify item');
+      }
+
+      const data = await response.json();
+      const newTag = {
+        type: tag.domain_pk_namespace.startsWith('spotify.') ? 'hashtag' : 'item',
+        value: data.tag, // Use the tag from the backend
+        domain_pk: tag.domain_pk,
+        domain_pk_namespace: tag.domain_pk_namespace
+      };
+      
+      updateQueryState([...queryState, newTag]);
+      setSearchQuery(''); // Clear the search input
+      setActivePanel(2);
+    } catch (error) {
+      console.error('Error resolving Spotify item:', error);
+      // You might want to show an error message to the user here
+    }
   };
 
   return (
@@ -307,13 +369,13 @@ const SearchPanel = ({ searchQuery, setSearchQuery }) => {
             <div className="border-b pb-2 dark:border-gray-600">
               <h3 className="text-sm uppercase text-gray-500 dark:text-gray-400">Popular Tags</h3>
               <div className="flex flex-wrap gap-2 mt-2">
-                {['#hip-hop', '#2023', '#indie', '#rock', '#electronic'].map(tag => (
+                {['hip-hop', '2023', 'indie', 'rock', 'electronic'].map(tag => (
                   <span 
                     key={tag} 
-                    onClick={() => setSearchQuery(tag)}
+                    onClick={() => handleTagClick(tag)}
                     className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-sm cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600"
                   >
-                    {tag}
+                    #{tag}
                   </span>
                 ))}
               </div>
@@ -326,15 +388,46 @@ const SearchPanel = ({ searchQuery, setSearchQuery }) => {
 };
 
 const RankingPanel = () => {
+  const { queryState, updateQueryState } = useQueryState();
+
+  const formatTagDisplay = (item) => {
+    switch (item.type) {
+      case 'hashtag':
+        return `#${item.value}`;
+      case 'mention':
+        return `@${item.value}`;
+      case 'action':
+        return `${item.value}${item.itemId ? ` ${item.itemId}` : ''}`;
+      case 'item':
+        return `item:${item.value}`;
+      default:
+        return item.value;
+    }
+  };
+
+  const handleRemoveTag = (indexToRemove) => {
+    const newQueryState = queryState.filter((_, index) => index !== indexToRemove);
+    updateQueryState(newQueryState);
+  };
+
   return (
     <div className="panel-content p-6 bg-white dark:bg-gray-800">
       <div className="max-w-4xl mx-auto">
         <div className="mb-6">
           <h3 className="text-sm uppercase text-gray-500 dark:text-gray-400 mb-2">Selected Tags</h3>
           <div className="flex flex-wrap gap-2">
-            {['#hip-hop', '#2020s'].map(tag => (
-              <span key={tag} className="px-4 py-2 bg-blue-100 dark:bg-blue-900 rounded-full text-blue-800 dark:text-blue-200">
-                {tag} ×
+            {queryState.map((item, index) => (
+              <span 
+                key={`${item.type}-${item.value}-${index}`}
+                className="px-3 py-1 bg-blue-100 dark:bg-blue-900 rounded-full text-blue-800 dark:text-blue-200 flex items-center"
+              >
+                {formatTagDisplay(item)}
+                <button 
+                  className="ml-2 hover:text-blue-600"
+                  onClick={() => handleRemoveTag(index)}
+                >
+                  ×
+                </button>
               </span>
             ))}
           </div>
@@ -404,7 +497,8 @@ const VotingPanel = () => {
 };
 
 export const Cli = () => {
-  const [activePanel, setActivePanel] = useState(1);
+  const activePanel = useStore(state => state.activePanel);
+  const setActivePanel = useStore(state => state.setActivePanel);
   const [searchQuery, setSearchQuery] = useState('');
   const [isTutorialVisible, setIsTutorialVisible] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
