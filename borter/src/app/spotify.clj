@@ -120,17 +120,72 @@
                                                                    existing-records))})
                            (get-in results [:tracks :items]))}}))
 
+(pco/defresolver ensure-track-exists [{:keys [spotify/track-id]}]
+  {::pco/input [:spotify/track-id]
+   ::pco/output [:db/item-id :spotify/name]}
+  (when-let [existing (first 
+                     (db/exec! 
+                      (-> (h/select :*)
+                          (h/from :items)
+                          (h/where [:and
+                                  [:= :domain_pk track-id]
+                                  [:= :domain_pk_namespace "spotify.track"]]))))]
+    {:db/item-id (:items/id existing)
+     :spotify/name (:items/title existing)}))
+
+(pco/defresolver create-track-record [{:keys [spotify/track-id spotify/name]}]
+  {::pco/input [:spotify/track-id :spotify/name]
+   ::pco/output [:db/item-id :spotify/name]}
+  (println "creating track record!")
+  (let [new-record (first
+                    (db/exec! 
+                     (-> (h/insert-into :items)
+                         (h/values [{:title name
+                                     :slug (sluj name)
+                                     :domain_pk track-id
+                                     :domain_pk_namespace "spotify.track"
+                                     :owner "spotify"}])
+                         (h/returning :*))))]
+    {:db/item-id (:items/id new-record)
+     :spotify/name (:items/title new-record)}))
+
+(pco/defresolver spotify-track-metadata [{:keys [spotify/track-id spotify/access-token]}]
+  {::pco/input [:spotify/track-id :spotify/access-token]
+   ::pco/output [:spotify/name
+                 :spotify/album-id
+                 :spotify/artist-id
+                 :spotify/release-date
+                 :spotify/album-name
+                 :spotify/artist-name
+                 :spotify/images]}
+  (when-let [track-data (get-track-metadata track-id access-token)]
+    {:spotify/name (:name track-data)
+     :spotify/album-id (-> track-data :album :id)
+     :spotify/artist-id (-> track-data :artists first :id)
+     :spotify/release-date (:release_date track-data)
+     :spotify/album-name (-> track-data :album :name)
+     :spotify/artist-name (-> track-data :artists first :name)
+     :spotify/images (-> track-data :album :images)}))
+
 ;; Register both resolvers
 (def env
   (-> [spotify-client-token
-       spotify-search]
+       spotify-search
+       ensure-track-exists
+       create-track-record
+       spotify-track-metadata]
       (pci/register)))
 
 (comment
-  ;; Then try the spotify search
-  (p.eql/process env [{[:spotify/query "kdot"] 
-                       [{:spotify/search-results 
-                         [:spotify/artists :spotify/albums :spotify/tracks]}]}]))
+  ;; First get the access token
+  ;; Then use it in the track query
+  (p.eql/process env
+                 {:spotify/track-id "0nj9Bq5sHDiTxSHunhgkFb"}
+                 [:spotify/name])
+
+  (db/exec! ["delete from items where domain_pk = ?" "0nj9Bq5sHDiTxSHunhgkFb"])
+
+  (count (db/exec! {:select :* :from :items :where [:= :domain_pk_namespace "spotify.track"]})))
 
 ;; Example usage in your API endpoint:
 (defn search-endpoint [req]
@@ -329,23 +384,30 @@
                      (h/returning :*)))}))))
 
 (defn resolve-spotify-entity [req]
-  (let [{:keys [domain_pk domain_pk_namespace metadata]} (-> req :body-params)
+  "take a spotify search result, and return a tag to filter the ui by.
+   if the spotify entity is not in our db, import it.
+
+   for artists:
+        import the artist item, make an artist tag, add artist item to the tag
+        import top 3 albums, run import album routine, add those album items and songs to artist tag
+        imoprt top 10 songs, add to appropriate tags.
+        return artist tag to be shown in ui
+   for albums:
+        import artist, make tag. add album item and song items. make album tag, add album,songs,to appropriate tag
+        return album tag to be shown in ui
+   for songs: add song, artist, and album tags. return just the song item to be shown in ui (not as a tag, just return the itemid so that ui can focus on that item.
+         
+"
+  (let [{:keys [domain_pk domain_pk_namespace name]} (-> req :body-params)
         username (-> req :session :user_name)]
+    (def req req)
+    (-> req :body-params)
     
     (when-not username
       (throw (ex-info "Must be logged in" {:status 401})))
     
-    (let [result (import-spotify-entity 
-                  domain_pk_namespace
-                  {:id domain_pk 
-                   :name (:name metadata)
-                   :images [{:url (:image metadata)}]})]
-      
-      (if result
-        {:status 200
-         :body {:tag (-> result :tag :slug)}}
-        {:status 404
-         :body {:error "Failed to resolve entity"}}))))
+    {:status 200
+     :body {:tag "epicwin"}}))
 
 (comment
   (db/exec! {:select :* :from :tags :where [:= :domain_pk_namespace "spotify.artist"]})

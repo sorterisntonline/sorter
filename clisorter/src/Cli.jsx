@@ -209,11 +209,7 @@ const SearchPanel = ({ searchQuery, setSearchQuery }) => {
         const response = await fetch('/api/spotify/resolve', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            domain_pk: tag.domain_pk,
-            domain_pk_namespace: tag.domain_pk_namespace,
-            metadata: { name: tag.tag, image: tag.image }
-          })
+          body: JSON.stringify(tag)
         });
 
         if (!response.ok) throw new Error('Failed to resolve Spotify item');
