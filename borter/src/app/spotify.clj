@@ -307,7 +307,7 @@
   
   )
 
-(def routes [])
+(def routes [["/resolve" {:post {:handler #'resolve-spotify-entity}}]])
 
 
 
