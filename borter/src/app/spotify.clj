@@ -46,17 +46,35 @@
         (reset! global-token {:access_token (:access_token body)
                               :expires_at (+ (System/currentTimeMillis) expires-in)})))
     (or (:access_token @global-token)
-        (throw (ex-info "Failed to get client token" {:status 500})))
+        (throw (ex-info "Failed to get client token" {:status 500})))))
+
+(pco/defresolver spotify-client-token []
+  {::pco/output [:spotify/access-token]}
+  (try
+    (when (or (nil? @global-token) 
+              (nil? (:expires_at @global-token))
+              (> (System/currentTimeMillis) (:expires_at @global-token)))
+      (let [response (hc/request {:url "https://accounts.spotify.com/api/token"
+                                 :method :post
+                                 :headers {"Authorization" (str "Basic " (oauth/encode-to-base64 (str so/client-id ":" so/client-secret)))}
+                                 :form-params {:grant_type "client_credentials"}})
+            body (-> response :body (json/read-str {:key-fn keyword}))
+            expires-in (* (:expires_in body) 1000)]
+        (reset! global-token {:access_token (:access_token body)
+                             :expires_at (+ (System/currentTimeMillis) expires-in)})))
+    {:spotify/access-token (or (:access_token @global-token)
+                              (throw (ex-info "Failed to get client token" {:status 500})))}
     (catch Exception e
-      (println "Error getting client token:" (ex-message e))
       (throw (ex-info "Failed to get client token" {:status 500 :cause e})))))
 
-(defn search
-  "Search Spotify for items and merge with existing database records"
-  [query]
-  (let [access-token (get-client-token)
-        ;; Get results from Spotify API
-        response (hc/request 
+(pco/defresolver spotify-search [{:keys [spotify/query spotify/access-token] :as input}]
+  {::pco/input [:spotify/query :spotify/access-token]
+   ::pco/output [{:spotify/search-results
+                  [{:spotify/artists [:spotify/id :spotify/name :spotify/images]}
+                   {:spotify/albums [:spotify/id :spotify/name :spotify/images]}
+                   {:spotify/tracks [:spotify/id :spotify/name :spotify/album]}]}]}
+    ; Debug the entire input map
+  (let [response (hc/request 
                   {:url "https://api.spotify.com/v1/search"
                    :method :get
                    :headers {"Authorization" (str "Bearer " access-token)}
@@ -64,14 +82,13 @@
                                   "type" "album,track,artist"
                                   "limit" 5}})
         results (-> response :body (json/read-str {:key-fn keyword}))
-        
-        ;; Extract all Spotify IDs
+        ;; Extract Spotify IDs for database lookup
         spotify-ids (concat 
                      (map :id (get-in results [:artists :items]))
                      (map :id (get-in results [:albums :items]))
                      (map :id (get-in results [:tracks :items])))
         
-        ;; Look up existing records
+        ;; Look up existing tags
         existing-records (when (seq spotify-ids)
                            (db/exec! 
                             (-> (h/select :*)
@@ -80,19 +97,49 @@
                                           [:in :domain_pk spotify-ids]
                                           [:like :domain_pk_namespace "spotify.%"]]))))]
     
-    ;; Merge results with existing records
-    {:artists (map #(merge % (first (filter (fn [r] (= (:domain_pk r) (:id %))) 
-                                            existing-records)))
-                   (get-in results [:artists :items]))
-     :albums (map #(merge % (first (filter (fn [r] (= (:domain_pk r) (:id %))) 
-                                           existing-records)))
-                  (get-in results [:albums :items]))
-     :tracks (map #(merge % (first (filter (fn [r] (= (:domain_pk r) (:id %))) 
-                                           existing-records)))
-                  (get-in results [:tracks :items]))}))
+    {:spotify/search-results
+     {:spotify/artists (map (fn [artist]
+                              {:spotify/id (:id artist)
+                               :spotify/name (:name artist)
+                               :spotify/images (:images artist)
+                               :spotify/existing-tag (first (filter #(= (:domain_pk %) (:id artist)) 
+                                                                    existing-records))})
+                            (get-in results [:artists :items]))
+      :spotify/albums (map (fn [album]
+                             {:spotify/id (:id album)
+                              :spotify/name (:name album)
+                              :spotify/images (:images album)
+                              :spotify/existing-tag (first (filter #(= (:domain_pk %) (:id album)) 
+                                                                   existing-records))})
+                           (get-in results [:albums :items]))
+      :spotify/tracks (map (fn [track]
+                             {:spotify/id (:id track)
+                              :spotify/name (:name track)
+                              :spotify/album (:album track)
+                              :spotify/existing-tag (first (filter #(= (:domain_pk %) (:id track)) 
+                                                                   existing-records))})
+                           (get-in results [:tracks :items]))}}))
+
+;; Register both resolvers
+(def env
+  (-> [spotify-client-token
+       spotify-search]
+      (pci/register)))
 
 (comment
-  (search "kdot"))
+  ;; Then try the spotify search
+  (p.eql/process env [{[:spotify/query "kdot"] 
+                       [{:spotify/search-results 
+                         [:spotify/artists :spotify/albums :spotify/tracks]}]}]))
+
+;; Example usage in your API endpoint:
+(defn search-endpoint [req]
+  (let [query (-> req :params (get "q"))
+        results (first (vals (p.eql/process env [{[:spotify/query query] 
+                                                  [{:spotify/search-results 
+                                                    [:spotify/artists :spotify/albums :spotify/tracks]}]}])))]
+    {:status 200
+     :body results}))
 
 ;; Create the standard OAuth route handlers
 (defn create-spotify-tag
@@ -307,7 +354,8 @@
   
   )
 
-(def routes [["/resolve" {:post {:handler #'resolve-spotify-entity}}]])
+(def routes [["/resolve" {:post {:handler #'resolve-spotify-entity}}]
+             ["/search" {:get {:handler #'search-endpoint}}]])
 
 
 

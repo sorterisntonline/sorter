@@ -162,7 +162,7 @@ const SearchPanel = ({ searchQuery, setSearchQuery }) => {
     queryKey: ['search', searchQuery],
     queryFn: async () => {
       if (!searchQuery.trim()) return { suggestions: [] };
-      const response = await fetch(`/api/tag/query?query=${encodeURIComponent(searchQuery)}`);
+      const response = await fetch(`/api/spotify/search?q=${encodeURIComponent(searchQuery)}`);
       if (!response.ok) throw new Error('Failed to fetch search results');
       return response.json();
     },
@@ -171,27 +171,28 @@ const SearchPanel = ({ searchQuery, setSearchQuery }) => {
     cacheTime: 3600000,
   });
 
-
-  console.log('data', data);
-  const suggestions = data?.suggestions || {};
+  const suggestions = data?.['search-results'] || {};
   const allResults = [
     ...(suggestions.artists || []).map(item => ({
       ...item,
       domain_pk_namespace: 'spotify.artist',
       tag: item.name,
-      image: item.images?.[0]?.url
+      image: item.images?.[0]?.url,
+      id: item.id
     })),
     ...(suggestions.albums || []).map(item => ({
       ...item,
       domain_pk_namespace: 'spotify.album',
       tag: item.name,
-      image: item.images?.[0]?.url
+      image: item.images?.[0]?.url,
+      id: item.id
     })),
     ...(suggestions.tracks || []).map(item => ({
       ...item,
       domain_pk_namespace: 'spotify.track',
       tag: item.name,
-      image: item.album?.images?.[0]?.url
+      image: item.album?.images?.[0]?.url,
+      id: item.id
     }))
   ];
 
