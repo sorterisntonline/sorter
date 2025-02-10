@@ -120,16 +120,52 @@
                                                                    existing-records))})
                            (get-in results [:tracks :items]))}}))
 
+(pco/defresolver ensure-artist-tag [{:keys [spotify/artist-id spotify/artist-name]}]
+  {::pco/input [:spotify/artist-id :spotify/artist-name]
+   ::pco/output [:db/artist-tag-id]} 
+  (println "ensure-artist-tag")
+  (let [tag (create-spotify-tag 
+             "spotify.artist"
+             {:id artist-id
+              :name artist-name})]
+    (println "tag" tag)
+    {:db/artist-tag-id (:tags/id tag)}))
+
+(pco/defresolver ensure-album-tag [{:keys [spotify/album-id spotify/album-name]}]
+  {::pco/input [:spotify/album-id :spotify/album-name]
+   ::pco/output [:db/album-tag-id]}
+  (println "ensure-album-tag")
+  (let [tag (create-spotify-tag 
+             "spotify.album"
+             {:id album-id
+              :name album-name})]
+    {:db/album-tag-id (:tags/id tag)}))
+
+(pco/defresolver add-track-to-tags [{:keys [db/item-id db/artist-tag-id db/album-tag-id]}]
+  {::pco/input [:db/item-id :db/artist-tag-id :db/album-tag-id]
+   ::pco/output [:db/tags-added?]}
+  (println "add-track-to-tags")
+  (db/exec! 
+   (-> (h/insert-into :items_in_tags)
+       (h/values [{:item_id item-id
+                   :tag_id artist-tag-id}
+                  {:item_id item-id
+                   :tag_id album-tag-id}])
+       (h/on-conflict)
+       (h/do-nothing)))
+  {:db/tags-added? true})
+
 (pco/defresolver ensure-track-exists [{:keys [spotify/track-id]}]
   {::pco/input [:spotify/track-id]
    ::pco/output [:db/item-id :spotify/name]}
+  (println "ensure-track-exists")
   (when-let [existing (first 
-                     (db/exec! 
-                      (-> (h/select :*)
-                          (h/from :items)
-                          (h/where [:and
-                                  [:= :domain_pk track-id]
-                                  [:= :domain_pk_namespace "spotify.track"]]))))]
+                       (db/exec! 
+                        (-> (h/select :*)
+                            (h/from :items)
+                            (h/where [:and
+                                      [:= :domain_pk track-id]
+                                      [:= :domain_pk_namespace "spotify.track"]]))))]
     {:db/item-id (:items/id existing)
      :spotify/name (:items/title existing)}))
 
@@ -158,6 +194,7 @@
                  :spotify/album-name
                  :spotify/artist-name
                  :spotify/images]}
+  (println "spotify-track-metadata")
   (when-let [track-data (get-track-metadata track-id access-token)]
     {:spotify/name (:name track-data)
      :spotify/album-id (-> track-data :album :id)
@@ -173,7 +210,10 @@
        spotify-search
        ensure-track-exists
        create-track-record
-       spotify-track-metadata]
+       spotify-track-metadata
+       ensure-artist-tag
+       ensure-album-tag
+       add-track-to-tags]
       (pci/register)))
 
 (comment
@@ -181,10 +221,10 @@
   ;; Then use it in the track query
   (p.eql/process env
                  {:spotify/track-id "0nj9Bq5sHDiTxSHunhgkFb"}
-                 [:spotify/name])
+                 [:spotify/name :db/item-id :db/tags-added?])
 
   (db/exec! ["delete from items where domain_pk = ?" "0nj9Bq5sHDiTxSHunhgkFb"])
-
+  
   (count (db/exec! {:select :* :from :items :where [:= :domain_pk_namespace "spotify.track"]})))
 
 ;; Example usage in your API endpoint:
@@ -209,21 +249,19 @@
 
   (let [title (:name entity)
         slug (sluj title)
-        domain-pk (:id entity)
-        ;; Try insert first, if nothing returned, do a select
-        result (or 
-                (first (db/exec! 
-                        ["SELECT * FROM tags 
+        domain-pk (:id entity)]
+    (or 
+     (first (db/exec! 
+             ["SELECT * FROM tags 
                         WHERE domain_pk_namespace = ? AND domain_pk = ?"
-                         domain_pk_namespace domain-pk]))
-                (first (db/exec! 
-                        ["INSERT INTO tags (title, slug, owner, domain_pk_namespace, domain_pk)
+              domain_pk_namespace domain-pk]))
+     (first (db/exec! 
+             ["INSERT INTO tags (title, slug, owner, domain_pk_namespace, domain_pk)
                         VALUES (?, ?, ?, ?, ?)
                         ON CONFLICT (domain_pk_namespace, domain_pk) 
                         DO NOTHING
                         RETURNING *"
-                         title slug "spotify" domain_pk_namespace domain-pk])))]
-    [result]))
+              title slug "spotify" domain_pk_namespace domain-pk])))))
 
 
 (defn get-artist-tracks
@@ -309,79 +347,6 @@
     (let [year (Integer/parseInt (first (str/split release-date #"-")))
           decade (* (quot year 10) 10)]
       (str decade "s"))))
-
-(defn add-to-category-tags
-  "Add items to genre and decade tags"
-  [items owner metadata]
-  (let [token (get-client-token)]
-    ;; Handle genres
-    (when-let [genres (:genres metadata)]
-      (doseq [genre genres]
-        (let [genre-tag (first (create-or-get-category-tag (str "genre-" (sluj genre)) owner))]
-          (db/exec! 
-           (-> (h/insert-into :items_in_tags)
-               (h/values
-                (for [item items]
-                  {:item_id (:id item)
-                   :tag_id (:id genre-tag)})))))))
-    
-    ;; Handle decades
-    (when-let [release-date (:release_date metadata)]
-      (when-let [decade (get-decade-from-date release-date)]
-        (let [decade-tag (first (create-or-get-category-tag (str "decade-" decade) owner))]
-          (db/exec! 
-           (-> (h/insert-into :items_in_tags)
-               (h/values
-                (for [item items]
-                  {:item_id (:id item)
-                   :tag_id (:id decade-tag)})))))))))
-
-(defn import-spotify-entity
-  "Main function to handle importing any Spotify entity (artist, album, track)"
-  [domain_pk_namespace entity]
-  (let [token (get-client-token)
-        entity-tag (first (create-spotify-tag domain_pk_namespace entity))
-        
-        tracks (case domain_pk_namespace
-                 "spotify.artist" (get-artist-tracks (:id entity) token)
-                 "spotify.album" (get-album-tracks (:id entity) token)
-                 "spotify.track" [entity]
-                 [])]
-    (when (and entity-tag tracks)
-      ;; First insert or get existing items
-      (let [items (or 
-                   ;; Try insert first
-                   (seq (db/exec! 
-                         (-> (h/insert-into :items)
-                             (h/values
-                              (for [track tracks]
-                                {:title (:name track)
-                                 :slug (sluj (:name track))
-                                 :domain_pk (:id track)
-                                 :domain_pk_namespace domain_pk_namespace
-                                 :owner "spotify"}))
-                             (h/on-conflict :domain_pk :domain_pk_namespace)
-                             (h/do-nothing)
-                             (h/returning :*))))
-                   ;; If no inserts, get existing items
-                   (db/exec! 
-                    (-> (h/select :*)
-                        (h/from :items)
-                        (h/where [:and 
-                                  [:= :domain_pk_namespace domain_pk_namespace]
-                                  [:in :domain_pk (map :id tracks)]]))))]
-        
-        ;; Create items_in_tags associations and return result
-        {:tag entity-tag
-         :items (db/exec! 
-                 (-> (h/insert-into :items_in_tags)
-                     (h/values
-                      (for [item items]
-                        {:item_id (:id item)
-                         :tag_id (:id entity-tag)}))
-                     (h/on-conflict :item_id :tag_id)
-                     (h/do-nothing)
-                     (h/returning :*)))}))))
 
 (defn resolve-spotify-entity [req]
   "take a spotify search result, and return a tag to filter the ui by.
