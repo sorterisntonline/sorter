@@ -227,12 +227,19 @@ const SearchPanel = ({ searchQuery, setSearchQuery }) => {
       const resolvedItem = await resolveSpotifyItem(tag);
       if (!resolvedItem) return;
 
-      newTag = {
-        type: tag.domain_pk_namespace.startsWith('spotify.') ? 'hashtag' : 'item',
-        value: resolvedItem.tag,
-        domain_pk: tag.domain_pk,
-        domain_pk_namespace: tag.domain_pk_namespace
-      };
+      if (resolvedItem['item-id']) {
+        newTag = {
+          type: 'item',
+          value: resolvedItem['item-id'].toString()
+        };
+      } else {
+        newTag = {
+          type: tag.domain_pk_namespace.startsWith('spotify.') ? 'hashtag' : 'item',
+          value: resolvedItem.tag,
+          domain_pk: tag.domain_pk,
+          domain_pk_namespace: tag.domain_pk_namespace
+        };
+      }
     } else {
       newTag = {
         type: 'hashtag',
@@ -455,9 +462,29 @@ const VotingPanel = () => (
   </div>
 );
 
-// Main Component
+// New ItemView Component
+const ItemView = ({ itemId }) => {
+  return (
+    <div className="p-8">
+      <h1 className="text-2xl font-bold mb-4">Item Details: {itemId}</h1>
+      <div className="bg-gray-100 p-4 rounded">
+        <p>Placeholder for item-specific content</p>
+      </div>
+    </div>
+  );
+};
+
+// Updated Main Component
 export const Cli = () => {
   const [searchQuery, setSearchQuery] = useState('');
+  const { queryState } = useQueryState();
+  
+  // Check if we have an item in the query state
+  const itemTag = queryState.find(tag => tag.type === 'item');
+
+  if (itemTag) {
+    return <ItemView itemId={itemTag.value} />;
+  }
 
   return (
     <div className="min-h-screen">

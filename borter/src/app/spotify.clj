@@ -50,22 +50,19 @@
 
 (pco/defresolver spotify-client-token []
   {::pco/output [:spotify/access-token]}
-  (try
-    (when (or (nil? @global-token) 
-              (nil? (:expires_at @global-token))
-              (> (System/currentTimeMillis) (:expires_at @global-token)))
-      (let [response (hc/request {:url "https://accounts.spotify.com/api/token"
-                                 :method :post
-                                 :headers {"Authorization" (str "Basic " (oauth/encode-to-base64 (str so/client-id ":" so/client-secret)))}
-                                 :form-params {:grant_type "client_credentials"}})
-            body (-> response :body (json/read-str {:key-fn keyword}))
-            expires-in (* (:expires_in body) 1000)]
-        (reset! global-token {:access_token (:access_token body)
-                             :expires_at (+ (System/currentTimeMillis) expires-in)})))
-    {:spotify/access-token (or (:access_token @global-token)
-                              (throw (ex-info "Failed to get client token" {:status 500})))}
-    (catch Exception e
-      (throw (ex-info "Failed to get client token" {:status 500 :cause e})))))
+  (when (or (nil? @global-token) 
+            (nil? (:expires_at @global-token))
+            (> (System/currentTimeMillis) (:expires_at @global-token)))
+    (let [response (hc/request {:url "https://accounts.spotify.com/api/token"
+                                :method :post
+                                :headers {"Authorization" (str "Basic " (oauth/encode-to-base64 (str so/client-id ":" so/client-secret)))}
+                                :form-params {:grant_type "client_credentials"}})
+          body (-> response :body (json/read-str {:key-fn keyword}))
+          expires-in (* (:expires_in body) 1000)]
+      (reset! global-token {:access_token (:access_token body)
+                            :expires_at (+ (System/currentTimeMillis) expires-in)})))
+  {:spotify/access-token (or (:access_token @global-token)
+                             (throw (ex-info "Failed to get client token" {:status 500})))})
 
 (pco/defresolver spotify-search [{:keys [spotify/query spotify/access-token] :as input}]
   {::pco/input [:spotify/query :spotify/access-token]
@@ -353,30 +350,24 @@
       (str decade "s"))))
 
 (defn resolve-spotify-entity [req]
-  "take a spotify search result, and return a tag to filter the ui by.
-   if the spotify entity is not in our db, import it.
-
-   for artists:
-        import the artist item, make an artist tag, add artist item to the tag
-        import top 3 albums, run import album routine, add those album items and songs to artist tag
-        imoprt top 10 songs, add to appropriate tags.
-        return artist tag to be shown in ui
-   for albums:
-        import artist, make tag. add album item and song items. make album tag, add album,songs,to appropriate tag
-        return album tag to be shown in ui
-   for songs: add song, artist, and album tags. return just the song item to be shown in ui (not as a tag, just return the itemid so that ui can focus on that item.
-         
-"
   (let [{:keys [domain_pk domain_pk_namespace name]} (-> req :body-params)
         username (-> req :session :user_name)]
-    (def req req)
-    (-> req :body-params)
-    
     (when-not username
       (throw (ex-info "Must be logged in" {:status 401})))
+
+    (def domain_pk domain_pk)
     
-    {:status 200
-     :body {:tag "epicwin"}}))
+    (case domain_pk_namespace
+      "spotify.track" 
+      (let [result (p.eql/process env
+                                 {:spotify/track-id domain_pk}
+                                 [:spotify/name :db/item-id :db/tags-added?])]
+        {:status 200
+         :body result})
+      
+      ;; For now, return not implemented for other types
+      {:status 501
+       :body {:error "Not yet implemented for this entity type"}})))
 
 (comment
   (db/exec! {:select :* :from :tags :where [:= :domain_pk_namespace "spotify.artist"]})
