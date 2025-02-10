@@ -50,6 +50,7 @@
 
 (pco/defresolver spotify-client-token []
   {::pco/output [:spotify/access-token]}
+  (println "Running spotify-client-token resolver")
   (when (or (nil? @global-token) 
             (nil? (:expires_at @global-token))
             (> (System/currentTimeMillis) (:expires_at @global-token)))
@@ -70,7 +71,7 @@
                   [{:spotify/artists [:spotify/id :spotify/name :spotify/images]}
                    {:spotify/albums [:spotify/id :spotify/name :spotify/images]}
                    {:spotify/tracks [:spotify/id :spotify/name :spotify/album]}]}]}
-    ; Debug the entire input map
+  (println "Running spotify-search resolver with input:" input)
   (let [response (hc/request 
                   {:url "https://api.spotify.com/v1/search"
                    :method :get
@@ -117,27 +118,30 @@
                                                                    existing-records))})
                            (get-in results [:tracks :items]))}}))
 
-(pco/defresolver ensure-artist-tag [{:keys [spotify/artist-id spotify/artist-name]}]
+(pco/defresolver ensure-artist-tag [{:keys [spotify/artist-id spotify/artist-name] :as input}]
   {::pco/input [:spotify/artist-id :spotify/artist-name]
    ::pco/output [:db/artist-tag-id]}
+  (println "Running ensure-artist-tag resolver with input:" input)
   (let [tag (create-spotify-tag 
              "spotify.artist"
              {:id artist-id
               :name artist-name})]
     {:db/artist-tag-id (:tags/id tag)}))
 
-(pco/defresolver ensure-album-tag [{:keys [spotify/album-id spotify/album-name]}]
+(pco/defresolver ensure-album-tag [{:keys [spotify/album-id spotify/album-name] :as input}]
   {::pco/input [:spotify/album-id :spotify/album-name]
    ::pco/output [:db/album-tag-id]}
+  (println "Running ensure-album-tag resolver with input:" input)
   (let [tag (create-spotify-tag 
              "spotify.album"
              {:id album-id
               :name album-name})]
     {:db/album-tag-id (:tags/id tag)}))
 
-(pco/defresolver add-track-to-tags [{:keys [db/item-id db/artist-tag-id db/album-tag-id]}]
+(pco/defresolver add-track-to-tags [{:keys [db/item-id db/artist-tag-id db/album-tag-id] :as input}]
   {::pco/input [:db/item-id :db/artist-tag-id :db/album-tag-id]
    ::pco/output [:db/tags-added?]}
+  (println "Running add-track-to-tags resolver with input:" input)
   (println "add-track-to-tags")
   (db/exec! 
    (-> (h/insert-into :items_in_tags)
@@ -149,9 +153,10 @@
        (h/do-nothing)))
   {:db/tags-added? true})
 
-(pco/defresolver ensure-track-exists [{:keys [spotify/track-id]}]
+(pco/defresolver ensure-track-exists [{:keys [spotify/track-id] :as input}]
   {::pco/input [:spotify/track-id]
    ::pco/output [:db/item-id :spotify/name]}
+  (println "Running ensure-track-exists resolver with input:" input)
   (println "ensure-track-exists")
   (when-let [existing (first 
                        (db/exec! 
@@ -163,9 +168,10 @@
     {:db/item-id (:items/id existing)
      :spotify/name (:items/title existing)}))
 
-(pco/defresolver create-track-record [{:keys [spotify/track-id spotify/name]}]
+(pco/defresolver create-track-record [{:keys [spotify/track-id spotify/name] :as input}]
   {::pco/input [:spotify/track-id :spotify/name]
    ::pco/output [:db/item-id :spotify/name]}
+  (println "Running create-track-record resolver with input:" input)
   (println "creating track record!")
   (let [new-record (first
                     (db/exec! 
@@ -179,7 +185,7 @@
     {:db/item-id (:items/id new-record)
      :spotify/name (:items/title new-record)}))
 
-(pco/defresolver spotify-track-metadata [{:keys [spotify/track-id spotify/access-token]}]
+(pco/defresolver spotify-track-metadata [{:keys [spotify/track-id spotify/access-token] :as input}]
   {::pco/input [:spotify/track-id :spotify/access-token]
    ::pco/output [:spotify/name
                  :spotify/album-id
@@ -188,6 +194,7 @@
                  :spotify/album-name
                  :spotify/artist-name
                  :spotify/images]}
+  (println "Running spotify-track-metadata resolver with input:" input)
   (println "spotify-track-metadata")
   (when-let [track-data (get-track-metadata track-id access-token)]
     {:spotify/name (:name track-data)
@@ -198,6 +205,116 @@
      :spotify/artist-name (-> track-data :artists first :name)
      :spotify/images (-> track-data :album :images)}))
 
+(pco/defresolver spotify-album-metadata [{:keys [spotify/album-id spotify/access-token] :as input}]
+  {::pco/input [:spotify/album-id :spotify/access-token]
+   ::pco/output [:spotify/name
+                 :spotify/artist-id
+                 :spotify/release-date
+                 :spotify/artist-name
+                 :spotify/images]}
+  (println "Running spotify-album-metadata resolver with input:" input)
+  (let [response (hc/request 
+                  {:url (str "https://api.spotify.com/v1/albums/" album-id)
+                   :method :get
+                   :headers {"Authorization" (str "Bearer " access-token)}})
+        album-data (-> response :body (json/read-str {:key-fn keyword}))]
+    {:spotify/name (:name album-data)
+     :spotify/artist-id (-> album-data :artists first :id)
+     :spotify/release-date (:release_date album-data)
+     :spotify/artist-name (-> album-data :artists first :name)
+     :spotify/images (:images album-data)}))
+
+(pco/defresolver ensure-album-exists [{:keys [spotify/album-id] :as input}]
+  {::pco/input [:spotify/album-id]
+   ::pco/output [:db/item-id :spotify/name]}
+  (println "Running ensure-album-exists resolver with input:" input)
+  (when-let [existing (first 
+                      (db/exec! 
+                       (-> (h/select :*)
+                           (h/from :items)
+                           (h/where [:and
+                                   [:= :domain_pk album-id]
+                                   [:= :domain_pk_namespace "spotify.album"]]))))]
+    {:db/item-id (:items/id existing)
+     :spotify/name (:items/title existing)}))
+
+(pco/defresolver create-album-record [{:keys [spotify/album-id spotify/name] :as input}]
+  {::pco/input [:spotify/album-id :spotify/name]
+   ::pco/output [:db/item-id :spotify/name]}
+  (println "Running create-album-record resolver with input:" input)
+  (let [new-record (first
+                    (db/exec! 
+                     (-> (h/insert-into :items)
+                         (h/values [{:title name
+                                   :slug (sluj name)
+                                   :domain_pk album-id
+                                   :domain_pk_namespace "spotify.album"
+                                   :owner "spotify"}])
+                         (h/returning :*))))]
+    {:db/item-id (:items/id new-record)
+     :spotify/name (:items/title new-record)}))
+
+(pco/defresolver add-album-to-tags [{:keys [db/item-id db/artist-tag-id spotify/name] :as input}]
+  {::pco/input [:db/item-id :db/artist-tag-id :spotify/name]
+   ::pco/output [:db/tags-added? :db/album-tag-id]}
+  (println "Running add-album-to-tags resolver with input:" input)
+  (let [tag (create-spotify-tag 
+             "spotify.album"
+             {:id (str item-id)
+              :name name})]
+    (db/exec! 
+     (-> (h/insert-into :items_in_tags)
+         (h/values [{:item_id item-id
+                    :tag_id artist-tag-id}])
+         (h/on-conflict)
+         (h/do-nothing)))
+    {:db/tags-added? true
+     :db/album-tag-id (:tags/id tag)}))
+
+(pco/defresolver album-tracks [{:keys [spotify/album-id spotify/access-token] :as input}]
+  {::pco/input [:spotify/album-id :spotify/access-token]
+   ::pco/output [{:spotify/tracks [:spotify/id :spotify/name]}]}
+  (println "Running album-tracks resolver with input:" input)
+  (let [tracks (get-album-tracks album-id access-token)]
+    {:spotify/tracks (map (fn [track]
+                          {:spotify/id (:id track)
+                           :spotify/name (:name track)})
+                        tracks)}))
+
+(pco/defresolver process-album-tracks [{:keys [spotify/tracks db/artist-tag-id db/album-tag-id] :as input}]
+  {::pco/input [:spotify/tracks 
+                :db/artist-tag-id 
+                :db/album-tag-id]
+   ::pco/output [:db/tracks-processed?]}
+  (println "Running process-album-tracks resolver with input:" input)
+  (doseq [{:keys [spotify/id spotify/name]} tracks]
+    (when-let [item-id (:items/id
+                       (or (first 
+                           (db/exec! 
+                            (-> (h/select :*)
+                                (h/from :items)
+                                (h/where [:and
+                                        [:= :domain_pk id]
+                                        [:= :domain_pk_namespace "spotify.track"]]))))
+                           (first
+                            (db/exec! 
+                             (-> (h/insert-into :items)
+                                 (h/values [{:title name
+                                           :slug (sluj name)
+                                           :domain_pk id
+                                           :domain_pk_namespace "spotify.track"
+                                           :owner "spotify"}])
+                                 (h/returning :*))))))]
+      (db/exec! 
+       (-> (h/insert-into :items_in_tags)
+           (h/values [{:item_id item-id
+                      :tag_id artist-tag-id}
+                     {:item_id item-id
+                      :tag_id album-tag-id}])
+           (h/on-conflict)
+           (h/do-nothing)))))
+  {:db/tracks-processed? true})
+
 ;; Register both resolvers
 (def env
   (-> [spotify-client-token
@@ -207,7 +324,13 @@
        spotify-track-metadata
        ensure-artist-tag
        ensure-album-tag
-       add-track-to-tags]
+       add-track-to-tags
+       spotify-album-metadata
+       ensure-album-exists
+       create-album-record
+       add-album-to-tags
+       album-tracks
+       process-album-tracks]
       (pci/register)))
 
 (comment
@@ -216,6 +339,15 @@
   (p.eql/process env
                  {:spotify/track-id "0nj9Bq5sHDiTxSHunhgkFb"}
                  [:spotify/name :db/item-id :db/tags-added?])
+  
+  (p.eql/process env
+                 {:spotify/album-id "0y17shGWtVIUSETo8d4mMB"}
+                 [:spotify/name
+                  :db/item-id
+                  :db/tags-added?
+                  :db/tracks-processed?])
+  
+  (clean-spotify-data!)
 
   (db/exec! ["delete from items where domain_pk = ?" "0nj9Bq5sHDiTxSHunhgkFb"])
   
@@ -290,57 +422,6 @@
       (println "Error getting album tracks:" (ex-message e))
       [])))
 
-(defn create-or-get-category-tag
-  "Creates or gets a tag for categories like genres, decades"
-  [category-name owner]
-  (db/exec! 
-   ["INSERT INTO tags (title, slug, owner, domain_pk_namespace)
-     VALUES (?, ?, ?, ?)
-     ON CONFLICT (title, domain_pk_namespace) 
-     DO UPDATE SET 
-       slug = EXCLUDED.slug,
-       owner = EXCLUDED.owner
-     RETURNING *"
-    (str "#" category-name)
-    (sluj category-name)
-    "spotify"
-    (case (first (str/split category-name #"-"))
-      "genre" "meta.genre"
-      "decade" "meta.decade")]))
-
-(defn get-artist-metadata
-  "Get full artist metadata including genres"
-  [artist-id token]
-  (try
-    (let [response (hc/request 
-                    {:url (str "https://api.spotify.com/v1/artists/" artist-id)
-                     :method :get
-                     :headers {"Authorization" (str "Bearer " token)}})
-          artist (-> response :body (json/read-str {:key-fn keyword}))]
-      artist)
-    (catch Exception e
-      (println "Error getting artist metadata:" (ex-message e))
-      nil)))
-
-(defn get-track-metadata
-  "Get full track metadata including album release date"
-  [track-id token]
-  (try
-    (let [response (hc/request 
-                    {:url (str "https://api.spotify.com/v1/tracks/" track-id)
-                     :method :get
-                     :headers {"Authorization" (str "Bearer " token)}})
-          track (-> response :body (json/read-str {:key-fn keyword}))
-          album-response (hc/request 
-                         {:url (str "https://api.spotify.com/v1/albums/" (-> track :album :id))
-                          :method :get
-                          :headers {"Authorization" (str "Bearer " token)}})
-          album (-> album-response :body (json/read-str {:key-fn keyword}))]
-      (assoc track :release_date (:release_date album)))
-    (catch Exception e
-      (println "Error getting track metadata:" (ex-message e))
-      nil)))
-
 (defn get-decade-from-date
   "Convert a release date to a decade tag (e.g., '1970s')"
   [release-date]
@@ -355,23 +436,27 @@
     (when-not username
       (throw (ex-info "Must be logged in" {:status 401})))
 
-    (def domain_pk domain_pk)
-    
     (case domain_pk_namespace
       "spotify.track" 
       (let [result (p.eql/process env
-                                 {:spotify/track-id domain_pk}
-                                 [:spotify/name :db/item-id :db/tags-added?])]
+                                  {:spotify/track-id domain_pk}
+                                  [:spotify/name :db/item-id :db/tags-added?])]
         {:status 200
          :body result})
       
-      ;; For now, return not implemented for other types
+      "spotify.album"
+      (let [result (p.eql/process env
+                                  {:spotify/album-id domain_pk}
+                                  [:spotify/name :db/item-id :db/tags-added? :db/tracks-processed?])]
+        {:status 200
+         :body result})
+      
       {:status 501
        :body {:error "Not yet implemented for this entity type"}})))
 
 (comment
   (db/exec! {:select :* :from :tags :where [:= :domain_pk_namespace "spotify.artist"]})
-  (import-spotify-entity domain_pk_namespace entity)
+  
   
   
   )
