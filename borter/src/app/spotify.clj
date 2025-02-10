@@ -122,19 +122,16 @@
 
 (pco/defresolver ensure-artist-tag [{:keys [spotify/artist-id spotify/artist-name]}]
   {::pco/input [:spotify/artist-id :spotify/artist-name]
-   ::pco/output [:db/artist-tag-id]} 
-  (println "ensure-artist-tag")
+   ::pco/output [:db/artist-tag-id]}
   (let [tag (create-spotify-tag 
              "spotify.artist"
              {:id artist-id
               :name artist-name})]
-    (println "tag" tag)
     {:db/artist-tag-id (:tags/id tag)}))
 
 (pco/defresolver ensure-album-tag [{:keys [spotify/album-id spotify/album-name]}]
   {::pco/input [:spotify/album-id :spotify/album-name]
    ::pco/output [:db/album-tag-id]}
-  (println "ensure-album-tag")
   (let [tag (create-spotify-tag 
              "spotify.album"
              {:id album-id
@@ -249,19 +246,26 @@
 
   (let [title (:name entity)
         slug (sluj title)
-        domain-pk (:id entity)]
-    (or 
-     (first (db/exec! 
-             ["SELECT * FROM tags 
-                        WHERE domain_pk_namespace = ? AND domain_pk = ?"
-              domain_pk_namespace domain-pk]))
-     (first (db/exec! 
-             ["INSERT INTO tags (title, slug, owner, domain_pk_namespace, domain_pk)
-                        VALUES (?, ?, ?, ?, ?)
-                        ON CONFLICT (domain_pk_namespace, domain_pk) 
-                        DO NOTHING
-                        RETURNING *"
-              title slug "spotify" domain_pk_namespace domain-pk])))))
+        domain-pk (:id entity)
+        tag (or 
+             (first (db/exec! 
+                     ["SELECT * FROM tags 
+                      WHERE domain_pk_namespace = ? AND domain_pk = ?"
+                      domain_pk_namespace domain-pk]))
+             (first (db/exec! 
+                     ["INSERT INTO tags (title, slug, owner, domain_pk_namespace, domain_pk)
+                      VALUES (?, ?, ?, ?, ?)
+                      ON CONFLICT (domain_pk_namespace, domain_pk) 
+                      DO NOTHING
+                      RETURNING *"
+                      title slug "spotify" domain_pk_namespace domain-pk])))]
+    ;; Create public permissions for the tag
+    (when tag
+      (db/exec! (-> (h/insert-into :perms)
+                    (h/values (perms/public-permissions (:tags/id tag)))
+                    (h/on-conflict)
+                    (h/do-nothing))))
+    tag))
 
 
 (defn get-artist-tracks
@@ -383,6 +387,59 @@
 
 (def routes [["/resolve" {:post {:handler #'resolve-spotify-entity}}]
              ["/search" {:get {:handler #'search-endpoint}}]])
+
+(defn clean-spotify-data! []
+  ;; First remove votes for spotify items
+  (db/exec! ["DELETE FROM votes 
+             WHERE left_item_id IN (
+               SELECT id FROM items 
+               WHERE domain_pk_namespace = 'spotify.track'
+             )"])
+  (db/exec! ["DELETE FROM votes 
+             WHERE right_item_id IN (
+               SELECT id FROM items 
+               WHERE domain_pk_namespace = 'spotify.track'
+             )"])
+  
+  ;; Then remove permissions for spotify tags
+  (db/exec! ["DELETE FROM perms 
+             WHERE tag_id IN (
+               SELECT id FROM tags 
+               WHERE domain_pk_namespace LIKE 'spotify.%'
+             )"])
+  
+  ;; Then remove items_in_tags connections
+  (db/exec! ["DELETE FROM items_in_tags 
+             WHERE tag_id IN (
+               SELECT id FROM tags 
+               WHERE domain_pk_namespace LIKE 'spotify.%'
+             )
+             OR item_id IN (
+               SELECT id FROM items 
+               WHERE domain_pk_namespace = 'spotify.track'
+             )"])
+  
+  ;; Then remove the tags
+  (db/exec! ["DELETE FROM tags 
+             WHERE domain_pk_namespace LIKE 'spotify.%'"])
+  
+  ;; Finally remove the items
+  (db/exec! ["DELETE FROM items 
+             WHERE domain_pk_namespace = 'spotify.track'"]))
+
+(comment
+  ;; Usage:
+  (clean-spotify-data!)
+  
+  ;; Verify counts including votes
+  (count (db/exec! ["SELECT * FROM votes 
+                    WHERE item_id IN (SELECT id FROM items WHERE domain_pk_namespace = 'spotify.track')"]))
+  (count (db/exec! ["SELECT * FROM items WHERE domain_pk_namespace = 'spotify.track'"]))
+  (count (db/exec! ["SELECT * FROM tags WHERE domain_pk_namespace LIKE 'spotify.%'"]))
+  (count (db/exec! ["SELECT * FROM items_in_tags 
+                    WHERE tag_id IN (SELECT id FROM tags WHERE domain_pk_namespace LIKE 'spotify.%')"]))
+  (count (db/exec! ["SELECT * FROM perms 
+                    WHERE tag_id IN (SELECT id FROM tags WHERE domain_pk_namespace LIKE 'spotify.%')"])))
 
 
 
