@@ -383,15 +383,7 @@
                :get {:handler #'login/current-session}}]
     ["/logout" {:post {:handler #'login/handle-logout}}]
 
-    ["/spotify" 
-     ["/auth" {:get {:handler spotify/handle-auth}}]
-     ["/callback" {:get {:handler spotify/handle-callback}}]
-     ["/status" {:get {:handler spotify/check-spotify-status}}]
-     ["/disconnect" {:post {:handler spotify/handle-disconnect}}]
-     ["/playlists" {:get {:handler spotify/get-playlists}
-                    :post {:handler spotify/post-playlist}}]
-     ["/resolve" {:post {:handler spotify/resolve-spotify-entity}}]]
-
+    ["/spotify" spotify/routes]
     ["/youtube" youtube/routes]
     ["/linear" linear/routes]
     ["/reddit" reddit/routes]
