@@ -75,16 +75,26 @@ const useQueryState = () => {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const parseParams = () => {
-    const parseType = (param, type) => searchParams.get(param)?.split('.').map(value => ({ type, value })) || [];
+    const parseType = (param, type, namespaceParam) => {
+      const values = searchParams.get(param)?.split('.') || [];
+      const namespaces = searchParams.get(namespaceParam)?.split('.') || [];
+      return values.map((value, i) => ({
+        type,
+        value,
+        namespace: namespaces[i] || null
+      }));
+    };
+    
     const parseActions = () => searchParams.get('a')?.split('.').map(action => {
       const match = action.match(/^(\w+)(\d+)?$/);
       return { type: 'action', value: match[1], itemId: match[2] };
     }) || [];
+    
     const parseItem = () => searchParams.get('item') ? [{ type: 'item', value: searchParams.get('item') }] : [];
 
     return [
-      ...parseType('t', 'hashtag'),
-      ...parseType('u', 'mention'),
+      ...parseType('t', 'hashtag', 'ns'),
+      ...parseType('u', 'mention', 'uns'),
       ...parseActions(),
       ...parseItem()
     ];
@@ -93,20 +103,27 @@ const useQueryState = () => {
   const updateParams = (updates) => {
     const newParams = new URLSearchParams();
 
-    const serializeType = (type) => updates.filter(item => item.type === type).map(item => item.value).join('.');
-    const serializeActions = () => updates.filter(item => item.type === 'action').map(item => item.itemId ? `${item.value}${item.itemId}` : item.value).join('.');
-    const serializeItem = () => updates.find(item => item.type === 'item')?.value;
-
-    const params = {
-      't': serializeType('hashtag'),
-      'u': serializeType('mention'),
-      'a': serializeActions(),
-      'item': serializeItem()
+    const serializeTypeWithNamespace = (type, param, namespaceParam) => {
+      const items = updates.filter(item => item.type === type);
+      if (items.length) {
+        newParams.set(param, items.map(item => item.value).join('.'));
+        const namespaces = items.map(item => item.namespace).filter(Boolean);
+        if (namespaces.length) {
+          newParams.set(namespaceParam, namespaces.join('.'));
+        }
+      }
     };
 
-    Object.entries(params).forEach(([key, value]) => {
-      if (value) newParams.set(key, value);
-    });
+    serializeTypeWithNamespace('hashtag', 't', 'ns');
+    serializeTypeWithNamespace('mention', 'u', 'uns');
+
+    const actions = updates.filter(item => item.type === 'action')
+      .map(item => item.itemId ? `${item.value}${item.itemId}` : item.value)
+      .join('.');
+    if (actions) newParams.set('a', actions);
+
+    const item = updates.find(item => item.type === 'item')?.value;
+    if (item) newParams.set('item', item);
 
     setSearchParams(newParams, { replace: true });
   };
@@ -235,7 +252,9 @@ const SearchPanel = ({ searchQuery, setSearchQuery }) => {
       } else {
         newTag = {
           type: tag.domain_pk_namespace.startsWith('spotify.') ? 'hashtag' : 'item',
-          value: resolvedItem.tag,
+          value: resolvedItem.slug || resolvedItem.tag,
+          tagId: resolvedItem['tag-id'],
+          namespace: tag.domain_pk_namespace,
           domain_pk: tag.domain_pk,
           domain_pk_namespace: tag.domain_pk_namespace
         };
@@ -251,6 +270,7 @@ const SearchPanel = ({ searchQuery, setSearchQuery }) => {
     const isDuplicate = queryState.some(existingTag => 
       existingTag.type === newTag.type && 
       existingTag.value === newTag.value &&
+      existingTag.namespace === newTag.namespace &&
       existingTag.domain_pk === newTag.domain_pk &&
       existingTag.domain_pk_namespace === newTag.domain_pk_namespace
     );

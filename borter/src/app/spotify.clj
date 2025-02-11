@@ -308,24 +308,24 @@
 
 (pco/defresolver album-tag-details [{:keys [spotify.album/tag-id]}]
   {::pco/input [:spotify.album/tag-id]
-   ::pco/output [:spotify.tag/id
-                 :spotify.tag/slug
-                 :spotify.tag/title
-                 :spotify.tag/domain-pk
-                 :spotify.tag/domain-pk-namespace
-                 :spotify.tag/owner]}
+   ::pco/output [:tags/id
+                 :tags/slug
+                 :tags/title
+                 :tags/domain-pk
+                 :tags/domain-pk-namespace
+                 :tags/owner]}
   (println "Running album-tag-details resolver")
   (when-let [tag (first
                   (db/exec!
                    (-> (h/select :*)
                        (h/from :tags)
                        (h/where [:= :id tag-id]))))]
-    {:spotify.tag/id (:tags/id tag)
-     :spotify.tag/slug (:tags/slug tag)
-     :spotify.tag/title (:tags/title tag)
-     :spotify.tag/domain-pk (:tags/domain_pk tag)
-     :spotify.tag/domain-pk-namespace (:tags/domain_pk_namespace tag)
-     :spotify.tag/owner (:tags/owner tag)}))
+    {:tags/id (:tags/id tag)
+     :tags/slug (:tags/slug tag)
+     :tags/title (:tags/title tag)
+     :tags/domain-pk (:tags/domain_pk tag)
+     :tags/domain-pk-namespace (:tags/domain_pk_namespace tag)
+     :tags/owner (:tags/owner tag)}))
 
 ;; Register both resolvers
 (def env
@@ -358,9 +358,9 @@
                  [:spotify.album/name
                   :spotify.album/tracks-processed?
                   :spotify.album/tag-id
-                  :spotify.tag/domain-pk
-                  :spotify.tag/domain-pk-namespace
-                  :spotify.tag/slug])
+                  :tags/domain-pk
+                  :tags/domain-pk-namespace
+                  :tags/slug])
 
   (clean-spotify-data!)
 
@@ -451,6 +451,7 @@
     (when-not username
       (throw (ex-info "Must be logged in" {:status 401})))
 
+    (def domain_pk domain_pk)
     (case domain_pk_namespace
       "spotify.track"
       (let [result (p.eql/process env
@@ -466,7 +467,8 @@
                                   {:spotify.album/album-id domain_pk}
                                   [:spotify.album/name
                                    :spotify.album/tracks-processed?
-                                   :spotify.album/tag-id])]
+                                   :spotify.album/tag-id
+                                   :tags/slug])]
         {:status 200
          :body result})
 
