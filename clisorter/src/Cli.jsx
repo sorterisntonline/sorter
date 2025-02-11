@@ -35,6 +35,7 @@ export const useStore = create((set, get) => ({
   items_by_id: {},
   spotifyConnected: false,
   activePanel: 1,
+  advancedMode: false,
 
   setResults: (results) => {
     const items_by_id = {};
@@ -54,6 +55,41 @@ export const useStore = create((set, get) => ({
       const response = await fetch(`/api/tag/page2?${params.toString()}`);
       const data = await response.json();
       get().setResults(data);
+
+      // If results are empty and there are multiple tags, remove the leftmost one
+      if ((!data?.sorted?.length && !data?.unsorted?.length) && params.toString()) {
+        const searchParams = new URLSearchParams(window.location.search);
+        const currentTags = [];
+        
+        // Collect all current tags
+        ['t', 'u'].forEach(param => {
+          const values = searchParams.get(param)?.split('+') || [];
+          const namespaces = searchParams.get(param === 't' ? 'ns' : 'uns')?.split('+') || [];
+          values.forEach((value, i) => {
+            currentTags.push({
+              type: param === 't' ? 'hashtag' : 'mention',
+              value,
+              namespace: namespaces[i] || null
+            });
+          });
+        });
+
+        // Add actions and items
+        const actions = searchParams.get('a')?.split('+').map(action => {
+          const match = action.match(/^(\w+)(\d+)?$/);
+          return { type: 'action', value: match[1], itemId: match[2] };
+        }) || [];
+        const item = searchParams.get('item') ? [{ type: 'item', value: searchParams.get('item') }] : [];
+        currentTags.push(...actions, ...item);
+
+        // If we have multiple tags, remove the leftmost one
+        if (currentTags.length > 1) {
+          const newTags = currentTags.slice(1);
+          // Use the existing updateQueryState function from the closest useQueryState
+          window.dispatchEvent(new CustomEvent('updateQueryState', { detail: newTags }));
+        }
+      }
+
       return data;
     } catch (error) {
       console.error('Failed to fetch results:', error);
@@ -64,6 +100,7 @@ export const useStore = create((set, get) => ({
 
   setSpotifyConnected: (connected) => set({ spotifyConnected: connected }),
   setActivePanel: (panel) => set({ activePanel: panel }),
+  setAdvancedMode: (enabled) => set({ advancedMode: enabled }),
 }));
 
 // Custom Hooks
@@ -131,6 +168,14 @@ const useQueryState = () => {
   useEffect(() => {
     fetchResults();
   }, [searchParams]);
+
+  useEffect(() => {
+    const handleUpdateQueryState = (event) => {
+      updateParams(event.detail);
+    };
+    window.addEventListener('updateQueryState', handleUpdateQueryState);
+    return () => window.removeEventListener('updateQueryState', handleUpdateQueryState);
+  }, []);
 
   return {
     queryState: parseParams(),
@@ -219,8 +264,6 @@ const HeaderWithPillbox = ({ searchQuery, setSearchQuery }) => {
     </div>
   );
 };
-
-// Update SearchPanel to use shared header
 
 // Single source of truth for the button, with fixed width matching search bar
 const ActionButton = ({ onClick, text, disabled }) => (
@@ -363,7 +406,7 @@ const VoteComparisonView = () => {
                 max="100"
                 value={sliderValue}
                 onChange={(e) => setSliderValue(parseInt(e.target.value))}
-                className="flex-grow h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                className="flex-grow h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-red-500 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:bg-red-500 [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:cursor-pointer"
               />
               <span className="text-sm font-medium">Right</span>
             </div>
@@ -542,6 +585,27 @@ const VotingPanel = () => {
   );
 };
 
+// Add new component for the mode toggle
+const ModeToggle = () => {
+  const advancedMode = useStore(state => state.advancedMode);
+  const setAdvancedMode = useStore(state => state.setAdvancedMode);
+
+  return (
+    <div className="p-4 flex items-center justify-end">
+      <label className="flex items-center cursor-pointer">
+        <input
+          type="checkbox"
+          checked={advancedMode}
+          onChange={(e) => setAdvancedMode(e.target.checked)}
+          className="sr-only peer"
+        />
+        <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-red-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-500"></div>
+        <span className="ml-3 text-sm font-medium">Advanced Mode</span>
+      </label>
+    </div>
+  );
+};
+
 // Updated Main Component
 export const Cli = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -572,8 +636,9 @@ export const Cli = () => {
           )}
         </div>
 
-        {/* Top right - Action buttons and voting panel */}
-        <div className="p-4">
+        {/* Top right - Mode toggle, Action buttons and voting panel */}
+        <div>
+          <ModeToggle />
           {isVoting ? (
             <ActionButton 
               onClick={() => {
@@ -602,6 +667,7 @@ export const Cli = () => {
 const SearchResults = ({ searchQuery }) => {
   const { queryState, updateQueryState } = useQueryState();
   const setActivePanel = useStore(state => state.setActivePanel);
+  const advancedMode = useStore(state => state.advancedMode);
 
   const debouncedQuery = useRef(
     debounce((query) => {
@@ -624,13 +690,13 @@ const SearchResults = ({ searchQuery }) => {
 
   const suggestions = data?.['search-results'] || {};
   const allResults = [
-    ...(suggestions.artists || []).map(item => ({
+    ...(advancedMode ? (suggestions.artists || []).map(item => ({
       ...item,
       domain_pk_namespace: 'spotify.artist',
       tag: item.name,
       image: item.images?.[0]?.url,
       id: item.id
-    })),
+    })) : []),
     ...(suggestions.albums || []).map(item => ({
       ...item,
       domain_pk_namespace: 'spotify.album',
@@ -638,13 +704,13 @@ const SearchResults = ({ searchQuery }) => {
       image: item.images?.[0]?.url,
       id: item.id
     })),
-    ...(suggestions.tracks || []).map(item => ({
+    ...(advancedMode ? (suggestions.tracks || []).map(item => ({
       ...item,
       domain_pk_namespace: 'spotify.track',
       tag: item.name,
       image: item.album?.images?.[0]?.url,
       id: item.id
-    }))
+    })) : [])
   ];
 
   useEffect(() => {
@@ -717,20 +783,22 @@ const SearchResults = ({ searchQuery }) => {
 
   return (
     <>
-      <div className="mb-4">
-        <div className="font-bold mb-2">tags that narrow this down:</div>
-        <div className="space-y-1">
-          {['hiphop', '2010s'].map(tag => (
-            <div 
-              key={tag}
-              className="cursor-pointer hover:bg-gray-100 p-1"
-              onClick={() => handleTagClick(tag)}
-            >
-              #{tag}
-            </div>
-          ))}
+      {advancedMode && (
+        <div className="mb-4">
+          <div className="font-bold mb-2">tags that narrow this down:</div>
+          <div className="space-y-1">
+            {['hiphop', '2010s'].map(tag => (
+              <div 
+                key={tag}
+                className="cursor-pointer hover:bg-gray-100 p-1"
+                onClick={() => handleTagClick(tag)}
+              >
+                #{tag}
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       <div>
         <div className="font-bold mb-2">Search Results:</div>
