@@ -72,8 +72,8 @@ const useQueryState = () => {
 
   const parseParams = () => {
     const parseType = (param, type, namespaceParam) => {
-      const values = searchParams.get(param)?.split('.') || [];
-      const namespaces = searchParams.get(namespaceParam)?.split('.') || [];
+      const values = searchParams.get(param)?.split('+') || [];
+      const namespaces = searchParams.get(namespaceParam)?.split('+') || [];
       return values.map((value, i) => ({
         type,
         value,
@@ -81,7 +81,7 @@ const useQueryState = () => {
       }));
     };
     
-    const parseActions = () => searchParams.get('a')?.split('.').map(action => {
+    const parseActions = () => searchParams.get('a')?.split('+').map(action => {
       const match = action.match(/^(\w+)(\d+)?$/);
       return { type: 'action', value: match[1], itemId: match[2] };
     }) || [];
@@ -102,10 +102,10 @@ const useQueryState = () => {
     const serializeTypeWithNamespace = (type, param, namespaceParam) => {
       const items = updates.filter(item => item.type === type);
       if (items.length) {
-        newParams.set(param, items.map(item => item.value).join('.'));
+        newParams.set(param, items.map(item => item.value).join('+'));
         const namespaces = items.map(item => item.namespace).filter(Boolean);
         if (namespaces.length) {
-          newParams.set(namespaceParam, namespaces.join('.'));
+          newParams.set(namespaceParam, namespaces.join('+'));
         }
       }
     };
@@ -115,7 +115,7 @@ const useQueryState = () => {
 
     const actions = updates.filter(item => item.type === 'action')
       .map(item => item.itemId ? `${item.value}${item.itemId}` : item.value)
-      .join('.');
+      .join('+');
     if (actions) newParams.set('a', actions);
 
     const item = updates.find(item => item.type === 'item')?.value;

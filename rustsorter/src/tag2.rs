@@ -138,12 +138,12 @@ async fn get_tags_as_items(db: &sqlx::PgPool) -> Vec<Item> {
 pub async fn hello2(data: web::Data<crate::AppState>, info: web::Query<TagInfo>) -> impl Responder {
     let tag_strings: Vec<String> = info.t
         .as_ref()
-        .map(|t| t.split(',').map(|s| s.to_string()).collect())
+        .map(|t| t.split('+').map(|s| s.to_string()).collect())
         .unwrap_or_default();
         
     let namespaces: Vec<String> = info.ns
         .as_ref()
-        .map(|ns| ns.split('.').map(|s| s.to_string()).collect())
+        .map(|ns| ns.split('+').map(|s| s.to_string()).collect())
         .unwrap_or_default();
 
     let mut tag_ids = Vec::new();
@@ -151,7 +151,7 @@ pub async fn hello2(data: web::Data<crate::AppState>, info: web::Query<TagInfo>)
         let namespace = namespaces.get(i).cloned();
         
         let query = if let Some(ns) = namespace {
-            sqlx::query_as::<_, Tag>("SELECT * FROM tags WHERE slug = $1 AND namespace = $2")
+            sqlx::query_as::<_, Tag>("SELECT * FROM tags WHERE slug = $1 AND domain_pk_namespace = $2")
                 .bind(tag_str)
                 .bind(ns)
         } else {
@@ -451,7 +451,7 @@ pub async fn hello2(data: web::Data<crate::AppState>, info: web::Query<TagInfo>)
     }
     let tag_strings2: Vec<String> = info.t
         .as_ref()
-        .map(|t| t.split(',').map(|s| s.to_string()).collect())
+        .map(|t| t.split('+').map(|s| s.to_string()).collect())
         .unwrap_or_default();
 
     let tags = sqlx::query_as::<_, Tag>("SELECT * FROM tags WHERE slug = ANY($1)")

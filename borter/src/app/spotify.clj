@@ -476,7 +476,9 @@
        :body {:error "Not yet implemented for this entity type"}})))
 
 (comment
-  (db/exec! {:select :* :from :tags :where [:= :domain_pk_namespace "spotify.artist"]})
+  (db/exec! {:select :* :from :tags :where [:= :domain_pk_namespace "spotify.album"]})
+  
+  
 
 
 
