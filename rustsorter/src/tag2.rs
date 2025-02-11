@@ -19,6 +19,7 @@ struct TagInfo {
     user_name: Option<String>,
     elo: Option<bool>,
     namespace: Option<String>,
+    ns: Option<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -140,10 +141,25 @@ pub async fn hello2(data: web::Data<crate::AppState>, info: web::Query<TagInfo>)
         .map(|t| t.split(',').map(|s| s.to_string()).collect())
         .unwrap_or_default();
         
+    let namespaces: Vec<String> = info.ns
+        .as_ref()
+        .map(|ns| ns.split('.').map(|s| s.to_string()).collect())
+        .unwrap_or_default();
+
     let mut tag_ids = Vec::new();
-    for tag_str in tag_strings {
-        if let Some(tag) = sqlx::query_as::<_, Tag>("SELECT * FROM tags WHERE slug = $1")
-            .bind(tag_str)
+    for (i, tag_str) in tag_strings.iter().enumerate() {
+        let namespace = namespaces.get(i).cloned();
+        
+        let query = if let Some(ns) = namespace {
+            sqlx::query_as::<_, Tag>("SELECT * FROM tags WHERE slug = $1 AND namespace = $2")
+                .bind(tag_str)
+                .bind(ns)
+        } else {
+            sqlx::query_as::<_, Tag>("SELECT * FROM tags WHERE slug = $1")
+                .bind(tag_str)
+        };
+
+        if let Some(tag) = query
             .fetch_optional(&data.db)
             .await
             .expect("Unable to fetch tag") {
