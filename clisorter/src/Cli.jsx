@@ -161,8 +161,9 @@ const PanelNav = ({ activePanel, setActivePanel }) => (
         <button
           key={panel}
           onClick={() => setActivePanel(panel)}
-          className={`flex-1 h-full transition-colors duration-200 ${activePanel === panel ? 'bg-blue-500' : 'bg-gray-300 hover:bg-gray-400'
-            }`}
+          className={`flex-1 h-full transition-colors duration-200 ${
+            activePanel === panel ? 'bg-red-500' : 'bg-gray-300 hover:bg-gray-400'
+          }`}
         />
       ))}
     </div>
@@ -198,11 +199,11 @@ const HeaderWithPillbox = ({ searchQuery, setSearchQuery }) => {
             return (
               <span
                 key={`${item.type}-${item.value}-${index}`}
-                className="px-3 py-1 bg-blue-100 dark:bg-blue-900 rounded-full text-blue-800 dark:text-blue-200 flex items-center"
+                className="px-3 py-1 bg-red-100 dark:bg-red-900 rounded-full text-red-800 dark:text-red-200 flex items-center"
               >
                 {display}
                 <button
-                  className="ml-2 text-blue-600 hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-100"
+                  className="ml-2 text-red-600 hover:text-red-800 dark:text-red-300 dark:hover:text-red-100"
                   onClick={() => {
                     const newQueryState = queryState.filter((_, idx) => idx !== index);
                     updateQueryState(newQueryState);
@@ -231,7 +232,7 @@ const ActionButton = ({ onClick, text, disabled }) => (
         className={`w-full py-3 px-6 font-semibold rounded-lg transition-colors ${
           disabled 
             ? 'bg-gray-400 cursor-not-allowed text-gray-200' 
-            : 'bg-blue-500 hover:bg-blue-600 text-white cursor-pointer'
+            : 'bg-red-500 hover:bg-red-600 text-white cursor-pointer'
         }`}
       >
         {text}
@@ -370,10 +371,10 @@ const VoteComparisonView = () => {
             <button
               onClick={handleVote}
               disabled={isSubmitting}
-              className={`px-6 py-2 bg-blue-500 text-white rounded-lg transition-colors ${
+              className={`px-6 py-2 bg-red-500 text-white rounded-lg transition-colors ${
                 isSubmitting 
                   ? 'opacity-50 cursor-not-allowed' 
-                  : 'hover:bg-blue-600'
+                  : 'hover:bg-red-600'
               }`}
             >
               {isSubmitting ? 'Submitting...' : 'Submit Vote'}
@@ -415,7 +416,7 @@ const VoteComparisonView = () => {
                         <div className="flex items-center justify-center">
                           <div className="w-20 h-2 bg-gray-100 rounded-full overflow-hidden">
                             <div 
-                              className="h-full bg-blue-500 rounded-full transition-all duration-200"
+                              className="h-full bg-red-500 rounded-full transition-all duration-200"
                               style={{ width: `${vote.magnitude}%` }}
                             />
                           </div>
@@ -439,6 +440,17 @@ const VoteComparisonView = () => {
 const VotingPanel = () => {
   const results = useStore(state => state.results);
   const { queryState, updateQueryState } = useQueryState();
+
+  // Calculate min and max ELO for color scaling
+  const getEloColor = (elo, minElo, maxElo) => {
+    // Normalize ELO to 0-1 range
+    const normalized = (elo - minElo) / (maxElo - minElo);
+    // Use a gradient from light red to dark red
+    const hue = 0; // Red hue
+    const saturation = 90;
+    const lightness = 95 - (normalized * 20); // Lighter red (95%) to darker red (75%)
+    return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+  };
 
   // Check if we're in voting mode
   const isVoting = queryState.some(tag => tag.type === 'action' && tag.value === 'vote');
@@ -465,6 +477,11 @@ const VotingPanel = () => {
 
   const { canVote, reason } = getVoteStatus();
 
+  // Calculate min and max ELO scores
+  const sortedItems = results?.sorted || [];
+  const minElo = Math.min(...sortedItems.map(item => item.elo));
+  const maxElo = Math.max(...sortedItems.map(item => item.elo));
+
   return (
     <div>
       <ActionButton 
@@ -490,11 +507,12 @@ const VotingPanel = () => {
                 .map(item => (
                   <div
                     key={item.id}
-                    className="p-2 bg-gray-100 rounded flex justify-between items-center"
+                    className="p-2 rounded flex justify-between items-center"
+                    style={{ backgroundColor: getEloColor(item.elo, minElo, maxElo) }}
                   >
                     <span>{item.title}</span>
-                    <span className="text-sm text-gray-500">
-                      {Math.round(item.elo)}
+                    <span className="text-sm text-gray-600">
+                      {item.elo.toFixed(2)}
                     </span>
                   </div>
                 ))}
