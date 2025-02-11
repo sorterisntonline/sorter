@@ -219,246 +219,6 @@ const HeaderWithPillbox = ({ searchQuery, setSearchQuery }) => {
 };
 
 // Update SearchPanel to use shared header
-const SearchPanel = ({ searchQuery, setSearchQuery }) => {
-  const { queryState } = useQueryState();
-  const setActivePanel = useStore(state => state.setActivePanel);
-  const isVoting = queryState.some(tag => tag.type === 'action' && tag.value === 'vote');
-
-  const debouncedQuery = useRef(
-    debounce((query) => {
-      refetch();
-    }, 300)
-  ).current;
-
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ['search', searchQuery],
-    queryFn: async () => {
-      if (!searchQuery.trim()) return { suggestions: [] };
-      const response = await fetch(`/api/spotify/search?q=${encodeURIComponent(searchQuery)}`);
-      if (!response.ok) throw new Error('Failed to fetch search results');
-      return response.json();
-    },
-    enabled: false,
-    staleTime: 30000,
-    cacheTime: 3600000,
-  });
-
-  const suggestions = data?.['search-results'] || {};
-  const allResults = [
-    ...(suggestions.artists || []).map(item => ({
-      ...item,
-      domain_pk_namespace: 'spotify.artist',
-      tag: item.name,
-      image: item.images?.[0]?.url,
-      id: item.id
-    })),
-    ...(suggestions.albums || []).map(item => ({
-      ...item,
-      domain_pk_namespace: 'spotify.album',
-      tag: item.name,
-      image: item.images?.[0]?.url,
-      id: item.id
-    })),
-    ...(suggestions.tracks || []).map(item => ({
-      ...item,
-      domain_pk_namespace: 'spotify.track',
-      tag: item.name,
-      image: item.album?.images?.[0]?.url,
-      id: item.id
-    }))
-  ];
-
-  useEffect(() => {
-    debouncedQuery(searchQuery);
-    return () => {
-      debouncedQuery.cancel();
-    };
-  }, [searchQuery, debouncedQuery]);
-
-  const handleTagClick = async (tag) => {
-    const resolveSpotifyItem = async (tag) => {
-      try {
-        const response = await fetch('/api/spotify/resolve', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(tag)
-        });
-
-        if (!response.ok) throw new Error('Failed to resolve Spotify item');
-        const data = await response.json();
-        return data;
-      } catch (error) {
-        console.error('Error resolving Spotify item:', error);
-        return null;
-      }
-    };
-
-    let newTag = tag;
-
-    if (typeof tag !== 'string') {
-      const resolvedItem = await resolveSpotifyItem(tag);
-      if (!resolvedItem) return;
-
-      if (resolvedItem['item-id']) {
-        newTag = {
-          type: 'item',
-          value: resolvedItem['item-id'].toString()
-        };
-      } else {
-        newTag = {
-          type: tag.domain_pk_namespace.startsWith('spotify.') ? 'hashtag' : 'item',
-          value: resolvedItem.slug || resolvedItem.tag,
-          tagId: resolvedItem['tag-id'],
-          namespace: tag.domain_pk_namespace,
-          domain_pk: tag.domain_pk,
-          domain_pk_namespace: tag.domain_pk_namespace
-        };
-      }
-    } else {
-      newTag = {
-        type: 'hashtag',
-        value: tag.replace('#', '')
-      };
-    }
-
-    // Check for duplicates before adding
-    const isDuplicate = queryState.some(existingTag => 
-      existingTag.type === newTag.type && 
-      existingTag.value === newTag.value &&
-      existingTag.namespace === newTag.namespace &&
-      existingTag.domain_pk === newTag.domain_pk &&
-      existingTag.domain_pk_namespace === newTag.domain_pk_namespace
-    );
-
-    if (!isDuplicate) {
-      updateQueryState([...queryState, newTag]);
-      setSearchQuery(''); // Clear the search input
-      setActivePanel(2);
-    }
-  };
-
-  return (
-    <>
-      <div className="mb-4">
-        <div className="font-bold mb-2">tags that narrow this down:</div>
-        <div className="space-y-1">
-          {['hiphop', '2010s'].map(tag => (
-            <div 
-              key={tag}
-              className="cursor-pointer hover:bg-gray-100 p-1"
-              onClick={() => handleTagClick(tag)}
-            >
-              #{tag}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <div className="font-bold mb-2">Search Results:</div>
-        {isLoading ? (
-          <div className="text-gray-500">Loading...</div>
-        ) : (
-          <div className="space-y-2">
-            {allResults.map((result) => (
-              <div
-                key={result.id}
-                className="cursor-pointer hover:bg-gray-100 p-2 rounded flex items-center"
-                onClick={() => handleTagClick({
-                  ...result,
-                  domain_pk: result.id
-                })}
-              >
-                {result.image && (
-                  <img src={result.image} alt="" className="w-8 h-8 mr-2 rounded" />
-                )}
-                <span>{result.tag}</span>
-                <span className="ml-2 text-sm text-gray-500">
-                  ({result.domain_pk_namespace.split('.')[1]})
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </>
-  );
-};
-
-const RankingPanel = () => {
-  const { queryState, updateQueryState } = useQueryState();
-
-  const formatTagDisplay = (item) => {
-    switch (item.type) {
-      case 'hashtag':
-        return `#${item.value}`;
-      case 'mention':
-        return `@${item.value}`;
-      case 'action':
-        return `${item.value}${item.itemId ? ` ${item.itemId}` : ''}`;
-      case 'item':
-        return `item:${item.value}`;
-      default:
-        return item.value;
-    }
-  };
-
-  const handleRemoveTag = (indexToRemove) => {
-    const newQueryState = queryState.filter((_, index) => index !== indexToRemove);
-    updateQueryState(newQueryState);
-  };
-
-  return (
-    <div className="panel-content p-6 bg-white dark:bg-gray-800">
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-6">
-          <h3 className="text-sm uppercase text-gray-500 dark:text-gray-400 mb-2">Selected Tags</h3>
-          <div className="flex flex-wrap gap-2">
-            {queryState.map((item, index) => (
-              <span
-                key={`${item.type}-${item.value}-${index}`}
-                className="px-3 py-1 bg-blue-100 dark:bg-blue-900 rounded-full text-blue-800 dark:text-blue-200 flex items-center"
-              >
-                {formatTagDisplay(item)}
-                <button
-                  className="ml-2 hover:text-blue-600"
-                  onClick={() => handleRemoveTag(index)}
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-6">
-          <div>
-            <h3 className="text-sm uppercase text-gray-500 dark:text-gray-400 mb-3">Current Rankings</h3>
-            <div className="space-y-2">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="p-3 border rounded-lg flex items-center">
-                  <span className="mr-3 text-gray-400">{i}.</span>
-                  <span>Item {i}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <h3 className="text-sm uppercase text-gray-500 dark:text-gray-400 mb-3">Suggested Tags</h3>
-            <div className="flex flex-wrap gap-2">
-              {['#west-coast', '#conscious', '#grammy-winner'].map(tag => (
-                <span key={tag} className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-sm cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600">
-                  {tag}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 // Single source of truth for the button, with fixed width matching search bar
 const ActionButton = ({ onClick, text, disabled }) => (
@@ -484,6 +244,7 @@ const VoteComparisonView = () => {
   const { queryState, updateQueryState } = useQueryState();
   const results = useStore(state => state.results);
   const [sliderValue, setSliderValue] = useState(50);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const pair = results?.pair || [];
 
@@ -526,9 +287,51 @@ const VoteComparisonView = () => {
     );
   };
 
-  const handleVote = () => {
-    console.log("Voted with value:", sliderValue);
-    // TODO: Implement vote submission
+  const handleVote = async () => {
+    setIsSubmitting(true);
+    try {
+      // Debug logging
+      const results = useStore.getState().results;
+      console.log('Current results:', results);
+      console.log('Selected attribute:', results?.selected_attribute);
+      
+      const selectedAttributeId = results?.selected_attribute?.id;
+      console.log('Selected attribute ID:', selectedAttributeId);
+      
+      if (selectedAttributeId === undefined || selectedAttributeId === null) {
+        throw new Error('No attribute selected');
+      }
+
+      const response = await fetch('/api/vote', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          left_item_id: leftItem.id,
+          right_item_id: rightItem.id,
+          magnitude: sliderValue,
+          attribute: {
+            id: selectedAttributeId
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to submit vote');
+      }
+
+      // Refresh the results to get the next pair
+      const fetchResults = useStore.getState().fetchResults;
+      await fetchResults();
+
+      // Reset slider to middle position
+      setSliderValue(50);
+    } catch (error) {
+      console.error('Error submitting vote:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -557,9 +360,14 @@ const VoteComparisonView = () => {
             
             <button
               onClick={handleVote}
-              className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              disabled={isSubmitting}
+              className={`px-6 py-2 bg-blue-500 text-white rounded-lg transition-colors ${
+                isSubmitting 
+                  ? 'opacity-50 cursor-not-allowed' 
+                  : 'hover:bg-blue-600'
+              }`}
             >
-              Submit Vote
+              {isSubmitting ? 'Submitting...' : 'Submit Vote'}
             </button>
           </div>
         </div>
@@ -655,30 +463,6 @@ const VotingPanel = () => {
     </div>
   );
 };
-
-// New ItemView Component
-const ItemView = ({ itemId }) => {
-  return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold mb-4">Item Details: {itemId}</h1>
-      <div className="bg-gray-100 p-4 rounded">
-        <p>Placeholder for item-specific content</p>
-      </div>
-    </div>
-  );
-};
-
-// New layout component for consistent two-panel structure
-const TwoPanelLayout = ({ leftPanel, rightPanel }) => (
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-    <div className="md:col-span-1">
-      {leftPanel}
-    </div>
-    <div className="md:col-span-1">
-      {rightPanel}
-    </div>
-  </div>
-);
 
 // Updated Main Component
 export const Cli = () => {
