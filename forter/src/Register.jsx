@@ -59,7 +59,7 @@ export const Register = () => {
         logged in as {current_session.value.user_name}{" "}
         <button
           className="border-2 cursor-pointer"
-          onClick={async () => {
+          onClick={async () => { 
             await fetch("/api/logout", {
               method: "POST",
               credentials: "include",

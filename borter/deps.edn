@@ -27,7 +27,8 @@
         io.github.borkdude/deflet {:mvn/version "0.1.0"}
         ring-ratelimit/ring-ratelimit {:mvn/version "0.2.3"}
         environ/environ {:mvn/version "1.2.0"} ; Corrected dependency
-        }
+        clj-commons/clj-yaml {:mvn/version "1.0.29"}
+        com.wsscode/pathom3 {:mvn/version "2025.01.16-alpha"}}
  :aliases {:dev
            {:extra-deps
             {binaryage/devtools {:mvn/version "1.0.6"}

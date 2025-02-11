@@ -4,6 +4,7 @@ import { startTrackingLiked, youtubeLogin } from "./Youtube";
 import { loginLinear, postView } from "./Linear";
 import { current_session } from "../session";
 import { loadTag } from "../Network";
+import { login as spotifyLogin } from './Spotify';
 
 const LinearControls = () => {
   return (
@@ -115,21 +116,6 @@ export const IntegrationsPanel = () => {
   if (tag.value.tag["domain_pk_namespace"] === "reddit.sub")
     return <RedditControls />;
   return <div>unknown integration type</div>;
-};
-
-const spotifyLogin = async () => {
-  const params = new URLSearchParams("");
-  params.append("client_id", "e61d249115c9451a8137a2a5af90d76b");
-  params.append("response_type", "code");
-  const redirect_uri = window.location.origin + "/api/spotify/callback";
-  params.append("redirect_uri", redirect_uri);
-  params.append(
-    "scope",
-    "playlist-read-private playlist-modify-private playlist-modify-public playlist-read-collaborative"
-  );
-  params.append("state", window.location);
-  window.location.href =
-    "https://accounts.spotify.com/authorize?" + params.toString();
 };
 
 const fetcher = (arg) => fetch(arg).then((res) => res.json());

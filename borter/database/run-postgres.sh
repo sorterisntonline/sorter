@@ -18,7 +18,7 @@ if docker ps -a | grep -q $NAME; then
             echo "Removing existing container..."
             docker rm $NAME || true
             echo "Removing existing data directory..."
-            rm -rf `pwd`/pgdata/*
+            sudo rm -rf `pwd`/pgdata/*
         else
             echo "Keeping existing data"
             PG_DUMP_DATA=""
