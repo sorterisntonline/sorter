@@ -387,11 +387,24 @@ const VoteComparisonView = () => {
     }
   };
 
+  // Add this function to filter votes for current pair
+  const getCurrentPairVotes = () => {
+    if (!votes || !pair || pair.length !== 2) return [];
+    
+    return votes.filter(vote => 
+      (vote.left_item_id === leftItem.id && vote.right_item_id === rightItem.id) ||
+      (vote.left_item_id === rightItem.id && vote.right_item_id === leftItem.id)
+    ).map(vote => ({
+      ...vote,
+      // Normalize the magnitude if the items are in reverse order
+      magnitude: vote.left_item_id === leftItem.id ? vote.magnitude : 100 - vote.magnitude
+    }));
+  };
+
   return (
     <div className="min-h-screen">
       <div className="max-w-6xl mx-auto px-4">
         <div className="mt-8">
-          <h2 className="text-xl font-bold mb-8 text-center">Which is better?</h2>
           <div className="grid grid-cols-2 gap-8">
             <div>{renderItem(leftItem)}</div>
             <div>{renderItem(rightItem)}</div>
@@ -406,7 +419,15 @@ const VoteComparisonView = () => {
                 max="100"
                 value={sliderValue}
                 onChange={(e) => setSliderValue(parseInt(e.target.value))}
-                className="flex-grow h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-red-500 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:bg-red-500 [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:cursor-pointer"
+                className="flex-grow h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer 
+                  [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 
+                  [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-red-500 
+                  [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer 
+                  [&::-webkit-slider-thumb]:border-none [&::-webkit-slider-thumb]:shadow-md
+                  [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-4 
+                  [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:bg-red-500 
+                  [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:rounded-full 
+                  [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:shadow-md"
               />
               <span className="text-sm font-medium">Right</span>
             </div>
@@ -425,9 +446,71 @@ const VoteComparisonView = () => {
           </div>
         </div>
 
-        {/* Vote History Section with enhanced styling */}
+        {/* Current Pair Votes Section */}
+        <div className="mt-8 mb-4">
+          <h3 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2">
+            <span className="text-red-500">•</span>
+            Other votes on this pair
+          </h3>
+          <div className="overflow-x-auto rounded-lg shadow border border-gray-200">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Date
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Voter
+                  </th>
+                  <th className="px-6 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Preference
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {getCurrentPairVotes().map((vote, index) => (
+                  <tr key={index} className="hover:bg-gray-50 transition-colors duration-150">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-500">
+                      {formatDate(vote.edited_at)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {vote.owner}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center justify-center">
+                        <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-red-500 rounded-full transition-all duration-200"
+                            style={{ width: `${vote.magnitude}%` }}
+                          />
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {getCurrentPairVotes().length === 0 && (
+                  <tr>
+                    <td colSpan="3" className="px-6 py-4 text-center text-sm text-gray-500 italic">
+                      No votes yet for this pair
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* All Votes History Section */}
         <div className="mt-12 mb-8">
-          <h3 className="text-xl font-bold mb-6 text-gray-800">Vote History</h3>
+          <h3 className="text-xl font-bold mb-6 text-gray-800 flex items-center gap-2">
+            <span className="text-red-500">•</span>
+            All Vote History 
+            {votes.length > 0 && (
+              <span className="ml-2 text-sm font-normal text-gray-500">
+                ({votes.length} votes)
+              </span>
+            )}
+          </h3>
           <div className="overflow-x-auto rounded-lg shadow">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -505,20 +588,21 @@ const VotingPanel = () => {
 
   const getVoteStatus = () => {
     const allItems = [...(results?.sorted || []), ...(results?.unsorted || [])];
+    const voteCount = results?.votes?.length || 0;  // Get the vote count
     
     if (!allItems || allItems.length === 0) {
-      return { canVote: false, reason: "No items to vote on" };
+      return { canVote: false, reason: "No items to vote on", voteCount };
     }
     if (allItems.length < 2) {
-      return { canVote: false, reason: "Need at least 2 items to compare" };
+      return { canVote: false, reason: "Need at least 2 items to compare", voteCount };
     }
     if (!allItems.every((item, _, arr) => item.domain_pk_namespace === arr[0].domain_pk_namespace)) {
-      return { canVote: false, reason: "Items must be of the same type to compare" };
+      return { canVote: false, reason: "Items must be of the same type to compare", voteCount };
     }
-    return { canVote: true, reason: null };
+    return { canVote: true, reason: null, voteCount };
   };
 
-  const { canVote, reason } = getVoteStatus();
+  const { canVote, reason, voteCount } = getVoteStatus();
 
   // Calculate min and max ELO scores
   const sortedItems = results?.sorted || [];
@@ -528,7 +612,9 @@ const VotingPanel = () => {
   return (
     <div>
       <ActionButton 
-        text={canVote ? "Vote on these items" : reason}
+        text={canVote 
+          ? `Vote on these items${voteCount ? ` (${voteCount} votes)` : ''}`
+          : reason}
         onClick={() => {
           if (canVote) {
             const voteAction = { type: 'action', value: 'vote' };
@@ -606,10 +692,11 @@ const ModeToggle = () => {
   );
 };
 
-// Updated Main Component
+// Updated Main Componet
 export const Cli = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const { queryState, updateQueryState } = useQueryState();
+  const advancedMode = useStore(state => state.advancedMode);
   
   const isVoting = queryState.some(tag => tag.type === 'action' && tag.value === 'vote');
 
@@ -625,7 +712,7 @@ export const Cli = () => {
                 <span className="mr-2">🔍</span>
                 <input
                   type="text"
-                  placeholder="search spotify/tags"
+                  placeholder={advancedMode ? "search spotify tracks/artists/albums/tags" : "search spotify albums"}
                   className="bg-transparent w-full outline-none"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -801,7 +888,6 @@ const SearchResults = ({ searchQuery }) => {
       )}
 
       <div>
-        <div className="font-bold mb-2">Search Results:</div>
         {isLoading ? (
           <div className="text-gray-500">Loading...</div>
         ) : (
