@@ -49,11 +49,6 @@ export const useStore = create((set, get) => ({
 
   fetchResults: async () => {
     const params = new URLSearchParams(window.location.search);
-    if (!params.has('t')) {
-      set({ results: null });
-      return null;
-    }
-
     try {
       const response = await fetch(`/api/tag/page2?${params.toString()}`);
       const data = await response.json();
@@ -73,6 +68,7 @@ export const useStore = create((set, get) => ({
 // Custom Hooks
 const useQueryState = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const fetchResults = useStore(state => state.fetchResults);
 
   const parseParams = () => {
     const parseType = (param, type, namespaceParam) => {
@@ -126,7 +122,14 @@ const useQueryState = () => {
     if (item) newParams.set('item', item);
 
     setSearchParams(newParams, { replace: true });
+    // Trigger fetch after updating params
+    fetchResults();
   };
+
+  // Add effect to fetch on mount and URL changes
+  useEffect(() => {
+    fetchResults();
+  }, [searchParams]);
 
   return {
     queryState: parseParams(),
@@ -456,31 +459,54 @@ const RankingPanel = () => {
   );
 };
 
-const VotingPanel = () => (
-  <div className="p-4">
-    <div className="text-xl font-bold mb-4">
-      press here to vote
+const VotingPanel = () => {
+  const results = useStore(state => state.results);
+
+  return (
+    <div className="p-4">
+      {results?.sorted?.length > 0 && (
+        <>
+          <div className="text-xl font-bold mb-4">
+            Sorted Items
+          </div>
+          <div className="space-y-2 mb-6">
+            {results.sorted
+              .sort((a, b) => b.elo - a.elo)
+              .map(item => (
+                <div
+                  key={item.id}
+                  className="p-2 bg-gray-100 rounded flex justify-between items-center"
+                >
+                  <span>{item.title}</span>
+                  <span className="text-sm text-gray-500">
+                    {Math.round(item.elo)}
+                  </span>
+                </div>
+              ))}
+          </div>
+        </>
+      )}
+
+      {results?.unsorted?.length > 0 && (
+        <>
+          <div className="text-xl font-bold mb-4">
+            Unsorted Items
+          </div>
+          <div className="space-y-2">
+            {results.unsorted.map(item => (
+              <div
+                key={item.id}
+                className="p-2 bg-gray-200 rounded cursor-pointer hover:bg-gray-300"
+              >
+                {item.title}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
-    
-    <div className="space-y-2">
-      {[
-        'HUMBLE.',
-        'Not Like Us',
-        'euphoria',
-        "Fuckin' Problems",
-        'm.A.A.d city',
-        'Swimming Pools (Drank)'
-      ].map(song => (
-        <div
-          key={song}
-          className="p-2 bg-gray-200 rounded cursor-pointer hover:bg-gray-300"
-        >
-          {song}
-        </div>
-      ))}
-    </div>
-  </div>
-);
+  );
+};
 
 // New ItemView Component
 const ItemView = ({ itemId }) => {
