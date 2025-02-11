@@ -14,6 +14,19 @@
 (def client-secret (System/getenv "BORTER_SPOTIFY_CLIENT_SECRET"))
 (def client-id (System/getenv "BORTER_SPOTIFY_CLIENT_ID"))
 
+(defn ensure-spotify-user [token-info]
+  (let [spotify-id (get token-info "id")
+        username (str "spotify/" spotify-id)]
+    ;; Create user if doesn't exist
+    (db/exec!
+     ["INSERT INTO users (user_name, email, password_hash)
+       VALUES (?, ?, ?)
+       ON CONFLICT (user_name) DO NOTHING"
+      username
+      (get token-info "email")
+      "spotify-oauth-user"])
+    username))
+
 (defrecord SpotifyProvider []
   oauth/OAuthProvider
   (get-auth-url [_ state redirect-uri]
@@ -48,7 +61,9 @@
                           :headers {"Authorization" (str "Bearer " access-token)}})
                         :body
                         (json/read-str))]
-      user-info))
+      ;; Create user and return enhanced token info
+      (assoc user-info 
+             "username" (ensure-spotify-user user-info))))
   
   (refresh-token [_ refresh-token]
     (-> (hc/request

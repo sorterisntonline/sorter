@@ -1,20 +1,15 @@
-import * as ohm from 'ohm-js';
 import useSWR from "swr";
 import { create } from "zustand";
 import { useState, useEffect, useRef } from 'react';
-import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import debounce from 'lodash/debounce';  // For debouncing
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'timeago.js';
 
-import { VotePanel } from "./VotePanel";
-import { VotesPanel } from './VotesPanel';
 import { ItemPanel } from './ItemPanel';
-import { current_session, fetchSession } from "./session";
-import { redirectToLogin, redirectToRegister } from './authUtils';
-import WarningPopup from './WarningPopup';
+import { current_session, useSession, isLoggedIn } from "./session";
 import { initiateOAuth } from './oauth/useOAuth';
-import { SpotifyAuthButton } from './oauth/OAuthButton';
+import { SessionProvider } from './session';
 
 // Constants
 const SPOTIFY_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/1/19/Spotify_logo_without_text.svg";
@@ -36,6 +31,7 @@ export const useStore = create((set, get) => ({
   spotifyConnected: false,
   activePanel: 1,
   advancedMode: false,
+  selectedItem: null,
 
   setResults: (results) => {
     const items_by_id = {};
@@ -101,6 +97,7 @@ export const useStore = create((set, get) => ({
   setSpotifyConnected: (connected) => set({ spotifyConnected: connected }),
   setActivePanel: (panel) => set({ activePanel: panel }),
   setAdvancedMode: (enabled) => set({ advancedMode: enabled }),
+  setSelectedItem: (item) => set({ selectedItem: item }),
 }));
 
 // Custom Hooks
@@ -160,21 +157,13 @@ const useQueryState = () => {
     if (item) newParams.set('item', item);
 
     setSearchParams(newParams, { replace: true });
-    // Trigger fetch after updating params
+    // Fetch results after updating the URL
     fetchResults();
   };
 
-  // Add effect to fetch on mount and URL changes
+  // Keep only the mount effect
   useEffect(() => {
     fetchResults();
-  }, [searchParams]);
-
-  useEffect(() => {
-    const handleUpdateQueryState = (event) => {
-      updateParams(event.detail);
-    };
-    window.addEventListener('updateQueryState', handleUpdateQueryState);
-    return () => window.removeEventListener('updateQueryState', handleUpdateQueryState);
   }, []);
 
   return {
@@ -183,41 +172,9 @@ const useQueryState = () => {
   };
 };
 
-const useSpotifyStatus = () => {
-  const { data, error, mutate } = useSWR('/api/spotify/status', async (url) => {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('Failed to fetch Spotify status');
-    return res.json();
-  });
-
-  return {
-    isConnected: data?.connected ?? false,
-    isLoading: !error && !data,
-    error,
-    mutate
-  };
-};
-
-// UI Components
-const PanelNav = ({ activePanel, setActivePanel }) => (
-  <nav className="p-4 flex justify-center items-center">
-    <div className="flex w-64 h-5 bg-gray-300">
-      {[1, 2, 3].map(panel => (
-        <button
-          key={panel}
-          onClick={() => setActivePanel(panel)}
-          className={`flex-1 h-full transition-colors duration-200 ${
-            activePanel === panel ? 'bg-red-500' : 'bg-gray-300 hover:bg-gray-400'
-          }`}
-        />
-      ))}
-    </div>
-  </nav>
-);
-
 // New shared header component
-const HeaderWithPillbox = ({ searchQuery, setSearchQuery }) => {
-  const { queryState, updateQueryState } = useQueryState();
+const HeaderWithPillbox = ({ searchQuery, setSearchQuery, queryState }) => {
+  const { queryState: state, updateQueryState } = queryState;
 
   const formatTagDisplay = (item) => {
     if (item.type === 'action') return null;
@@ -237,7 +194,7 @@ const HeaderWithPillbox = ({ searchQuery, setSearchQuery }) => {
     <div className="p-4">
       <div className="mb-4">
         <div className="flex flex-wrap gap-2">
-          {queryState.map((item, index) => {
+          {state.map((item, index) => {
             const display = formatTagDisplay(item);
             if (!display) return null;
             
@@ -250,7 +207,7 @@ const HeaderWithPillbox = ({ searchQuery, setSearchQuery }) => {
                 <button
                   className="ml-2 text-red-600 hover:text-red-800 dark:text-red-300 dark:hover:text-red-100"
                   onClick={() => {
-                    const newQueryState = queryState.filter((_, idx) => idx !== index);
+                    const newQueryState = state.filter((_, idx) => idx !== index);
                     updateQueryState(newQueryState);
                   }}
                 >
@@ -284,13 +241,16 @@ const ActionButton = ({ onClick, text, disabled }) => (
   </div>
 );
 
-// Update VoteComparisonView to use shared header
-const VoteComparisonView = () => {
-  const { queryState, updateQueryState } = useQueryState();
+// Update VoteComparisonView to use useSession
+const VoteComparisonView = ({ queryState }) => {
+  const { queryState: state, updateQueryState } = queryState;
   const results = useStore(state => state.results);
-  const items_by_id = useStore(state => state.items_by_id);  // Get items from store
+  const items_by_id = useStore(state => state.items_by_id);
   const [sliderValue, setSliderValue] = useState(50);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const { session } = useSession();
+  const isLoggedIn = Boolean(session?.user_name);
 
   const pair = results?.pair || [];
   const votes = results?.votes || [];
@@ -387,24 +347,11 @@ const VoteComparisonView = () => {
     }
   };
 
-  // Add this function to filter votes for current pair
-  const getCurrentPairVotes = () => {
-    if (!votes || !pair || pair.length !== 2) return [];
-    
-    return votes.filter(vote => 
-      (vote.left_item_id === leftItem.id && vote.right_item_id === rightItem.id) ||
-      (vote.left_item_id === rightItem.id && vote.right_item_id === leftItem.id)
-    ).map(vote => ({
-      ...vote,
-      // Normalize the magnitude if the items are in reverse order
-      magnitude: vote.left_item_id === leftItem.id ? vote.magnitude : 100 - vote.magnitude
-    }));
-  };
-
   return (
     <div className="min-h-screen">
       <div className="max-w-6xl mx-auto px-4">
         <div className="mt-8">
+          <h2 className="text-xl font-bold mb-8 text-center">Which is better?</h2>
           <div className="grid grid-cols-2 gap-8">
             <div>{renderItem(leftItem)}</div>
             <div>{renderItem(rightItem)}</div>
@@ -419,97 +366,53 @@ const VoteComparisonView = () => {
                 max="100"
                 value={sliderValue}
                 onChange={(e) => setSliderValue(parseInt(e.target.value))}
-                className="flex-grow h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer 
-                  [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 
-                  [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-red-500 
-                  [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer 
-                  [&::-webkit-slider-thumb]:border-none [&::-webkit-slider-thumb]:shadow-md
-                  [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-4 
-                  [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:bg-red-500 
-                  [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:rounded-full 
-                  [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:shadow-md"
+                className="vote-slider flex-grow"
               />
               <span className="text-sm font-medium">Right</span>
             </div>
             
             <button
-              onClick={handleVote}
+              onClick={() => {
+                if (!isLoggedIn) {
+                  // Encode the current URL state to return here after login
+                  const currentPath = window.location.pathname + window.location.search;
+                  const nonActionTags = state.filter(tag => 
+                    tag.type !== 'action' || 
+                    (tag.value !== 'vote' && tag.value !== 'login')
+                  );
+                  const loginAction = { type: 'action', value: 'login' };
+                  updateQueryState([...nonActionTags, loginAction]);
+                  // Redirect to Spotify auth with return path
+                  window.location.href = `/api/spotify/auth?redirect=${encodeURIComponent(currentPath)}`;
+                } else {
+                  handleVote();
+                }
+              }}
               disabled={isSubmitting}
-              className={`px-6 py-2 bg-red-500 text-white rounded-lg transition-colors ${
+              className={`flex items-center gap-2 px-6 py-2 bg-red-500 text-white rounded-lg transition-colors ${
                 isSubmitting 
                   ? 'opacity-50 cursor-not-allowed' 
                   : 'hover:bg-red-600'
               }`}
             >
-              {isSubmitting ? 'Submitting...' : 'Submit Vote'}
+              {isSubmitting ? (
+                'Submitting...'
+              ) : !isLoggedIn ? (
+                <>
+                  <SpotifyIcon />
+                  Login with Spotify to Vote
+                </>
+              ) : (
+                'Submit Vote'
+              )}
             </button>
           </div>
         </div>
 
-        {/* Current Pair Votes Section */}
-        <div className="mt-8 mb-4">
-          <h3 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2">
-            <span className="text-red-500">•</span>
-            Other votes on this pair
-          </h3>
-          <div className="overflow-x-auto rounded-lg shadow border border-gray-200">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Date
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Voter
-                  </th>
-                  <th className="px-6 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Preference
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {getCurrentPairVotes().map((vote, index) => (
-                  <tr key={index} className="hover:bg-gray-50 transition-colors duration-150">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-500">
-                      {formatDate(vote.edited_at)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {vote.owner}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-center">
-                        <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-red-500 rounded-full transition-all duration-200"
-                            style={{ width: `${vote.magnitude}%` }}
-                          />
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {getCurrentPairVotes().length === 0 && (
-                  <tr>
-                    <td colSpan="3" className="px-6 py-4 text-center text-sm text-gray-500 italic">
-                      No votes yet for this pair
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* All Votes History Section */}
+        {/* Vote History Section with vote count */}
         <div className="mt-12 mb-8">
-          <h3 className="text-xl font-bold mb-6 text-gray-800 flex items-center gap-2">
-            <span className="text-red-500">•</span>
-            All Vote History 
-            {votes.length > 0 && (
-              <span className="ml-2 text-sm font-normal text-gray-500">
-                ({votes.length} votes)
-              </span>
-            )}
+          <h3 className="text-xl font-bold mb-6 text-gray-800">
+            Vote History {votes.length > 0 && `(${votes.length} votes)`}
           </h3>
           <div className="overflow-x-auto rounded-lg shadow">
             <table className="min-w-full divide-y divide-gray-200">
@@ -563,9 +466,9 @@ const VoteComparisonView = () => {
   );
 };
 
-const VotingPanel = () => {
+const VotingPanel = ({ queryState }) => {
+  const { queryState: state, updateQueryState } = queryState;
   const results = useStore(state => state.results);
-  const { queryState, updateQueryState } = useQueryState();
 
   // Calculate min and max ELO for color scaling
   const getEloColor = (elo, minElo, maxElo) => {
@@ -579,7 +482,7 @@ const VotingPanel = () => {
   };
 
   // Check if we're in voting mode
-  const isVoting = queryState.some(tag => tag.type === 'action' && tag.value === 'vote');
+  const isVoting = state.some(tag => tag.type === 'action' && tag.value === 'vote');
 
   // If we're in voting mode, don't render the panel
   if (isVoting) {
@@ -609,6 +512,13 @@ const VotingPanel = () => {
   const minElo = Math.min(...sortedItems.map(item => item.elo));
   const maxElo = Math.max(...sortedItems.map(item => item.elo));
 
+  const handleItemClick = (item) => {
+    // Replace existing state with just the item tag
+    const nonItemTags = state.filter(tag => tag.type !== 'item');
+    const itemTag = { type: 'item', value: item.id };
+    updateQueryState([...nonItemTags, itemTag]);
+  };
+
   return (
     <div>
       <ActionButton 
@@ -617,8 +527,9 @@ const VotingPanel = () => {
           : reason}
         onClick={() => {
           if (canVote) {
+            const nonItemTags = state.filter(tag => tag.type !== 'item');
             const voteAction = { type: 'action', value: 'vote' };
-            updateQueryState([...queryState, voteAction]);
+            updateQueryState([...nonItemTags, voteAction]);
           }
         }}
         disabled={!canVote}
@@ -636,8 +547,9 @@ const VotingPanel = () => {
                 .map(item => (
                   <div
                     key={item.id}
-                    className="p-2 rounded flex justify-between items-center"
+                    className="p-2 rounded flex justify-between items-center cursor-pointer hover:bg-gray-300"
                     style={{ backgroundColor: getEloColor(item.elo, minElo, maxElo) }}
+                    onClick={() => handleItemClick(item)}
                   >
                     <span>{item.title}</span>
                     <span className="text-sm text-gray-600">
@@ -659,6 +571,7 @@ const VotingPanel = () => {
                 <div
                   key={item.id}
                   className="p-2 bg-gray-200 rounded cursor-pointer hover:bg-gray-300"
+                  onClick={() => handleItemClick(item)}
                 >
                   {item.title}
                 </div>
@@ -671,13 +584,14 @@ const VotingPanel = () => {
   );
 };
 
-// Add new component for the mode toggle
-const ModeToggle = () => {
+// Remove standalone ModeToggle component and combine with UserMenu
+const UserMenu = () => {
+  const { session, isLoading } = useSession();
   const advancedMode = useStore(state => state.advancedMode);
   const setAdvancedMode = useStore(state => state.setAdvancedMode);
-
+  
   return (
-    <div className="p-4 flex items-center justify-end">
+    <div className="absolute top-4 right-4 flex items-center gap-6">
       <label className="flex items-center cursor-pointer">
         <input
           type="checkbox"
@@ -688,62 +602,183 @@ const ModeToggle = () => {
         <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-red-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-500"></div>
         <span className="ml-3 text-sm font-medium">Advanced Mode</span>
       </label>
+      
+      {!isLoading && session?.user_name && (
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-600">
+            {session.user_name}
+          </span>
+          <LogoutButton />
+        </div>
+      )}
     </div>
+  );
+};
+
+// Add LogoutButton component
+const LogoutButton = () => {
+  const { refetchSession } = useSession();
+
+  const handleLogout = async () => {
+    try {
+      const response = await fetch('/api/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        throw new Error('Logout failed');
+      }
+      
+      // Refresh session state after logout
+      await refetchSession();
+      
+      // Refresh the page to clear any cached state
+      window.location.reload();
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleLogout}
+      className="text-gray-600 hover:text-gray-800"
+    >
+      Logout
+    </button>
   );
 };
 
 // Updated Main Componet
 export const Cli = () => {
+  return (
+    <SessionProvider>
+      <CliContent />
+    </SessionProvider>
+  );
+};
+
+// Update CliContent to add padding at the top
+const CliContent = () => {
   const [searchQuery, setSearchQuery] = useState('');
-  const { queryState, updateQueryState } = useQueryState();
+  const queryState = useQueryState();
   const advancedMode = useStore(state => state.advancedMode);
+  const selectedItem = useStore(state => state.selectedItem);
+  const setSelectedItem = useStore(state => state.setSelectedItem);
+  const items_by_id = useStore(state => state.items_by_id);
   
-  const isVoting = queryState.some(tag => tag.type === 'action' && tag.value === 'vote');
+  const isVoting = queryState.queryState.some(tag => tag.type === 'action' && tag.value === 'vote');
+  const isLoggingIn = queryState.queryState.some(tag => tag.type === 'action' && tag.value === 'login');
+
+  // Effect to handle item parameter in URL
+  useEffect(() => {
+    const itemId = queryState.queryState.find(tag => tag.type === 'item')?.value;
+    if (itemId && items_by_id[itemId]) {
+      setSelectedItem(items_by_id[itemId]);
+    } else {
+      setSelectedItem(null);
+    }
+  }, [queryState.queryState, items_by_id]);
+
+  // Add login view rendering
+  if (isLoggingIn) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold mb-6">Login Required</h2>
+          <div className="flex flex-col items-center gap-4">
+            <button
+              onClick={() => initiateOAuth('spotify')}
+              className="flex items-center gap-2 px-8 py-3 bg-[#1DB954] text-white font-semibold rounded-full hover:bg-[#1ed760] transition-colors"
+            >
+              <img
+                src={SPOTIFY_LOGO_URL}
+                alt="Spotify"
+                className="w-6 h-6"
+              />
+              Continue with Spotify
+            </button>
+            <button
+              onClick={() => {
+                const newQueryState = queryState.queryState.filter(tag => 
+                  tag.type !== 'action' || tag.value !== 'login'
+                );
+                queryState.updateQueryState(newQueryState);
+              }}
+              className="text-gray-600 hover:text-gray-800"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen">
-      <div className="grid grid-cols-2 gap-4">
-        {/* Top row */}
+    <div className="min-h-screen relative">
+      <UserMenu />
+      <div className="grid grid-cols-2 gap-4 pt-16">
+        {/* Left panel */}
         <div className="p-4">
-          <HeaderWithPillbox searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
-          {!isVoting && (
-            <div className="mt-4">
-              <div className="flex items-center bg-gray-200 rounded p-2">
-                <span className="mr-2">🔍</span>
-                <input
-                  type="text"
-                  placeholder={advancedMode ? "search spotify tracks/artists/albums/tags" : "search spotify albums"}
-                  className="bg-transparent w-full outline-none"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-              <SearchResults searchQuery={searchQuery} />
+          <HeaderWithPillbox 
+            searchQuery={searchQuery} 
+            setSearchQuery={setSearchQuery}
+            queryState={queryState}
+          />
+          {selectedItem ? (
+            <div>
+              <ActionButton 
+                text="← Back to search"
+                onClick={() => {
+                  const newQueryState = queryState.queryState.filter(tag => tag.type !== 'item');
+                  queryState.updateQueryState(newQueryState);
+                }}
+              />
+              <ItemPanel item={selectedItem} />
             </div>
+          ) : (
+            !isVoting && (
+              <div className="mt-4">
+                <div className="flex items-center bg-gray-200 rounded p-2">
+                  <span className="mr-2">🔍</span>
+                  <input
+                    type="text"
+                    placeholder={advancedMode ? "search spotify tracks/artists/albums/tags" : "search spotify albums"}
+                    className="bg-transparent w-full outline-none"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+                <SearchResults searchQuery={searchQuery} queryState={queryState} />
+              </div>
+            )
           )}
         </div>
 
-        {/* Top right - Mode toggle, Action buttons and voting panel */}
+        {/* Right panel */}
         <div>
-          <ModeToggle />
           {isVoting ? (
             <ActionButton 
               onClick={() => {
-                const newQueryState = queryState.filter(item => item.type !== 'action' || item.value !== 'vote');
-                updateQueryState(newQueryState);
+                const newQueryState = queryState.queryState.filter(item => 
+                  item.type !== 'action' || item.value !== 'vote'
+                );
+                queryState.updateQueryState(newQueryState);
               }}
               text="← Back to sorted list"
             />
           ) : (
-            <VotingPanel />
+            <VotingPanel queryState={queryState} />
           )}
         </div>
       </div>
 
-      {/* Voting comparison view appears below when voting */}
+      {/* Voting comparison view */}
       {isVoting && (
         <div className="mt-4">
-          <VoteComparisonView />
+          <VoteComparisonView queryState={queryState} />
         </div>
       )}
     </div>
@@ -751,8 +786,8 @@ export const Cli = () => {
 };
 
 // Split SearchPanel into SearchResults component
-const SearchResults = ({ searchQuery }) => {
-  const { queryState, updateQueryState } = useQueryState();
+const SearchResults = ({ searchQuery, queryState }) => {
+  const { queryState: state, updateQueryState } = queryState;
   const setActivePanel = useStore(state => state.setActivePanel);
   const advancedMode = useStore(state => state.advancedMode);
 
@@ -853,19 +888,24 @@ const SearchResults = ({ searchQuery }) => {
       };
     }
 
-    // Check for duplicates before adding
-    const isDuplicate = queryState.some(existingTag => 
-      existingTag.type === newTag.type && 
-      existingTag.value === newTag.value &&
-      existingTag.namespace === newTag.namespace &&
-      existingTag.domain_pk === newTag.domain_pk &&
-      existingTag.domain_pk_namespace === newTag.domain_pk_namespace
-    );
+    // In non-advanced mode, replace all query params when clicking an album
+    if (!advancedMode && tag.domain_pk_namespace === 'spotify.album') {
+      updateQueryState([newTag]);
+    } else {
+      // Check for duplicates before adding
+      const isDuplicate = state.some(existingTag => 
+        existingTag.type === newTag.type && 
+        existingTag.value === newTag.value &&
+        existingTag.namespace === newTag.namespace &&
+        existingTag.domain_pk === newTag.domain_pk &&
+        existingTag.domain_pk_namespace === newTag.domain_pk_namespace
+      );
 
-    if (!isDuplicate) {
-      updateQueryState([...queryState, newTag]);
-      setActivePanel(2);
+      if (!isDuplicate) {
+        updateQueryState([...state, newTag]);
+      }
     }
+    setActivePanel(2);
   };
 
   return (

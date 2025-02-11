@@ -25,12 +25,65 @@
 (defn get-valid-token [username]
   (oauth/get-valid-token so/spotify-provider username "spotify"))
 
+(defn get-track-metadata
+  "Get metadata for a specific track from Spotify API"
+  [track-id token]
+  (let [response (hc/request
+                  {:url (str "https://api.spotify.com/v1/tracks/" track-id)
+                   :method :get
+                   :headers {"Authorization" (str "Bearer " token)}})
+        track-data (-> response :body (json/read-str {:key-fn keyword}))]
+    track-data))
+
+(defn get-album-tracks
+  "Get all tracks from an album"
+  [album-id token]
+  (let [response (hc/request
+                  {:url (str "https://api.spotify.com/v1/albums/" album-id "/tracks")
+                   :method :get
+                   :headers {"Authorization" (str "Bearer " token)}})
+        tracks (-> response :body (json/read-str {:key-fn keyword}) :items)]
+    tracks))
+
 
 (defn get-hostname []
   (case (System/getenv "ENVIRONMENT")
     "production" "https://sorter.social"
     "staging" "https://staging.sorter.social"
     "http://localhost:3000"))
+
+(defn create-spotify-tag
+  "Creates a tag for a Spotify entity (artist, album, track) if it doesn't exist"
+  [domain_pk_namespace entity]
+  ;; First ensure spotify system user exists
+  (db/exec!
+   ["INSERT INTO users (user_name, email, password_hash)
+     VALUES (?, ?, ?)
+     ON CONFLICT (user_name) DO NOTHING"
+    "spotify" "spotify@sorter.social" "not-a-real-password"])
+
+  (let [title (:name entity)
+        slug (sluj title)
+        domain-pk (:id entity)
+        tag (or
+             (first (db/exec!
+                     ["SELECT * FROM tags
+                      WHERE domain_pk_namespace = ? AND domain_pk = ?"
+                      domain_pk_namespace domain-pk]))
+             (first (db/exec!
+                     ["INSERT INTO tags (title, slug, owner, domain_pk_namespace, domain_pk)
+                      VALUES (?, ?, ?, ?, ?)
+                      ON CONFLICT (domain_pk_namespace, domain_pk)
+                      DO NOTHING
+                      RETURNING *"
+                      title slug "spotify" domain_pk_namespace domain-pk])))]
+    ;; Create public permissions for the tag
+    (when tag
+      (db/exec! (-> (h/insert-into :perms)
+                    (h/values (perms/public-permissions (:tags/id tag)))
+                    (h/on-conflict)
+                    (h/do-nothing))))
+    tag))
 
 (defn get-client-token []
   (try
@@ -219,12 +272,12 @@
    ::pco/priority 1}  ; Higher priority for DB lookup
   (println "Running ensure-album-exists resolver with input:" input)
   (when-let [existing (first
-                      (db/exec!
-                       (-> (h/select :*)
-                           (h/from :items)
-                           (h/where [:and
-                                   [:= :domain_pk album-id]
-                                   [:= :domain_pk_namespace "spotify.album"]]))))]
+                       (db/exec!
+                        (-> (h/select :*)
+                            (h/from :items)
+                            (h/where [:and
+                                      [:= :domain_pk album-id]
+                                      [:= :domain_pk_namespace "spotify.album"]]))))]
     {:spotify.album/item-id (:items/id existing)
      :spotify.album/name (:items/title existing)}))
 
@@ -245,13 +298,13 @@
     {:spotify.album/item-id (:items/id new-record)
      :spotify.album/name (:items/title new-record)}))
 
-(pco/defresolver add-album-to-tags [{:keys [spotify.album/item-id spotify.artist/tag-id spotify.album/name] :as input}]
-  {::pco/input [:spotify.album/item-id :spotify.artist/tag-id :spotify.album/name]
+(pco/defresolver add-album-to-tags [{:keys [spotify.album/item-id spotify.artist/tag-id spotify.album/name spotify.album/album-id] :as input}]
+  {::pco/input [:spotify.album/item-id :spotify.artist/tag-id :spotify.album/name :spotify.album/album-id]
    ::pco/output [:spotify.album/tags-added? :spotify.album/tag-id :spotify.album/slug]}
   (println "Running add-album-to-tags resolver with input:" input)
   (let [tag (create-spotify-tag
              "spotify.album"
-             {:id (str item-id)
+             {:id album-id
               :name name})]
     (db/exec!
      (-> (h/insert-into :items_in_tags)
@@ -327,9 +380,40 @@
      :tags/domain-pk-namespace (:tags/domain_pk_namespace tag)
      :tags/owner (:tags/owner tag)}))
 
+(pco/defresolver album-complete? [{:keys [spotify.album/album-id] :as input}]
+  {::pco/input [:spotify.album/album-id]
+   ::pco/output [:spotify.album/name
+                 :spotify.album/tracks-processed?
+                 :spotify.album/tag-id
+                 :tags/slug]}
+  (println "Running album-complete? resolver")
+  (when-let [album-tag (first
+                        (db/exec!
+                         (-> (h/select :*)
+                             (h/from :tags)
+                             (h/where [:and
+                                     [:= :domain_pk album-id]
+                                     [:= :domain_pk_namespace "spotify.album"]]))))]
+    (let [tracks-in-db (db/exec!
+                        (-> (h/select :*)
+                            (h/from :items_in_tags)
+                            (h/join :items [:= :items.id :items_in_tags.item_id])
+                            (h/where [:and
+                                    [:= :tag_id (:tags/id album-tag)]
+                                    [:= :items.domain_pk_namespace "spotify.track"]])))]
+      ; Always return a map with all promised outputs, even if some are nil
+      {:spotify.album/name (:tags/title album-tag)
+       :spotify.album/tracks-processed? (boolean (seq tracks-in-db))  ; Ensure this is always returned
+       :spotify.album/tag-id (:tags/id album-tag)
+       :tags/slug (:tags/slug album-tag)})))
+
 ;; Register both resolvers
 (def env
-  (-> [spotify-client-token
+  (-> [album-complete?  ; Keep this first for fast path
+       ensure-album-exists
+       album-tag-details
+       ;; Add back Spotify API resolvers for new items
+       spotify-client-token
        spotify-search
        ensure-track-exists
        create-track-record
@@ -338,12 +422,10 @@
        ensure-album-tag
        add-track-to-tags
        spotify-album-metadata
-       ensure-album-exists
        create-album-record
        add-album-to-tags
        album-tracks
-       process-album-tracks
-       album-tag-details]
+       process-album-tracks]
       (pci/register)))
 
 (comment
@@ -377,41 +459,6 @@
     {:status 200
      :body results}))
 
-;; Create the standard OAuth route handlers
-(defn create-spotify-tag
-  "Creates a tag for a Spotify entity (artist, album, track) if it doesn't exist"
-  [domain_pk_namespace entity]
-  ;; First ensure spotify system user exists
-  (db/exec!
-   ["INSERT INTO users (user_name, email, password_hash)
-     VALUES (?, ?, ?)
-     ON CONFLICT (user_name) DO NOTHING"
-    "spotify" "spotify@sorter.social" "not-a-real-password"])
-
-  (let [title (:name entity)
-        slug (sluj title)
-        domain-pk (:id entity)
-        tag (or
-             (first (db/exec!
-                     ["SELECT * FROM tags
-                      WHERE domain_pk_namespace = ? AND domain_pk = ?"
-                      domain_pk_namespace domain-pk]))
-             (first (db/exec!
-                     ["INSERT INTO tags (title, slug, owner, domain_pk_namespace, domain_pk)
-                      VALUES (?, ?, ?, ?, ?)
-                      ON CONFLICT (domain_pk_namespace, domain_pk)
-                      DO NOTHING
-                      RETURNING *"
-                      title slug "spotify" domain_pk_namespace domain-pk])))]
-    ;; Create public permissions for the tag
-    (when tag
-      (db/exec! (-> (h/insert-into :perms)
-                    (h/values (perms/public-permissions (:tags/id tag)))
-                    (h/on-conflict)
-                    (h/do-nothing))))
-    tag))
-
-
 (defn get-artist-tracks
   "Get all tracks for an artist from Spotify API"
   [artist-id token]
@@ -422,20 +469,6 @@
                    :query-params {"market" "US"}})
         tracks (-> response :body (json/read-str {:key-fn keyword}) :tracks)]
     tracks))
-
-(defn get-album-tracks
-  "Get all tracks from an album"
-  [album-id token]
-  (try
-    (let [response (hc/request
-                    {:url (str "https://api.spotify.com/v1/albums/" album-id "/tracks")
-                     :method :get
-                     :headers {"Authorization" (str "Bearer " token)}})
-          tracks (-> response :body (json/read-str {:key-fn keyword}) :items)]
-      tracks)
-    (catch Exception e
-      (println "Error getting album tracks:" (ex-message e))
-      [])))
 
 (defn get-decade-from-date
   "Convert a release date to a decade tag (e.g., '1970s')"
@@ -448,9 +481,6 @@
 (defn resolve-spotify-entity [req]
   (let [{:keys [domain_pk domain_pk_namespace name]} (-> req :body-params)
         username (-> req :session :user_name)]
-    (when-not username
-      (throw (ex-info "Must be logged in" {:status 401})))
-
     (def domain_pk domain_pk)
     (case domain_pk_namespace
       "spotify.track"
@@ -484,8 +514,11 @@
 
   )
 
-(def routes [["/resolve" {:post {:handler #'resolve-spotify-entity}}]
-             ["/search" {:get {:handler #'search-endpoint}}]])
+(def routes 
+  (concat
+    so/oauth-routes  ; Use the pre-defined OAuth routes
+    [["/resolve" {:post {:handler #'resolve-spotify-entity}}]
+     ["/search" {:get {:handler #'search-endpoint}}]]))
 
 (defn clean-spotify-data! []
   ;; First remove votes for spotify items
@@ -539,6 +572,8 @@
                     WHERE tag_id IN (SELECT id FROM tags WHERE domain_pk_namespace LIKE 'spotify.%')"]))
   (count (db/exec! ["SELECT * FROM perms
                     WHERE tag_id IN (SELECT id FROM tags WHERE domain_pk_namespace LIKE 'spotify.%')"])))
+
+
 
 
 
