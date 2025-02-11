@@ -34,7 +34,7 @@
 
 (defn get-client-token []
   (try
-    (when (or (nil? @global-token) 
+    (when (or (nil? @global-token)
               (nil? (:expires_at @global-token))
               (> (System/currentTimeMillis) (:expires_at @global-token)))
       (let [response (hc/request {:url "https://accounts.spotify.com/api/token"
@@ -51,26 +51,14 @@
 (pco/defresolver spotify-client-token []
   {::pco/output [:spotify/access-token]}
   (println "Running spotify-client-token resolver")
-  (when (or (nil? @global-token) 
-            (nil? (:expires_at @global-token))
-            (> (System/currentTimeMillis) (:expires_at @global-token)))
-    (let [response (hc/request {:url "https://accounts.spotify.com/api/token"
-                                :method :post
-                                :headers {"Authorization" (str "Basic " (oauth/encode-to-base64 (str so/client-id ":" so/client-secret)))}
-                                :form-params {:grant_type "client_credentials"}})
-          body (-> response :body (json/read-str {:key-fn keyword}))
-          expires-in (* (:expires_in body) 1000)]
-      (reset! global-token {:access_token (:access_token body)
-                            :expires_at (+ (System/currentTimeMillis) expires-in)})))
-  {:spotify/access-token (or (:access_token @global-token)
-                             (throw (ex-info "Failed to get client token" {:status 500})))})
+  {:spotify/access-token (get-client-token)})
 
 (pco/defresolver spotify-search [{:keys [spotify/query spotify/access-token] :as input}]
   {::pco/input [:spotify/query :spotify/access-token]
    ::pco/output [{:spotify/search-results
-                  [{:spotify/artists [:spotify/id :spotify/name :spotify/images]}
-                   {:spotify/albums [:spotify/id :spotify/name :spotify/images]}
-                   {:spotify/tracks [:spotify/id :spotify/name :spotify/album]}]}]}
+                  [{:spotify.artist/artists [:spotify.artist/id :spotify.artist/name :spotify.artist/images]}
+                   {:spotify.album/albums [:spotify.album/id :spotify.album/name :spotify.album/images]}
+                   {:spotify.track/tracks [:spotify.track/id :spotify.track/name :spotify.track/album]}]}]}
   (println "Running spotify-search resolver with input:" input)
   (let [response (hc/request 
                   {:url "https://api.spotify.com/v1/search"
@@ -96,67 +84,67 @@
                                           [:like :domain_pk_namespace "spotify.%"]]))))]
     
     {:spotify/search-results
-     {:spotify/artists (map (fn [artist]
-                              {:spotify/id (:id artist)
-                               :spotify/name (:name artist)
-                               :spotify/images (:images artist)
-                               :spotify/existing-tag (first (filter #(= (:domain_pk %) (:id artist)) 
+     {:spotify.artist/artists (map (fn [artist]
+                              {:spotify.artist/id (:id artist)
+                               :spotify.artist/name (:name artist)
+                               :spotify.artist/images (:images artist)
+                               :spotify.artist/existing-tag (first (filter #(= (:domain_pk %) (:id artist)) 
                                                                     existing-records))})
                             (get-in results [:artists :items]))
-      :spotify/albums (map (fn [album]
-                             {:spotify/id (:id album)
-                              :spotify/name (:name album)
-                              :spotify/images (:images album)
-                              :spotify/existing-tag (first (filter #(= (:domain_pk %) (:id album)) 
+      :spotify.album/albums (map (fn [album]
+                             {:spotify.album/id (:id album)
+                              :spotify.album/name (:name album)
+                              :spotify.album/images (:images album)
+                              :spotify.album/existing-tag (first (filter #(= (:domain_pk %) (:id album)) 
                                                                    existing-records))})
                            (get-in results [:albums :items]))
-      :spotify/tracks (map (fn [track]
-                             {:spotify/id (:id track)
-                              :spotify/name (:name track)
-                              :spotify/album (:album track)
-                              :spotify/existing-tag (first (filter #(= (:domain_pk %) (:id track)) 
+      :spotify.track/tracks (map (fn [track]
+                             {:spotify.track/id (:id track)
+                              :spotify.track/name (:name track)
+                              :spotify.track/album (:album track)
+                              :spotify.track/existing-tag (first (filter #(= (:domain_pk %) (:id track)) 
                                                                    existing-records))})
                            (get-in results [:tracks :items]))}}))
 
-(pco/defresolver ensure-artist-tag [{:keys [spotify/artist-id spotify/artist-name] :as input}]
-  {::pco/input [:spotify/artist-id :spotify/artist-name]
-   ::pco/output [:db/artist-tag-id]}
-  (println "Running ensure-artist-tag resolver with input:" input)
+(pco/defresolver ensure-artist-tag [{:keys [spotify.artist/artist-id spotify.artist/artist-name]}]
+  {::pco/input [:spotify.artist/artist-id :spotify.artist/artist-name]
+   ::pco/output [:spotify.artist/tag-id]}
+  (println "Running ensure-artist-tag resolver")
   (let [tag (create-spotify-tag 
              "spotify.artist"
              {:id artist-id
               :name artist-name})]
-    {:db/artist-tag-id (:tags/id tag)}))
+    {:spotify.artist/tag-id (:tags/id tag)}))
 
-(pco/defresolver ensure-album-tag [{:keys [spotify/album-id spotify/album-name] :as input}]
-  {::pco/input [:spotify/album-id :spotify/album-name]
-   ::pco/output [:db/album-tag-id :db/album-slug]}
-  (println "Running ensure-album-tag resolver with input:" input)
+(pco/defresolver ensure-album-tag [{:keys [spotify.album/album-id spotify.album/name]}]
+  {::pco/input [:spotify.album/album-id :spotify.album/name]
+   ::pco/output [:spotify.album/tag-id]}
+  (println "Running ensure-album-tag resolver")
   (let [tag (create-spotify-tag 
              "spotify.album"
              {:id album-id
-              :name album-name})]
-    {:db/album-tag-id (:tags/id tag)
-     :db/album-slug (:tags/slug tag)}))
+              :name name})]
+    {:spotify.album/tag-id (:tags/id tag)}))
 
-(pco/defresolver add-track-to-tags [{:keys [db/item-id db/artist-tag-id db/album-tag-id] :as input}]
-  {::pco/input [:db/item-id :db/artist-tag-id :db/album-tag-id]
-   ::pco/output [:db/tags-added?]}
+(pco/defresolver add-track-to-tags [{:keys [spotify.track/item-id spotify.artist/tag-id spotify.album/tag-id] :as input}]
+  {::pco/input [:spotify.track/item-id :spotify.artist/tag-id :spotify.album/tag-id]
+   ::pco/output [:spotify.track/tags-added?]}
   (println "Running add-track-to-tags resolver with input:" input)
   (println "add-track-to-tags")
+  (def input input)
   (db/exec! 
    (-> (h/insert-into :items_in_tags)
        (h/values [{:item_id item-id
-                   :tag_id artist-tag-id}
+                   :tag_id (:spotify.album/tag-id input)}
                   {:item_id item-id
-                   :tag_id album-tag-id}])
+                   :tag_id (:spotify.artist/tag-id input)}])
        (h/on-conflict)
        (h/do-nothing)))
-  {:db/tags-added? true})
+  {:spotify.track/tags-added? true})
 
-(pco/defresolver ensure-track-exists [{:keys [spotify/track-id] :as input}]
-  {::pco/input [:spotify/track-id]
-   ::pco/output [:db/item-id :spotify/name]}
+(pco/defresolver ensure-track-exists [{:keys [spotify.track/track-id] :as input}]
+  {::pco/input [:spotify.track/track-id]
+   ::pco/output [:spotify.track/item-id :spotify.track/name]}
   (println "Running ensure-track-exists resolver with input:" input)
   (println "ensure-track-exists")
   (when-let [existing (first 
@@ -166,12 +154,12 @@
                             (h/where [:and
                                       [:= :domain_pk track-id]
                                       [:= :domain_pk_namespace "spotify.track"]]))))]
-    {:db/item-id (:items/id existing)
-     :spotify/name (:items/title existing)}))
+    {:spotify.track/item-id (:items/id existing)
+     :spotify.track/name (:items/title existing)}))
 
-(pco/defresolver create-track-record [{:keys [spotify/track-id spotify/name] :as input}]
-  {::pco/input [:spotify/track-id :spotify/name]
-   ::pco/output [:db/item-id :spotify/name]}
+(pco/defresolver create-track-record [{:keys [spotify.track/track-id spotify.track/name] :as input}]
+  {::pco/input [:spotify.track/track-id :spotify.track/name]
+   ::pco/output [:spotify.track/item-id :spotify.track/name]}
   (println "Running create-track-record resolver with input:" input)
   (println "creating track record!")
   (let [new-record (first
@@ -183,74 +171,70 @@
                                      :domain_pk_namespace "spotify.track"
                                      :owner "spotify"}])
                          (h/returning :*))))]
-    {:db/item-id (:items/id new-record)
-     :spotify/name (:items/title new-record)}))
+    {:spotify.track/item-id (:items/id new-record)
+     :spotify.track/name (:items/title new-record)}))
 
-(pco/defresolver spotify-track-metadata [{:keys [spotify/track-id spotify/access-token] :as input}]
-  {::pco/input [:spotify/track-id :spotify/access-token]
-   ::pco/output [:spotify/name
-                 :spotify/album-id
-                 :spotify/artist-id
-                 :spotify/release-date
-                 :spotify/album-name
-                 :spotify/artist-name
-                 :spotify/images]}
+(pco/defresolver spotify-track-metadata [{:keys [spotify.track/track-id spotify/access-token] :as input}]
+  {::pco/input [:spotify.track/track-id :spotify/access-token]
+   ::pco/output [:spotify.track/name
+                 :spotify.album/album-id
+                 :spotify.artist/artist-id
+                 :spotify.track/release-date
+                 :spotify.album/album-name
+                 :spotify.artist/artist-name
+                 :spotify.album/images]}
   (println "Running spotify-track-metadata resolver with input:" input)
   (println "spotify-track-metadata")
   (when-let [track-data (get-track-metadata track-id access-token)]
-    {:spotify/name (:name track-data)
-     :spotify/album-id (-> track-data :album :id)
-     :spotify/artist-id (-> track-data :artists first :id)
-     :spotify/release-date (:release_date track-data)
-     :spotify/album-name (-> track-data :album :name)
-     :spotify/artist-name (-> track-data :artists first :name)
-     :spotify/images (-> track-data :album :images)}))
+    {:spotify.track/name (:name track-data)
+     :spotify.album/album-id (-> track-data :album :id)
+     :spotify.artist/artist-id (-> track-data :artists first :id)
+     :spotify.track/release-date (:release_date track-data)
+     :spotify.album/album-name (-> track-data :album :name)
+     :spotify.artist/artist-name (-> track-data :artists first :name)
+     :spotify.album/images (-> track-data :album :images)}))
 
-(pco/defresolver spotify-album-metadata [{:keys [spotify/album-id spotify/access-token db/item-id] :as input}]
-  {::pco/input [:spotify/album-id 
-                :spotify/access-token
-                (pco/? :db/item-id)]  ; Make item-id optional
-   ::pco/output [:spotify/name
-                 :spotify/artist-id
-                 :spotify/release-date
-                 :spotify/artist-name
-                 :spotify/images]}
-  (println "Running spotify-album-metadata resolver with input:" input)
-  ;; Only make API call if we don't have an item-id (meaning it's not in our DB)
-  (when-not item-id
-    (let [response (hc/request 
-                    {:url (str "https://api.spotify.com/v1/albums/" album-id)
-                     :method :get
-                     :headers {"Authorization" (str "Bearer " access-token)}})
-          album-data (-> response :body (json/read-str {:key-fn keyword}))]
-      {:spotify/name (:name album-data)
-       :spotify/artist-id (-> album-data :artists first :id)
-       :spotify/release-date (:release_date album-data)
-       :spotify/artist-name (-> album-data :artists first :name)
-       :spotify/images (:images album-data)})))
+(pco/defresolver spotify-album-metadata [{:keys [spotify.album/album-id spotify/access-token]}]
+  {::pco/input [:spotify.album/album-id :spotify/access-token]
+   ::pco/output [:spotify.album/name
+                 :spotify.artist/artist-id
+                 :spotify.album/release-date
+                 :spotify.artist/artist-name
+                 :spotify.album/images]}
+  (println "Running spotify-album-metadata resolver")
+  (let [response (hc/request
+                  {:url (str "https://api.spotify.com/v1/albums/" album-id)
+                   :method :get
+                   :headers {"Authorization" (str "Bearer " access-token)}})
+        album-data (-> response :body (json/read-str {:key-fn keyword}))]
+    {:spotify.album/name (:name album-data)
+     :spotify.artist/artist-id (-> album-data :artists first :id)
+     :spotify.album/release-date (:release_date album-data)
+     :spotify.artist/artist-name (-> album-data :artists first :name)
+     :spotify.album/images (:images album-data)}))
 
-(pco/defresolver ensure-album-exists [{:keys [spotify/album-id] :as input}]
-  {::pco/input [:spotify/album-id]
-   ::pco/output [:db/item-id :spotify/name]
+(pco/defresolver ensure-album-exists [{:keys [spotify.album/album-id] :as input}]
+  {::pco/input [:spotify.album/album-id]
+   ::pco/output [:spotify.album/item-id :spotify.album/name]
    ::pco/priority 1}  ; Higher priority for DB lookup
   (println "Running ensure-album-exists resolver with input:" input)
-  (when-let [existing (first 
-                      (db/exec! 
+  (when-let [existing (first
+                      (db/exec!
                        (-> (h/select :*)
                            (h/from :items)
                            (h/where [:and
                                    [:= :domain_pk album-id]
                                    [:= :domain_pk_namespace "spotify.album"]]))))]
-    {:db/item-id (:items/id existing)
-     :spotify/name (:items/title existing)}))
+    {:spotify.album/item-id (:items/id existing)
+     :spotify.album/name (:items/title existing)}))
 
-(pco/defresolver create-album-record [{:keys [spotify/album-id spotify/name] :as input}]
-  {::pco/input [:spotify/album-id :spotify/name]
-   ::pco/output [:db/item-id :spotify/name]
+(pco/defresolver create-album-record [{:keys [spotify.album/album-id spotify.album/name] :as input}]
+  {::pco/input [:spotify.album/album-id :spotify.album/name]
+   ::pco/output [:spotify.album/item-id :spotify.album/name]
    ::pco/priority 0}  ; Lower priority than ensure-album-exists
   (println "Running create-album-record resolver with input:" input)
   (let [new-record (first
-                    (db/exec! 
+                    (db/exec!
                      (-> (h/insert-into :items)
                          (h/values [{:title name
                                    :slug (sluj name)
@@ -258,54 +242,53 @@
                                    :domain_pk_namespace "spotify.album"
                                    :owner "spotify"}])
                          (h/returning :*))))]
-    {:db/item-id (:items/id new-record)
-     :spotify/name (:items/title new-record)}))
+    {:spotify.album/item-id (:items/id new-record)
+     :spotify.album/name (:items/title new-record)}))
 
-(pco/defresolver add-album-to-tags [{:keys [db/item-id db/artist-tag-id spotify/name] :as input}]
-  {::pco/input [:db/item-id :db/artist-tag-id :spotify/name]
-   ::pco/output [:db/tags-added? :db/album-tag-id :db/album-slug]}
+(pco/defresolver add-album-to-tags [{:keys [spotify.album/item-id spotify.artist/tag-id spotify.album/name] :as input}]
+  {::pco/input [:spotify.album/item-id :spotify.artist/tag-id :spotify.album/name]
+   ::pco/output [:spotify.album/tags-added? :spotify.album/tag-id :spotify.album/slug]}
   (println "Running add-album-to-tags resolver with input:" input)
-  (let [tag (create-spotify-tag 
+  (let [tag (create-spotify-tag
              "spotify.album"
              {:id (str item-id)
               :name name})]
-    (db/exec! 
+    (db/exec!
      (-> (h/insert-into :items_in_tags)
          (h/values [{:item_id item-id
-                    :tag_id artist-tag-id}])
+                     :tag_id tag-id}])
          (h/on-conflict)
          (h/do-nothing)))
-    {:db/tags-added? true
-     :db/album-tag-id (:tags/id tag)
-     :db/album-slug (:tags/slug tag)}))
+    {:spotify.album/tags-added? true
+     :spotify.album/tag-id (:tags/id tag)}))
 
-(pco/defresolver album-tracks [{:keys [spotify/album-id spotify/access-token] :as input}]
-  {::pco/input [:spotify/album-id :spotify/access-token]
-   ::pco/output [{:spotify/tracks [:spotify/id :spotify/name]}]}
+(pco/defresolver album-tracks [{:keys [spotify.album/album-id spotify/access-token] :as input}]
+  {::pco/input [:spotify.album/album-id :spotify/access-token]
+   ::pco/output [{:spotify.album/tracks [:spotify.track/id :spotify.track/name]}]}
   (println "Running album-tracks resolver with input:" input)
   (let [tracks (get-album-tracks album-id access-token)]
-    {:spotify/tracks (map (fn [track]
-                          {:spotify/id (:id track)
-                           :spotify/name (:name track)})
+    {:spotify.album/tracks (map (fn [track]
+                          {:spotify.track/id (:id track)
+                           :spotify.track/name (:name track)})
                         tracks)}))
 
-(pco/defresolver process-album-tracks [{:keys [spotify/tracks db/artist-tag-id db/album-tag-id] :as input}]
-  {::pco/input [:spotify/tracks 
-                :db/artist-tag-id 
-                :db/album-tag-id]
-   ::pco/output [:db/tracks-processed?]}
+(pco/defresolver process-album-tracks [{:keys [spotify.album/tracks spotify.artist/tag-id spotify.album/tag-id] :as input}]
+  {::pco/input [:spotify.album/tracks
+                :spotify.artist/tag-id
+                :spotify.album/tag-id]
+   ::pco/output [:spotify.album/tracks-processed?]}
   (println "Running process-album-tracks resolver with input:" input)
-  (doseq [{:keys [spotify/id spotify/name]} tracks]
+  (doseq [{:keys [spotify.track/id spotify.track/name]} tracks]
     (when-let [item-id (:items/id
-                       (or (first 
-                           (db/exec! 
+                       (or (first
+                           (db/exec!
                             (-> (h/select :*)
                                 (h/from :items)
                                 (h/where [:and
                                         [:= :domain_pk id]
                                         [:= :domain_pk_namespace "spotify.track"]]))))
                            (first
-                            (db/exec! 
+                            (db/exec!
                              (-> (h/insert-into :items)
                                  (h/values [{:title name
                                            :slug (sluj name)
@@ -313,36 +296,36 @@
                                            :domain_pk_namespace "spotify.track"
                                            :owner "spotify"}])
                                  (h/returning :*))))))]
-      (db/exec! 
+      (db/exec!
        (-> (h/insert-into :items_in_tags)
            (h/values [{:item_id item-id
-                      :tag_id artist-tag-id}
-                     {:item_id item-id
-                      :tag_id album-tag-id}])
+                       :tag_id (:spotify.artist/tag-id input)}
+                      {:item_id item-id
+                       :tag_id (:spotify.album/tag-id input)}])
            (h/on-conflict)
            (h/do-nothing)))))
-  {:db/tracks-processed? true})
+  {:spotify.album/tracks-processed? true})
 
-(pco/defresolver album-tag-details [{:keys [db/album-tag-id] :as input}]
-  {::pco/input [:db/album-tag-id]
-   ::pco/output [:tags/id 
-                 :tags/slug 
-                 :tags/title
-                 :tags/domain_pk
-                 :tags/domain_pk_namespace
-                 :tags/owner]}
-  (println "Running album-tag-details resolver with input:" input)
-  (when-let [tag (first 
-                  (db/exec! 
+(pco/defresolver album-tag-details [{:keys [spotify.album/tag-id]}]
+  {::pco/input [:spotify.album/tag-id]
+   ::pco/output [:spotify.tag/id
+                 :spotify.tag/slug
+                 :spotify.tag/title
+                 :spotify.tag/domain-pk
+                 :spotify.tag/domain-pk-namespace
+                 :spotify.tag/owner]}
+  (println "Running album-tag-details resolver")
+  (when-let [tag (first
+                  (db/exec!
                    (-> (h/select :*)
                        (h/from :tags)
-                       (h/where [:= :id album-tag-id]))))]
-    {:tags/id (:tags/id tag)
-     :tags/slug (:tags/slug tag)
-     :tags/title (:tags/title tag)
-     :tags/domain_pk (:tags/domain_pk tag)
-     :tags/domain_pk_namespace (:tags/domain_pk_namespace tag)
-     :tags/owner (:tags/owner tag)}))
+                       (h/where [:= :id tag-id]))))]
+    {:spotify.tag/id (:tags/id tag)
+     :spotify.tag/slug (:tags/slug tag)
+     :spotify.tag/title (:tags/title tag)
+     :spotify.tag/domain-pk (:tags/domain_pk tag)
+     :spotify.tag/domain-pk-namespace (:tags/domain_pk_namespace tag)
+     :spotify.tag/owner (:tags/owner tag)}))
 
 ;; Register both resolvers
 (def env
@@ -367,30 +350,30 @@
   ;; First get the access token
   ;; Then use it in the track query
   (p.eql/process env
-                 {:spotify/track-id "0nj9Bq5sHDiTxSHunhgkFb"}
-                 [:spotify/name :db/item-id :db/tags-added?])
-  
+                 {:spotify.track/track-id "0nj9Bq5sHDiTxSHunhgkFb"}
+                 [:spotify.track/name :spotify.track/item-id :spotify.track/tags-added?])
+
   (p.eql/process env
-                 {:spotify/album-id "0y17shGWtVIUSETo8d4mMB"}
-                 [:spotify/name
-                  :db/tracks-processed?
-                  :db/album-tag-id
-                  :tags/domain_pk
-                  :tags/domain_pk_namespace
-                  :tags/slug])
-  
+                 {:spotify.album/album-id "0y17shGWtVIUSETo8d4mMB"}
+                 [:spotify.album/name
+                  :spotify.album/tracks-processed?
+                  :spotify.album/tag-id
+                  :spotify.tag/domain-pk
+                  :spotify.tag/domain-pk-namespace
+                  :spotify.tag/slug])
+
   (clean-spotify-data!)
 
   (db/exec! ["delete from items where domain_pk = ?" "0nj9Bq5sHDiTxSHunhgkFb"])
-  
+
   (count (db/exec! {:select :* :from :items :where [:= :domain_pk_namespace "spotify.track"]})))
 
 ;; Example usage in your API endpoint:
 (defn search-endpoint [req]
   (let [query (-> req :params (get "q"))
-        results (first (vals (p.eql/process env [{[:spotify/query query] 
-                                                  [{:spotify/search-results 
-                                                    [:spotify/artists :spotify/albums :spotify/tracks]}]}])))]
+        results (first (vals (p.eql/process env [{[:spotify/query query]
+                                                  [{:spotify/search-results
+                                                    [:spotify.artist/artists :spotify.album/albums :spotify.track/tracks]}]}])))]
     {:status 200
      :body results}))
 
@@ -399,7 +382,7 @@
   "Creates a tag for a Spotify entity (artist, album, track) if it doesn't exist"
   [domain_pk_namespace entity]
   ;; First ensure spotify system user exists
-  (db/exec! 
+  (db/exec!
    ["INSERT INTO users (user_name, email, password_hash)
      VALUES (?, ?, ?)
      ON CONFLICT (user_name) DO NOTHING"
@@ -408,15 +391,15 @@
   (let [title (:name entity)
         slug (sluj title)
         domain-pk (:id entity)
-        tag (or 
-             (first (db/exec! 
-                     ["SELECT * FROM tags 
+        tag (or
+             (first (db/exec!
+                     ["SELECT * FROM tags
                       WHERE domain_pk_namespace = ? AND domain_pk = ?"
                       domain_pk_namespace domain-pk]))
-             (first (db/exec! 
+             (first (db/exec!
                      ["INSERT INTO tags (title, slug, owner, domain_pk_namespace, domain_pk)
                       VALUES (?, ?, ?, ?, ?)
-                      ON CONFLICT (domain_pk_namespace, domain_pk) 
+                      ON CONFLICT (domain_pk_namespace, domain_pk)
                       DO NOTHING
                       RETURNING *"
                       title slug "spotify" domain_pk_namespace domain-pk])))]
@@ -432,7 +415,7 @@
 (defn get-artist-tracks
   "Get all tracks for an artist from Spotify API"
   [artist-id token]
-  (let [response (hc/request 
+  (let [response (hc/request
                   {:url (str "https://api.spotify.com/v1/artists/" artist-id "/top-tracks")
                    :method :get
                    :headers {"Authorization" (str "Bearer " token)}
@@ -444,7 +427,7 @@
   "Get all tracks from an album"
   [album-id token]
   (try
-    (let [response (hc/request 
+    (let [response (hc/request
                     {:url (str "https://api.spotify.com/v1/albums/" album-id "/tracks")
                      :method :get
                      :headers {"Authorization" (str "Bearer " token)}})
@@ -469,30 +452,32 @@
       (throw (ex-info "Must be logged in" {:status 401})))
 
     (case domain_pk_namespace
-      "spotify.track" 
+      "spotify.track"
       (let [result (p.eql/process env
-                                  {:spotify/track-id domain_pk}
-                                  [:spotify/name :db/item-id :db/tags-added?])]
+                                  {:spotify.track/track-id domain_pk}
+                                  [:spotify.track/name 
+                                   :spotify.track/item-id 
+                                   :spotify.track/tags-added?])]
         {:status 200
          :body result})
-      
+
       "spotify.album"
       (let [result (p.eql/process env
-                                  {:spotify/album-id domain_pk}
-                                  [:spotify/name
-                                   :db/tracks-processed?
-                                   :db/album-tag-id])]
+                                  {:spotify.album/album-id domain_pk}
+                                  [:spotify.album/name
+                                   :spotify.album/tracks-processed?
+                                   :spotify.album/tag-id])]
         {:status 200
          :body result})
-      
+
       {:status 501
        :body {:error "Not yet implemented for this entity type"}})))
 
 (comment
   (db/exec! {:select :* :from :tags :where [:= :domain_pk_namespace "spotify.artist"]})
-  
-  
-  
+
+
+
   )
 
 (def routes [["/resolve" {:post {:handler #'resolve-spotify-entity}}]
@@ -500,55 +485,55 @@
 
 (defn clean-spotify-data! []
   ;; First remove votes for spotify items
-  (db/exec! ["DELETE FROM votes 
+  (db/exec! ["DELETE FROM votes
              WHERE left_item_id IN (
-               SELECT id FROM items 
+               SELECT id FROM items
                WHERE domain_pk_namespace = 'spotify.track'
              )"])
-  (db/exec! ["DELETE FROM votes 
+  (db/exec! ["DELETE FROM votes
              WHERE right_item_id IN (
-               SELECT id FROM items 
+               SELECT id FROM items
                WHERE domain_pk_namespace = 'spotify.track'
              )"])
-  
+
   ;; Then remove permissions for spotify tags
-  (db/exec! ["DELETE FROM perms 
+  (db/exec! ["DELETE FROM perms
              WHERE tag_id IN (
-               SELECT id FROM tags 
+               SELECT id FROM tags
                WHERE domain_pk_namespace LIKE 'spotify.%'
              )"])
-  
+
   ;; Then remove items_in_tags connections
-  (db/exec! ["DELETE FROM items_in_tags 
+  (db/exec! ["DELETE FROM items_in_tags
              WHERE tag_id IN (
-               SELECT id FROM tags 
+               SELECT id FROM tags
                WHERE domain_pk_namespace LIKE 'spotify.%'
              )
              OR item_id IN (
-               SELECT id FROM items 
+               SELECT id FROM items
                WHERE domain_pk_namespace = 'spotify.track'
              )"])
-  
+
   ;; Then remove the tags
-  (db/exec! ["DELETE FROM tags 
+  (db/exec! ["DELETE FROM tags
              WHERE domain_pk_namespace LIKE 'spotify.%'"])
-  
+
   ;; Finally remove the items
-  (db/exec! ["DELETE FROM items 
+  (db/exec! ["DELETE FROM items
              WHERE domain_pk_namespace = 'spotify.track'"]))
 
 (comment
   ;; Usage:
   (clean-spotify-data!)
-  
+
   ;; Verify counts including votes
-  (count (db/exec! ["SELECT * FROM votes 
+  (count (db/exec! ["SELECT * FROM votes
                     WHERE item_id IN (SELECT id FROM items WHERE domain_pk_namespace = 'spotify.track')"]))
   (count (db/exec! ["SELECT * FROM items WHERE domain_pk_namespace = 'spotify.track'"]))
   (count (db/exec! ["SELECT * FROM tags WHERE domain_pk_namespace LIKE 'spotify.%'"]))
-  (count (db/exec! ["SELECT * FROM items_in_tags 
+  (count (db/exec! ["SELECT * FROM items_in_tags
                     WHERE tag_id IN (SELECT id FROM tags WHERE domain_pk_namespace LIKE 'spotify.%')"]))
-  (count (db/exec! ["SELECT * FROM perms 
+  (count (db/exec! ["SELECT * FROM perms
                     WHERE tag_id IN (SELECT id FROM tags WHERE domain_pk_namespace LIKE 'spotify.%')"])))
 
 
