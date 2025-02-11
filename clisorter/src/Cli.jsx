@@ -171,6 +171,7 @@ const PanelNav = ({ activePanel, setActivePanel }) => (
 const SearchPanel = ({ searchQuery, setSearchQuery }) => {
   const { queryState, updateQueryState } = useQueryState();
   const setActivePanel = useStore(state => state.setActivePanel);
+  const isVoting = queryState.some(tag => tag.type === 'action' && tag.value === 'vote');
 
   const debouncedQuery = useRef(
     debounce((query) => {
@@ -307,7 +308,7 @@ const SearchPanel = ({ searchQuery, setSearchQuery }) => {
         <div className="flex flex-wrap gap-2">
           {queryState.map((item, index) => {
             const display = formatTagDisplay(item);
-            if (!display) return null; // Skip rendering if formatTagDisplay returns null
+            if (!display) return null;
             
             return (
               <span
@@ -330,62 +331,65 @@ const SearchPanel = ({ searchQuery, setSearchQuery }) => {
         </div>
       </div>
       
-      <div className="mb-4">
-        <div className="flex items-center bg-gray-200 rounded p-2">
-          <span className="mr-2">🔍</span>
-          <input
-            type="text"
-            placeholder="search spotify/tags"
-            className="bg-transparent w-full outline-none"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-      </div>
-
-      <div className="mb-4">
-        <div className="font-bold mb-2">tags that narrow this down:</div>
-        <div className="space-y-1">
-          {['hiphop', '2010s'].map(tag => (
-            <div 
-              key={tag}
-              className="cursor-pointer hover:bg-gray-100 p-1"
-              onClick={() => handleTagClick(tag)}
-            >
-              #{tag}
+      {!isVoting && (
+        <>
+          <div className="mb-4">
+            <div className="flex items-center bg-gray-200 rounded p-2">
+              <span className="mr-2">🔍</span>
+              <input
+                type="text"
+                placeholder="search spotify/tags"
+                className="bg-transparent w-full outline-none"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Updated search results section */}
-      <div>
-        <div className="font-bold mb-2">Search Results:</div>
-        {isLoading ? (
-          <div className="text-gray-500">Loading...</div>
-        ) : (
-          <div className="space-y-2">
-            {allResults.map((result) => (
-              <div
-                key={result.id}
-                className="cursor-pointer hover:bg-gray-100 p-2 rounded flex items-center"
-                onClick={() => handleTagClick({
-                  ...result,
-                  domain_pk: result.id
-                })}
-              >
-                {result.image && (
-                  <img src={result.image} alt="" className="w-8 h-8 mr-2 rounded" />
-                )}
-                <span>{result.tag}</span>
-                <span className="ml-2 text-sm text-gray-500">
-                  ({result.domain_pk_namespace.split('.')[1]})
-                </span>
-              </div>
-            ))}
           </div>
-        )}
-      </div>
+
+          <div className="mb-4">
+            <div className="font-bold mb-2">tags that narrow this down:</div>
+            <div className="space-y-1">
+              {['hiphop', '2010s'].map(tag => (
+                <div 
+                  key={tag}
+                  className="cursor-pointer hover:bg-gray-100 p-1"
+                  onClick={() => handleTagClick(tag)}
+                >
+                  #{tag}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div className="font-bold mb-2">Search Results:</div>
+            {isLoading ? (
+              <div className="text-gray-500">Loading...</div>
+            ) : (
+              <div className="space-y-2">
+                {allResults.map((result) => (
+                  <div
+                    key={result.id}
+                    className="cursor-pointer hover:bg-gray-100 p-2 rounded flex items-center"
+                    onClick={() => handleTagClick({
+                      ...result,
+                      domain_pk: result.id
+                    })}
+                  >
+                    {result.image && (
+                      <img src={result.image} alt="" className="w-8 h-8 mr-2 rounded" />
+                    )}
+                    <span>{result.tag}</span>
+                    <span className="ml-2 text-sm text-gray-500">
+                      ({result.domain_pk_namespace.split('.')[1]})
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 };
@@ -465,6 +469,55 @@ const RankingPanel = () => {
   );
 };
 
+// Single source of truth for the button, with fixed width matching search bar
+const ActionButton = ({ onClick, text, disabled }) => (
+  <div className="p-4 md:col-span-1">
+    <div className="flex items-center rounded p-2">
+      <button 
+        onClick={onClick}
+        disabled={disabled}
+        className="w-full py-3 px-6 font-semibold rounded-lg transition-colors bg-blue-500 hover:bg-blue-600 text-white cursor-pointer"
+      >
+        {text}
+      </button>
+    </div>
+  </div>
+);
+
+const VoteComparisonView = () => {
+  const { queryState, updateQueryState } = useQueryState();
+
+  return (
+    <div className="min-h-screen">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <SearchPanel searchQuery="" setSearchQuery={() => {}} />
+        <ActionButton 
+          text="Back to list"
+          onClick={() => {
+            const newQueryState = queryState.filter(tag => 
+              !(tag.type === 'action' && tag.value === 'vote')
+            );
+            updateQueryState(newQueryState);
+          }}
+        />
+      </div>
+      <div className="p-4 md:col-span-2">
+        <div className="mt-8">
+          <h2 className="text-xl font-bold mb-4">Which is better?</h2>
+          <div className="grid grid-cols-2 gap-4">
+            <button className="p-16 bg-gray-100 rounded-lg hover:bg-gray-200 text-xl">
+              Item 1
+            </button>
+            <button className="p-16 bg-gray-100 rounded-lg hover:bg-gray-200 text-xl">
+              Item 2
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const VotingPanel = () => {
   const results = useStore(state => state.results);
   const { queryState, updateQueryState } = useQueryState();
@@ -486,66 +539,61 @@ const VotingPanel = () => {
 
   const { canVote, reason } = getVoteStatus();
 
-  const handleVoteClick = () => {
-    console.log('Transitioning to voting panel...');
-    const voteAction = { type: 'action', value: 'vote' };
-    updateQueryState([...queryState, voteAction]);
-  };
-
   return (
-    <div className="p-4">
-      <button
-        onClick={handleVoteClick}
-        disabled={!canVote}
-        className={`w-full mb-6 py-3 px-6 font-semibold rounded-lg transition-colors
-          ${canVote 
-            ? 'bg-blue-500 hover:bg-blue-600 text-white cursor-pointer' 
-            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-          }`}
-      >
-        {canVote ? 'Vote on these items' : reason}
-      </button>
+      <div>
+        <ActionButton 
+          text={canVote ? "Vote on these items" : reason}
+          onClick={() => {
+            if (canVote) {
+              const voteAction = { type: 'action', value: 'vote' };
+              updateQueryState([...queryState, voteAction]);
+            }
+          }}
+          disabled={!canVote}
+        />
 
-      {results?.sorted?.length > 0 && (
-        <>
-          <div className="text-xl font-bold mb-4">
-            Sorted Items
-          </div>
-          <div className="space-y-2 mb-6">
-            {results.sorted
-              .sort((a, b) => b.elo - a.elo)
-              .map(item => (
-                <div
-                  key={item.id}
-                  className="p-2 bg-gray-100 rounded flex justify-between items-center"
-                >
-                  <span>{item.title}</span>
-                  <span className="text-sm text-gray-500">
-                    {Math.round(item.elo)}
-                  </span>
-                </div>
-              ))}
-          </div>
-        </>
-      )}
-
-      {results?.unsorted?.length > 0 && (
-        <>
-          <div className="text-xl font-bold mb-4">
-            Unsorted Items
-          </div>
-          <div className="space-y-2">
-            {results.unsorted.map(item => (
-              <div
-                key={item.id}
-                className="p-2 bg-gray-200 rounded cursor-pointer hover:bg-gray-300"
-              >
-                {item.title}
+        <div className="p-4">
+          {results?.sorted?.length > 0 && (
+            <>
+              <div className="text-xl font-bold mb-4 mt-6">
+                Sorted Items
               </div>
-            ))}
-          </div>
-        </>
-      )}
+              <div className="space-y-2 mb-6">
+                {results.sorted
+                  .sort((a, b) => b.elo - a.elo)
+                  .map(item => (
+                    <div
+                      key={item.id}
+                      className="p-2 bg-gray-100 rounded flex justify-between items-center"
+                    >
+                      <span>{item.title}</span>
+                      <span className="text-sm text-gray-500">
+                        {Math.round(item.elo)}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </>
+          )}
+
+          {results?.unsorted?.length > 0 && (
+            <>
+              <div className="text-xl font-bold mb-4">
+                Unsorted Items
+              </div>
+              <div className="space-y-2">
+                {results.unsorted.map(item => (
+                  <div
+                    key={item.id}
+                    className="p-2 bg-gray-200 rounded cursor-pointer hover:bg-gray-300"
+                  >
+                    {item.title}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+      </div>
     </div>
   );
 };
@@ -557,44 +605,6 @@ const ItemView = ({ itemId }) => {
       <h1 className="text-2xl font-bold mb-4">Item Details: {itemId}</h1>
       <div className="bg-gray-100 p-4 rounded">
         <p>Placeholder for item-specific content</p>
-      </div>
-    </div>
-  );
-};
-
-// New VoteComparisonView component
-const VoteComparisonView = () => {
-  const { queryState, updateQueryState } = useQueryState();
-
-  const handleBack = () => {
-    const newQueryState = queryState.filter(tag => !(tag.type === 'action' && tag.value === 'vote'));
-    updateQueryState(newQueryState);
-  };
-
-  return (
-    <div className="min-h-screen">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <SearchPanel searchQuery="" setSearchQuery={() => {}} />
-        <div className="p-4">
-          <button 
-            onClick={handleBack}
-            className="w-full mb-6 py-3 px-6 font-semibold rounded-lg transition-colors bg-blue-500 hover:bg-blue-600 text-white cursor-pointer"
-          >
-            ← Back to list
-          </button>
-
-          <div className="mt-8">
-            <h2 className="text-xl font-bold mb-4">Which is better?</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <button className="p-8 bg-gray-100 rounded-lg hover:bg-gray-200">
-                Item 1
-              </button>
-              <button className="p-8 bg-gray-100 rounded-lg hover:bg-gray-200">
-                Item 2
-              </button>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );
