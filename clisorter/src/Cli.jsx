@@ -908,6 +908,47 @@ const SearchResults = ({ searchQuery, queryState }) => {
     setActivePanel(2);
   };
 
+  const AuthSection = () => {
+    if (current_session.value && current_session.value.user_name) {
+      return (
+        <div
+          className="fixed top-0 right-0 p-2 dark:text-white z-50 bg-white dark:bg-black bg-opacity-90"
+        >
+          logged in as {current_session.value.user_name}{" "}
+          <button
+            className="border-2 cursor-pointer px-2 hover:bg-gray-200 dark:hover:bg-gray-700"
+            onClick={async () => {
+              await fetch("/api/logout", {
+                method: "POST",
+                credentials: "include",
+              });
+              await fetchSession();
+            }}
+          >
+            logout
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="fixed top-0 right-0 p-2 space-x-2 z-50 bg-white dark:bg-black bg-opacity-90">
+        <button
+          className="border-2 cursor-pointer px-2 hover:bg-gray-200 dark:hover:bg-gray-700 dark:text-white"
+          onClick={() => redirectToLogin()}
+        >
+          login
+        </button>
+        <button
+          className="border-2 cursor-pointer px-2 hover:bg-gray-200 dark:hover:bg-gray-700 dark:text-white"
+          onClick={() => redirectToRegister()}
+        >
+          register
+        </button>
+      </div>
+    );
+  };
+
   return (
     <>
       {advancedMode && (
