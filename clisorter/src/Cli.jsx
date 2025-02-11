@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { format } from 'timeago.js';
 
 import { ItemPanel } from './ItemPanel';
-import { current_session, useSession, isLoggedIn } from "./session";
+import { useSession, isLoggedIn } from "./session";
 import { initiateOAuth } from './oauth/useOAuth';
 import { SessionProvider } from './session';
 
