@@ -286,13 +286,14 @@ const SearchPanel = ({ searchQuery, setSearchQuery }) => {
   };
 
   const formatTagDisplay = (item) => {
+    // Don't display action tags in the pillbox
+    if (item.type === 'action') return null;
+
     switch (item.type) {
       case 'hashtag':
         return `#${item.value}`;
       case 'mention':
         return `@${item.value}`;
-      case 'action':
-        return `${item.value}${item.itemId ? ` ${item.itemId}` : ''}`;
       case 'item':
         return `item:${item.value}`;
       default:
@@ -304,23 +305,28 @@ const SearchPanel = ({ searchQuery, setSearchQuery }) => {
     <div className="p-4">
       <div className="mb-4">
         <div className="flex flex-wrap gap-2">
-          {queryState.map((item, index) => (
-            <span
-              key={`${item.type}-${item.value}-${index}`}
-              className="px-3 py-1 bg-blue-100 dark:bg-blue-900 rounded-full text-blue-800 dark:text-blue-200 flex items-center"
-            >
-              {formatTagDisplay(item)}
-              <button
-                className="ml-2 text-blue-600 hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-100"
-                onClick={() => {
-                  const newQueryState = queryState.filter((_, idx) => idx !== index);
-                  updateQueryState(newQueryState);
-                }}
+          {queryState.map((item, index) => {
+            const display = formatTagDisplay(item);
+            if (!display) return null; // Skip rendering if formatTagDisplay returns null
+            
+            return (
+              <span
+                key={`${item.type}-${item.value}-${index}`}
+                className="px-3 py-1 bg-blue-100 dark:bg-blue-900 rounded-full text-blue-800 dark:text-blue-200 flex items-center"
               >
-                ×
-              </button>
-            </span>
-          ))}
+                {display}
+                <button
+                  className="ml-2 text-blue-600 hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-100"
+                  onClick={() => {
+                    const newQueryState = queryState.filter((_, idx) => idx !== index);
+                    updateQueryState(newQueryState);
+                  }}
+                >
+                  ×
+                </button>
+              </span>
+            );
+          })}
         </div>
       </div>
       
@@ -461,9 +467,45 @@ const RankingPanel = () => {
 
 const VotingPanel = () => {
   const results = useStore(state => state.results);
+  const { queryState, updateQueryState } = useQueryState();
+
+  const getVoteStatus = () => {
+    const allItems = [...(results?.sorted || []), ...(results?.unsorted || [])];
+    
+    if (!allItems || allItems.length === 0) {
+      return { canVote: false, reason: "No items to vote on" };
+    }
+    if (allItems.length < 2) {
+      return { canVote: false, reason: "Need at least 2 items to compare" };
+    }
+    if (!allItems.every((item, _, arr) => item.domain_pk_namespace === arr[0].domain_pk_namespace)) {
+      return { canVote: false, reason: "Items must be of the same type to compare" };
+    }
+    return { canVote: true, reason: null };
+  };
+
+  const { canVote, reason } = getVoteStatus();
+
+  const handleVoteClick = () => {
+    console.log('Transitioning to voting panel...');
+    const voteAction = { type: 'action', value: 'vote' };
+    updateQueryState([...queryState, voteAction]);
+  };
 
   return (
     <div className="p-4">
+      <button
+        onClick={handleVoteClick}
+        disabled={!canVote}
+        className={`w-full mb-6 py-3 px-6 font-semibold rounded-lg transition-colors
+          ${canVote 
+            ? 'bg-blue-500 hover:bg-blue-600 text-white cursor-pointer' 
+            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+          }`}
+      >
+        {canVote ? 'Vote on these items' : reason}
+      </button>
+
       {results?.sorted?.length > 0 && (
         <>
           <div className="text-xl font-bold mb-4">
@@ -520,13 +562,57 @@ const ItemView = ({ itemId }) => {
   );
 };
 
+// New VoteComparisonView component
+const VoteComparisonView = () => {
+  const { queryState, updateQueryState } = useQueryState();
+
+  const handleBack = () => {
+    const newQueryState = queryState.filter(tag => !(tag.type === 'action' && tag.value === 'vote'));
+    updateQueryState(newQueryState);
+  };
+
+  return (
+    <div className="min-h-screen">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <SearchPanel searchQuery="" setSearchQuery={() => {}} />
+        <div className="p-4">
+          <button 
+            onClick={handleBack}
+            className="w-full mb-6 py-3 px-6 font-semibold rounded-lg transition-colors bg-blue-500 hover:bg-blue-600 text-white cursor-pointer"
+          >
+            ← Back to list
+          </button>
+
+          <div className="mt-8">
+            <h2 className="text-xl font-bold mb-4">Which is better?</h2>
+            <div className="grid grid-cols-2 gap-4">
+              <button className="p-8 bg-gray-100 rounded-lg hover:bg-gray-200">
+                Item 1
+              </button>
+              <button className="p-8 bg-gray-100 rounded-lg hover:bg-gray-200">
+                Item 2
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Updated Main Component
 export const Cli = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const { queryState } = useQueryState();
   
+  // Check if we're in voting mode
+  const isVoting = queryState.some(tag => tag.type === 'action' && tag.value === 'vote');
   // Check if we have an item in the query state
   const itemTag = queryState.find(tag => tag.type === 'item');
+
+  if (isVoting) {
+    return <VoteComparisonView />;
+  }
 
   if (itemTag) {
     return <ItemView itemId={itemTag.value} />;
@@ -534,7 +620,7 @@ export const Cli = () => {
 
   return (
     <div className="min-h-screen">
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <SearchPanel searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
         <VotingPanel />
       </div>
