@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import debounce from 'lodash/debounce';  // For debouncing
 import { useQuery } from '@tanstack/react-query';
+import { format } from 'timeago.js';
 
 import { VotePanel } from "./VotePanel";
 import { VotesPanel } from './VotesPanel';
@@ -243,10 +244,18 @@ const ActionButton = ({ onClick, text, disabled }) => (
 const VoteComparisonView = () => {
   const { queryState, updateQueryState } = useQueryState();
   const results = useStore(state => state.results);
+  const items_by_id = useStore(state => state.items_by_id);  // Get items from store
   const [sliderValue, setSliderValue] = useState(50);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const pair = results?.pair || [];
+  const votes = results?.votes || [];
+
+  // Format timestamp to readable date
+  const formatDate = (timestamp) => {
+    const date = new Date(timestamp);
+    return format(date);
+  };
 
   if (pair.length !== 2) {
     return (
@@ -369,6 +378,57 @@ const VoteComparisonView = () => {
             >
               {isSubmitting ? 'Submitting...' : 'Submit Vote'}
             </button>
+          </div>
+        </div>
+
+        {/* Vote History Section with enhanced styling */}
+        <div className="mt-12 mb-8">
+          <h3 className="text-xl font-bold mb-6 text-gray-800">Vote History</h3>
+          <div className="overflow-x-auto rounded-lg shadow">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Voter</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Left Item</th>
+                  <th className="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Magnitude</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Right Item</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {votes.map((vote, index) => {
+                  const leftItem = items_by_id[vote.left_item_id];
+                  const rightItem = items_by_id[vote.right_item_id];
+                  
+                  return (
+                    <tr key={index} className="hover:bg-gray-50 transition-colors duration-150">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatDate(vote.edited_at)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {vote.owner}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {leftItem?.title || vote.left_item_id}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                        <div className="flex items-center justify-center">
+                          <div className="w-20 h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-blue-500 rounded-full transition-all duration-200"
+                              style={{ width: `${vote.magnitude}%` }}
+                            />
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {rightItem?.title || vote.right_item_id}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
