@@ -18,4 +18,6 @@
   (db/run-migrations)
   (http/start {:port 8080}))
 
+
+
 ; On CLJS side we reuse src/user.cljs for prod entrypoint
