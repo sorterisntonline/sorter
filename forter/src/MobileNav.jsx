@@ -5,12 +5,55 @@ import { NAV_ITEMS } from './constants/navigation';
 
 export const MobileNav = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const [expandedItem, setExpandedItem] = useState(null);
   const [location, setLocation] = useLocation();
 
-  const handleNavClick = (path) => {
-    setLocation(path);
-    setIsOpen(false);
+  const handleNavClick = (path, hasChildren) => {
+    if (!hasChildren) {
+      setLocation(path);
+      setIsOpen(false);
+      setExpandedItem(null);
+    }
   };
+
+  const handleItemClick = (item) => {
+    if (item.children) {
+      setExpandedItem(expandedItem === item.name ? null : item.name);
+    } else {
+      handleNavClick(item.path, false);
+    }
+  };
+
+  const renderNavItem = (item) => (
+    <div key={item.name}>
+      <div
+        onClick={() => handleItemClick(item)}
+        className="py-4 text-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 
+          dark:text-white text-left flex justify-between items-center"
+      >
+        <span>{item.name}</span>
+        {item.children && (
+          <span className="transform transition-transform duration-200">
+            {expandedItem === item.name ? '▼' : '▶'}
+          </span>
+        )}
+      </div>
+      {item.children && expandedItem === item.name && (
+        <div className="ml-4 border-l-2 border-gray-200 dark:border-gray-700">
+          {item.children.map(child => (
+            <div
+              key={child.name}
+              onClick={() => handleNavClick(child.path, false)}
+              className="py-2 pl-4 text-base cursor-pointer hover:bg-gray-100 
+                dark:hover:bg-gray-800 dark:text-white"
+            >
+              {child.name}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <>
@@ -81,56 +124,53 @@ export const MobileNav = () => {
       )}
 
       {/* Mobile Menu */}
-      <div 
-        className={`fixed inset-y-0 left-0 w-[66%] bg-white dark:bg-black transform 
-          transition-transform duration-300 ease-in-out z-[9998] lg:hidden
-          ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
+      <div className={`fixed inset-y-0 left-0 w-[66%] bg-white dark:bg-black transform 
+        transition-transform duration-300 ease-in-out z-[9998] lg:hidden
+        ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         <div className="flex flex-col h-full pt-16 px-4">
           {/* Navigation Items */}
           <div className="flex-grow">
-            {NAV_ITEMS.map((item) => (
-              <div
-                key={item.path}
-                onClick={() => handleNavClick(item.path)}
-                className="py-4 text-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 
-                  dark:text-white text-left"
-              >
-                {item.name}
-              </div>
-            ))}
+            {NAV_ITEMS.map(renderNavItem)}
           </div>
 
           {/* Bottom Authentication Section */}
-          <div>
+          <div className="pb-6">
             {current_session.value?.user_name ? (
-              <div 
-                className="flex items-center space-x-3 p-4 cursor-pointer dark:text-white"
-                onClick={() => handleNavClick('/profile')}
-              >
-                {current_session.value.profile_image && (
-                  <img
-                    src={current_session.value.profile_image}
-                    alt="Profile"
-                    className="w-10 h-10 rounded-full"
-                  />
-                )}
-                <span className="text-lg">@{current_session.value.user_name}</span>
+              <div className="flex flex-col space-y-2">
+                <div 
+                  className="flex items-center space-x-3 p-4 cursor-pointer dark:text-white"
+                  onClick={() => handleNavClick('/profile')}
+                >
+                  {current_session.value.profile_image && (
+                    <img
+                      src={current_session.value.profile_image}
+                      alt="Profile"
+                      className="w-10 h-10 rounded-full"
+                    />
+                  )}
+                  <span className="text-lg">@{current_session.value.user_name}</span>
+                </div>
+                <div 
+                  className="px-4 text-red-500 italic cursor-pointer"
+                  onClick={() => handleNavClick('/logout')}
+                >
+                  logout
+                </div>
               </div>
             ) : (
               <div className="space-y-2">
                 <button
                   onClick={() => handleNavClick('/login')}
-                  className="w-full py-2 bg-blue-500 text-white rounded text-left"
+                  className="w-full p-2 bg-blue-500 dark:bg-blue-700 hover:bg-blue-600 dark:hover:bg-blue-800 text-white rounded text-center"
                 >
-                  Login
+                  login
                 </button>
                 <button
                   onClick={() => handleNavClick('/register')}
-                  className="w-full py-2 border border-blue-500 text-blue-500 
-                    dark:text-blue-400 dark:border-blue-400 rounded text-left"
+                  className="w-full p-2 border border-blue-500 text-blue-500 dark:text-blue-400 dark:border-blue-400 hover:bg-blue-50 dark:hover:bg-gray-800 rounded text-center"
                 >
-                  Register
+                  register
                 </button>
               </div>
             )}

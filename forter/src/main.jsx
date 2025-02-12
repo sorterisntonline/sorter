@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect } from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
 import "./index.css";
-import { Router, Route, Link, useRoute, useLocation, Switch } from "wouter";
+import { Router, Route, Switch } from "wouter";
 import { TagList } from "./TagList.jsx";
 import { TagList2 } from "./TagList2.jsx";
 import { TagList3 } from "./TagList3.jsx";
@@ -15,131 +15,15 @@ import { Integrations } from "./integrations/IntegrationsPanel.jsx";
 import { FrontpageFeed } from "./FrontpageFeed.jsx";
 import { Graph } from "./Graph.jsx";
 import { Leaderboard } from "./Leaderboard.jsx";
-import { Profile, dark_mode } from "./Profile.jsx";
+import { Profile } from "./Profile.jsx";
 import { signal } from "@preact/signals-react";
-import { current_session, fetchSession } from "./session"; // Ensure fetchSession is exported from session.js
-// import { Twitter } from "./Twitter.jsx";
-import { ProfileHoverPane } from "./ProfileHoverPane.jsx"; // Import the ProfileHoverPane component
+import { current_session, fetchSession } from "./session";
 import AnnouncementBar, { showAnnouncement } from './AnnouncementBar';
 import { MobileNav } from './MobileNav';
 import { MobileNewTagChooser } from './MobileNewTagChooser';
-import { NAV_ITEMS } from './constants/navigation';
+import { TopNav } from './TopNav';  // Import the new TopNav
 
 export const namespace = signal(false);
-
-const MyLink = (props) => {
-  const [isActive] = useRoute(props.to);
-
-  return (
-    <Link {...props} className="flex">
-      <a
-        className={
-          isActive
-            ? "dark:bg-blue-900 bg-blue-300 px-1"
-            : "px-1"
-        }
-      >
-        {props.children}
-      </a>
-    </Link>
-  );
-};
-
-const ShowLink = (props) => {
-  const [isActive, params] = useRoute(props.to);
-
-  return (
-    <a className={isActive ? "dark:bg-black px-2 underline" : ""}>
-      {isActive && params.slug !== undefined && params.slug}
-    </a>
-  );
-};
-
-const TopNav = () => {
-  const [location, setLocation] = useLocation();
-  const [currentPath] = useRoute(location);
-  const [isHovered, setIsHovered] = useState(false);
-  const [hideTimeout, setHideTimeout] = useState(null);
-
-  // Determine if the current path is /login or /register
-  const isAuthPage = location === "/login" || location === "/register";
-
-  // Check if the user is logged in
-  const isLoggedIn = current_session.value && current_session.value.user_name;
-
-  const handleMouseEnter = () => {
-    if (hideTimeout) clearTimeout(hideTimeout);
-    setIsHovered(true);
-  };
-
-  const handleMouseLeave = () => {
-    const timeout = setTimeout(() => {
-      setIsHovered(false);
-    }, 300); // 300ms delay before hiding
-    setHideTimeout(timeout);
-  };
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (hideTimeout) clearTimeout(hideTimeout);
-    };
-  }, [hideTimeout]);
-
-  return (
-    <div
-      className="fixed top-0 right-0 hidden lg:flex flex-wrap items-center justify-between bg-white dark:bg-black text-black dark:text-white w-full px-4 p-2.5 z-40 transition-[top] duration-300 ease-in"
-      style={{ 
-        top: showAnnouncement.value ? '32px' : '0',
-      }}
-    >
-      {/* Left side navigation links */}
-      <div className="flex items-center space-x-2">
-        {NAV_ITEMS.map(item => (
-          <MyLink key={item.path} to={item.path}>
-            <div className="p-0">{item.name}</div>
-          </MyLink>
-        ))}
-        <ShowLink to="/:tag/:slug" />
-      </div>
-
-      {/* Right side authentication */}
-      <div className="flex items-center">
-        {isLoggedIn ? (
-          <div 
-            className="relative"
-            onMouseEnter={handleMouseEnter}
-            onMouseLeave={handleMouseLeave}
-          >
-            <div className="cursor-default">
-              {"@" + current_session.value.user_name}
-            </div>
-            {isHovered && (
-              <ProfileHoverPane onClose={() => setIsHovered(false)} />
-            )}
-          </div>
-        ) : (
-          !isAuthPage && (
-            <div className="flex items-center gap-2">
-              <button
-                className="bg-blue-200 dark:bg-blue-950 hover:bg-blue-300 dark:hover:bg-blue-900 text-black dark:text-white px-3 py-1 transition-colors border border-transparent"
-                onClick={() => setLocation("/login")}
-              >
-                login
-              </button>
-              <button
-                className="bg-green-200 dark:bg-green-950 hover:bg-green-300 dark:hover:bg-green-900 text-black dark:text-white px-3 py-1 transition-colors border border-transparent"
-                onClick={() => setLocation("/register")}
-              >
-                register
-              </button>
-            </div>
-          )
-        )}
-      </div>
-    </div>
-  );
-};
 
 const LogoutRoute = () => {
   const [_, setLocation] = useLocation();
@@ -169,7 +53,6 @@ const LogoutRoute = () => {
   return null;
 };
 
-// === New Root Component with fetchSession useEffect ===
 const Root = () => {
   useEffect(() => {
     fetchSession();
@@ -180,14 +63,14 @@ const Root = () => {
       {/* Fixed height nav bar background with stronger constraints */}
       <div className="fixed top-0 left-0 right-0 h-[56px] min-h-[56px] flex-none bg-white dark:bg-black z-[9996] lg:hidden" />
       <MobileNav />
-      <div className="min-h-screen flex flex-col lg:pt-0"> {/* Add padding-top to account for fixed navbar */}
+      <div className="min-h-screen flex flex-col lg:pt-0">
         <AnnouncementBar />
+        <TopNav />
         <div 
           className="flex-1 transition-[margin] duration-300 ease-in-out"
           style={{ marginTop: showAnnouncement.value ? '40px' : '0' }}
         >
           <Router>
-            <TopNav />
             <Switch>
               <Route path="/login"><Login /></Route>
               <Route path="/register"><Register /></Route>
@@ -198,9 +81,6 @@ const Root = () => {
                   return <FrontpageFeed />;
                 }}
               </Route>
-              {/* <Route path="/x">
-                <Twitter />
-              </Route> */}
               <Route path="/tags3">
                 {(params) => {
                   tag.value = null;
@@ -266,7 +146,7 @@ const Root = () => {
               <Route path="/logout">
                 <LogoutRoute />
               </Route>
-              {/* 404 catch-all route - must be last and inside Switch */}
+              {/* 404 catch-all route */}
               <Route path="/:rest*">
                 <div className="flex flex-col items-center justify-center min-h-screen dark:text-white">
                   <h1 className="text-2xl mb-4">404: page not found</h1>
@@ -289,6 +169,5 @@ const Root = () => {
     </React.StrictMode>
   );
 };
-// === End of Root Component ===
 
 ReactDOM.createRoot(document.getElementById("root")).render(<Root />);

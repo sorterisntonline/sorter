@@ -1,13 +1,33 @@
 export const NAV_ITEMS = [
-  { name: 'Tags2', path: '/tags2' },
-  { name: 'Tags', path: '/' },
-  { name: 'Feed', path: '/feed' },
-  { name: 'FAQ', path: '/faq' },
-  { name: 'Leaderboard', path: '/leaderboard' },
+  { 
+    name: 'Home', 
+    path: '/' 
+  },
+  { 
+    name: 'Tags', 
+    path: '/',
+    children: [
+      { name: 'Block', path: '/' },
+      { name: 'List', path: '/tags2' },
+      { name: 'Tree', path: '/tags3' }
+    ]
+  },
+  { 
+    name: 'Feed', 
+    path: '/feed' 
+  },
+  { 
+    name: 'FAQ', 
+    path: '/faq' 
+  },
+  { 
+    name: 'Leaderboard', 
+    path: '/leaderboard' 
+  }
 ];
 
 // Routes where the new tag button should be shown
-export const NEW_TAG_ROUTES = ['/', '/tags2', '/feed', '/faq', '/leaderboard'];
+export const NEW_TAG_ROUTES = ['/', '/tags2', '/tags3'];
 
 // New tag button options
 export const NEW_TAG_BUTTONS = [

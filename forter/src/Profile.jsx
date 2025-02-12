@@ -1,8 +1,10 @@
-import React, { useState } from "react";
-import { current_session } from "./session";
+import React, { useState, useEffect } from "react";
+import { current_session, fetchSession } from "./session";
 import { UserPanel } from "./UserPanel";
 import useSWR from "swr";
 import { signal, useSignal } from "@preact/signals-react";
+import { useLocation } from "wouter";
+import { redirectToLogin } from './authUtils';
 
 export const dark_mode = signal(localStorage.getItem("dark_mode") === "true");
 const body = document.getElementsByTagName("body").item(0);
@@ -73,11 +75,36 @@ export const Profile = () => {
     const { data: users, error, isLoading } = useSWR("/api/users", fetcher);
     const { data, error: error1, isLoading: isLoading1, mutate: mutate1 } = useSWR("/api/user_group", fetcher);
     const { data: mygroups, error: error2, isLoading: isLoading2, mutate: mutate2 } = useSWR("/api/user_group/me", fetcher);
-
-    const [newGroupName, setNewGroupName] = useState("")
+    const [_, setLocation] = useLocation();
+    const [isSessionLoaded, setIsSessionLoaded] = useState(false);
+    const [newGroupName, setNewGroupName] = useState("");
     const selected_users = useSignal([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
+
+    // Wait for session to be loaded before making redirect decision
+    useEffect(() => {
+        const checkSession = async () => {
+            await fetchSession();
+            setIsSessionLoaded(true);
+        };
+        checkSession();
+    }, []);
+
+    useEffect(() => {
+        if (isSessionLoaded && !current_session.value?.user_name) {
+            redirectToLogin();
+        }
+    }, [isSessionLoaded]);
+
+    // Loading states
+    if (!isSessionLoaded) {
+        return null;
+    }
+
+    if (!current_session.value?.user_name) {
+        return null;
+    }
 
     if (isLoading || isLoading1 || isLoading2) return <h1>loading...</h1>;
     if (error || error1 || error2) return <h1>error</h1>;
@@ -113,7 +140,7 @@ export const Profile = () => {
         }
     }
 
-    return <div className="dark:text-white h-full">
+    return <div className="page-padding-top dark:text-white h-full">
         <div className="border m-3 border-dashed dark:border-gray-600 text-left lg:w-1/2"><span className="text-xl text-blue-500">@{current_session.value.user_name}</span></div>
         <div className="m-3 border border-dashed dark:border-gray-600 text-left lg:w-1/2">
             user groups you are in

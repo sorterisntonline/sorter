@@ -208,8 +208,8 @@ export const TagList = () => {
         )}
       </div>
 
-      <div className="dark:text-white flex flex-row flex-wrap">
-        {groups.map((group) => {
+      <div className="dark:text-white flex flex-col lg:flex-row lg:flex-wrap w-full">
+        {groups.map((group, index) => {
           const tags = tagsByGroup[group];
           if (!tags || tags.length === 0) {
             return <></>;
@@ -221,9 +221,17 @@ export const TagList = () => {
             return null;
           }
           return (
-            <div key={group} className="h-fit w-fit border border-dashed border-gray-200 dark:border-gray-600">
+            <div 
+              key={group} 
+              className={`h-fit w-fit border border-dashed border-gray-200 dark:border-gray-600 
+                lg:m-2
+                ${index % 2 === 1 ? 'self-end' : 'self-start'} 
+                lg:self-auto`}
+            >
               <div className="flex m-1">{group}</div>
-              {body}
+              <div className="flex flex-col">
+                {body}
+              </div>
             </div>
           );
         })}

@@ -14,6 +14,7 @@ import WarningPopup from './WarningPopup';
 import { MetaTags } from "./MetaTags";
 import AnnouncementBar, { showAnnouncement } from './AnnouncementBar';
 import { IntegrationsPanel } from './integrations/IntegrationsPanel';
+import { MobileNewItemChooser } from './MobileNewItemChooser';
 
 export const useElo = signal(false);
 export const tag = signal(false);
@@ -347,10 +348,9 @@ export const Tag = ({ isVoting, handleError }) => {
 
   const votingRender = (
     <div className="dark:text-white flex flex-col py-3">
-      {/* Mobile-first layout */}
       <div className="items-center">
         {/* First row - tag, by, attribute */}
-        <div className="flex flex-wrap items-center mb-2">
+        <div className="flex flex-wrap items-center justify-center mb-2">
           <span className="text-xl">#{tag.value.tag.slug}</span>
           <span className="px-2">by</span>
           <AttributePanel />
@@ -373,20 +373,24 @@ export const Tag = ({ isVoting, handleError }) => {
         </div>
       </div>
 
-      {/* Mobile sticky buttons */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-black z-50">
-        <button 
-          onClick={() => setShowVote(true)}
-          className="w-full py-4 bg-purple-500 text-white font-bold"
-        >
-          Vote
-        </button>
-        <button 
-          onClick={() => setShowItemPanel(true)}
-          className="w-full py-2 bg-purple-300 text-white font-bold"
-        >
-          Add an item
-        </button>
+      {/* Mobile-only full width vote button */}
+      <div className="lg:hidden">
+        {can_vote && (
+          <button
+            onClick={() => {
+              resetSelectedUsers();
+              loadTag(undefined);
+              if (namespace) {
+                setLocation('/namespace/' + namespace + '/voting');
+              } else {
+                setLocation('/' + tag.value.tag.id + '/' + tag.value.tag.slug + '/voting');
+              }
+            }}
+            className="w-full py-4 bg-purple-500 text-white font-bold mb-4"
+          >
+            vote
+          </button>
+        )}
       </div>
 
       {/* Adjust main content layout */}
@@ -423,6 +427,9 @@ export const Tag = ({ isVoting, handleError }) => {
           <ItemPanel />
         </div>
       </div>
+
+      {/* Add the floating action button for items */}
+      {can_add && <MobileNewItemChooser />}
     </div>
   );
 

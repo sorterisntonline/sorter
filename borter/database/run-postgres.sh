@@ -31,25 +31,25 @@ if docker ps -a | grep -q $NAME; then
     fi
 fi
 
-# Start the container
-docker run --rm --name $NAME \
-    --volume `pwd`/pgdata:/var/lib/pgsql/data \
-    --volume `pwd`/mnt_data:/mnt/data \
-    --volume `pwd`/pg_hba.conf:/etc/postgresql/pg_hba.conf \
-    --volume `pwd`/postgresql.conf:/etc/postgresql/postgresql.conf \
-    -e POSTGRES_PASSWORD=password \
-    -e POSTGRES_USER=postgres \
-    -e PGDATA=/var/lib/pgsql/data/pgdata14 \
-    -e POSTGRES_INITDB_ARGS="--data-checksums --encoding=UTF8" \
-    -e POSTGRES_DB=postgres \
-    -p ${HOST_PORT}:5432 \
-    ${DOCKER_REPO}:${TAG} \
-    postgres \
-    -c 'config_file=/etc/postgresql/postgresql.conf' \
-    -c 'hba_file=/etc/postgresql/pg_hba.conf' &
-
 # If PG_DUMP_DATA is provided, wait for PostgreSQL to start and import the data
 if [ ! -z "$PG_DUMP_DATA" ]; then
+    # Start container in background temporarily
+    docker run --rm --name $NAME \
+        --volume `pwd`/pgdata:/var/lib/pgsql/data \
+        --volume `pwd`/mnt_data:/mnt/data \
+        --volume `pwd`/pg_hba.conf:/etc/postgresql/pg_hba.conf \
+        --volume `pwd`/postgresql.conf:/etc/postgresql/postgresql.conf \
+        -e POSTGRES_PASSWORD=password \
+        -e POSTGRES_USER=postgres \
+        -e PGDATA=/var/lib/pgsql/data/pgdata14 \
+        -e POSTGRES_INITDB_ARGS="--data-checksums --encoding=UTF8" \
+        -e POSTGRES_DB=postgres \
+        -p ${HOST_PORT}:5432 \
+        ${DOCKER_REPO}:${TAG} \
+        postgres \
+        -c 'config_file=/etc/postgresql/postgresql.conf' \
+        -c 'hba_file=/etc/postgresql/pg_hba.conf' &
+
     echo "Waiting for PostgreSQL to start..."
     sleep 5  # Give PostgreSQL time to start
 
@@ -63,6 +63,45 @@ if [ ! -z "$PG_DUMP_DATA" ]; then
         fi
         sleep 1
     done
+
+    # Stop the temporary container
+    docker stop $NAME
+else
+    # Start container directly (no background)
+    exec docker run --rm --name $NAME \
+        --volume `pwd`/pgdata:/var/lib/pgsql/data \
+        --volume `pwd`/mnt_data:/mnt/data \
+        --volume `pwd`/pg_hba.conf:/etc/postgresql/pg_hba.conf \
+        --volume `pwd`/postgresql.conf:/etc/postgresql/postgresql.conf \
+        -e POSTGRES_PASSWORD=password \
+        -e POSTGRES_USER=postgres \
+        -e PGDATA=/var/lib/pgsql/data/pgdata14 \
+        -e POSTGRES_INITDB_ARGS="--data-checksums --encoding=UTF8" \
+        -e POSTGRES_DB=postgres \
+        -p ${HOST_PORT}:5432 \
+        ${DOCKER_REPO}:${TAG} \
+        postgres \
+        -c 'config_file=/etc/postgresql/postgresql.conf' \
+        -c 'hba_file=/etc/postgresql/pg_hba.conf'
+fi
+
+# If we had data to import, start the final container
+if [ ! -z "$PG_DUMP_DATA" ]; then
+    exec docker run --rm --name $NAME \
+        --volume `pwd`/pgdata:/var/lib/pgsql/data \
+        --volume `pwd`/mnt_data:/mnt/data \
+        --volume `pwd`/pg_hba.conf:/etc/postgresql/pg_hba.conf \
+        --volume `pwd`/postgresql.conf:/etc/postgresql/postgresql.conf \
+        -e POSTGRES_PASSWORD=password \
+        -e POSTGRES_USER=postgres \
+        -e PGDATA=/var/lib/pgsql/data/pgdata14 \
+        -e POSTGRES_INITDB_ARGS="--data-checksums --encoding=UTF8" \
+        -e POSTGRES_DB=postgres \
+        -p ${HOST_PORT}:5432 \
+        ${DOCKER_REPO}:${TAG} \
+        postgres \
+        -c 'config_file=/etc/postgresql/postgresql.conf' \
+        -c 'hba_file=/etc/postgresql/pg_hba.conf'
 fi
 
 # Add admin user if it doesn't exist

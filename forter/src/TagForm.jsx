@@ -97,7 +97,7 @@ export const TagForm = ({ mutate, onClose }) => {
       <textarea
         type="textarea"
         placeholder="tag description"
-        className="border-2 w-full dark:bg-[#181a1b]"
+        className="border-2 w-full dark:bg-[#181a1b] text-black dark:text-white"
         value={description}
         onChange={(e) => setDescription(e.target.value)}
       />
