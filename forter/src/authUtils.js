@@ -41,3 +41,21 @@ export const handleAuthReturn = () => {
     }
   }
 };
+
+// Handle user logout
+export const handleLogout = async () => {
+  try {
+    const response = await fetch("/api/logout", {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!response.ok) {
+      const msg = await response.text();
+      alert(msg);
+    }
+    window.location.href = '/';
+  } catch (error) {
+    console.error("Logout failed:", error);
+    window.location.href = '/';
+  }
+};

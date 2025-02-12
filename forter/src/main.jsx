@@ -22,33 +22,15 @@ import AnnouncementBar, { showAnnouncement } from './AnnouncementBar';
 import { MobileNav } from './MobileNav';
 import { MobileNewTagChooser } from './MobileNewTagChooser';
 import { TopNav } from './TopNav';  // Import the new TopNav
+import { handleLogout } from './authUtils';
+
 
 export const namespace = signal(false);
 
 const LogoutRoute = () => {
-  const [_, setLocation] = useLocation();
-
   useEffect(() => {
-    const performLogout = async () => {
-      try {
-        const response = await fetch("/api/logout", {
-          method: "POST",
-          credentials: "include",
-        });
-        if (!response.ok) {
-          const msg = await response.text();
-          alert(msg);
-        }
-        await fetchSession();
-        setLocation("/");
-      } catch (error) {
-        console.error("Logout failed:", error);
-        setLocation("/");
-      }
-    };
-
-    performLogout();
-  }, [setLocation]);
+    handleLogout();
+  }, []);
 
   return null;
 };
