@@ -1,13 +1,13 @@
 (ns build
   "build electric.jar library artifact and demos"
   (:require [clojure.tools.build.api :as b]
-            [org.corfield.build :as bb]))
+            [org.corfield.build :as bb]
+            [clojure.pprint :as pprint]))
 
 (def version (b/git-process {:git-args "describe --tags --long --always --dirty"}))
 (def basis (b/create-basis {:project "deps.edn"
                            ;; Add data readers configuration
-                            :aliases [:build]
-                            :extra-data-readers true}))
+                            :aliases [:build]}))
 
 (defn clean [opts]
   (bb/clean opts))
@@ -47,10 +47,7 @@
   (b/uber {:class-dir class-dir
            :uber-file (str (or jar-name (default-jar-name {:version version})))
            :basis     basis
-           :main      'prod
-           ;; Removed data readers merge to avoid parsing reader conditionals
-           ;; :data-readers true
-           })
+           :main      'prod})
 
   (println "Uberjar build complete."))
 
