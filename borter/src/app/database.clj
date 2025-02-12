@@ -118,7 +118,8 @@
   (exec! {:insert-into :users :values [{:user_name "admin" :password_hash "admin"}]})
   ;; Example usage & debugging commands:
   ;; (exec! "SELECT column_name, data_type, is_nullable, column_default FROM information_schema.columns WHERE table_name = 'comments'")
-  (migratus/create (migratus-config) "slug-namespace-unique")
+  ;; (migratus/create (migratus-config) "slug-namespace-unique")
+  ;; (migratus/create (migratus-config) "grant-tokens-privileges")
   ;; 
   ;; (migratus/migrate (migratus-config))
   ;; (migratus/rollback (migratus-config))
