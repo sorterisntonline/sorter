@@ -1,16 +1,13 @@
 (ns build
   "build electric.jar library artifact and demos"
   (:require [clojure.tools.build.api :as b]
-            [org.corfield.build :as bb]
-             ; so as not to shell out to NPM for shadow
-            
-            ))
+            [org.corfield.build :as bb]))
 
 (def version (b/git-process {:git-args "describe --tags --long --always --dirty"}))
 (def basis (b/create-basis {:project "deps.edn"
                            ;; Add data readers configuration
-                           :aliases [:build]
-                           :extra-data-readers true}))
+                            :aliases [:build]
+                            :extra-data-readers true}))
 
 (defn clean [opts]
   (bb/clean opts))
@@ -51,7 +48,10 @@
            :uber-file (str (or jar-name (default-jar-name {:version version})))
            :basis     basis
            :main      'prod
-           ;; Add data readers merge configuration
-           :data-readers true}))
+           ;; Removed data readers merge to avoid parsing reader conditionals
+           ;; :data-readers true
+           })
 
-(defn noop [_])                         ; run to preload mvn deps
+  (println "Uberjar build complete."))
+
+(defn noop [_])  ; run to preload mvn deps
