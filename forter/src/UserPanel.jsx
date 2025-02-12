@@ -4,6 +4,7 @@ import { current_session } from "./session";
 import { signal } from "@preact/signals-react";
 import { loadTag } from "./Network";
 import { dark_mode } from "./Profile";
+import { useEffect } from "react";
 
 const allUsers = {
   value: "all",
@@ -16,7 +17,6 @@ export const selected_users = signal(users ? users.split('.').map(user => {
 
 export const resetSelectedUsers = () => {
   if (current_session.value === null) return;
-  console.log("resetting selected users")
   const uname = current_session.value.user_name;
   if (uname === undefined) return;
 
@@ -24,9 +24,12 @@ export const resetSelectedUsers = () => {
   selected_users.value = [yourself];
 }
 
-
-export const UserPanel = ({ users, selected_users }) => {
-
+export const UserPanel = ({ users, selected_users: initialSelectedUsers }) => {
+  useEffect(() => {
+    if (initialSelectedUsers) {
+      selected_users.value = initialSelectedUsers;
+    }
+  }, [initialSelectedUsers]);
 
   if (users === undefined || users === null) return null;
   if (current_session.value === null) return null;
@@ -34,7 +37,8 @@ export const UserPanel = ({ users, selected_users }) => {
   const uname = current_session.value.user_name;
   const yourself = { value: uname, label: '@' + uname };
 
-  console.log(users);
+  console.log("UserPanel selected_users:", selected_users.value);
+
   const options = [
     allUsers,
     ...users
@@ -44,34 +48,32 @@ export const UserPanel = ({ users, selected_users }) => {
       }),
   ];
 
-
   if (yourself.value !== undefined) {
     options.unshift(yourself);
   }
 
   const onChange = (e) => {
-    // if we are on all, we move out of all
-    if (e.length === 0) {
+    if (e === null || e.length === 0) {
       selected_users.value = [allUsers];
     } else if (
       selected_users.value.length === 1 &&
       selected_users.value[0].value === "all"
     ) {
       selected_users.value = e.filter((user) => user.value !== "all");
-    } else if (
-      // if we are not on all, we wipe to all
-      e.some((user) => user.value === "all")
-    ) {
+    } else if (e.some((user) => user.value === "all")) {
       selected_users.value = [allUsers];
     } else {
       selected_users.value = e;
     }
 
-    loadTag(undefined);
+    // Only call loadTag if the selection actually changed
+    if (JSON.stringify(selected_users.value) !== JSON.stringify(e)) {
+      loadTag(undefined);
+    }
   };
 
   return (
-    <div className="border-4 border-blue-400 w-full max-w-full overflow-x-hidden lg:w-auto"
+    <div className="border-4 border-blue-400 w-full lg:w-auto overflow-visible"
       style={{ borderStyle: 'double' }}
     >
       <Select
@@ -95,16 +97,29 @@ export const UserPanel = ({ users, selected_users }) => {
             ...base,
             backgroundColor: dark_mode.value ? "#181a1b" : "white",
             border: 2,
-            width: '100%',
-            maxWidth: '100vw',
             borderStyle: "solid",
             borderColor: "lavender",
+            zIndex: 9999,
           }),
-          singleValue: (base) => ({
+          menuList: (base) => ({
             ...base,
-            padding: 0,
-            margin: 0,
-            backgroundColor: "red",
+            maxHeight: '50vh',
+            overflowY: 'auto',
+          }),
+          multiValue: (base) => ({
+            ...base,
+            backgroundColor: dark_mode.value ? "#2d3748" : "#e2e8f0",
+          }),
+          multiValueLabel: (base) => ({
+            ...base,
+            color: dark_mode.value ? "white" : "black",
+          }),
+          multiValueRemove: (base) => ({
+            ...base,
+            color: dark_mode.value ? "white" : "black",
+            ':hover': {
+              backgroundColor: dark_mode.value ? "#4a5568" : "#cbd5e0",
+            },
           }),
         }}
         isMulti={true}

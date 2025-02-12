@@ -97,17 +97,19 @@ const Root = () => {
                   return <Graph tagid={params.tagid} />;
                 }}
               </Route>
+              <Route path="/:tagid/:slug/voting">
+                {(params) => {
+                  console.log("Voting route hit:", params);
+                  return <App tagid={params.tagid} isVoting={true} />;
+                }}
+              </Route>
               <Route path="/:tagid/:slug">
                 {(params) => {
                   if (params.tagid === "namespace") {
                     return <></>;
                   }
-                  return <App tagid={params.tagid} />;
-                }}
-              </Route>
-              <Route path="/:tagid/:slug/voting">
-                {(params) => {
-                  return <App tagid={params.tagid} isVoting />;
+                  console.log("Regular tag route hit:", params);
+                  return <App tagid={params.tagid} isVoting={false} />;
                 }}
               </Route>
               <Route path="/faq">

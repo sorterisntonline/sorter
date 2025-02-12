@@ -3,6 +3,7 @@ import { errors } from "./ErrorPanel";
 import { pinned_left, pinned_right } from "./ItemPanel";
 import { namespace } from "./main";
 import { selected_users } from "./UserPanel";
+import { handleApiError } from './ErrorHandler';
 
 const buildQueryParams = ({ tagid }) => {
   const tag_id = tagid || (tag.value && tag.value.tag["id"]);
@@ -82,4 +83,18 @@ export const makeRequest = async (method, url, body = null) => {
 
   // Assuming the response is JSON
   return response.json();
+};
+
+// Example API call
+const fetchData = async () => {
+  try {
+    const response = await fetch('/api/data');
+    if (!response.ok) {
+      throw { status: response.status, message: await response.text() };
+    }
+    return await response.json();
+  } catch (error) {
+    handleApiError(error);
+    throw error;
+  }
 };

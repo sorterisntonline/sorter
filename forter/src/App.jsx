@@ -15,6 +15,7 @@ import { MetaTags } from "./MetaTags";
 import AnnouncementBar, { showAnnouncement } from './AnnouncementBar';
 import { IntegrationsPanel } from './integrations/IntegrationsPanel';
 import { MobileNewItemChooser } from './MobileNewItemChooser';
+import { errorState, clearError } from './ErrorHandler';
 
 export const useElo = signal(false);
 export const tag = signal(false);
@@ -166,8 +167,7 @@ const TextSummary = ({ can_vote, can_add }) => {
 
   return (
     <div className="flex flex-col text-xl justify-self-start p-2">
-      <div className="flex flex-wrap items-center">
-        {/* <div className="px-2">sorting of tag</div> */}
+      <div className="flex flex-wrap items-center justify-center lg:justify-start">
         <div
           className="bg-purple-200 text-black dark:text-white dark:bg-purple-950 p-1 cursor-pointer"
           onClick={() => setIsViewingTag(true)}
@@ -179,37 +179,64 @@ const TextSummary = ({ can_vote, can_add }) => {
         </Modal>
         <div className="px-2">by</div>
         <AttributePanel />
-        <div className="px-2"> according to </div>
-        {/* <div className="text-blue-400"> {selected_users.value.map((user) => '@' + user.value).join(", ")} </div> */}
-        <UserPanel users={tag.value.users_who_voted} selected_users={selected_users} />
-        <div className=""> . </div>
-        {(can_vote || can_add) && <div className="px-2"> You can </div>}
+        
+        {/* Desktop-only period */}
+        <div className="hidden lg:block px-2">.</div>
+        
+        <div className="w-full lg:w-auto text-center lg:text-left lg:px-2">according to</div>
+        <UserPanel users={tag.value.users_who_voted} />
+        
+        {/* Desktop-only content */}
+        <div className="hidden lg:flex items-center">
+          <div className="px-2">.</div>
+          {(can_vote || can_add) && <div className="px-2">You can</div>}
+          {can_vote && (
+            <div className="border-4 border-yellow-400 bigbutton">
+              <button
+                onClick={() => {
+                  console.log("Vote button clicked");
+                  resetSelectedUsers();
+                  if (namespace) {
+                    setLocation('/namespace/' + namespace + '/voting');
+                  } else {
+                    setLocation('/' + tag.value.tag.id + '/' + tag.value.tag.slug + '/voting');
+                  }
+                  console.log("New location set");
+                }}
+              >
+                vote
+              </button>
+            </div>
+          )}
+          {can_add && can_vote && <div className="px-2">or</div>}
+          {can_add && (
+            <button className="border-4 border-gray-300 bigbutton" onClick={popupModal}>
+              add an item
+            </button>
+          )}
+          {(can_vote || can_add) && <div className="px-2">.</div>}
+        </div>
+
+        {/* Mobile-only vote button */}
         {can_vote && (
-          <div className="border-4 border-yellow-400 bigbutton">
+          <div className="w-full lg:hidden mt-4">
             <button
-              className=""
               onClick={() => {
+                console.log("Vote button clicked");
                 resetSelectedUsers();
-                loadTag(undefined);
                 if (namespace) {
                   setLocation('/namespace/' + namespace + '/voting');
                 } else {
                   setLocation('/' + tag.value.tag.id + '/' + tag.value.tag.slug + '/voting');
                 }
+                console.log("New location set");
               }}
+              className="w-full py-4 font-bold border-4 border-yellow-400 bg-transparent text-inherit"
             >
               vote
             </button>
           </div>
         )}
-        {can_add && can_vote && <div className="px-2"> or </div>}
-        {can_add && (
-          <button className={"border-4 border-gray-300 bigbutton"} onClick={popupModal}>
-            add an item
-          </button>
-        )}
-        {(can_vote || can_add) && <div className="px-2">.</div>}
-
       </div>
     </div>
   );
@@ -222,6 +249,12 @@ export const showAllSorted = signal(true);
 export const showAllUnsorted = signal(true);
 
 export const Tag = ({ isVoting, handleError }) => {
+  console.log("=== Tag Component Debug ===");
+  console.log("Props:", { isVoting });
+  console.log("Permissions:", tag.value?.perms);
+  const { can_vote, can_view, can_add } = tag.value?.perms || {};
+  console.log("Derived permissions:", { can_vote, can_view, can_add });
+
   const [showVote, setShowVote] = useState(false);
   const [showItemPanel, setShowItemPanel] = useState(false);
   const [showAllSorted, setShowAllSorted] = useState(false);
@@ -234,8 +267,6 @@ export const Tag = ({ isVoting, handleError }) => {
   const filteredVotes = votes.filter(v => v.attribute === selected_attribute.value.value.id);
 
   const [isFeed, setIsFeed] = useState(false);
-
-  const { can_vote, can_view, can_add } = tag.value.perms;
 
   const [location, setLocation] = useLocation();
 
@@ -322,7 +353,7 @@ export const Tag = ({ isVoting, handleError }) => {
 
   const votesList = (
     <div className={" p-3 " + (toggle.value ? "lg:w-2/3" : "lg:w-1/3")}>
-      <div className="lg:flex lg:space-x-4">
+      <div className="lg:flex lg:space-x-12">
         {sorteditems?.length > 0 && (
           <div className={unsorteditems?.length > 0 ? "lg:w-1/2" : "lg:w-full"}>
             <SortedList 
@@ -364,7 +395,7 @@ export const Tag = ({ isVoting, handleError }) => {
         {/* Third row - UserPanel (full width on mobile) */}
         <div className="w-full lg:flex lg:items-center">
           <div className="hidden lg:block px-2">according to</div>
-          <UserPanel users={tag.value.users_who_voted} selected_users={selected_users} />
+          <UserPanel users={tag.value.users_who_voted} />
         </div>
 
         {/* Desktop-only text */}
@@ -378,13 +409,14 @@ export const Tag = ({ isVoting, handleError }) => {
         {can_vote && (
           <button
             onClick={() => {
+              console.log("Vote button clicked");
               resetSelectedUsers();
-              loadTag(undefined);
               if (namespace) {
                 setLocation('/namespace/' + namespace + '/voting');
               } else {
                 setLocation('/' + tag.value.tag.id + '/' + tag.value.tag.slug + '/voting');
               }
+              console.log("New location set");
             }}
             className="w-full py-4 bg-purple-500 text-white font-bold mb-4"
           >
@@ -448,60 +480,73 @@ export const Tag = ({ isVoting, handleError }) => {
             can_vote={can_vote}
             can_add={can_add}
           />
-          {showVote && <VotePanel handleError={handleError}/>}
-          <div className="flex lg:flex-row flex-col">
+          <div className="flex lg:flex-row flex-col lg:space-x-24">
             {votesList}
-            <div className="flex flex-col">
-              <div
-                className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
-                onClick={() => toggle.value = !toggle.value}
-                role="button"
-              >
-                {toggle.value ? "[more space <-]" : "[less space ->]"}
-              </div>
-              <div
-                className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
-                onClick={() => {
-                  useElo.value = !useElo.value;
-                  loadTag(undefined);
-                }}
-                role="button"
-              >
-                {useElo.value ? "[use pagerank]" : "[use elo]"}
-              </div>
-              <div
-                className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
-                onClick={() => {
-                  setLocation('/' + tag.value.tag.id + '/' + tag.value.tag.slug + '/graph');
-                }}
-                role="button"
-              >
-                [show graph]
-              </div>
-              <div
-                className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
-                onClick={() => {
-                  showPin.value = !showPin.value;
-                }}
-                role="button"
-              >
-                {showPin.value ? "[hide pin]" : "[show pin]"}
-              </div>
-
-            </div>
-            <div className={"page-padding-top " + (toggle.value ? "lg:w-1/4" : "lg:w-2/3")}>
-                <div className="sticky top-0 z-10">
-                    <ItemPanel />
+            <div className="lg:ml-auto lg:w-1/4">
+              <div className="flex flex-col">
+                <div
+                  className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
+                  onClick={() => toggle.value = !toggle.value}
+                  role="button"
+                >
+                  {toggle.value ? "[more space <-]" : "[less space ->]"}
                 </div>
+                <div
+                  className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
+                  onClick={() => {
+                    useElo.value = !useElo.value;
+                    loadTag(undefined);
+                  }}
+                  role="button"
+                >
+                  {useElo.value ? "[use pagerank]" : "[use elo]"}
+                </div>
+                <div
+                  className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
+                  onClick={() => {
+                    setLocation('/' + tag.value.tag.id + '/' + tag.value.tag.slug + '/graph');
+                  }}
+                  role="button"
+                >
+                  [show graph]
+                </div>
+                <div
+                  className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
+                  onClick={() => {
+                    showPin.value = !showPin.value;
+                  }}
+                  role="button"
+                >
+                  {showPin.value ? "[hide pin]" : "[show pin]"}
+                </div>
+
+              </div>
+              <div className="page-padding-top">
+                <div className="sticky top-0 z-10">
+                  <ItemPanel />
+                </div>
+              </div>
             </div>
-          </div >
-        </div >
+          </div>
+        </div>
+        <WarningPopup 
+          isOpen={errorState.value.isOpen}
+          onClose={clearError}
+          duration={errorState.value.duration}
+          showLogin={errorState.value.showLogin}
+        >
+          {errorState.value.message}
+        </WarningPopup>
       </>
     );
   }
 };
 
 function App({ tagid, isVoting }) {
+  console.log("=== App Debug ===");
+  console.log("Props:", { tagid, isVoting });
+  console.log("Tag value:", tag.value);
+  
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [initialLoad, setInitialLoad] = useState(true);
@@ -516,27 +561,11 @@ function App({ tagid, isVoting }) {
   };
 
   useEffect(() => {
-    // Clear selected item on initial load unless there's an item parameter
-    const params = new URLSearchParams(window.location.search);
-    const itemId = params.get('item');
-    if (!itemId) {
-      selected_item.value = null;
-    }
+    console.log("Loading tag with ID:", tagid);
     loadTag(tagid);
-  }, []);
+  }, [tagid, location]);
 
   useEffect(() => {
-    // Only scroll if it's the initial load with an item parameter
-    // const params = new URLSearchParams(window.location.search);
-    // const itemId = params.get('item');
-    // if (selected_item.value && initialLoad && itemId) {
-    //   const element = document.getElementById(`item-${selected_item.value.id}`);
-    //   if (element) {
-    //     element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    //   }
-    // }
-    // setInitialLoad(false);
-
     // TODO: decide if we want this 
     /* Original auto-scrolling behavior (scrolls on every item selection): */
     if (selected_item.value) {
