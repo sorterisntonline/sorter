@@ -7,7 +7,10 @@
             ))
 
 (def version (b/git-process {:git-args "describe --tags --long --always --dirty"}))
-(def basis (b/create-basis {:project "deps.edn"}))
+(def basis (b/create-basis {:project "deps.edn"
+                           ;; Add data readers configuration
+                           :aliases [:build]
+                           :extra-data-readers true}))
 
 (defn clean [opts]
   (bb/clean opts))
@@ -47,6 +50,8 @@
   (b/uber {:class-dir class-dir
            :uber-file (str (or jar-name (default-jar-name {:version version})))
            :basis     basis
-           :main      'prod}))
+           :main      'prod
+           ;; Add data readers merge configuration
+           :data-readers true}))
 
 (defn noop [_])                         ; run to preload mvn deps
