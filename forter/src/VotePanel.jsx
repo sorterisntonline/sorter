@@ -25,9 +25,9 @@ const MobileVoteCard = ({ item, isTop, dragX, magnitudeMotionValue }) => {
 
   return (
     <motion.div
-      className="absolute w-[90vw] h-[40vh] rounded-xl overflow-hidden bg-white dark:bg-gray-800 shadow-lg"
+      className="absolute w-[90vw] h-[38vh] rounded-xl overflow-hidden bg-white dark:bg-gray-800 shadow-lg"
       style={{
-        top: isTop ? '4vh' : '44vh',  // Reduced space after slider
+        top: isTop ? '4vh' : '46vh',  // 4vh gap between cards (was 44vh)
         y: useTransform(
           magnitudeMotionValue,
           [0, 50, 100],
@@ -54,8 +54,12 @@ const MobileVoteCard = ({ item, isTop, dragX, magnitudeMotionValue }) => {
     >
       {(item.domain_pk_namespace === "IMG" || item.domain_pk_namespace === "reddit.post") && item.url && (
         <div
-          className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: `url(${item.url})` }}
+          className="absolute inset-0 bg-center"
+          style={{ 
+            backgroundImage: `url(${item.url})`,
+            backgroundSize: 'cover',  // Ensure image covers the whole area
+            backgroundPosition: 'center',  // Center the image
+          }}
         />
       )}
       <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
@@ -66,7 +70,7 @@ const MobileVoteCard = ({ item, isTop, dragX, magnitudeMotionValue }) => {
   );
 };
 
-const MobileVoteSlider = ({ dragX }) => {
+const MobileVoteSlider = ({ dragX, onSliderDrag }) => {
   const maxSliderWidth = window.innerWidth * 0.45;
 
   const sliderX = useTransform(
@@ -79,10 +83,17 @@ const MobileVoteSlider = ({ dragX }) => {
     <div className="fixed top-0 left-0 right-0 h-14 bg-white dark:bg-black flex items-center justify-center z-30">
       <div className="w-[90vw] h-1 bg-gray-300 dark:bg-gray-600 rounded">
         <motion.div
-          className="w-3 h-3 -translate-y-1 flex justify-center absolute left-1/2 -translate-x-1/2"
+          className="w-3 h-3 -translate-y-1 flex justify-center absolute left-1/2 -translate-x-1/2 cursor-grab active:cursor-grabbing"
           initial={{ x: 0 }}
           animate={{ x: sliderX }}
           style={{ x: sliderX }}
+          drag="x"
+          dragConstraints={{ left: -maxSliderWidth, right: maxSliderWidth }}
+          onDrag={(_, info) => {
+            // Convert slider position back to dragX range
+            const dragValue = (info.offset.x / maxSliderWidth) * 300;
+            onSliderDrag(dragValue);
+          }}
         >
           <div className="w-0 h-0 
                       border-l-[6px] border-l-transparent
@@ -140,7 +151,6 @@ export const VotePanel = ({ handleError, isMobile = false }) => {
     const dragX = useMotionValue(0);
     const magnitudeMotionValue = useMotionValue(50);
 
-    // Force initial center position
     useEffect(() => {
       requestAnimationFrame(() => {
         dragX.set(0);
@@ -150,10 +160,15 @@ export const VotePanel = ({ handleError, isMobile = false }) => {
     }, []);
 
     const handleDrag = (_, info) => {
-      // Debug: Log the drag info
-      console.log('Drag info:', info.offset.x);
       dragX.set(info.offset.x);
       const newMagnitude = Math.min(Math.max((info.offset.x + 300) / 6, 0), 100);
+      magnitude.value = newMagnitude;
+      magnitudeMotionValue.set(newMagnitude);
+    };
+
+    const handleSliderDrag = (dragValue) => {
+      dragX.set(dragValue);
+      const newMagnitude = Math.min(Math.max((dragValue + 300) / 6, 0), 100);
       magnitude.value = newMagnitude;
       magnitudeMotionValue.set(newMagnitude);
     };
@@ -175,8 +190,11 @@ export const VotePanel = ({ handleError, isMobile = false }) => {
     };
 
     return (
-      <div className="relative h-screen w-screen overflow-hidden bg-gray-100 dark:bg-gray-900">
-        <MobileVoteSlider dragX={dragX} />
+      <div className="relative h-[88vh] w-screen overflow-hidden bg-gray-100 dark:bg-gray-900">
+        <MobileVoteSlider 
+          dragX={dragX} 
+          onSliderDrag={handleSliderDrag}
+        />
         
         <div className="absolute inset-0 flex flex-col items-center z-10">
           <MobileVoteCard 

@@ -45,7 +45,7 @@ export const Voting = ({ handleError }) => {
         <>
           <div className="w-full flex justify-center flex-col">
             <VotePanel handleError={handleError} isMobile={true} />
-            <br />
+            <br /><br />
             <VotesPanel votes={filteredVotes} />
           </div>
           <button
