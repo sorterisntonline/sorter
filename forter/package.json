@@ -10,7 +10,7 @@
     "development": "ENVIRONMENT=development vite build --mode development",
     "staging": "ENVIRONMENT=staging vite build --mode staging",
     "production": "ENVIRONMENT=production vite build --mode production",
-    "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
+    "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {

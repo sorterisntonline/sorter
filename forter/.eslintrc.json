@@ -24,6 +24,18 @@
     }
   },
   "rules": {
-    "react/react-in-jsx-scope": "off"
-  }
+    "react/react-in-jsx-scope": "off",
+    "no-unused-vars": "error",
+    "react-refresh/only-export-components": "warn"
+  },
+  "reportUnusedDisableDirectives": true,
+  "ignorePatterns": ["dist/*"],
+  "overrides": [
+    {
+      "files": ["*.js", "*.jsx"],
+      "rules": {
+        "max-warnings": 0
+      }
+    }
+  ]
 } 
