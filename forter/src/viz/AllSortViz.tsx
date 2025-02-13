@@ -5,6 +5,14 @@ import * as d3 from "d3";
 import rawSampleItems from "./items.json";
 import rawSampleVotes from "./votes.json";
 
+/**
+ * Wanted a place to stash this code.
+ * Usage:
+ *
+ * <AllSortViz /> in index or something
+ *
+ */
+
 interface Item {
   id: string;
   name: string;
@@ -36,21 +44,37 @@ const categoryColors = {
 const sampleItems = rawSampleItems as unknown as Item[];
 const sampleVotes = rawSampleVotes as unknown as Vote[];
 
-const Graph3D = () => {
+interface AllSortVizProps {
+  width?: number;
+  height?: number;
+}
+
+/**
+ * Basic 3D visualisation of all items and votes.
+ * Informed by D3 force graphs.
+ * Probably a bad implementation, please modify and fix and optimise.
+ *
+ * @param width - width of the container
+ * @param height - height of the container
+ * @returns - a div containing the 3D visualisation
+ */
+const AllSortViz = ({ width = 800, height = 600 }: AllSortVizProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const width = 800;
-    const height = 600;
-
     const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xffffff); // Set white background
     const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
     camera.position.set(200, 200, 300);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true, // Enable transparency
+    });
     renderer.setSize(width, height);
+    renderer.setClearColor(0x000000, 0); // Make background transparent
     containerRef.current.appendChild(renderer.domElement);
 
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -165,7 +189,7 @@ const Graph3D = () => {
       renderer.dispose();
       controls.dispose();
     };
-  }, []);
+  }, [width, height]);
 
   return (
     <div className="container" ref={containerRef}>
@@ -178,4 +202,4 @@ const Graph3D = () => {
   );
 };
 
-export default Graph3D;
+export default AllSortViz;

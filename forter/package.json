@@ -6,7 +6,7 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite build --watch --mode development",
-    "dev:client": "ENVIRONMENT=development vite",
+    "dev:client": "echo 'starting client-only dev server' && ENVIRONMENT=development vite",
     "development": "ENVIRONMENT=development vite build --mode development",
     "staging": "ENVIRONMENT=staging vite build --mode staging",
     "production": "ENVIRONMENT=production vite build --mode production",

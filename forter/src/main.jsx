@@ -22,6 +22,8 @@ import { current_session, fetchSession } from "./session"; // Ensure fetchSessio
 import { ProfileHoverPane } from "./ProfileHoverPane.jsx"; // Import the ProfileHoverPane component
 import AnnouncementBar, { showAnnouncement } from './AnnouncementBar';
 
+import AllSortViz from './viz/AllSortViz';
+
 export const namespace = signal(false);
 
 const MyLink = (props) => {
@@ -185,6 +187,7 @@ const Root = () => {
   return (
     <React.StrictMode>
       <div className="min-h-screen flex flex-col">
+        <AllSortViz />
         <AnnouncementBar />
         <div 
           className="flex-1 transition-[margin] duration-300 ease-in-out"
