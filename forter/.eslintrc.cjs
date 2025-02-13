@@ -14,11 +14,14 @@ module.exports = {
     ecmaVersion: "latest",
     sourceType: "module",
     project: ["./tsconfig.json", "./tsconfig.node.json"],
+    tsconfigRootDir: ".",
     ecmaFeatures: {
       jsx: true,
     },
   },
-  settings: { react: { version: "18.2" } },
+  settings: {
+    react: { version: "18.2" },
+  },
   plugins: ["react-refresh", "@typescript-eslint", "react"],
   rules: {
     "react-refresh/only-export-components": [
@@ -27,14 +30,41 @@ module.exports = {
     ],
     "@typescript-eslint/no-explicit-any": "warn",
     "react/react-in-jsx-scope": "off",
-    "no-unused-vars": "error",
+    "react/prop-types": "off",
+    "@typescript-eslint/no-unused-vars": [
+      "warn",
+      {
+        argsIgnorePattern: "^_",
+        varsIgnorePattern: "^_",
+        ignoreRestSiblings: true,
+      },
+    ],
+    "no-unused-vars": "off",
+    "react/no-unescaped-entities": "off",
+    "react/no-unknown-property": "off",
+    "react/jsx-key": "warn",
+    "react-hooks/exhaustive-deps": "warn",
   },
   reportUnusedDisableDirectives: true,
   overrides: [
     {
-      files: ["*.js", "*.jsx"],
+      files: ["*.js", "*.jsx", "*.cjs"],
       rules: {
-        "max-warnings": 0,
+        "@typescript-eslint/no-unused-vars": "off",
+        "no-unused-vars": [
+          "warn",
+          {
+            argsIgnorePattern: "^_",
+            varsIgnorePattern: "^_",
+            ignoreRestSiblings: true,
+          },
+        ],
+      },
+    },
+    {
+      files: ["vite.config.ts", "tailwind.config.js", "vite.config.js"],
+      parserOptions: {
+        project: ["./tsconfig.node.json"],
       },
     },
   ],
