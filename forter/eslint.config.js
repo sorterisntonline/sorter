@@ -4,7 +4,23 @@ import tsParser from "@typescript-eslint/parser";
 import reactPlugin from "eslint-plugin-react";
 import reactRefreshPlugin from "eslint-plugin-react-refresh";
 import reactHooksPlugin from "eslint-plugin-react-hooks";
-import globals from "globals";
+
+const browserGlobals = {
+  window: true,
+  document: true,
+  navigator: true,
+  console: true,
+  fetch: true,
+  localStorage: true,
+  setTimeout: true,
+  clearTimeout: true,
+  alert: true,
+  confirm: true,
+  requestAnimationFrame: true,
+  process: true,
+  location: true,
+  history: true,
+};
 
 export default [
   {
@@ -21,16 +37,18 @@ export default [
         project: ["./tsconfig.json", "./tsconfig.node.json"],
         tsconfigRootDir: ".",
       },
-      globals: {
-        ...globals.browser,
-        ...globals.es2020,
-      },
+      globals: browserGlobals,
     },
     plugins: {
       "@typescript-eslint": tsPlugin,
       react: reactPlugin,
       "react-refresh": reactRefreshPlugin,
       "react-hooks": reactHooksPlugin,
+    },
+    settings: {
+      react: {
+        version: "detect",
+      },
     },
     rules: {
       ...js.configs.recommended.rules,
@@ -58,6 +76,9 @@ export default [
       "react/no-unknown-property": "off",
       "react/jsx-key": "warn",
       "react-hooks/exhaustive-deps": "warn",
+      "no-undef": "error",
+    },
+    linterOptions: {
       reportUnusedDisableDirectives: true,
     },
   },
@@ -76,11 +97,18 @@ export default [
     },
   },
   {
-    files: ["**/vite.config.{ts,js}", "**/tailwind.config.js"],
+    files: ["**/*.config.ts"],
     languageOptions: {
       parserOptions: {
         project: ["./tsconfig.node.json"],
       },
+    },
+  },
+  {
+    files: ["**/*.config.js"],
+    languageOptions: {
+      ecmaVersion: "latest",
+      sourceType: "module",
     },
   },
 ];
