@@ -5,6 +5,10 @@ import * as d3 from "d3";
 import rawSampleItems from "./items.json";
 import rawSampleVotes from "./votes.json";
 
+// These are the full datasets; they can crash your browser. Be careful!
+// import rawSampleItems from "./full/items.json";
+// import rawSampleVotes from "./full/votes.json";
+
 /**
  * Wanted a place to stash this code.
  * Usage:
