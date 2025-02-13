@@ -2,7 +2,7 @@
 const getAuthDomain = () => {
   const hostname = window.location.hostname;
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    return 'http://localhost:3000';
+    return `${window.location.protocol}//${window.location.host}`;
   }
   return 'https://sorter.social';
 };
@@ -29,13 +29,13 @@ export const handleAuthReturn = () => {
   
   if (returnPath && returnPath.includes('/music')) {
     if (isLocalhost) {
-      window.location.href = `http://localhost:3000${returnPath}`;
+      window.location.href = `${window.location.protocol}//${window.location.host}${returnPath}`;
     } else {
       window.location.href = `https://music.sorter.social${returnPath.replace('/music', '')}`;
     }
   } else {
     if (isLocalhost) {
-      window.location.href = 'http://localhost:3000';
+      window.location.href = `${window.location.protocol}//${window.location.host}`;
     } else {
       window.location.href = 'https://sorter.social';
     }

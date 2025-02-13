@@ -402,7 +402,10 @@
 (def app
   (-> (ring/ring-handler
        (ring/router routes)
-       #'test)
+       (fn [request]
+         (if (re-matches #".+\.(js|css|map|ico|png|jpg|jpeg|gif|svg)$" (:uri request))
+           nil  ; Let wrap-resource handle asset requests
+           (#'test request))))  ; Serve index.html for other routes
 
       (wrap-exception)
       (mw/wrap-params)
