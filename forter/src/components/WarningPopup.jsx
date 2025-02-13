@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const WarningPopup = ({ 
+export const WarningPopup = ({ 
   isOpen, 
   onClose, 
   children, 
@@ -98,5 +98,3 @@ const WarningPopup = ({
     </AnimatePresence>
   );
 };
-
-export default WarningPopup;

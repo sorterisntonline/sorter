@@ -42,16 +42,19 @@ const Root = () => {
   }, []);
 
   const [location] = useLocation();
+  const isVoting = location.includes('/voting');
   
   // Only handle tag chooser here
   const showTagChooser = NEW_TAG_ROUTES.includes(location) && current_session.value?.user_name;
 
   return (
     <React.StrictMode>
-      {/* Fixed height nav bar background with stronger constraints */}
-      <div className="fixed top-0 left-0 right-0 h-[56px] min-h-[56px] flex-none bg-white dark:bg-black z-[9996] lg:hidden" />
+      {/* Only show nav bar and its space if not voting */}
+      {!isVoting && (
+        <div className="fixed top-0 left-0 right-0 h-[56px] min-h-[56px] flex-none bg-white dark:bg-black z-[9996] lg:hidden" />
+      )}
       <MobileNav />
-      <div className="min-h-screen flex flex-col lg:pt-0">
+      <div className={`min-h-screen flex flex-col lg:pt-0 ${!isVoting ? 'pt-[56px]' : ''}`}>
         <AnnouncementBar />
         <TopNav />
         <div 

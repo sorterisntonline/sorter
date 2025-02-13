@@ -8,6 +8,11 @@ export const MobileNav = () => {
   const [expandedItem, setExpandedItem] = useState(null);
   const [location, setLocation] = useLocation();
 
+  // Hide nav if we're in voting mode
+  if (location.includes('/voting')) {
+    return null;
+  }
+
   const handleNavClick = (path, hasChildren) => {
     if (!hasChildren) {
       setLocation(path);

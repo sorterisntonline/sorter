@@ -4,6 +4,7 @@ import { loadTag, makeRequest } from "./Network";
 import { signal } from "@preact/signals-react";
 import MarkdownRenderer from "./MarkdownRenderer";
 import { motion, AnimatePresence } from 'framer-motion';
+import { Item } from "./components/Item";
 const createEmbedUrl = (item) => {
   const [code, time] = item["domain_pk"].split("?t=")
 

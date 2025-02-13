@@ -1,9 +1,7 @@
-import { items_by_id, selected_item } from "./App";
+import { items_by_id, selected_item, tag } from "./App";
 import { makeRequest } from "./Network";
 import { current_session } from "./session";
 import { magnitude } from "./App";
-
-import { tag } from "./App";
 
 export const Vote = ({ vote, showDelete }) => {
   const leftItem = items_by_id.value[vote["left_item_id"]] || { title: vote.left_title };
