@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "ENVIRONMENT=development vite build --watch --mode development",
+    "dev": "vite build --watch --mode development",
+    "dev:client": "ENVIRONMENT=development vite",
     "development": "ENVIRONMENT=development vite build --mode development",
     "staging": "ENVIRONMENT=staging vite build --mode staging",
     "production": "ENVIRONMENT=production vite build --mode production",
@@ -36,6 +37,7 @@
   },
   "devDependencies": {
     "@types/d3": "^7.4.3",
+    "@types/node": "^22.13.2",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@types/three": "^0.173.0",
