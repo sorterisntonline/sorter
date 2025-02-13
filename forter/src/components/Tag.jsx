@@ -14,6 +14,7 @@ import { MobileNewItemChooser } from "./MobileNewItemChooser";
 import { WarningPopup } from "./WarningPopup";
 import { errorState, clearError } from "../ErrorHandler";
 import { TextSummary } from "./TextSummary";
+import { selected_item } from "../App";
 
 export const Tag = ({ isVoting, handleError }) => {
   const [location, setLocation] = useLocation();
@@ -44,7 +45,105 @@ export const Tag = ({ isVoting, handleError }) => {
         title={`sorter - #${tag.value.tag.slug}`}
         image="/logoanim.gif"
       />
-      {/* Rest of the Tag component implementation */}
+      <div className="dark:text-white justify-start">
+        <IntegrationsPanel />
+        <TextSummary can_vote={can_vote} can_add={can_add} />
+        
+        {/* Mobile ItemPanel - positioned between TextSummary and ItemsLists */}
+        {isMobileDevice() && editing_item.value && (
+          <div className="p-4 bg-white dark:bg-black">
+            <div className="relative">
+              <ItemPanel />
+              <button
+                className="absolute top-0 right-0 text-2xl p-4"
+                onClick={() => {
+                  editing_item.value = null;
+                  selected_item.value = false;
+                }}
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="flex lg:flex-row flex-col lg:space-x-24">
+          <div className="flex-1">
+            <ItemsLists 
+              sorteditems={tag.value.sorted}
+              unsorteditems={tag.value.unsorted}
+              skippedItems={tag.value.skipped}
+            />
+            {/* Mobile selected item view */}
+            {isMobileDevice() && selected_item.value && (
+              <div className="fixed inset-0 bg-white dark:bg-black z-50 overflow-auto p-4">
+                <ItemPanel />
+                <button
+                  className="fixed top-4 right-4 text-2xl p-4"
+                  onClick={() => {
+                    selected_item.value = false;
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            )}
+          </div>
+          
+          {/* Desktop sidebar */}
+          <div className="lg:ml-auto lg:w-1/4">
+            <div className="flex flex-col">
+              <div
+                className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
+                onClick={() => toggle.value = !toggle.value}
+                role="button"
+              >
+                {toggle.value ? "[more space <-]" : "[less space ->]"}
+              </div>
+              <div
+                className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
+                onClick={() => {
+                  useElo.value = !useElo.value;
+                  loadTag(undefined);
+                }}
+                role="button"
+              >
+                {useElo.value ? "[use pagerank]" : "[use elo]"}
+              </div>
+              <div
+                className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
+                onClick={() => {
+                  setLocation('/' + tag.value.tag.id + '/' + tag.value.tag.slug + '/graph');
+                }}
+                role="button"
+              >
+                [show graph]
+              </div>
+              <div
+                className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
+                onClick={() => {
+                  showPin.value = !showPin.value;
+                }}
+                role="button"
+              >
+                {showPin.value ? "[hide pin]" : "[show pin]"}
+              </div>
+            </div>
+            <div className="page-padding-top hidden lg:block">
+              <div className="sticky top-0 z-10">
+                {(editing_item.value || selected_item.value) && <ItemPanel />}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Show MobileNewItemChooser on mobile when not editing/viewing */}
+      {isMobileDevice() && can_add && !isVoting && !selected_item.value && (
+        <div className="fixed bottom-4 right-4 z-[99999]">
+          <MobileNewItemChooser />
+        </div>
+      )}
     </>
   );
 }; 

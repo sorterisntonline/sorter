@@ -109,19 +109,21 @@ function App({ tagid, isVoting }) {
   }, [tagid]);
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <AnnouncementBar />
-      <div className="flex-1 page-padding-top">
-        {tag.value && <Tag isVoting={isVoting} handleError={handleError}/>}
-        <ErrorPanel />
-        <WarningPopup isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
-          <div className="p-4">
-            <h2 className="text-lg font-bold">login required</h2>
-            <p>{errorMessage}</p>
-          </div>
-        </WarningPopup>
+    <>
+      <div className={`min-h-screen flex flex-col ${isVoting ? 'h-screen' : ''}`}>
+        <AnnouncementBar />
+        <div className={`flex-1 ${!isVoting ? 'page-padding-top' : ''}`}>
+          {tag.value && <Tag isVoting={isVoting} handleError={handleError}/>}
+        </div>
       </div>
-    </div>
+      <ErrorPanel />
+      <WarningPopup isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
+        <div className="p-4">
+          <h2 className="text-lg font-bold">login required</h2>
+          <p>{errorMessage}</p>
+        </div>
+      </WarningPopup>
+    </>
   );
 }
 

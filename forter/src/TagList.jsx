@@ -39,32 +39,6 @@ const TagButton = ({ mutate }) => {
   );
 };
 
-const TagSuggestion = ({ suggestion, onSelect }) => {
-  const getIcon = () => {
-    switch (suggestion.domain_pk_namespace) {
-      case 'spotify.artist':
-      case 'spotify.album':
-      case 'spotify.track':
-        return <SpotifyIcon />;
-      default:
-        return null;
-    }
-  };
-
-  return (
-    <div
-      onClick={() => onSelect(suggestion)}
-      className="flex items-center p-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
-    >
-      {getIcon()}
-      <span className="ml-2">{suggestion.tag}</span>
-      <span className="ml-2 text-sm text-gray-500">
-        ({suggestion.domain_pk_namespace?.split('.')[1]})
-      </span>
-    </div>
-  );
-};
-
 export const SingleTag = ({ tagg }) => {
   const [location, navigate] = useLocation();
 
@@ -103,51 +77,7 @@ const fetcher = (arg) => fetch(arg).then((res) => res.json());
 
 export const TagList = () => {
   const { data, error, isLoading, mutate } = useSWR("/api/tag", fetcher);
-  const [location, navigate] = useLocation();
   const [search, setSearch] = useState("");
-  const [suggestions, setSuggestions] = useState([]);
-  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
-  const searchTimeoutRef = useRef(null);
-
-  useEffect(() => {
-    if (search.trim()) {
-      setIsLoadingSuggestions(true);
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
-
-      searchTimeoutRef.current = setTimeout(async () => {
-        try {
-          const response = await fetch(`/api/tags/suggest?query=${encodeURIComponent(search)}`);
-          if (response.ok) {
-            const data = await response.json();
-            setSuggestions(data.suggestions);
-          }
-        } catch (error) {
-          console.error('Failed to fetch suggestions:', error);
-        } finally {
-          setIsLoadingSuggestions(false);
-        }
-      }, 300);
-
-      return () => {
-        if (searchTimeoutRef.current) {
-          clearTimeout(searchTimeoutRef.current);
-        }
-      };
-    } else {
-      setSuggestions([]);
-      setIsLoadingSuggestions(false);
-    }
-  }, [search]);
-
-  const handleSuggestionSelect = async (suggestion) => {
-    setSearch('');
-    setSuggestions([]);
-    if (suggestion.id) {
-      navigate(`/${suggestion.id}/${suggestion.slug}`);
-    }
-  };
 
   if (isLoading) return <h1 className="pt-4"> loading... </h1>;
   if (error) return <h1 className="pt-4"> error </h1>;
@@ -184,29 +114,12 @@ export const TagList = () => {
         <Linear />
       </div>
 
-      <div className="relative">
-        <input 
-          className="w-full m-1 p-1 focus:outline-none dark:text-white dark:bg-[#181a1b]" 
-          placeholder="search..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        {(isLoadingSuggestions || suggestions.length > 0) && (
-          <div className="absolute z-10 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg">
-            {isLoadingSuggestions ? (
-              <div className="p-2 text-center text-gray-500">Loading suggestions...</div>
-            ) : (
-              suggestions.map((suggestion, index) => (
-                <TagSuggestion
-                  key={index}
-                  suggestion={suggestion}
-                  onSelect={handleSuggestionSelect}
-                />
-              ))
-            )}
-          </div>
-        )}
-      </div>
+      <input 
+        className="w-full m-1 p-1 focus:outline-none dark:text-white dark:bg-[#181a1b]" 
+        placeholder="search..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
 
       <div className="dark:text-white flex flex-col lg:flex-row lg:flex-wrap w-full">
         {groups.map((group, index) => {

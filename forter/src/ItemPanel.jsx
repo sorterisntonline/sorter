@@ -181,6 +181,34 @@ export const editing_item = signal(false);
 const fetcher = (arg) => fetch(arg).then((res) => res.json());
 export const ItemPanel = () => {
   const item = selected_item.value;
+  const [location, setLocation] = useLocation();
+  const [isAddingToAnotherTag, setIsAddingToAnotherTag] = useState(false);
+  const isMobileDevice = () => window.innerWidth < 1024;
+
+  // If we're editing, show the ItemForm
+  if (editing_item.value) {
+    return <ItemForm />;
+  }
+
+  // If no item selected and not editing, show nothing
+  if (!item && !editing_item.value) {
+    return null;
+  }
+
+  const { data, error, isLoading, mutate } = useSWR(
+    "/api/item/membership?item_id=" + (item?.id ?? -1),
+    fetcher
+  );
+
+  if (isLoading) return <h1>loading...</h1>;
+  if (error) return <h1>error</h1>;
+
+  const { membership = [], skips = [] } = data || {};
+  const isOwnedByUser = item ? current_session.value.user_name === item["owner"] : false;
+
+  const editItem = () => {
+    editing_item.value = item;
+  };
 
   const showPinnedLeft = () => {
     if (pinned_left.value) {
@@ -200,24 +228,6 @@ export const ItemPanel = () => {
     }
   };
 
-  const { data, error, isLoading, mutate } = useSWR(
-    "/api/item/membership?item_id=" + (item["id"] ?? -1),
-    fetcher
-  );
-
-  const [location, setLocation] = useLocation();
-
-  const [isAddingToAnotherTag, setIsAddingToAnotherTag] = useState(false);
-
-  const isMobileDevice = () => window.innerWidth < 1024; // 1024px is the 'lg' breakpoint in Tailwind
-
-  if (isLoading) return <h1> loading... </h1>;
-  if (error) return <h1> error </h1>;
-  if (!item && !editing_item.value) return <Feed />;
-
-  const { membership, skips } = data;
-
-  const isOwnedByUser = current_session.value.user_name === item["owner"];
   const onRemoveTag = async (tagid) => {
     //selected_item.value = false;
     await makeRequest("DELETE", "/api/item/membership", {
@@ -232,10 +242,6 @@ export const ItemPanel = () => {
       "item_id": item["id"],
     })
     mutate();
-  }
-
-  const editItem = () => {
-    editing_item.value = item;
   }
 
   const attrid = selected_attribute.value.value.id;
@@ -261,153 +267,102 @@ export const ItemPanel = () => {
 
   const showMoreActions = skips?.length > 0 || isOwnedByUser;
 
-  // Desktop version - no animation
-  if (!isMobileDevice()) {
-    return (
-      <div className="">
-        <div className="flex justify-between mb-4">
-          <button 
-            onClick={showPinnedLeft} 
-            className={`border-2 bigbutton ${!pinned_left.value && 'opacity-50'}`}
-            disabled={!pinned_left.value}
-          >
-            📍 Left Pin
-          </button>
-          <button 
-            onClick={showPinnedRight}
-            className={`border-2 bigbutton ${!pinned_right.value && 'opacity-50'}`}
-            disabled={!pinned_right.value}
-          >
-            📍 Right Pin
-          </button>
-        </div>
-        {editing_item.value ? <ItemForm /> : notEditing}
-        <br />
-        <table>
-          <tbody className="text-left">
-            {showMoreActions &&
-              <tr>
-                <td className="flex flex-row">
-                  {isOwnedByUser && <div className="cursor-pointer border-2 bigbutton" onClick={editItem}>edit item</div>}
-                  {skips?.length > 0 && <div className="cursor-pointer border-2 bigbutton" onClick={unskip}>unskip</div>}
-                </td>
-              </tr>}
-            <tr>
-              <td>
-                {membership?.map((tag) => (
-                  <div className="bg-purple-200 text-black dark:text-white dark:bg-purple-950 m-1 cursor-pointer"
-                    key={tag["id"]}
-                    onClick={() => {
-                      setLocation('/' + tag.id + '/' + tag.slug)
-                      loadTag(tag.id);
-                    }}>
-                    <td>#{tag["slug"]}</td>
-                    {isOwnedByUser && (
-                      <td>
-                        <button
-                          className="border-2 bigbutton text-red-600 border-red-600"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onRemoveTag(tag["tag_id"])
-                          }}>
-                          remove
-                        </button>
-                      </td>
-                    )}
-                  </div>
-                ))}
-              </td>
-            </tr>
-            <div className="cursor-pointer" onClick={() => setIsAddingToAnotherTag(true)}>
-              {!isAddingToAnotherTag && <div className="border-2 bigbutton">add to another tag</div>}
-              {isAddingToAnotherTag && <OtherTagInput mutate={mutate} close={() => setIsAddingToAnotherTag(false)} />}
-            </div>
-          </tbody>
-        </table>
-        {!toggle.value &&
-          <VotesPanel votes={filteredVotes} />}
-        {item.id && <Comments coord={"item:" + item.id} />}
+  const content = (
+    <div className="w-full">
+      <div className="flex justify-between mb-4">
+        <button 
+          onClick={showPinnedLeft}
+          className={`border-2 bigbutton ${!pinned_left.value && 'opacity-50'}`}
+          disabled={!pinned_left.value}
+        >
+          📍 Left Pin
+        </button>
+        <button 
+          onClick={showPinnedRight}
+          className={`border-2 bigbutton ${!pinned_right.value && 'opacity-50'}`}
+          disabled={!pinned_right.value}
+        >
+          📍 Right Pin
+        </button>
       </div>
-    );
-  }
 
-  // Mobile version - with animation
-  return (
-    <AnimatePresence mode="wait">
-      {(item || editing_item.value) && (
-        <motion.div 
+      {item && (
+        <div className="flex flex-col">
+          <h1 className="text-3xl">{item.title}</h1>
+          {item.body && (
+            <div className="markdown-body">
+              <MarkdownRenderer content={item.body} />
+            </div>
+          )}
+        </div>
+      )}
+
+      <br />
+      <table>
+        <tbody className="text-left">
+          {showMoreActions &&
+            <tr>
+              <td className="flex flex-row">
+                {isOwnedByUser && <div className="cursor-pointer border-2 bigbutton" onClick={editItem}>edit item</div>}
+                {skips?.length > 0 && <div className="cursor-pointer border-2 bigbutton" onClick={unskip}>unskip</div>}
+              </td>
+            </tr>}
+          <tr>
+            <td>
+              {membership?.map((tag) => (
+                <div className="bg-purple-200 text-black dark:text-white dark:bg-purple-950 m-1 cursor-pointer"
+                  key={tag["id"]}
+                  onClick={() => {
+                    setLocation('/' + tag.id + '/' + tag.slug)
+                    loadTag(tag.id);
+                  }}>
+                  <td>#{tag["slug"]}</td>
+                  {isOwnedByUser && (
+                    <td>
+                      <button
+                        className="border-2 bigbutton text-red-600 border-red-600"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemoveTag(tag["tag_id"])
+                        }}>
+                        remove
+                      </button>
+                    </td>
+                  )}
+                </div>
+              ))}
+            </td>
+          </tr>
+          <div className="cursor-pointer" onClick={() => setIsAddingToAnotherTag(true)}>
+            {!isAddingToAnotherTag && <div className="border-2 bigbutton">add to another tag</div>}
+            {isAddingToAnotherTag && <OtherTagInput mutate={mutate} close={() => setIsAddingToAnotherTag(false)} />}
+          </div>
+        </tbody>
+      </table>
+      {!toggle.value &&
+        <VotesPanel votes={filteredVotes} />}
+      {item.id && <Comments coord={"item:" + item.id} />}
+    </div>
+  );
+
+  // Mobile version with animation
+  if (isMobileDevice()) {
+    return (
+      <AnimatePresence mode="wait">
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 20 }}
           transition={{ duration: 0.2 }}
-          className=""
         >
-          <div className="flex justify-between mb-4">
-            <button 
-              onClick={showPinnedLeft} 
-              className={`border-2 bigbutton ${!pinned_left.value && 'opacity-50'}`}
-              disabled={!pinned_left.value}
-            >
-              📍 Left Pin
-            </button>
-            <button 
-              onClick={showPinnedRight}
-              className={`border-2 bigbutton ${!pinned_right.value && 'opacity-50'}`}
-              disabled={!pinned_right.value}
-            >
-              📍 Right Pin
-            </button>
-          </div>
-          {editing_item.value ? <ItemForm /> : notEditing}
-          <br />
-          <table>
-            <tbody className="text-left">
-              {showMoreActions &&
-                <tr>
-                  <td className="flex flex-row">
-                    {isOwnedByUser && <div className="cursor-pointer border-2 bigbutton" onClick={editItem}>edit item</div>}
-                    {skips?.length > 0 && <div className="cursor-pointer border-2 bigbutton" onClick={unskip}>unskip</div>}
-                  </td>
-                </tr>}
-              <tr>
-                <td>
-                  {membership?.map((tag) => (
-                    <div className="bg-purple-200 text-black dark:text-white dark:bg-purple-950 m-1 cursor-pointer"
-                      key={tag["id"]}
-                      onClick={() => {
-                        setLocation('/' + tag.id + '/' + tag.slug)
-                        loadTag(tag.id);
-                      }}>
-                      <td>#{tag["slug"]}</td>
-                      {isOwnedByUser && (
-                        <td>
-                          <button
-                            className="border-2 bigbutton text-red-600 border-red-600"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onRemoveTag(tag["tag_id"])
-                            }}>
-                            remove
-                          </button>
-                        </td>
-                      )}
-                    </div>
-                  ))}
-                </td>
-              </tr>
-              <div className="cursor-pointer" onClick={() => setIsAddingToAnotherTag(true)}>
-                {!isAddingToAnotherTag && <div className="border-2 bigbutton">add to another tag</div>}
-                {isAddingToAnotherTag && <OtherTagInput mutate={mutate} close={() => setIsAddingToAnotherTag(false)} />}
-              </div>
-            </tbody>
-          </table>
-          {!toggle.value &&
-            <VotesPanel votes={filteredVotes} />}
-          {item.id && <Comments coord={"item:" + item.id} />}
+          {content}
         </motion.div>
-      )}
-    </AnimatePresence>
-  );
+      </AnimatePresence>
+    );
+  }
+
+  // Desktop version - no animation
+  return content;
 };
 
 const OtherTagInput = ({ mutate, close }) => {

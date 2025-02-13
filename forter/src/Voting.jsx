@@ -43,9 +43,9 @@ export const Voting = ({ handleError }) => {
     <div className="dark:text-white flex flex-col py-3">
       {isMobileDevice() ? (
         <>
-          <div className="w-full flex justify-center flex-col">
+          <div className="w-full flex justify-center flex-col mobile-padding-top">
             <VotePanel handleError={handleError} isMobile={true} />
-            <br /><br />
+            <br /><br /><br />
             <VotesPanel votes={filteredVotes} />
           </div>
           <button
