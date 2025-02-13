@@ -80,7 +80,7 @@ const MobileVoteSlider = ({ dragX, onSliderDrag }) => {
   );
 
   return (
-    <div className="fixed top-0 left-0 right-0 h-14 bg-white dark:bg-black flex items-center justify-center z-30">
+    <div className="h-14 bg-white dark:bg-black flex items-center justify-center">
       <div className="w-[90vw] h-1 bg-gray-300 dark:bg-gray-600 rounded">
         <motion.div
           className="w-3 h-3 -translate-y-1 flex justify-center absolute left-1/2 -translate-x-1/2 cursor-grab active:cursor-grabbing"
@@ -90,7 +90,6 @@ const MobileVoteSlider = ({ dragX, onSliderDrag }) => {
           drag="x"
           dragConstraints={{ left: -maxSliderWidth, right: maxSliderWidth }}
           onDrag={(_, info) => {
-            // Convert slider position back to dragX range
             const dragValue = (info.offset.x / maxSliderWidth) * 300;
             onSliderDrag(dragValue);
           }}
@@ -101,6 +100,115 @@ const MobileVoteSlider = ({ dragX, onSliderDrag }) => {
                       border-t-[8px] border-t-yellow-400" />
         </motion.div>
       </div>
+    </div>
+  );
+};
+
+const MobileVotePanel = ({ left, right, onSubmitVote }) => {
+  const dragX = useMotionValue(0);
+  const dragY = useMotionValue(0);
+  const magnitudeMotionValue = useMotionValue(50);
+
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      dragX.set(0);
+      dragY.set(0);
+      magnitudeMotionValue.set(50);
+      magnitude.value = 50;
+    });
+  }, []);
+
+  const handleDrag = (_, info) => {
+    // Update X position and magnitude
+    dragX.set(info.offset.x);
+    const newMagnitude = Math.min(Math.max((info.offset.x + 300) / 6, 0), 100);
+    magnitude.value = newMagnitude;
+    magnitudeMotionValue.set(newMagnitude);
+
+    // Track Y position
+    dragY.set(info.offset.y);
+  };
+
+  const handleDragEnd = async (_, info) => {
+    if (info.event?.preventDefault) {
+      info.event.preventDefault();
+      info.event.stopPropagation();
+    }
+
+    const upwardVelocityThreshold = -300;
+    const upwardOffsetThreshold = -50;
+    
+    const isVerticalMotion = Math.abs(info.velocity.y) > Math.abs(info.velocity.x);
+    const isUpwardSwipe = info.velocity.y < upwardVelocityThreshold || info.offset.y < upwardOffsetThreshold;
+
+    if (isVerticalMotion && isUpwardSwipe) {
+      // First reset only the Y position to complete the swipe animation
+      animate(dragY, 0, { duration: 0.2 });
+      
+      // Wait a moment to ensure the swipe animation completes
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
+      // Submit the vote
+      await onSubmitVote();
+      
+      // Only after vote is submitted, reset the other positions
+      animate(dragX, 0, { duration: 0.3 });
+      animate(magnitudeMotionValue, 50, { duration: 0.3 });
+      magnitude.value = 50;
+    } else {
+      // For horizontal motions or non-swipe verticals, just reset Y
+      animate(dragY, 0);
+    }
+  };
+
+  const handleSliderDrag = (dragValue) => {
+    dragX.set(dragValue);
+    const newMagnitude = Math.min(Math.max((dragValue + 300) / 6, 0), 100);
+    magnitude.value = newMagnitude;
+    magnitudeMotionValue.set(newMagnitude);
+  };
+
+  return (
+    <div className="fixed inset-0 touch-none bg-gray-100 dark:bg-gray-900">
+      <div className="absolute inset-0 flex flex-col items-center z-10">
+        <MobileVoteCard 
+          item={left} 
+          isTop={true}
+          dragX={dragX}
+          magnitudeMotionValue={magnitudeMotionValue}
+        />
+        <MobileVoteCard 
+          item={right} 
+          isTop={false}
+          dragX={dragX}
+          magnitudeMotionValue={magnitudeMotionValue}
+        />
+      </div>
+
+      <div className="fixed bottom-16 left-0 right-0 z-30">
+        <MobileVoteSlider 
+          dragX={dragX} 
+          onSliderDrag={handleSliderDrag}
+        />
+      </div>
+
+      <motion.div
+        className="absolute inset-0 z-20 touch-none"
+        drag={true}
+        dragDirectionLock={false}
+        dragElastic={0.9}
+        dragConstraints={{ left: -300, right: 300, top: 0, bottom: 0 }}
+        dragMomentum={false}
+        onDrag={handleDrag}
+        onDragEnd={handleDragEnd}
+        style={{ 
+          x: dragX,
+          y: dragY,
+          pointerEvents: 'auto' 
+        }}
+        onTouchStart={(e) => e.stopPropagation()}
+        onTouchMove={(e) => e.stopPropagation()}
+      />
     </div>
   );
 };
@@ -148,80 +256,11 @@ export const VotePanel = ({ handleError, isMobile = false }) => {
   };
 
   if (isMobile) {
-    const dragX = useMotionValue(0);
-    const magnitudeMotionValue = useMotionValue(50);
-
-    useEffect(() => {
-      requestAnimationFrame(() => {
-        dragX.set(0);
-        magnitudeMotionValue.set(50);
-        magnitude.value = 50;
-      });
-    }, []);
-
-    const handleDrag = (_, info) => {
-      dragX.set(info.offset.x);
-      const newMagnitude = Math.min(Math.max((info.offset.x + 300) / 6, 0), 100);
-      magnitude.value = newMagnitude;
-      magnitudeMotionValue.set(newMagnitude);
-    };
-
-    const handleSliderDrag = (dragValue) => {
-      dragX.set(dragValue);
-      const newMagnitude = Math.min(Math.max((dragValue + 300) / 6, 0), 100);
-      magnitude.value = newMagnitude;
-      magnitudeMotionValue.set(newMagnitude);
-    };
-
-    const handleDragEnd = async (_, info) => {
-      const xThreshold = 100;
-      const velocityThreshold = 500;
-
-      if ((Math.abs(info.offset.x) > xThreshold || 
-           Math.abs(info.velocity.x) > velocityThreshold) && 
-          magnitude.value !== 50) {
-        await submitVote();
-      }
-      
-      // Reset everything to center
-      animate(dragX, 0);
-      animate(magnitudeMotionValue, 50);
-      magnitude.value = 50;
-    };
-
-    return (
-      <div className="relative h-[88vh] w-screen overflow-hidden bg-gray-100 dark:bg-gray-900">
-        <MobileVoteSlider 
-          dragX={dragX} 
-          onSliderDrag={handleSliderDrag}
-        />
-        
-        <div className="absolute inset-0 flex flex-col items-center z-10">
-          <MobileVoteCard 
-            item={left} 
-            isTop={true}
-            dragX={dragX}
-            magnitudeMotionValue={magnitudeMotionValue}
-          />
-          <MobileVoteCard 
-            item={right} 
-            isTop={false}
-            dragX={dragX}
-            magnitudeMotionValue={magnitudeMotionValue}
-          />
-        </div>
-
-        <motion.div
-          className="absolute inset-0 z-20"
-          drag="x"
-          dragElastic={0.9}
-          dragConstraints={{ left: -300, right: 300 }}
-          onDrag={handleDrag}
-          onDragEnd={handleDragEnd}
-          style={{ pointerEvents: 'auto' }}
-        />
-      </div>
-    );
+    return <MobileVotePanel 
+      left={left} 
+      right={right} 
+      onSubmitVote={submitVote}
+    />;
   }
 
   // Desktop version remains unchanged

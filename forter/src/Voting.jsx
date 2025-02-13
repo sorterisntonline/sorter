@@ -8,6 +8,8 @@ import { showAllSorted, showAllUnsorted } from "./App";
 import { ItemsLists } from './ItemsLists';
 import { tag, toggle } from "./App";
 import { Tag } from "./components/Tag";
+import { useEffect, useState } from "react";
+import { ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/24/solid";
 
 const MobileHeader = ({ can_vote, can_add, isVoting }) => {
   const [_, setLocation] = useLocation();
@@ -34,55 +36,25 @@ const MobileHeader = ({ can_vote, can_add, isVoting }) => {
 export const Voting = ({ handleError }) => {
   const [location, setLocation] = useLocation();
   const isMobileDevice = () => window.innerWidth < 1024;
+  const [showVotesPanel, setShowVotesPanel] = useState(false);
 
   const filteredVotes = tag.value?.votes?.filter(v => v.attribute === selected_attribute.value?.value?.id) || [];
   const sorteditems = tag.value?.["sorted"] || [];
   const unsorteditems = tag.value?.["unsorted"] || [];
 
-  return (
-    <div className="dark:text-white flex flex-col py-3">
-      {isMobileDevice() ? (
-        <>
-          <div className="w-full flex justify-center flex-col mobile-padding-top">
-            <VotePanel handleError={handleError} isMobile={true} />
-            <br /><br /><br />
-            <VotesPanel votes={filteredVotes} />
-          </div>
-          <button
-            className="fixed bottom-0 left-1/2 transform -translate-x-1/2 px-4 py-1.5 
-                       border-2 border-red-500 border-b-0 rounded-t-lg 
-                       bg-white dark:bg-gray-800 shadow-lg z-50 
-                       text-sm font-normal lowercase"
-            onClick={() => {
-              const ns = namespace.value;
-              if (ns) {
-                setLocation('/namespace/' + ns);
-              } else {
-                setLocation('/' + tag.value.tag.id + '/' + tag.value.tag.slug);
-              }
-            }}
-          >
-            stop voting
-          </button>
-        </>
-      ) : (
-        <>
-          <div className="items-center">
-            <div className="text-xl flex flex-row">
-              <div className="px-2">
-                voting on
-              </div>
-              <AttributePanel />
-              <div className="px-2">
-                according to
-              </div>
-              <UserPanel users={tag.value.users_who_voted} />
-            </div>
-          </div>
-
-          <div className="flex lg:flex-row flex-col">
+  if (isMobileDevice()) {
+    return (
+      <div className="h-screen overflow-hidden">
+        {/* Vote Motion Pane */}
+        <div className={`h-screen ${showVotesPanel ? 'hidden' : 'block'}`}>
+          <VotePanel handleError={handleError} isMobile={true} />
+          
+          {/* Navigation Controls - increased bottom padding to account for slider */}
+          <div className="fixed bottom-4 left-0 right-0 flex justify-center items-center gap-2">
             <button
-              className="border-2 border-red-500 lg:w-14 lg:h-56 w-full bigbutton"
+              className="px-4 py-2 border-2 border-red-500 rounded-lg 
+                       bg-white dark:bg-gray-800 shadow-lg
+                       text-sm font-normal lowercase"
               onClick={() => {
                 const ns = namespace.value;
                 if (ns) {
@@ -94,14 +66,74 @@ export const Voting = ({ handleError }) => {
             >
               stop voting
             </button>
-            <div className="w-full flex justify-center flex-col">
-              <VotePanel handleError={handleError} />
-              <br />
-              <VotesPanel votes={filteredVotes} />
+            <button
+              className="p-1.5 rounded-lg bg-white dark:bg-gray-800 shadow-lg"
+              onClick={() => setShowVotesPanel(true)}
+            >
+              <ChevronDownIcon className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+            </button>
+          </div>
+        </div>
+
+        {/* Votes Panel View */}
+        <div className={`min-h-screen overflow-auto ${showVotesPanel ? 'block' : 'hidden'}`}>
+          <button
+            className="fixed top-4 left-4 z-50 p-1.5 rounded-lg bg-white dark:bg-gray-800 shadow-lg"
+            onClick={() => setShowVotesPanel(false)}
+          >
+            <ChevronUpIcon className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+          </button>
+
+          <div className="pt-16">
+            <VotesPanel votes={filteredVotes} />
+            <div className="flex justify-center w-full pb-16">
+              <ItemsLists 
+                sorteditems={sorteditems}
+                unsorteditems={unsorteditems}
+                skippedItems={tag.value.skipped}
+              />
             </div>
           </div>
-        </>
-      )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="dark:text-white flex flex-col py-3">
+      <div className="items-center">
+        <div className="text-xl flex flex-row">
+          <div className="px-2">
+            voting on
+          </div>
+          <AttributePanel />
+          <div className="px-2">
+            according to
+          </div>
+          <UserPanel users={tag.value.users_who_voted} />
+        </div>
+      </div>
+
+      <div className="flex lg:flex-row flex-col">
+        <button
+          className="border-2 border-red-500 lg:w-14 lg:h-56 w-full bigbutton"
+          onClick={() => {
+            const ns = namespace.value;
+            if (ns) {
+              setLocation('/namespace/' + ns);
+            } else {
+              setLocation('/' + tag.value.tag.id + '/' + tag.value.tag.slug);
+            }
+          }}
+        >
+          stop voting
+        </button>
+        <div className="w-full flex justify-center flex-col">
+          <VotePanel handleError={handleError} />
+          <br />
+          <VotesPanel votes={filteredVotes} />
+        </div>
+      </div>
 
       <div className="flex justify-center w-full pb-16">
         <ItemsLists 
