@@ -29,6 +29,12 @@ export const NAV_ITEMS = [
 // Routes where the new tag button should be shown
 export const NEW_TAG_ROUTES = ['/', '/tags2', '/tags3'];
 
+// Routes where the new item button should be shown (any tag view that's not voting)
+export const NEW_ITEM_ROUTES = [
+  '/:tagid/:slug',
+  '/namespace/:namespace'
+];
+
 // New tag button options
 export const NEW_TAG_BUTTONS = [
   {

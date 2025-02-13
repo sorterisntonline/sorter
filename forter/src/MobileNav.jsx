@@ -28,24 +28,38 @@ export const MobileNav = () => {
     <div key={item.name}>
       <div
         onClick={() => handleItemClick(item)}
-        className="py-4 text-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 
-          dark:text-white text-left flex justify-between items-center"
+        className="py-4 text-lg cursor-pointer dark:text-white text-left flex justify-between items-center"
       >
         <span>{item.name}</span>
         {item.children && (
-          <span className="transform transition-transform duration-200">
-            {expandedItem === item.name ? '▼' : '▶'}
-          </span>
+          <svg
+            className={`w-5 h-5 transform transition-transform duration-200 ${
+              expandedItem === item.name ? 'rotate-90' : ''
+            }`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M19 9l-7 7-7-7"
+            />
+          </svg>
         )}
       </div>
-      {item.children && expandedItem === item.name && (
-        <div className="ml-4 border-l-2 border-gray-200 dark:border-gray-700">
+      {item.children && (
+        <div
+          className={`overflow-hidden transition-all duration-200 ease-in-out ${
+            expandedItem === item.name ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+          }`}
+        >
           {item.children.map(child => (
             <div
               key={child.name}
               onClick={() => handleNavClick(child.path, false)}
-              className="py-2 pl-4 text-base cursor-pointer hover:bg-gray-100 
-                dark:hover:bg-gray-800 dark:text-white"
+              className="py-2 pl-4 text-base cursor-pointer dark:text-white text-left"
             >
               {child.name}
             </div>

@@ -3,7 +3,7 @@ import { tag, magnitude } from "./App";
 import { ItemFull } from "./ItemPanel";
 import { current_session } from "./session";
 import { useEffect, useState } from "react";
-import WarningPopup from "./WarningPopup";
+import WarningPopup from "./components/WarningPopup";
 
 const calculateMargin = (magnitude) => {
   if (magnitude < 50) {

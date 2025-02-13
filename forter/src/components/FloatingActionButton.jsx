@@ -11,7 +11,31 @@ export const FloatingActionButton = ({
   setShowModal = () => {},
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  
+  // If there's only one button, use it directly without menu
+  const singleButton = buttons.length === 1 ? buttons[0] : null;
 
+  if (singleButton) {
+    return (
+      <div className="block lg:hidden">
+        <motion.button
+          onClick={singleButton.onClick}
+          className={`w-14 h-14 rounded-full shadow-lg flex items-center justify-center transition-colors ${singleButton.color} ${singleButton.hoverColor || ''}`}
+          whileTap={{ scale: 0.95 }}
+        >
+          <motion.span 
+            className={`text-3xl ${singleButton.textColor}`}
+            animate={singleButton.animate}
+            transition={singleButton.transition}
+          >
+            {singleButton.label}
+          </motion.span>
+        </motion.button>
+      </div>
+    );
+  }
+
+  // Original multi-button menu implementation
   return (
     <div className="block lg:hidden">
       <Modal isOpen={showModal} onClose={() => setShowModal(false)}>

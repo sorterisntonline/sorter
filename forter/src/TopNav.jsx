@@ -2,15 +2,16 @@ import { useState, useEffect } from 'react';
 import { Link, useRoute, useLocation } from "wouter";
 import { NAV_ITEMS } from './constants/navigation';
 import { current_session } from './session';
-import { ProfileHoverPane } from './ProfileHoverPane';
-import { showAnnouncement } from './AnnouncementBar';
+import { ProfileHoverPane } from './components/ProfileHoverPane';
+import { showAnnouncement } from './components/AnnouncementBar';
 import { redirectToLogin, redirectToRegister } from './authUtils';
 
 const MyLink = ({ to, children, className = "" }) => {
   const [isActive] = useRoute(to);
+  // if you want the 'you're here' highlighting back, add: ${isActive ? "dark:bg-blue-900 bg-blue-300" : ""} to the classes
   return (
     <Link to={to}>
-      <a className={`${isActive ? "dark:bg-blue-900 bg-blue-300" : ""} px-2 py-1 ${className}`}>
+      <a className={`px-2 py-1 ${className}`}>
         {children}
       </a>
     </Link>

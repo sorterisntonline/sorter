@@ -1,6 +1,6 @@
 import React from "react";
 import { useLocation } from "wouter";
-import { current_session } from "./session";
+import { current_session } from "../session";
 
 export const ProfileHoverPane = ({ onClose }) => {
   const [location, setLocation] = useLocation();

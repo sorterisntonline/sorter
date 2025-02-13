@@ -3,6 +3,7 @@ import { current_session } from "./session";
 import { loadTag, makeRequest } from "./Network";
 import { signal } from "@preact/signals-react";
 import MarkdownRenderer from "./MarkdownRenderer";
+import { motion, AnimatePresence } from 'framer-motion';
 const createEmbedUrl = (item) => {
   const [code, time] = item["domain_pk"].split("?t=")
 
@@ -207,7 +208,7 @@ export const ItemPanel = () => {
 
   const [isAddingToAnotherTag, setIsAddingToAnotherTag] = useState(false);
 
-
+  const isMobileDevice = () => window.innerWidth < 1024; // 1024px is the 'lg' breakpoint in Tailwind
 
   if (isLoading) return <h1> loading... </h1>;
   if (error) return <h1> error </h1>;
@@ -258,71 +259,153 @@ export const ItemPanel = () => {
   </>
 
   const showMoreActions = skips?.length > 0 || isOwnedByUser;
-  return (
-    <div className="">
-      <div className="flex justify-between mb-4">
-        <button 
-          onClick={showPinnedLeft} 
-          className={`border-2 bigbutton ${!pinned_left.value && 'opacity-50'}`}
-          disabled={!pinned_left.value}
-        >
-          📍 Left Pin
-        </button>
-        <button 
-          onClick={showPinnedRight}
-          className={`border-2 bigbutton ${!pinned_right.value && 'opacity-50'}`}
-          disabled={!pinned_right.value}
-        >
-          📍 Right Pin
-        </button>
-      </div>
-      {editing_item.value ? <ItemForm /> : notEditing}
-      <br />
-      <table>
-        <tbody className="text-left">
-          {showMoreActions &&
+
+  // Desktop version - no animation
+  if (!isMobileDevice()) {
+    return (
+      <div className="">
+        <div className="flex justify-between mb-4">
+          <button 
+            onClick={showPinnedLeft} 
+            className={`border-2 bigbutton ${!pinned_left.value && 'opacity-50'}`}
+            disabled={!pinned_left.value}
+          >
+            📍 Left Pin
+          </button>
+          <button 
+            onClick={showPinnedRight}
+            className={`border-2 bigbutton ${!pinned_right.value && 'opacity-50'}`}
+            disabled={!pinned_right.value}
+          >
+            📍 Right Pin
+          </button>
+        </div>
+        {editing_item.value ? <ItemForm /> : notEditing}
+        <br />
+        <table>
+          <tbody className="text-left">
+            {showMoreActions &&
+              <tr>
+                <td className="flex flex-row">
+                  {isOwnedByUser && <div className="cursor-pointer border-2 bigbutton" onClick={editItem}>edit item</div>}
+                  {skips?.length > 0 && <div className="cursor-pointer border-2 bigbutton" onClick={unskip}>unskip</div>}
+                </td>
+              </tr>}
             <tr>
-              <td className="flex flex-row">
-                {isOwnedByUser && <div className="cursor-pointer border-2 bigbutton" onClick={editItem}>edit item</div>}
-                {skips?.length > 0 && <div className="cursor-pointer border-2 bigbutton" onClick={unskip}>unskip</div>}
+              <td>
+                {membership?.map((tag) => (
+                  <div className="bg-purple-200 text-black dark:text-white dark:bg-purple-950 m-1 cursor-pointer"
+                    key={tag["id"]}
+                    onClick={() => {
+                      setLocation('/' + tag.id + '/' + tag.slug)
+                      loadTag(tag.id);
+                    }}>
+                    <td>#{tag["slug"]}</td>
+                    {isOwnedByUser && (
+                      <td>
+                        <button
+                          className="border-2 bigbutton text-red-600 border-red-600"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onRemoveTag(tag["tag_id"])
+                          }}>
+                          remove
+                        </button>
+                      </td>
+                    )}
+                  </div>
+                ))}
               </td>
-            </tr>}
-          <tr>
-            <td>
-              {membership?.map((tag) => (
-                <div className="bg-purple-200 text-black dark:text-white dark:bg-purple-950 m-1 cursor-pointer"
-                  key={tag["id"]}
-                  onClick={() => {
-                    setLocation('/' + tag.id + '/' + tag.slug)
-                    loadTag(tag.id);
-                  }}>
-                  <td>#{tag["slug"]}</td>
-                  {isOwnedByUser && (
-                    <td>
-                      <button
-                        className="border-2 bigbutton text-red-600 border-red-600"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onRemoveTag(tag["tag_id"])
-                        }}>
-                        remove
-                      </button>
-                    </td>
-                  )}
-                </div>
-              ))}
-            </td>
-          </tr>
-          <div className="cursor-pointer" onClick={() => setIsAddingToAnotherTag(true)}>
-            {!isAddingToAnotherTag && <div className="border-2 bigbutton">add to another tag</div>}
-            {isAddingToAnotherTag && <OtherTagInput mutate={mutate} close={() => setIsAddingToAnotherTag(false)} />}
+            </tr>
+            <div className="cursor-pointer" onClick={() => setIsAddingToAnotherTag(true)}>
+              {!isAddingToAnotherTag && <div className="border-2 bigbutton">add to another tag</div>}
+              {isAddingToAnotherTag && <OtherTagInput mutate={mutate} close={() => setIsAddingToAnotherTag(false)} />}
+            </div>
+          </tbody>
+        </table>
+        {!toggle.value &&
+          <VotesPanel votes={filteredVotes} />}
+        {item.id && <Comments coord={"item:" + item.id} />}
+      </div>
+    );
+  }
+
+  // Mobile version - with animation
+  return (
+    <AnimatePresence mode="wait">
+      {(item || editing_item.value) && (
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 20 }}
+          transition={{ duration: 0.2 }}
+          className=""
+        >
+          <div className="flex justify-between mb-4">
+            <button 
+              onClick={showPinnedLeft} 
+              className={`border-2 bigbutton ${!pinned_left.value && 'opacity-50'}`}
+              disabled={!pinned_left.value}
+            >
+              📍 Left Pin
+            </button>
+            <button 
+              onClick={showPinnedRight}
+              className={`border-2 bigbutton ${!pinned_right.value && 'opacity-50'}`}
+              disabled={!pinned_right.value}
+            >
+              📍 Right Pin
+            </button>
           </div>
-        </tbody>
-      </table>
-      {!toggle.value &&
-        <VotesPanel votes={filteredVotes} />}
-      {item.id && <Comments coord={"item:" + item.id} />}
-    </div>
+          {editing_item.value ? <ItemForm /> : notEditing}
+          <br />
+          <table>
+            <tbody className="text-left">
+              {showMoreActions &&
+                <tr>
+                  <td className="flex flex-row">
+                    {isOwnedByUser && <div className="cursor-pointer border-2 bigbutton" onClick={editItem}>edit item</div>}
+                    {skips?.length > 0 && <div className="cursor-pointer border-2 bigbutton" onClick={unskip}>unskip</div>}
+                  </td>
+                </tr>}
+              <tr>
+                <td>
+                  {membership?.map((tag) => (
+                    <div className="bg-purple-200 text-black dark:text-white dark:bg-purple-950 m-1 cursor-pointer"
+                      key={tag["id"]}
+                      onClick={() => {
+                        setLocation('/' + tag.id + '/' + tag.slug)
+                        loadTag(tag.id);
+                      }}>
+                      <td>#{tag["slug"]}</td>
+                      {isOwnedByUser && (
+                        <td>
+                          <button
+                            className="border-2 bigbutton text-red-600 border-red-600"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onRemoveTag(tag["tag_id"])
+                            }}>
+                            remove
+                          </button>
+                        </td>
+                      )}
+                    </div>
+                  ))}
+                </td>
+              </tr>
+              <div className="cursor-pointer" onClick={() => setIsAddingToAnotherTag(true)}>
+                {!isAddingToAnotherTag && <div className="border-2 bigbutton">add to another tag</div>}
+                {isAddingToAnotherTag && <OtherTagInput mutate={mutate} close={() => setIsAddingToAnotherTag(false)} />}
+              </div>
+            </tbody>
+          </table>
+          {!toggle.value &&
+            <VotesPanel votes={filteredVotes} />}
+          {item.id && <Comments coord={"item:" + item.id} />}
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };
 

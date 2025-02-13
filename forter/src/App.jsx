@@ -10,11 +10,11 @@ import { VotePanel } from "./VotePanel";
 import { ItemPanel, editing_item, pinned_left, pinned_right } from "./ItemPanel";
 import { loadTag } from "./Network";
 import { Modal } from "./Modal";
-import WarningPopup from './WarningPopup';
+import WarningPopup from './components/WarningPopup';
 import { MetaTags } from "./MetaTags";
-import AnnouncementBar, { showAnnouncement } from './AnnouncementBar';
+import AnnouncementBar, { showAnnouncement } from './components/AnnouncementBar';
 import { IntegrationsPanel } from './integrations/IntegrationsPanel';
-import { MobileNewItemChooser } from './MobileNewItemChooser';
+import { MobileNewItemChooser } from './components/MobileNewItemChooser';
 import { errorState, clearError } from './ErrorHandler';
 
 export const useElo = signal(false);
@@ -165,6 +165,17 @@ const TextSummary = ({ can_vote, can_add }) => {
 
   const [isViewingTag, setIsViewingTag] = useState(false);
 
+  const handleVoteNavigation = (namespace, setLocation) => {
+    console.log("Vote button clicked");
+    resetSelectedUsers();
+    if (namespace) {
+      setLocation('/namespace/' + namespace + '/voting');
+    } else {
+      setLocation('/' + tag.value.tag.id + '/' + tag.value.tag.slug + '/voting');
+    }
+    console.log("New location set");
+  };
+
   return (
     <div className="flex flex-col text-xl justify-self-start p-2">
       <div className="flex flex-wrap items-center justify-center lg:justify-start">
@@ -193,16 +204,7 @@ const TextSummary = ({ can_vote, can_add }) => {
           {can_vote && (
             <div className="border-4 border-yellow-400 bigbutton">
               <button
-                onClick={() => {
-                  console.log("Vote button clicked");
-                  resetSelectedUsers();
-                  if (namespace) {
-                    setLocation('/namespace/' + namespace + '/voting');
-                  } else {
-                    setLocation('/' + tag.value.tag.id + '/' + tag.value.tag.slug + '/voting');
-                  }
-                  console.log("New location set");
-                }}
+                onClick={() => handleVoteNavigation(namespace, setLocation)}
               >
                 vote
               </button>
@@ -221,16 +223,7 @@ const TextSummary = ({ can_vote, can_add }) => {
         {can_vote && (
           <div className="w-full lg:hidden mt-4">
             <button
-              onClick={() => {
-                console.log("Vote button clicked");
-                resetSelectedUsers();
-                if (namespace) {
-                  setLocation('/namespace/' + namespace + '/voting');
-                } else {
-                  setLocation('/' + tag.value.tag.id + '/' + tag.value.tag.slug + '/voting');
-                }
-                console.log("New location set");
-              }}
+              onClick={() => handleVoteNavigation(namespace, setLocation)}
               className="w-full py-4 font-bold border-4 border-yellow-400 bg-transparent text-inherit"
             >
               vote
@@ -248,11 +241,59 @@ export const showPin = signal(false);
 export const showAllSorted = signal(true);
 export const showAllUnsorted = signal(true);
 
+// Extract the mobile header into its own component
+const MobileHeader = ({ can_vote, can_add, isVoting }) => {
+  const [_, setLocation] = useLocation();
+  let namespace = useParams().namespace;
+
+  const handleVoteNavigation = (namespace, setLocation) => {
+    console.log("Vote button clicked");
+    resetSelectedUsers();
+    if (namespace) {
+      setLocation('/namespace/' + namespace + '/voting');
+    } else {
+      setLocation('/' + tag.value.tag.id + '/' + tag.value.tag.slug + '/voting');
+    }
+    console.log("New location set");
+  };
+
+  return (
+    <div className="flex flex-col text-xl justify-self-start p-2">
+      <div className="flex flex-wrap items-center justify-center lg:justify-start">
+        <div
+          className="bg-purple-200 text-black dark:text-white dark:bg-purple-950 p-1 cursor-pointer"
+          onClick={() => setIsViewingTag(true)}
+        >
+          #{tag.value.tag.ns}{tag.value.tag.ns ? '/' : ''}{tag.value.tag.slug}
+        </div>
+        <div className="px-2">by</div>
+        <AttributePanel />
+        
+        <div className="w-full lg:w-auto text-center lg:text-left lg:px-2">according to</div>
+        <UserPanel users={tag.value.users_who_voted} />
+        
+        {/* Only show vote button if we're not in voting view */}
+        {!isVoting && can_vote && (
+          <div className="w-full lg:hidden mt-4">
+            <button
+              onClick={() => handleVoteNavigation(namespace, setLocation)}
+              className="w-full py-4 font-bold border-4 border-yellow-400 bg-transparent text-inherit"
+            >
+              vote
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export const Tag = ({ isVoting, handleError }) => {
   console.log("=== Tag Component Debug ===");
   console.log("Props:", { isVoting });
   console.log("Permissions:", tag.value?.perms);
-  const { can_vote, can_view, can_add } = tag.value?.perms || {};
+  
+  const { can_vote = false, can_view = false, can_add = false } = tag.value?.perms || {};
   console.log("Derived permissions:", { can_vote, can_view, can_add });
 
   const [showVote, setShowVote] = useState(false);
@@ -260,18 +301,19 @@ export const Tag = ({ isVoting, handleError }) => {
   const [showAllSorted, setShowAllSorted] = useState(false);
   const [showAllUnsorted, setShowAllUnsorted] = useState(false);
 
-  const sorteditems = tag.value["sorted"];
-  const unsorteditems = tag.value["unsorted"];
-  const votes = tag.value["votes"];
+  const sorteditems = tag.value?.["sorted"] || [];
+  const unsorteditems = tag.value?.["unsorted"] || [];
+  const votes = tag.value?.["votes"] || [];
 
-  const filteredVotes = votes.filter(v => v.attribute === selected_attribute.value.value.id);
+  const filteredVotes = votes.filter(v => v.attribute === selected_attribute.value?.value?.id);
 
   const [isFeed, setIsFeed] = useState(false);
-
   const [location, setLocation] = useLocation();
 
-  if (!can_view) {
-    return <div> you do not have permission to view this tag </div>;
+  const isMobileDevice = () => window.innerWidth < 1024; // 1024px is the 'lg' breakpoint in Tailwind
+
+  if (!tag.value || !can_view) {
+    return <div>you do not have permission to view this tag</div>;
   }
 
   const SortedList = ({ items, showAll, setShowAll }) => {
@@ -354,6 +396,13 @@ export const Tag = ({ isVoting, handleError }) => {
   const votesList = (
     <div className={" p-3 " + (toggle.value ? "lg:w-2/3" : "lg:w-1/3")}>
       <div className="lg:flex lg:space-x-12">
+        {/* Show ItemPanel above lists on mobile when editing */}
+        {isMobileDevice() && editing_item.value && (
+          <div className="mb-4">
+            <ItemPanel />
+          </div>
+        )}
+        
         {sorteditems?.length > 0 && (
           <div className={unsorteditems?.length > 0 ? "lg:w-1/2" : "lg:w-full"}>
             <SortedList 
@@ -379,91 +428,90 @@ export const Tag = ({ isVoting, handleError }) => {
 
   const votingRender = (
     <div className="dark:text-white flex flex-col py-3">
-      <div className="items-center">
-        {/* First row - tag, by, attribute */}
-        <div className="flex flex-wrap items-center justify-center mb-2">
-          <span className="text-xl">#{tag.value.tag.slug}</span>
-          <span className="px-2">by</span>
-          <AttributePanel />
-        </div>
-        
-        {/* Second row - according to (mobile only) */}
-        <div className="lg:hidden text-center my-2">
-          <span className="text-xl">according to</span>
-        </div>
-        
-        {/* Third row - UserPanel (full width on mobile) */}
-        <div className="w-full lg:flex lg:items-center">
-          <div className="hidden lg:block px-2">according to</div>
-          <UserPanel users={tag.value.users_who_voted} />
-        </div>
-
-        {/* Desktop-only text */}
-        <div className="hidden lg:block">
-          <TextSummary can_vote={can_vote} can_add={can_add} />
-        </div>
-      </div>
-
-      {/* Mobile-only full width vote button */}
-      <div className="lg:hidden">
-        {can_vote && (
+      {isMobileDevice() ? (
+        <>
+          <MobileHeader can_vote={can_vote} can_add={can_add} isVoting={true} />
+          <div className="w-full flex justify-center flex-col">
+            <VotePanel handleError={handleError} />
+            <br />
+            <VotesPanel votes={filteredVotes} />
+          </div>
+          {/* Tab-style stop voting button for mobile */}
           <button
+            className="fixed bottom-0 left-1/2 transform -translate-x-1/2 px-4 py-1.5 
+                       border-2 border-red-500 border-b-0 rounded-t-lg 
+                       bg-white dark:bg-gray-800 shadow-lg z-50 
+                       text-sm font-normal lowercase"
             onClick={() => {
-              console.log("Vote button clicked");
-              resetSelectedUsers();
-              if (namespace) {
-                setLocation('/namespace/' + namespace + '/voting');
+              const ns = namespace.value;
+              if (ns) {
+                setLocation('/namespace/' + ns);
               } else {
-                setLocation('/' + tag.value.tag.id + '/' + tag.value.tag.slug + '/voting');
+                setLocation('/' + tag.value.tag.id + '/' + tag.value.tag.slug);
               }
-              console.log("New location set");
             }}
-            className="w-full py-4 bg-purple-500 text-white font-bold mb-4"
           >
-            vote
+            stop voting
           </button>
-        )}
-      </div>
-
-      {/* Adjust main content layout */}
-      <div className="flex lg:flex-row flex-col pb-24 lg:pb-0"> {/* Added padding bottom for mobile sticky buttons */}
-        {/* Show ItemPanel before lists on mobile when adding item */}
-        {showItemPanel && <div className="lg:hidden">
-          <ItemPanel />
-        </div>}
-        
-        {/* Lists section */}
-        <div className="lg:flex lg:space-x-4">
-          {sorteditems?.length > 0 && (
-            <div className={unsorteditems?.length > 0 ? "lg:w-1/2" : "lg:w-full"}>
-              <SortedList 
-                items={sorteditems} 
-                showAll={showAllSorted.value} 
-                setShowAll={(val) => showAllSorted.value = val} 
+        </>
+      ) : (
+        <>
+          <div className="items-center">
+            <div className="text-xl flex flex-row">
+              <div className="px-2">
+                voting on
+              </div>
+              <AttributePanel />
+              <div className="px-2">
+                according to
+              </div>
+              <UserPanel 
+                users={tag.value.users_who_voted} 
+                selected_users={selected_users.value} 
               />
             </div>
-          )}
-          {unsorteditems?.length > 0 && (
-            <div className={sorteditems?.length > 0 ? "lg:w-1/2" : "lg:w-full"}>
-              <UnsortedList 
-                items={unsorteditems} 
-                showAll={showAllUnsorted.value} 
-                setShowAll={(val) => showAllUnsorted.value = val} 
-              />
+          </div>
+
+          <div className="flex lg:flex-row flex-col">
+            <button
+              className="border-2 border-red-500 lg:w-14 lg:h-56 w-full bigbutton"
+              onClick={() => {
+                const ns = namespace.value;
+                if (ns) {
+                  setLocation('/namespace/' + ns);
+                } else {
+                  setLocation('/' + tag.value.tag.id + '/' + tag.value.tag.slug);
+                }
+              }}
+            >
+              Stop Voting
+            </button>
+            <div className="w-full flex justify-center flex-col">
+              <VotePanel handleError={handleError} />
+              <br />
+              <VotesPanel votes={filteredVotes} />
             </div>
-          )}
-        </div>
+          </div>
+        </>
+      )}
 
-        {/* Desktop ItemPanel */}
-        <div className="hidden lg:block">
-          <ItemPanel />
-        </div>
+      {/* Lists section */}
+      <div className="flex justify-center w-full pb-16"> {/* Added padding to avoid button overlap */}
+        {votesList}
       </div>
-
-      {/* Add the floating action button for items */}
-      {can_add && <MobileNewItemChooser />}
     </div>
   );
+
+  useEffect(() => {
+    // Check for newItem param and open ItemPanel if present
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('newItem') === 'true') {
+      editing_item.value = {};
+      // Clear the param
+      params.delete('newItem');
+      window.history.replaceState({}, "", window.location.pathname + "?" + params.toString());
+    }
+  }, [location]); // Add location to dependencies if using wouter's useLocation
 
   if (isVoting) {
     return votingRender;
@@ -476,12 +524,14 @@ export const Tag = ({ isVoting, handleError }) => {
         />
         <div className="dark:text-white justify-start">
           <IntegrationsPanel />
-          <TextSummary
-            can_vote={can_vote}
-            can_add={can_add}
-          />
+          {isMobileDevice() ? (
+            <MobileHeader can_vote={can_vote} can_add={can_add} isVoting={false} />
+          ) : (
+            <TextSummary can_vote={can_vote} can_add={can_add} />
+          )}
           <div className="flex lg:flex-row flex-col lg:space-x-24">
             {votesList}
+            {/* Only show ItemPanel in sidebar on desktop */}
             <div className="lg:ml-auto lg:w-1/4">
               <div className="flex flex-col">
                 <div
@@ -521,7 +571,7 @@ export const Tag = ({ isVoting, handleError }) => {
                 </div>
 
               </div>
-              <div className="page-padding-top">
+              <div className="page-padding-top hidden lg:block">
                 <div className="sticky top-0 z-10">
                   <ItemPanel />
                 </div>
@@ -529,6 +579,14 @@ export const Tag = ({ isVoting, handleError }) => {
             </div>
           </div>
         </div>
+        
+        {/* Show MobileNewItemChooser on mobile when not voting */}
+        {isMobileDevice() && can_add && !isVoting && (
+          <div className="fixed bottom-4 right-4 z-[99999]">
+            <MobileNewItemChooser />
+          </div>
+        )}
+        
         <WarningPopup 
           isOpen={errorState.value.isOpen}
           onClose={clearError}
@@ -549,7 +607,6 @@ function App({ tagid, isVoting }) {
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [initialLoad, setInitialLoad] = useState(true);
   const [location] = useLocation();
 
   const handleError = (error) => {
@@ -562,19 +619,11 @@ function App({ tagid, isVoting }) {
 
   useEffect(() => {
     console.log("Loading tag with ID:", tagid);
-    loadTag(tagid);
-  }, [tagid, location]);
-
-  useEffect(() => {
-    // TODO: decide if we want this 
-    /* Original auto-scrolling behavior (scrolls on every item selection): */
-    if (selected_item.value) {
-      const element = document.getElementById(`item-${selected_item.value.id}`);
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
+    // Only load tag if we don't already have it or if the ID changed
+    if (!tag.value || tag.value.tag.id !== tagid) {
+      loadTag(tagid);
     }
-  }, [selected_item.value]);
+  }, [tagid]);
 
   return (
     <div className="min-h-screen flex flex-col">

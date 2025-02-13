@@ -2,7 +2,7 @@ import React, { useEffect } from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
 import "./index.css";
-import { Router, Route, Switch } from "wouter";
+import { Router, Route, Switch, useLocation } from "wouter";
 import { TagList } from "./TagList.jsx";
 import { TagList2 } from "./TagList2.jsx";
 import { TagList3 } from "./TagList3.jsx";
@@ -18,11 +18,12 @@ import { Leaderboard } from "./Leaderboard.jsx";
 import { Profile } from "./Profile.jsx";
 import { signal } from "@preact/signals-react";
 import { current_session, fetchSession } from "./session";
-import AnnouncementBar, { showAnnouncement } from './AnnouncementBar';
+import AnnouncementBar, { showAnnouncement } from './components/AnnouncementBar';
 import { MobileNav } from './MobileNav';
-import { MobileNewTagChooser } from './MobileNewTagChooser';
+import { MobileNewTagChooser } from './components/MobileNewTagChooser.jsx';
 import { TopNav } from './TopNav';  // Import the new TopNav
 import { handleLogout } from './authUtils';
+import { NEW_TAG_ROUTES, NEW_ITEM_ROUTES } from './constants/navigation';
 
 
 export const namespace = signal(false);
@@ -39,6 +40,11 @@ const Root = () => {
   useEffect(() => {
     fetchSession();
   }, []);
+
+  const [location] = useLocation();
+  
+  // Only handle tag chooser here
+  const showTagChooser = NEW_TAG_ROUTES.includes(location) && current_session.value?.user_name;
 
   return (
     <React.StrictMode>
@@ -148,7 +154,7 @@ const Root = () => {
         </div>
       </div>
       <div className="fixed bottom-6 right-6 z-[99999] pointer-events-auto">
-        <MobileNewTagChooser />
+        {showTagChooser && <MobileNewTagChooser />}
       </div>
     </React.StrictMode>
   );

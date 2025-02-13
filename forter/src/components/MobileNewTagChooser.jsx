@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useLocation } from 'wouter';
-import { current_session } from './session';
-import { loginLinear } from './integrations/Linear';
-import { NEW_TAG_ROUTES, NEW_TAG_BUTTONS } from './constants/navigation';
-import { TagForm } from './TagForm';
-import { FloatingActionButton } from './components/FloatingActionButton';
+import { current_session } from '../session';
+import { loginLinear } from '../integrations/Linear';
+import { NEW_TAG_ROUTES, NEW_TAG_BUTTONS } from '../constants/navigation';
+import { TagForm } from '../TagForm';
+import { FloatingActionButton } from './FloatingActionButton';
 
 export const MobileNewTagChooser = () => {
   const [showTagForm, setShowTagForm] = useState(false);
