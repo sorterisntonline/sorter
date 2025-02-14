@@ -1,5 +1,5 @@
 import { makeRequest, loadTag } from "./Network";
-import { tag, magnitude } from "./App";
+import { tag, magnitude, selected_item, drawer_open } from "./App";
 import { ItemFull } from "./ItemPanel";
 import { current_session } from "./session";
 import { useEffect, useState, useRef } from "react";
@@ -20,6 +20,27 @@ const calculateMargin = (magnitude) => {
 const MobileVoteCard = ({ item, isTop, dragX, magnitudeMotionValue }) => {
   const [mediaUrl, setMediaUrl] = useState(null);
   const [isIframeSupported, setIsIframeSupported] = useState(true);
+  const lastClickTime = useRef(0);
+  
+  // Add click handler for title area
+  const handleTitleClick = (e) => {
+    e.stopPropagation();
+    
+    const clickTime = Date.now();
+    if (clickTime - lastClickTime.current < 300) {
+      console.log('Double tap on title - resetting magnitude');
+      magnitude.value = 50;
+      magnitudeMotionValue.set(50);
+      dragX.set(0);
+      lastClickTime.current = 0;
+      return;
+    }
+    
+    lastClickTime.current = clickTime;
+    console.log('Opening drawer for item:', item.id);
+    selected_item.value = item;
+    drawer_open.value = true;
+  };
 
   // Helper to extract first media from markdown
   const extractFirstMedia = (markdown) => {
@@ -32,36 +53,18 @@ const MobileVoteCard = ({ item, isTop, dragX, magnitudeMotionValue }) => {
     return imageMatch?.[1] || videoMatch?.[1] || null;
   };
 
-  // Handle Spotify content
-  const getSpotifyContent = async () => {
-    if (!item.domain_pk_namespace?.startsWith('spotify.')) return null;
-    
-    const [type, id] = item.domain_pk_namespace.split('.');
-    try {
-      // For now, just return the artwork URL
-      // TODO: Implement proper Spotify API call to get artwork
-      return `https://i.scdn.co/image/${item.domain_pk}`;
-    } catch (error) {
-      console.error('Failed to fetch Spotify content:', error);
-      return null;
-    }
-  };
-
   useEffect(() => {
     const setupMedia = async () => {
       // Case 1: Direct image/URL
-      if (item.url) {
+      if (item.url && (item.domain_pk_namespace === "IMG" || item.domain_pk_namespace === "reddit.post")) {
         setMediaUrl(item.url);
         return;
       }
 
       // Case 2: Spotify content
-      if (item.domain_pk_namespace?.startsWith('spotify.')) {
-        const spotifyContent = await getSpotifyContent();
-        if (spotifyContent) {
-          setMediaUrl(spotifyContent);
-          return;
-        }
+      if (item.domain_pk_namespace === "spotify.track") {
+        setIsIframeSupported(true);
+        return;
       }
 
       // Case 3: Media in description
@@ -77,18 +80,6 @@ const MobileVoteCard = ({ item, isTop, dragX, magnitudeMotionValue }) => {
     setupMedia();
   }, [item]);
 
-  const opacity = useTransform(
-    magnitudeMotionValue,
-    [0, 50, 100],
-    isTop ? [1, 1, 0.6] : [0.6, 1, 1]
-  );
-
-  const scale = useTransform(
-    magnitudeMotionValue,
-    [0, 50, 100],
-    isTop ? [1.05, 0.95, 0.95] : [0.95, 0.95, 1.05]
-  );
-
   return (
     <motion.div
       className="absolute w-[90vw] h-[38vh] rounded-xl overflow-hidden bg-white dark:bg-gray-800 shadow-lg"
@@ -99,8 +90,16 @@ const MobileVoteCard = ({ item, isTop, dragX, magnitudeMotionValue }) => {
           [0, 50, 100],
           isTop ? [200, 0, 0] : [0, 0, -200]
         ),
-        opacity,
-        scale,
+        opacity: useTransform(
+          magnitudeMotionValue,
+          [0, 50, 100],
+          isTop ? [1, 1, 0.6] : [0.6, 1, 1]
+        ),
+        scale: useTransform(
+          magnitudeMotionValue,
+          [0, 50, 100],
+          isTop ? [1.05, 0.95, 0.95] : [0.95, 0.95, 1.05]
+        ),
         zIndex: useTransform(
           magnitudeMotionValue,
           [0, 50, 100],
@@ -109,22 +108,39 @@ const MobileVoteCard = ({ item, isTop, dragX, magnitudeMotionValue }) => {
       }}
     >
       {/* Media Content */}
-      {mediaUrl && (
+      {mediaUrl ? (
         <div
           className="absolute inset-0 bg-center bg-cover"
           style={{ 
             backgroundImage: `url(${mediaUrl})`,
           }}
         />
-      )}
+      ) : item.domain_pk_namespace === "spotify.track" ? (
+        <div className="absolute inset-0 pointer-events-auto">
+          <iframe
+            src={`https://open.spotify.com/embed/track/${item.domain_pk}`}
+            width="100%"
+            height="100%"
+            allowtransparency="true"
+            allow="encrypted-media"
+            style={{ border: 'none' }}
+          />
+        </div>
+      ) : null}
 
-      {/* Text Content */}
-      <div className={`absolute bottom-0 left-0 right-0 p-4 
-        ${mediaUrl ? 'bg-gradient-to-t from-black/80 to-transparent' : 'h-full flex flex-col justify-center'}`}>
-        <h3 className={`text-xl font-bold ${mediaUrl ? 'text-white' : 'text-black dark:text-white'}`}>
+      {/* Text Content - Always clickable */}
+      <div 
+        onClick={handleTitleClick}
+        className={`absolute bottom-0 left-0 right-0 p-4 cursor-pointer
+          ${(mediaUrl || item.domain_pk_namespace === "spotify.track") ? 
+            'bg-gradient-to-t from-black/80 to-transparent' : 
+            'h-full flex flex-col justify-center'}`}
+      >
+        <h3 className={`text-xl font-bold ${(mediaUrl || item.domain_pk_namespace === "spotify.track") ? 
+          'text-white' : 'text-black dark:text-white'}`}>
           {item.title}
         </h3>
-        {!mediaUrl && item.description && (
+        {!mediaUrl && !item.domain_pk_namespace === "spotify.track" && item.description && (
           <p className="text-sm text-gray-600 dark:text-gray-300 text-left mt-2">
             {item.description.substring(0, 150)}
             {item.description.length > 150 ? '...' : ''}
@@ -182,6 +198,10 @@ const MobileVotePanel = ({ left, right, onSubmitVote, voteCount }) => {
   const dragY = useMotionValue(0);
   const magnitudeMotionValue = useMotionValue(50);
   const [rainbowTime, setRainbowTime] = useState(0);
+  const lastClickTime = useRef(0);
+  const tapTimeout = useRef(null);
+  const tapStartPosition = useRef({ x: 0, y: 0 });
+  const isTapSequence = useRef(false);
   
   // Add refs to track state
   const hasMagnitudeChanged = useRef(false);
@@ -249,7 +269,20 @@ const MobileVotePanel = ({ left, right, onSubmitVote, voteCount }) => {
     dragY.set(info.offset.y);
   };
 
+  const handleTapStart = (e) => {
+    // Record the starting position of the tap
+    tapStartPosition.current = {
+      x: dragX.get(),
+      y: dragY.get()
+    };
+    isTapSequence.current = true;
+    console.log('Tap start detected at:', tapStartPosition.current);
+  };
+
   const handleDragEnd = async (_, info) => {
+    // Reset tap sequence flag since this was a drag
+    isTapSequence.current = false;
+    
     if (info.event?.preventDefault) {
       info.event.preventDefault();
       info.event.stopPropagation();
@@ -262,54 +295,105 @@ const MobileVotePanel = ({ left, right, onSubmitVote, voteCount }) => {
     
     const isVerticalMotion = Math.abs(info.velocity.y) > Math.abs(info.velocity.x);
     const isSwipe = 
-      (info.velocity.y < upwardVelocityThreshold || info.offset.y < upwardOffsetThreshold) || // Upward swipe
-      (info.velocity.y > downwardVelocityThreshold || info.offset.y > downwardOffsetThreshold); // Downward swipe
+      (info.velocity.y < upwardVelocityThreshold || info.offset.y < upwardOffsetThreshold) || 
+      (info.velocity.y > downwardVelocityThreshold || info.offset.y > downwardOffsetThreshold);
     
-    // Check if enough time has passed or if magnitude has changed
     const timeElapsed = Date.now() - mountTime.current;
     const canSubmit = hasMagnitudeChanged.current || timeElapsed > 3000;
 
     if (isVerticalMotion && isSwipe && canSubmit) {
-      // First reset only the Y position to complete the swipe animation
       animate(dragY, 0, { duration: 0.2 });
-      
-      // Wait a moment to ensure the swipe animation completes
       await new Promise(resolve => setTimeout(resolve, 50));
-      
-      // Submit the vote
       await onSubmitVote();
-      
-      // Reset everything after submission
       animate(dragX, 0, { duration: 0.3 });
       animate(magnitudeMotionValue, 50, { duration: 0.3 });
       magnitude.value = 50;
       mountTime.current = Date.now();
       hasMagnitudeChanged.current = false;
     } else {
-      // For horizontal motions or non-swipe verticals, just reset Y
-      animate(dragY, 0);
+      // Only animate Y back to center, preserve X for slider position
+      animate(dragY, 0, { duration: 0.3 });
     }
   };
 
-  const handleSliderDrag = (dragValue) => {
-    dragX.set(dragValue);
-    const newMagnitude = Math.min(Math.max((dragValue + 300) / 6, 0), 100);
-    
-    // Also track magnitude changes from slider
-    if (Math.abs(newMagnitude - 50) > 1) {
-      hasMagnitudeChanged.current = true;
+  const handleTap = (e) => {
+    console.log('Tap detected', Date.now() - lastClickTime.current);
+
+    // Only process tap if we're in a tap sequence
+    if (!isTapSequence.current) {
+      console.log('Ignoring tap - not part of tap sequence');
+      return;
+    }
+
+    // Get current position
+    const currentX = dragX.get();
+    const currentY = dragY.get();
+    const startX = tapStartPosition.current.x;
+    const startY = tapStartPosition.current.y;
+
+    // Calculate total movement during the tap
+    const totalMovement = Math.sqrt(
+      Math.pow(currentX - startX, 2) + 
+      Math.pow(currentY - startY, 2)
+    );
+
+    const dragThreshold = 20;
+    if (totalMovement > dragThreshold) {
+      console.log('Ignoring tap due to movement', { 
+        start: tapStartPosition.current,
+        end: { x: currentX, y: currentY },
+        movement: totalMovement 
+      });
+      isTapSequence.current = false;
+      return;
+    }
+
+    if (tapTimeout.current) {
+      clearTimeout(tapTimeout.current);
+    }
+
+    const clickTime = Date.now();
+    if (clickTime - lastClickTime.current < 300) {
+      console.log('Double tap detected - resetting magnitude');
+      animate(magnitudeMotionValue, 50, { duration: 0.3 });
+      animate(dragX, 0, { duration: 0.3 });
+      animate(dragY, 0, { duration: 0.3 });
+      magnitude.value = 50;
+      lastClickTime.current = 0;
+      isTapSequence.current = false;
+      return;
     }
     
-    magnitude.value = newMagnitude;
-    magnitudeMotionValue.set(newMagnitude);
+    lastClickTime.current = clickTime;
+
+    tapTimeout.current = setTimeout(() => {
+      if (Date.now() - lastClickTime.current >= 300) {
+        const tapY = e.clientY;
+        const windowHeight = window.innerHeight;
+        const isTopHalf = tapY < windowHeight / 2;
+        
+        const selectedItem = isTopHalf ? left : right;
+        console.log('Opening drawer for item:', selectedItem.id);
+        selected_item.value = selectedItem;
+        drawer_open.value = true;
+      }
+      isTapSequence.current = false;
+    }, 300);
   };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (tapTimeout.current) {
+        clearTimeout(tapTimeout.current);
+      }
+    };
+  }, []);
 
   return (
     <motion.div
       className="fixed inset-0 touch-none transition-colors duration-1000"
-      style={{ 
-        backgroundColor: getBgColor(),
-      }}
+      style={{ backgroundColor: getBgColor() }}
     >
       <div className="absolute inset-0 flex flex-col items-center z-10">
         <MobileVoteCard 
@@ -329,7 +413,7 @@ const MobileVotePanel = ({ left, right, onSubmitVote, voteCount }) => {
       <div className="fixed bottom-16 left-0 right-0 z-30">
         <MobileVoteSlider 
           dragX={dragX} 
-          onSliderDrag={handleSliderDrag}
+          onSliderDrag={handleDrag}
           voteCount={voteCount}
         />
       </div>
@@ -343,6 +427,8 @@ const MobileVotePanel = ({ left, right, onSubmitVote, voteCount }) => {
         dragMomentum={false}
         onDrag={handleDrag}
         onDragEnd={handleDragEnd}
+        onTapStart={handleTapStart}
+        onTap={handleTap}
         style={{ 
           x: dragX,
           y: dragY,

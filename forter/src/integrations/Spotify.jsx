@@ -139,36 +139,3 @@ export const Spotify = ({ refreshFrontpage }) => {
     </>
   );
 };
-
-export const getSpotifyTrackArtwork = async (trackId) => {
-  try {
-    const response = await fetch(`/api/spotify/track/${trackId}`, {
-      credentials: "include",
-    });
-    
-    if (!response.ok) {
-      if (response.status === 401) {
-        // Handle unauthorized - might need to login
-        console.warn("Unauthorized access to Spotify API");
-        return null;
-      }
-      throw new Error(`Failed to fetch track data: ${response.status}`);
-    }
-
-    const data = await response.json();
-    
-    // Get the first (usually largest) image from the album
-    const images = data?.album?.images;
-    if (!images || images.length === 0) {
-      return null;
-    }
-
-    // Return the medium size image if available (300x300), otherwise the first one
-    const mediumImage = images.find(img => img.width === 300);
-    return mediumImage?.url || images[0].url;
-  } catch (error) {
-    console.error("Error fetching Spotify track artwork:", error);
-    return null;
-  }
-};
-

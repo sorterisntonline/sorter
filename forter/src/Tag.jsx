@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useLocation, useParams } from "wouter";
 import { tag } from "./App";
 import { editing_item } from "./ItemPanel";
@@ -21,6 +21,7 @@ import { drawer_open } from "./App";
 export const Tag = ({ isVoting, handleError, onSelectItem, onCloseItem }) => {
   const [location, setLocation] = useLocation();
   const isMobileDevice = () => window.innerWidth < 1024;
+  const touchStartX = useRef(null);
 
   const { can_vote = false, can_view = false, can_add = false } = tag.value?.perms || {};
 
@@ -40,21 +41,45 @@ export const Tag = ({ isVoting, handleError, onSelectItem, onCloseItem }) => {
   useEffect(() => {
     // Only run this when we're NOT in voting view
     if (!isVoting) {
-      const handlePopState = (e) => {
-        // Check if the previous state was the voting view for this tag
-        const currentPath = window.location.pathname;
-        const previousPath = document.referrer;
-        
-        // If we're going back to the voting view of the current tag
-        if (previousPath.includes(currentPath + '/voting')) {
+      const handleNavigation = (e) => {
+        // Prevent default navigation
+        if (e?.preventDefault) {
           e.preventDefault();
-          // Go to homepage or another appropriate location
-          setLocation('/');
         }
+        console.log('Navigation detected in tag view, redirecting to home');
+        setLocation('/');
       };
 
-      window.addEventListener('popstate', handlePopState);
-      return () => window.removeEventListener('popstate', handlePopState);
+      const handleTouchStart = (e) => {
+        touchStartX.current = e.touches[0].clientX;
+      };
+
+      const handleTouchEnd = (e) => {
+        if (!touchStartX.current) return;
+
+        const touchEndX = e.changedTouches[0].clientX;
+        const swipeDistance = touchEndX - touchStartX.current;
+
+        // Detect right swipe (common back gesture)
+        if (swipeDistance > 100) {  // threshold of 100px
+          handleNavigation();
+        }
+
+        touchStartX.current = null;
+      };
+
+      // Handle browser back button and MacBook gestures
+      window.addEventListener('popstate', handleNavigation);
+      
+      // Handle touch gestures (mobile and trackpad)
+      document.addEventListener('touchstart', handleTouchStart, { passive: false });
+      document.addEventListener('touchend', handleTouchEnd, { passive: false });
+
+      return () => {
+        window.removeEventListener('popstate', handleNavigation);
+        document.removeEventListener('touchstart', handleTouchStart);
+        document.removeEventListener('touchend', handleTouchEnd);
+      };
     }
   }, [isVoting, setLocation]);
 
@@ -148,7 +173,9 @@ export const Tag = ({ isVoting, handleError, onSelectItem, onCloseItem }) => {
             onCloseItem?.();
           }}
         >
-          <ItemPanel onClose={onCloseItem} />
+          <div className="h-full overflow-y-auto">
+            <ItemPanel onClose={onCloseItem} />
+          </div>
         </Drawer>
       )}
 

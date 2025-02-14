@@ -188,10 +188,27 @@ export const ItemPanel = () => {
   const [location, setLocation] = useLocation();
   const [isAddingToAnotherTag, setIsAddingToAnotherTag] = useState(false);
   const isMobileDevice = () => window.innerWidth < 1024;
+  const contentRef = useRef(null);
+
+  useEffect(() => {
+    // When drawer opens, scroll content to top
+    if (drawer_open.value && contentRef.current) {
+      contentRef.current.scrollTop = 0;
+    }
+  }, [drawer_open.value]);
 
   const closeDrawer = () => {
+    // Clear the drawer state
     drawer_open.value = false;
     selected_item.value = null;
+
+    // Clear the 'item' parameter from URL
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('item')) {
+      params.delete('item');
+      const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+      window.history.replaceState({}, '', newUrl);
+    }
   };
 
   // If we're editing, show the ItemForm
@@ -277,7 +294,7 @@ export const ItemPanel = () => {
   const showMoreActions = skips?.length > 0 || isOwnedByUser;
 
   const content = (
-    <div className="w-full">
+    <div className="w-full" ref={contentRef}>
       {/* Pin navigation buttons - hidden on mobile */}
       {!isMobileDevice() && (
         <div className="flex justify-between mb-4">
@@ -301,8 +318,50 @@ export const ItemPanel = () => {
       {item && (
         <div className="flex flex-col">
           <h1 className="text-3xl">{item.title}</h1>
+          
+          {/* Media content */}
+          {(item.domain_pk_namespace === "IMG" || item.domain_pk_namespace === "reddit.post") && item.url && (
+            <img className="object-cover w-full rounded-lg mt-4" src={item.url} alt={item.title} />
+          )}
+          
+          {item.domain_pk_namespace === "spotify.track" && (
+            <div className="mt-4">
+              <iframe
+                src={`https://open.spotify.com/embed/track/${item.domain_pk}`}
+                width="100%"
+                height="380"
+                allowtransparency="true"
+                allow="encrypted-media"
+              ></iframe>
+            </div>
+          )}
+          
+          {item.domain_pk_namespace === "youtube.video" && (
+            <div className="mt-4">
+              <iframe
+                width="100%" 
+                height="250"
+                src={createEmbedUrl(item)}
+                allowFullScreen
+              ></iframe>
+            </div>
+          )}
+          
+          {item.domain_pk_namespace === "tiktok.video" && (
+            <div className="mt-4">
+              <TikTokEmbed item={item} />
+            </div>
+          )}
+          
+          {item.domain_pk_namespace === "x.xeet" && (
+            <div className="mt-4">
+              <Tweet tweetId={item.domain_pk} />
+            </div>
+          )}
+
+          {/* Description/body content */}
           {item.body && (
-            <div className="markdown-body">
+            <div className="markdown-body mt-4">
               <MarkdownRenderer content={item.body} />
             </div>
           )}
