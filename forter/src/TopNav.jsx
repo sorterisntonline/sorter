@@ -4,7 +4,7 @@ import { NAV_ITEMS } from './constants/navigation';
 import { current_session } from './session';
 import { ProfileHoverPane } from './components/ProfileHoverPane';
 import { showAnnouncement } from './components/AnnouncementBar';
-import { redirectToLogin, redirectToRegister } from './authUtils';
+import { redirectToLogin, redirectToRegister } from './utils/authUtils';
 
 const MyLink = ({ to, children, className = "" }) => {
   const [isActive] = useRoute(to);

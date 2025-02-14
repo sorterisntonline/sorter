@@ -4,7 +4,7 @@ import { UserPanel } from "./UserPanel";
 import useSWR from "swr";
 import { signal, useSignal } from "@preact/signals-react";
 import { useLocation } from "wouter";
-import { redirectToLogin } from './authUtils';
+import { redirectToLogin } from './utils/authUtils';
 
 export const dark_mode = signal(localStorage.getItem("dark_mode") === "true");
 const body = document.getElementsByTagName("body").item(0);

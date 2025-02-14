@@ -28,6 +28,8 @@ import { TextSummary } from './components/TextSummary';
 
 export const useElo = signal(false);
 export const tag = signal(false);
+export const selected_item = signal(false);
+export const drawer_open = signal(false);
 
 export const items_by_id = computed(() => {
   if (!tag.value) return {};
@@ -54,21 +56,26 @@ const computeSelectedItem = (tag, url) => {
   })[0] ?? false;
 }
 const url = new URLSearchParams(window.location.search).get("item");
-export const selected_item = signal(false);
 
 effect(() => {
   selected_item.value = computeSelectedItem(
     tag.value,
-    new URLSearchParams(window.location.search).get("item"));
-})
+    new URLSearchParams(window.location.search).get("item")
+  );
+});
 
 effect(() => {
   const url = new URLSearchParams(window.location.search);
   if (selected_item.value) {
     url.set("item", selected_item.value["id"]);
     window.history.replaceState({}, "", window.location.pathname + "?" + url.toString(), { preventScroll: true });
+    if (window.innerWidth < 1024) {
+      drawer_open.value = true;
+    }
+  } else {
+    drawer_open.value = false;
   }
-})
+});
 
 const truncateText = (text, length) => {
   if (text.length > length) {
@@ -84,13 +91,25 @@ export const showAllSorted = signal(true);
 export const showAllUnsorted = signal(true);
 
 function App({ tagid, isVoting }) {
-  console.log("=== App Debug ===");
-  console.log("Props:", { tagid, isVoting });
-  console.log("Tag value:", tag.value);
-  
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [location] = useLocation();
+  const isMobileDevice = () => window.innerWidth < 1024;
+
+  const handleSelectItem = (item) => {
+    selected_item.value = item;
+    if (isMobileDevice()) {
+      drawer_open.value = true;
+    }
+  };
+
+  const handleCloseItem = () => {
+    drawer_open.value = false;
+    // Small delay to let drawer animation complete
+    setTimeout(() => {
+      selected_item.value = false;
+    }, 100);
+  };
 
   const handleError = (error) => {
     console.log("handler called");
@@ -102,7 +121,6 @@ function App({ tagid, isVoting }) {
 
   useEffect(() => {
     console.log("Loading tag with ID:", tagid);
-    // Only load tag if we don't already have it or if the ID changed
     if (!tag.value || tag.value.tag.id !== tagid) {
       loadTag(tagid);
     }
@@ -113,7 +131,14 @@ function App({ tagid, isVoting }) {
       <div className={`min-h-screen flex flex-col ${isVoting ? 'h-screen' : ''}`}>
         <AnnouncementBar />
         <div className={`flex-1 ${!isVoting ? 'page-padding-top' : ''}`}>
-          {tag.value && <Tag isVoting={isVoting} handleError={handleError}/>}
+          {tag.value && (
+            <Tag 
+              isVoting={isVoting} 
+              handleError={handleError}
+              onSelectItem={handleSelectItem}
+              onCloseItem={handleCloseItem}
+            />
+          )}
         </div>
       </div>
       <ErrorPanel />

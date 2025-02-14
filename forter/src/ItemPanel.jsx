@@ -5,6 +5,18 @@ import { signal } from "@preact/signals-react";
 import MarkdownRenderer from "./MarkdownRenderer";
 import { motion, AnimatePresence } from 'framer-motion';
 import { Item } from "./components/Item";
+import { ItemPanelDrawer } from './components/ItemPanelDrawer';
+import { selected_item, toggle, items_by_id, magnitude, tag, drawer_open } from "./App";
+import { ItemForm } from "./ItemForm";
+import { Feed } from "./Feed";
+import { useEffect, useRef, useState } from "react";
+import { VotesPanel } from "./VotesPanel";
+import { Comments } from "./Comments";
+import { useLocation } from "wouter";
+import { selected_attribute } from "./AttributePanel";
+import { Tweet } from "react-twitter-widgets";
+import { useSearch } from "wouter/use-location";
+
 const createEmbedUrl = (item) => {
   const [code, time] = item["domain_pk"].split("?t=")
 
@@ -55,7 +67,6 @@ const TikTokEmbed = ({ item }) => {
   </div >
 }
 
-import { items_by_id, magnitude, tag } from "./App";
 export const pinned_left = signal(false);
 export const pinned_right = signal(false);
 
@@ -165,17 +176,6 @@ export const ItemFull = ({ item, right, skipped, mutate }) => {
   );
 };
 
-import { selected_item, toggle } from "./App";
-import { ItemForm } from "./ItemForm";
-import { Feed } from "./Feed";
-import { useEffect, useRef, useState } from "react";
-import { VotesPanel } from "./VotesPanel";
-import { Comments } from "./Comments";
-import { useLocation } from "wouter";
-import { selected_attribute } from "./AttributePanel";
-import { Tweet } from "react-twitter-widgets";
-import { useSearch } from "wouter/use-location";
-
 export const editing_item = signal(false);
 
 const fetcher = (arg) => fetch(arg).then((res) => res.json());
@@ -184,6 +184,11 @@ export const ItemPanel = () => {
   const [location, setLocation] = useLocation();
   const [isAddingToAnotherTag, setIsAddingToAnotherTag] = useState(false);
   const isMobileDevice = () => window.innerWidth < 1024;
+
+  const closeDrawer = () => {
+    drawer_open.value = false;
+    selected_item.value = null;
+  };
 
   // If we're editing, show the ItemForm
   if (editing_item.value) {
@@ -345,19 +350,15 @@ export const ItemPanel = () => {
     </div>
   );
 
-  // Mobile version with animation
+  // If we're on mobile, wrap the content in the drawer
   if (isMobileDevice()) {
     return (
-      <AnimatePresence mode="wait">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 20 }}
-          transition={{ duration: 0.2 }}
-        >
-          {content}
-        </motion.div>
-      </AnimatePresence>
+      <ItemPanelDrawer 
+        isOpen={drawer_open.value} 
+        onClose={closeDrawer}
+      >
+        {content}
+      </ItemPanelDrawer>
     );
   }
 

@@ -8,8 +8,9 @@ import { showAllSorted, showAllUnsorted } from "./App";
 import { ItemsLists } from './ItemsLists';
 import { tag, toggle } from "./App";
 import { Tag } from "./components/Tag";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/24/solid";
+import { ItemPanel } from "./ItemPanel";
 
 const MobileHeader = ({ can_vote, can_add, isVoting }) => {
   const [_, setLocation] = useLocation();
@@ -37,19 +38,28 @@ export const Voting = ({ handleError }) => {
   const [location, setLocation] = useLocation();
   const isMobileDevice = () => window.innerWidth < 1024;
   const [showVotesPanel, setShowVotesPanel] = useState(false);
+  const votesPanelRef = useRef(null);
 
   const filteredVotes = tag.value?.votes?.filter(v => v.attribute === selected_attribute.value?.value?.id) || [];
   const sorteditems = tag.value?.["sorted"] || [];
   const unsorteditems = tag.value?.["unsorted"] || [];
 
+  const scrollToVotesPanel = () => {
+    setShowVotesPanel(true);
+  };
+
+  const scrollToVoting = () => {
+    setShowVotesPanel(false);
+  };
+
   if (isMobileDevice()) {
     return (
-      <div className="h-screen overflow-hidden">
+      <div className="h-screen">
         {/* Vote Motion Pane */}
         <div className={`h-screen ${showVotesPanel ? 'hidden' : 'block'}`}>
           <VotePanel handleError={handleError} isMobile={true} />
           
-          {/* Navigation Controls - increased bottom padding to account for slider */}
+          {/* Navigation Controls */}
           <div className="fixed bottom-4 left-0 right-0 flex justify-center items-center gap-2">
             <button
               className="px-4 py-2 border-2 border-red-500 rounded-lg 
@@ -68,7 +78,7 @@ export const Voting = ({ handleError }) => {
             </button>
             <button
               className="p-1.5 rounded-lg bg-white dark:bg-gray-800 shadow-lg"
-              onClick={() => setShowVotesPanel(true)}
+              onClick={scrollToVotesPanel}
             >
               <ChevronDownIcon className="w-5 h-5 text-gray-600 dark:text-gray-300" />
             </button>
@@ -76,25 +86,32 @@ export const Voting = ({ handleError }) => {
         </div>
 
         {/* Votes Panel View */}
-        <div className={`min-h-screen overflow-auto ${showVotesPanel ? 'block' : 'hidden'}`}>
+        <div 
+          ref={votesPanelRef}
+          className={`min-h-screen ${showVotesPanel ? 'block' : 'hidden'}`}
+        >
           <button
             className="fixed top-4 left-4 z-50 p-1.5 rounded-lg bg-white dark:bg-gray-800 shadow-lg"
-            onClick={() => setShowVotesPanel(false)}
+            onClick={scrollToVoting}
           >
             <ChevronUpIcon className="w-5 h-5 text-gray-600 dark:text-gray-300" />
           </button>
 
           <div className="pt-16">
-            <VotesPanel votes={filteredVotes} />
-            <div className="flex justify-center w-full pb-16">
-              <ItemsLists 
-                sorteditems={sorteditems}
-                unsorteditems={unsorteditems}
-                skippedItems={tag.value.skipped}
-              />
+            <MobileHeader />
+            <div className="pt-4 pb-16">
+              <VotesPanel votes={filteredVotes} />
+              <div className="flex justify-center w-full">
+                <ItemsLists 
+                  sorteditems={sorteditems}
+                  unsorteditems={unsorteditems}
+                  skippedItems={tag.value.skipped}
+                />
+              </div>
             </div>
           </div>
         </div>
+        <ItemPanel />
       </div>
     );
   }

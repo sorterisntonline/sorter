@@ -2,9 +2,12 @@ import { makeRequest, loadTag } from "./Network";
 import { tag, magnitude } from "./App";
 import { ItemFull } from "./ItemPanel";
 import { current_session } from "./session";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { motion, useMotionValue, useTransform, animate } from "framer-motion";
 import { Item } from "./components/Item";
+import { VoteStreak } from './components/VoteStreak';
+import { getWavelength, wavelengthToColor, getRainbowColor } from './utils/colorUtils';
+import { getVoteEmoji } from './constants/voting_extras';
 
 const calculateMargin = (magnitude) => {
   if (magnitude < 50) {
@@ -23,11 +26,20 @@ const MobileVoteCard = ({ item, isTop, dragX, magnitudeMotionValue }) => {
       : [0.6, 1, 1]
   );
 
+  // More subtle scale transforms
+  const scale = useTransform(
+    magnitudeMotionValue,
+    [0, 50, 100],
+    isTop 
+      ? [1.05, 0.95, 0.95]  // Top card gets slightly bigger when dominant (left side)
+      : [0.95, 0.95, 1.05]  // Bottom card gets slightly bigger when dominant (right side)
+  );
+
   return (
     <motion.div
       className="absolute w-[90vw] h-[38vh] rounded-xl overflow-hidden bg-white dark:bg-gray-800 shadow-lg"
       style={{
-        top: isTop ? '4vh' : '46vh',  // 4vh gap between cards (was 44vh)
+        top: isTop ? '4vh' : '42vh',
         y: useTransform(
           magnitudeMotionValue,
           [0, 50, 100],
@@ -36,13 +48,7 @@ const MobileVoteCard = ({ item, isTop, dragX, magnitudeMotionValue }) => {
             : [0, 0, -200]
         ),
         opacity,
-        scale: useTransform(
-          magnitudeMotionValue,
-          [0, 50, 100],
-          isTop 
-            ? [0.9, 1, 1]
-            : [1, 1, 0.9]
-        ),
+        scale,
         zIndex: useTransform(
           magnitudeMotionValue,
           [0, 50, 100],
@@ -57,8 +63,8 @@ const MobileVoteCard = ({ item, isTop, dragX, magnitudeMotionValue }) => {
           className="absolute inset-0 bg-center"
           style={{ 
             backgroundImage: `url(${item.url})`,
-            backgroundSize: 'cover',  // Ensure image covers the whole area
-            backgroundPosition: 'center',  // Center the image
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
           }}
         />
       )}
@@ -70,7 +76,7 @@ const MobileVoteCard = ({ item, isTop, dragX, magnitudeMotionValue }) => {
   );
 };
 
-const MobileVoteSlider = ({ dragX, onSliderDrag }) => {
+const MobileVoteSlider = ({ dragX, onSliderDrag, voteCount }) => {
   const maxSliderWidth = window.innerWidth * 0.45;
 
   const sliderX = useTransform(
@@ -80,10 +86,10 @@ const MobileVoteSlider = ({ dragX, onSliderDrag }) => {
   );
 
   return (
-    <div className="h-14 bg-white dark:bg-black flex items-center justify-center">
-      <div className="w-[90vw] h-1 bg-gray-300 dark:bg-gray-600 rounded">
+    <div className="h-14 flex items-center justify-center">
+      <div className="w-[90vw] h-0.5 bg-gray-300 dark:bg-gray-600 rounded relative">
         <motion.div
-          className="w-3 h-3 -translate-y-1 flex justify-center absolute left-1/2 -translate-x-1/2 cursor-grab active:cursor-grabbing"
+          className="absolute top-0 left-1/2 -translate-y-[10px] -translate-x-1/2"
           initial={{ x: 0 }}
           animate={{ x: sliderX }}
           style={{ x: sliderX }}
@@ -94,20 +100,33 @@ const MobileVoteSlider = ({ dragX, onSliderDrag }) => {
             onSliderDrag(dragValue);
           }}
         >
-          <div className="w-0 h-0 
-                      border-l-[6px] border-l-transparent
-                      border-r-[6px] border-r-transparent
-                      border-t-[8px] border-t-yellow-400" />
+          {/* Container for indicator with right offset */}
+          <div className="relative right-3 -top-2 w-6 h-6 flex items-center justify-center cursor-grab active:cursor-grabbing">
+            <div className="text-2xl select-none">
+              {getVoteEmoji(voteCount) || (
+                <div className="w-0 h-0 
+                            border-l-[6px] border-l-transparent
+                            border-r-[6px] border-r-transparent
+                            border-b-[8px] border-yellow-400
+                            dark:border-yellow-500" />
+              )}
+            </div>
+          </div>
         </motion.div>
       </div>
     </div>
   );
 };
 
-const MobileVotePanel = ({ left, right, onSubmitVote }) => {
+const MobileVotePanel = ({ left, right, onSubmitVote, voteCount }) => {
   const dragX = useMotionValue(0);
   const dragY = useMotionValue(0);
   const magnitudeMotionValue = useMotionValue(50);
+  const [rainbowTime, setRainbowTime] = useState(0);
+  
+  // Add refs to track state
+  const hasMagnitudeChanged = useRef(false);
+  const mountTime = useRef(Date.now());
 
   useEffect(() => {
     requestAnimationFrame(() => {
@@ -115,17 +134,59 @@ const MobileVotePanel = ({ left, right, onSubmitVote }) => {
       dragY.set(0);
       magnitudeMotionValue.set(50);
       magnitude.value = 50;
+      mountTime.current = Date.now();
+      hasMagnitudeChanged.current = false;
     });
   }, []);
+
+  // Background color animation
+  useEffect(() => {
+    let animationFrame;
+    
+    const updateBackground = () => {
+      if (voteCount >= 400) {
+        // Rainbow mode
+        setRainbowTime(prev => (prev + 16) % 6000); // Increment by 16ms (roughly 60fps)
+      }
+      animationFrame = requestAnimationFrame(updateBackground);
+    };
+
+    if (voteCount >= 25) {
+      animationFrame = requestAnimationFrame(updateBackground);
+    }
+
+    return () => {
+      if (animationFrame) {
+        cancelAnimationFrame(animationFrame);
+      }
+    };
+  }, [voteCount]);
+
+  // Calculate background color
+  const getBgColor = () => {
+    if (voteCount < 25) return 'bg-gray-100 dark:bg-gray-900';
+    
+    const color = voteCount >= 400 
+      ? getRainbowColor(rainbowTime)
+      : wavelengthToColor(getWavelength(voteCount));
+    
+    // Convert RGB to RGBA with low opacity
+    const opacity = voteCount >= 400 ? 0.15 : 0.1;
+    return color.replace('rgb', 'rgba').replace(')', `, ${opacity})`);
+  };
 
   const handleDrag = (_, info) => {
     // Update X position and magnitude
     dragX.set(info.offset.x);
     const newMagnitude = Math.min(Math.max((info.offset.x + 300) / 6, 0), 100);
+    
+    // Check if magnitude has changed significantly (more than 1%)
+    if (Math.abs(newMagnitude - 50) > 1) {
+      hasMagnitudeChanged.current = true;
+    }
+    
     magnitude.value = newMagnitude;
     magnitudeMotionValue.set(newMagnitude);
-
-    // Track Y position
     dragY.set(info.offset.y);
   };
 
@@ -136,12 +197,20 @@ const MobileVotePanel = ({ left, right, onSubmitVote }) => {
     }
 
     const upwardVelocityThreshold = -300;
+    const downwardVelocityThreshold = 300;
     const upwardOffsetThreshold = -50;
+    const downwardOffsetThreshold = 50;
     
     const isVerticalMotion = Math.abs(info.velocity.y) > Math.abs(info.velocity.x);
-    const isUpwardSwipe = info.velocity.y < upwardVelocityThreshold || info.offset.y < upwardOffsetThreshold;
+    const isSwipe = 
+      (info.velocity.y < upwardVelocityThreshold || info.offset.y < upwardOffsetThreshold) || // Upward swipe
+      (info.velocity.y > downwardVelocityThreshold || info.offset.y > downwardOffsetThreshold); // Downward swipe
+    
+    // Check if enough time has passed or if magnitude has changed
+    const timeElapsed = Date.now() - mountTime.current;
+    const canSubmit = hasMagnitudeChanged.current || timeElapsed > 3000;
 
-    if (isVerticalMotion && isUpwardSwipe) {
+    if (isVerticalMotion && isSwipe && canSubmit) {
       // First reset only the Y position to complete the swipe animation
       animate(dragY, 0, { duration: 0.2 });
       
@@ -151,10 +220,12 @@ const MobileVotePanel = ({ left, right, onSubmitVote }) => {
       // Submit the vote
       await onSubmitVote();
       
-      // Only after vote is submitted, reset the other positions
+      // Reset everything after submission
       animate(dragX, 0, { duration: 0.3 });
       animate(magnitudeMotionValue, 50, { duration: 0.3 });
       magnitude.value = 50;
+      mountTime.current = Date.now();
+      hasMagnitudeChanged.current = false;
     } else {
       // For horizontal motions or non-swipe verticals, just reset Y
       animate(dragY, 0);
@@ -164,12 +235,23 @@ const MobileVotePanel = ({ left, right, onSubmitVote }) => {
   const handleSliderDrag = (dragValue) => {
     dragX.set(dragValue);
     const newMagnitude = Math.min(Math.max((dragValue + 300) / 6, 0), 100);
+    
+    // Also track magnitude changes from slider
+    if (Math.abs(newMagnitude - 50) > 1) {
+      hasMagnitudeChanged.current = true;
+    }
+    
     magnitude.value = newMagnitude;
     magnitudeMotionValue.set(newMagnitude);
   };
 
   return (
-    <div className="fixed inset-0 touch-none bg-gray-100 dark:bg-gray-900">
+    <motion.div
+      className="fixed inset-0 touch-none transition-colors duration-1000"
+      style={{ 
+        backgroundColor: getBgColor(),
+      }}
+    >
       <div className="absolute inset-0 flex flex-col items-center z-10">
         <MobileVoteCard 
           item={left} 
@@ -189,6 +271,7 @@ const MobileVotePanel = ({ left, right, onSubmitVote }) => {
         <MobileVoteSlider 
           dragX={dragX} 
           onSliderDrag={handleSliderDrag}
+          voteCount={voteCount}
         />
       </div>
 
@@ -209,13 +292,15 @@ const MobileVotePanel = ({ left, right, onSubmitVote }) => {
         onTouchStart={(e) => e.stopPropagation()}
         onTouchMove={(e) => e.stopPropagation()}
       />
-    </div>
+    </motion.div>
   );
 };
 
 export const VotePanel = ({ handleError, isMobile = false }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [voteCount, setVoteCount] = useState(0);
+  const [justVoted, setJustVoted] = useState(false);
   
   if (tag.value.pair === undefined || !tag.value.pair[0] || !tag.value.pair[1]) {
     return <div className="text-xl">no pair</div>;
@@ -247,6 +332,10 @@ export const VotePanel = ({ handleError, isMobile = false }) => {
         "tag_id": tag.value.tag["id"],
       });
 
+      setVoteCount(prev => prev + 1);
+      setJustVoted(true);
+      setTimeout(() => setJustVoted(false), 300);
+
       magnitude.value = 50;
       await loadTag(tag.value.tag["id"]);
     } catch (error) {
@@ -256,11 +345,17 @@ export const VotePanel = ({ handleError, isMobile = false }) => {
   };
 
   if (isMobile) {
-    return <MobileVotePanel 
-      left={left} 
-      right={right} 
-      onSubmitVote={submitVote}
-    />;
+    return (
+      <>
+        <MobileVotePanel 
+          left={left} 
+          right={right} 
+          onSubmitVote={submitVote}
+          voteCount={voteCount}
+        />
+        <VoteStreak voteCount={voteCount} justVoted={justVoted} />
+      </>
+    );
   }
 
   // Desktop version remains unchanged

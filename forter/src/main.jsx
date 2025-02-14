@@ -22,7 +22,7 @@ import AnnouncementBar, { showAnnouncement } from './components/AnnouncementBar'
 import { MobileNav } from './MobileNav';
 import { MobileNewTagChooser } from './components/MobileNewTagChooser.jsx';
 import { TopNav } from './TopNav';  // Import the new TopNav
-import { handleLogout } from './authUtils';
+import { handleLogout } from './utils/authUtils.js';
 import { NEW_TAG_ROUTES, NEW_ITEM_ROUTES } from './constants/navigation';
 
 

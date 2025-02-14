@@ -1,7 +1,9 @@
 import { Item } from "./components/Item";
 import { showAllSorted, showAllUnsorted, toggle } from "./App";
+import { selected_item } from "./App";
+import { useState } from "react";
 
-const SortedList = ({ items, showAll, setShowAll }) => {
+const SortedList = ({ items, showAll, setShowAll, inVotePanel }) => {
   const displayCount = 25;
   const hasMore = items?.length > displayCount;
   const displayItems = !showAll && hasMore ? items?.slice(0, displayCount) : items;
@@ -15,7 +17,13 @@ const SortedList = ({ items, showAll, setShowAll }) => {
       </div>
       <ol className="list-decimal">
         {displayItems?.map((item) => (
-          <Item key={item["id"]} item={item} />
+          <Item 
+            key={item["id"]} 
+            item={item} 
+            onClick={() => {
+              selected_item.value = item;
+            }}
+          />
         )) ?? [
           <div key="2">
             <div>no items </div>
@@ -34,7 +42,7 @@ const SortedList = ({ items, showAll, setShowAll }) => {
   );
 };
 
-const UnsortedList = ({ items, showAll, setShowAll }) => {
+const UnsortedList = ({ items, showAll, setShowAll, inVotePanel }) => {
   const displayCount = 25;
   const hasMore = items?.length > displayCount;
   const displayItems = !showAll && hasMore ? items?.slice(0, displayCount) : items;
@@ -48,7 +56,13 @@ const UnsortedList = ({ items, showAll, setShowAll }) => {
       </div>
       <ol className="list-disc ml-3">
         {displayItems?.map((item) => (
-          <Item key={item["id"]} item={item} />
+          <Item 
+            key={item["id"]} 
+            item={item} 
+            onClick={() => {
+              selected_item.value = item;
+            }}
+          />
         )) ?? [<tr key="2"></tr>]}
       </ol>
       {hasMore && (
@@ -95,7 +109,13 @@ export const ItemsLists = ({ sorteditems = [], unsorteditems = [], skippedItems 
           </div>
           <ol className="list-disc ml-3">
             {skippedItems?.map((item) => (
-              <Item key={item["id"]} item={item} />
+              <Item 
+                key={item["id"]} 
+                item={item} 
+                onClick={() => {
+                  selected_item.value = item;
+                }}
+              />
             )) ?? [<tr key="2"></tr>]}
           </ol>
         </div>

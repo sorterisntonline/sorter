@@ -1,9 +1,9 @@
-import { items_by_id, selected_item, tag } from "./App";
+import { items_by_id, tag } from "./App";
 import { makeRequest } from "./Network";
 import { current_session } from "./session";
 import { magnitude } from "./App";
 
-export const Vote = ({ vote, showDelete }) => {
+export const Vote = ({ vote, showDelete, onItemClick }) => {
   const leftItem = items_by_id.value[vote["left_item_id"]] || { title: vote.left_title };
   const rightItem = items_by_id.value[vote["right_item_id"]] || { title: vote.right_title };
 
@@ -16,14 +16,16 @@ export const Vote = ({ vote, showDelete }) => {
     return null;
   }
 
-  const clicked = (item) => () => {
-    selected_item.value = item;
+  const handleItemClick = (item) => () => {
+    if (onItemClick) {
+      onItemClick(item);
+    }
   };
 
   return (
     <tr className="border-yellow-300">
       <td className="text-yellow-500">{"{"}</td>
-      <td onClick={clicked(leftItem)} className="text-left cursor-pointer w-1/3">
+      <td onClick={handleItemClick(leftItem)} className="text-left cursor-pointer w-1/3">
         {leftItem["title"]}
       </td>
       <td
@@ -38,12 +40,13 @@ export const Vote = ({ vote, showDelete }) => {
           }}
         ></div>
       </td>
-      <td onClick={clicked(rightItem)} className="text-right cursor-pointer w-1/3">
+      <td onClick={handleItemClick(rightItem)} className="text-right cursor-pointer w-1/3">
         {rightItem["title"]}
         {(current_session.value && vote["owner"] === current_session.value.user_name && showDelete) ? (
           <button
             className="text-red-500"
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation(); // Prevent item click when deleting
               magnitude.value = 50;
               makeRequest("DELETE", "/api/vote", { vote_id: vote["id"] });
             }}
