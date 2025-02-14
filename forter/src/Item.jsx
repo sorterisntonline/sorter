@@ -1,7 +1,7 @@
 import { signal } from "@preact/signals-react";
-import { selected_item, toggle } from "../App";
-import { pinned_left, pinned_right } from "../ItemPanel";
-import { showPin } from "../App";
+import { selected_item, toggle } from "./App";
+import { pinned_left, pinned_right } from "./ItemPanel";
+import { showPin } from "./App";
 
 const formatNumber = (number) => {
   // take only 3 digits

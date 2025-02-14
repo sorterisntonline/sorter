@@ -22,8 +22,8 @@ import { AttributePanel, selected_attribute } from "./AttributePanel";
 import { namespace } from "./main";
 import { Voting } from './Voting';
 import { ItemsLists } from './ItemsLists';
-import { Tag } from './components/Tag';
-import { Item } from './components/Item';
+import { Tag } from './Tag';
+import { Item } from './Item';
 import { TextSummary } from './components/TextSummary';
 
 export const useElo = signal(false);

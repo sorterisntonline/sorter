@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { Vote } from "./Vote";
-import { selected_item } from "./App";
 
-export const VotesPanel = ({ votes }) => {
+export const VotesPanel = ({ votes, onSelectItem }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const votesPerPage = 5;
   const pageNumbersToShow = 5;
@@ -53,7 +52,7 @@ export const VotesPanel = ({ votes }) => {
   };
 
   const handleItemClick = (item) => {
-    selected_item.value = item;
+    onSelectItem(item);
   };
 
   if (votes === undefined || votes === null || votes.length === 0) {

@@ -7,10 +7,11 @@ import { namespace } from "./main";
 import { showAllSorted, showAllUnsorted } from "./App";
 import { ItemsLists } from './ItemsLists';
 import { tag, toggle } from "./App";
-import { Tag } from "./components/Tag";
+import { Tag } from "./Tag";
 import { useEffect, useState, useRef } from "react";
 import { ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/24/solid";
 import { ItemPanel } from "./ItemPanel";
+import { Drawer } from "./components/Drawer";
 
 const MobileHeader = ({ can_vote, can_add, isVoting }) => {
   const [_, setLocation] = useLocation();
@@ -34,7 +35,7 @@ const MobileHeader = ({ can_vote, can_add, isVoting }) => {
   );
 };
 
-export const Voting = ({ handleError }) => {
+export const Voting = ({ handleError, onSelectItem, onCloseItem }) => {
   const [location, setLocation] = useLocation();
   const isMobileDevice = () => window.innerWidth < 1024;
   const [showVotesPanel, setShowVotesPanel] = useState(false);
@@ -100,18 +101,21 @@ export const Voting = ({ handleError }) => {
           <div className="pt-16">
             <MobileHeader />
             <div className="pt-4 pb-16">
-              <VotesPanel votes={filteredVotes} />
+              <VotesPanel 
+                votes={filteredVotes} 
+                onSelectItem={onSelectItem}
+              />
               <div className="flex justify-center w-full">
                 <ItemsLists 
                   sorteditems={sorteditems}
                   unsorteditems={unsorteditems}
                   skippedItems={tag.value.skipped}
+                  onSelectItem={onSelectItem}
                 />
               </div>
             </div>
           </div>
         </div>
-        <ItemPanel />
       </div>
     );
   }
@@ -119,7 +123,7 @@ export const Voting = ({ handleError }) => {
   return (
     <div className="dark:text-white flex flex-col py-3">
       <div className="items-center">
-        <div className="text-xl flex flex-row">
+        <div className="text-xl flex flex-row page-padding-top">
           <div className="px-2">
             voting on
           </div>
@@ -148,7 +152,10 @@ export const Voting = ({ handleError }) => {
         <div className="w-full flex justify-center flex-col">
           <VotePanel handleError={handleError} />
           <br />
-          <VotesPanel votes={filteredVotes} />
+          <VotesPanel 
+            votes={filteredVotes} 
+            onSelectItem={onSelectItem}
+          />
         </div>
       </div>
 
@@ -157,6 +164,7 @@ export const Voting = ({ handleError }) => {
           sorteditems={sorteditems}
           unsorteditems={unsorteditems}
           skippedItems={tag.value.skipped}
+          onSelectItem={onSelectItem}
         />
       </div>
     </div>

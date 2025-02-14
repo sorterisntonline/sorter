@@ -4,8 +4,8 @@ import { loadTag, makeRequest } from "./Network";
 import { signal } from "@preact/signals-react";
 import MarkdownRenderer from "./MarkdownRenderer";
 import { motion, AnimatePresence } from 'framer-motion';
-import { Item } from "./components/Item";
-import { ItemPanelDrawer } from './components/ItemPanelDrawer';
+import { Item } from "./Item";
+import { Drawer } from './components/Drawer';
 import { selected_item, toggle, items_by_id, magnitude, tag, drawer_open } from "./App";
 import { ItemForm } from "./ItemForm";
 import { Feed } from "./Feed";
@@ -73,6 +73,7 @@ export const pinned_right = signal(false);
 export const ItemFull = ({ item, right, skipped, mutate }) => {
   right = right || false;
   skipped = skipped || false;
+  const isMobileDevice = () => window.innerWidth < 1024;
 
   const pinLeft = () => {
     pinned_left.value = pinned_left.value === item.id ? false : item.id;
@@ -158,20 +159,23 @@ export const ItemFull = ({ item, right, skipped, mutate }) => {
           </div>
         )
       }
-      <div>
+      {/* Pin buttons - hidden on mobile */}
+      {!isMobileDevice() && (
         <div>
-          <button onClick={pinLeft} className="border-2 bigbutton w-fit">
-            {pinned_left.value === item.id ? "📍 unpin left" : "📌 pin left"}
-          </button>
-          <button onClick={pinRight} className="border-2 bigbutton w-fit">
-            {pinned_right.value === item.id ? "📍 unpin right" : "📌 pin right"}
-          </button>
-          {!skipped &&
-            <button onClick={toggleSkip} className="border-2 bigbutton w-fit">
-              skip
-            </button>}
+          <div>
+            <button onClick={pinLeft} className="border-2 bigbutton w-fit">
+              {pinned_left.value === item.id ? "📍 unpin left" : "📌 pin left"}
+            </button>
+            <button onClick={pinRight} className="border-2 bigbutton w-fit">
+              {pinned_right.value === item.id ? "📍 unpin right" : "📌 pin right"}
+            </button>
+            {!skipped &&
+              <button onClick={toggleSkip} className="border-2 bigbutton w-fit">
+                skip
+              </button>}
+          </div>
         </div>
-      </div>
+      )}
     </div >
   );
 };
@@ -274,22 +278,25 @@ export const ItemPanel = () => {
 
   const content = (
     <div className="w-full">
-      <div className="flex justify-between mb-4">
-        <button 
-          onClick={showPinnedLeft}
-          className={`border-2 bigbutton ${!pinned_left.value && 'opacity-50'}`}
-          disabled={!pinned_left.value}
-        >
-          📍 Left Pin
-        </button>
-        <button 
-          onClick={showPinnedRight}
-          className={`border-2 bigbutton ${!pinned_right.value && 'opacity-50'}`}
-          disabled={!pinned_right.value}
-        >
-          📍 Right Pin
-        </button>
-      </div>
+      {/* Pin navigation buttons - hidden on mobile */}
+      {!isMobileDevice() && (
+        <div className="flex justify-between mb-4">
+          <button 
+            onClick={showPinnedLeft}
+            className={`border-2 bigbutton ${!pinned_left.value && 'opacity-50'}`}
+            disabled={!pinned_left.value}
+          >
+            📍 Left Pin
+          </button>
+          <button 
+            onClick={showPinnedRight}
+            className={`border-2 bigbutton ${!pinned_right.value && 'opacity-50'}`}
+            disabled={!pinned_right.value}
+          >
+            📍 Right Pin
+          </button>
+        </div>
+      )}
 
       {item && (
         <div className="flex flex-col">
@@ -353,12 +360,12 @@ export const ItemPanel = () => {
   // If we're on mobile, wrap the content in the drawer
   if (isMobileDevice()) {
     return (
-      <ItemPanelDrawer 
+      <Drawer 
         isOpen={drawer_open.value} 
         onClose={closeDrawer}
       >
         {content}
-      </ItemPanelDrawer>
+      </Drawer>
     );
   }
 

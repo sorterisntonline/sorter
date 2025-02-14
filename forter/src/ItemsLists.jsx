@@ -1,12 +1,18 @@
-import { Item } from "./components/Item";
+import { Item } from "./Item";
 import { showAllSorted, showAllUnsorted, toggle } from "./App";
-import { selected_item } from "./App";
+import { selected_item, drawer_open } from "./App";
 import { useState } from "react";
 
-const SortedList = ({ items, showAll, setShowAll, inVotePanel }) => {
+const SortedList = ({ items, showAll, setShowAll, onSelectItem }) => {
   const displayCount = 25;
   const hasMore = items?.length > displayCount;
   const displayItems = !showAll && hasMore ? items?.slice(0, displayCount) : items;
+
+  const handleItemClick = (item) => {
+    selected_item.value = item;
+    drawer_open.value = true;
+    onSelectItem?.(item);
+  };
 
   return (
     <div>
@@ -20,9 +26,7 @@ const SortedList = ({ items, showAll, setShowAll, inVotePanel }) => {
           <Item 
             key={item["id"]} 
             item={item} 
-            onClick={() => {
-              selected_item.value = item;
-            }}
+            onClick={() => handleItemClick(item)}
           />
         )) ?? [
           <div key="2">
@@ -42,10 +46,16 @@ const SortedList = ({ items, showAll, setShowAll, inVotePanel }) => {
   );
 };
 
-const UnsortedList = ({ items, showAll, setShowAll, inVotePanel }) => {
+const UnsortedList = ({ items, showAll, setShowAll, onSelectItem }) => {
   const displayCount = 25;
   const hasMore = items?.length > displayCount;
   const displayItems = !showAll && hasMore ? items?.slice(0, displayCount) : items;
+
+  const handleItemClick = (item) => {
+    selected_item.value = item;
+    drawer_open.value = true;
+    onSelectItem?.(item);
+  };
 
   return (
     <div>
@@ -59,9 +69,7 @@ const UnsortedList = ({ items, showAll, setShowAll, inVotePanel }) => {
           <Item 
             key={item["id"]} 
             item={item} 
-            onClick={() => {
-              selected_item.value = item;
-            }}
+            onClick={() => handleItemClick(item)}
           />
         )) ?? [<tr key="2"></tr>]}
       </ol>
@@ -77,7 +85,13 @@ const UnsortedList = ({ items, showAll, setShowAll, inVotePanel }) => {
   );
 };
 
-export const ItemsLists = ({ sorteditems = [], unsorteditems = [], skippedItems = [] }) => {
+export const ItemsLists = ({ sorteditems = [], unsorteditems = [], skippedItems = [], onSelectItem }) => {
+  const handleItemClick = (item) => {
+    selected_item.value = item;
+    drawer_open.value = true;
+    onSelectItem?.(item);
+  };
+
   return (
     <div className={" p-3 " + (toggle.value ? "lg:w-2/3" : "lg:w-1/3")}>
       <div className="lg:flex lg:space-x-12">
@@ -86,7 +100,8 @@ export const ItemsLists = ({ sorteditems = [], unsorteditems = [], skippedItems 
             <SortedList 
               items={sorteditems} 
               showAll={showAllSorted.value} 
-              setShowAll={(val) => showAllSorted.value = val} 
+              setShowAll={(val) => showAllSorted.value = val}
+              onSelectItem={handleItemClick}
             />
           </div>
         )}
@@ -95,7 +110,8 @@ export const ItemsLists = ({ sorteditems = [], unsorteditems = [], skippedItems 
             <UnsortedList 
               items={unsorteditems} 
               showAll={showAllUnsorted.value} 
-              setShowAll={(val) => showAllUnsorted.value = val} 
+              setShowAll={(val) => showAllUnsorted.value = val}
+              onSelectItem={handleItemClick}
             />
           </div>
         )}
@@ -112,9 +128,7 @@ export const ItemsLists = ({ sorteditems = [], unsorteditems = [], skippedItems 
               <Item 
                 key={item["id"]} 
                 item={item} 
-                onClick={() => {
-                  selected_item.value = item;
-                }}
+                onClick={() => handleItemClick(item)}
               />
             )) ?? [<tr key="2"></tr>]}
           </ol>

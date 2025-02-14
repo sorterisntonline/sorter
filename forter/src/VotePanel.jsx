@@ -4,7 +4,7 @@ import { ItemFull } from "./ItemPanel";
 import { current_session } from "./session";
 import { useEffect, useState, useRef } from "react";
 import { motion, useMotionValue, useTransform, animate } from "framer-motion";
-import { Item } from "./components/Item";
+import { Item } from "./Item";
 import { VoteStreak } from './components/VoteStreak';
 import { getWavelength, wavelengthToColor, getRainbowColor } from './utils/colorUtils';
 import { getVoteEmoji } from './constants/voting_extras';
@@ -18,21 +18,75 @@ const calculateMargin = (magnitude) => {
 };
 
 const MobileVoteCard = ({ item, isTop, dragX, magnitudeMotionValue }) => {
+  const [mediaUrl, setMediaUrl] = useState(null);
+  const [isIframeSupported, setIsIframeSupported] = useState(true);
+
+  // Helper to extract first media from markdown
+  const extractFirstMedia = (markdown) => {
+    const imageRegex = /!\[.*?\]\((.*?)\)/;
+    const videoRegex = /\[video\]\((.*?)\)/;  // Adjust based on your markdown format
+    
+    const imageMatch = markdown.match(imageRegex);
+    const videoMatch = markdown.match(videoRegex);
+    
+    return imageMatch?.[1] || videoMatch?.[1] || null;
+  };
+
+  // Handle Spotify content
+  const getSpotifyContent = async () => {
+    if (!item.domain_pk_namespace?.startsWith('spotify.')) return null;
+    
+    const [type, id] = item.domain_pk_namespace.split('.');
+    try {
+      // For now, just return the artwork URL
+      // TODO: Implement proper Spotify API call to get artwork
+      return `https://i.scdn.co/image/${item.domain_pk}`;
+    } catch (error) {
+      console.error('Failed to fetch Spotify content:', error);
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    const setupMedia = async () => {
+      // Case 1: Direct image/URL
+      if (item.url) {
+        setMediaUrl(item.url);
+        return;
+      }
+
+      // Case 2: Spotify content
+      if (item.domain_pk_namespace?.startsWith('spotify.')) {
+        const spotifyContent = await getSpotifyContent();
+        if (spotifyContent) {
+          setMediaUrl(spotifyContent);
+          return;
+        }
+      }
+
+      // Case 3: Media in description
+      if (item.description) {
+        const mediaFromDescription = extractFirstMedia(item.description);
+        if (mediaFromDescription) {
+          setMediaUrl(mediaFromDescription);
+          return;
+        }
+      }
+    };
+
+    setupMedia();
+  }, [item]);
+
   const opacity = useTransform(
     magnitudeMotionValue,
     [0, 50, 100],
-    isTop 
-      ? [1, 1, 0.6]
-      : [0.6, 1, 1]
+    isTop ? [1, 1, 0.6] : [0.6, 1, 1]
   );
 
-  // More subtle scale transforms
   const scale = useTransform(
     magnitudeMotionValue,
     [0, 50, 100],
-    isTop 
-      ? [1.05, 0.95, 0.95]  // Top card gets slightly bigger when dominant (left side)
-      : [0.95, 0.95, 1.05]  // Bottom card gets slightly bigger when dominant (right side)
+    isTop ? [1.05, 0.95, 0.95] : [0.95, 0.95, 1.05]
   );
 
   return (
@@ -43,34 +97,39 @@ const MobileVoteCard = ({ item, isTop, dragX, magnitudeMotionValue }) => {
         y: useTransform(
           magnitudeMotionValue,
           [0, 50, 100],
-          isTop 
-            ? [200, 0, 0]
-            : [0, 0, -200]
+          isTop ? [200, 0, 0] : [0, 0, -200]
         ),
         opacity,
         scale,
         zIndex: useTransform(
           magnitudeMotionValue,
           [0, 50, 100],
-          isTop 
-            ? [2, 1, 1]
-            : [1, 1, 2]
+          isTop ? [2, 1, 1] : [1, 1, 2]
         ),
       }}
     >
-      {(item.domain_pk_namespace === "IMG" || item.domain_pk_namespace === "reddit.post") && item.url && (
+      {/* Media Content */}
+      {mediaUrl && (
         <div
-          className="absolute inset-0 bg-center"
+          className="absolute inset-0 bg-center bg-cover"
           style={{ 
-            backgroundImage: `url(${item.url})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
+            backgroundImage: `url(${mediaUrl})`,
           }}
         />
       )}
-      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
-        <h3 className="text-xl font-bold text-white">{item.title}</h3>
-        <p className="text-sm text-white/90">{item.description}</p>
+
+      {/* Text Content */}
+      <div className={`absolute bottom-0 left-0 right-0 p-4 
+        ${mediaUrl ? 'bg-gradient-to-t from-black/80 to-transparent' : 'h-full flex flex-col justify-center'}`}>
+        <h3 className={`text-xl font-bold ${mediaUrl ? 'text-white' : 'text-black dark:text-white'}`}>
+          {item.title}
+        </h3>
+        {!mediaUrl && item.description && (
+          <p className="text-sm text-gray-600 dark:text-gray-300 text-left mt-2">
+            {item.description.substring(0, 150)}
+            {item.description.length > 150 ? '...' : ''}
+          </p>
+        )}
       </div>
     </motion.div>
   );
