@@ -11,11 +11,15 @@
 
 (def nrepl-config {:port 7888 :bind "0.0.0.0"})
 
-(defn -main [& args] ; run with `clj -M -m prod`
+(defn -main
+  "Run with `clj -M -m prod` or with optional port override {:port 3000}"
+  [& {:keys [port] :or {port 8080}}]
   (println "starting repl with config" nrepl-config)
   (defonce server (nrepl.server/start-server :bind (:bind nrepl-config)
-                                             :port (:port nrepl-config)))
+                                           :port (:port nrepl-config)))
   (db/run-migrations)
-  (http/start {:port 8080}))
+  (http/start {:port port}))
+
+
 
 ; On CLJS side we reuse src/user.cljs for prod entrypoint

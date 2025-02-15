@@ -1,0 +1,26 @@
+[
+  {
+    "id": "1",
+    "name": "Python",
+    "category": "language",
+    "x": 0,
+    "y": 0,
+    "z": 0
+  },
+  {
+    "id": "2",
+    "name": "React",
+    "category": "framework",
+    "x": 50,
+    "y": 50,
+    "z": 50
+  },
+  {
+    "id": "3",
+    "name": "MongoDB",
+    "category": "database",
+    "x": -50,
+    "y": -50,
+    "z": -50
+  }
+] 

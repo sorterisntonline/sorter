@@ -22,9 +22,8 @@
             [app.login :as login]
             [app.spotify :as spotify]
             [app.item :as item]
-            [app.query :as query]
-
             [app.vote :as vote]
+            
             [app.permissions :as perms]
             [app.youtube :as youtube]
             [app.integrations :as integrations]
@@ -364,7 +363,6 @@
     ["/tag/exists" {:get {:handler #'tag-slug-check}}]
     ["/tag/page" {:get {:handler #'tag-info-request}}]
     ["/tag/page2" {:get {:handler #'tag-info-request2}}]
-    ["/tag/query" {:get {:handler #'query/handle-tag-query}}]
     ["/tag/permissions" {:get {:handler #'perms/get-perms}
                          :post {:middleware [[wrap-rate-limit one-per-minute]]
                                 :handler #'perms/post-perms}}]
@@ -383,15 +381,7 @@
                :get {:handler #'login/current-session}}]
     ["/logout" {:post {:handler #'login/handle-logout}}]
 
-    ["/spotify" 
-     ["/auth" {:get {:handler spotify/handle-auth}}]
-     ["/callback" {:get {:handler spotify/handle-callback}}]
-     ["/status" {:get {:handler spotify/check-spotify-status}}]
-     ["/disconnect" {:post {:handler spotify/handle-disconnect}}]
-     ["/playlists" {:get {:handler spotify/get-playlists}
-                    :post {:handler spotify/post-playlist}}]
-     ["/resolve" {:post {:handler spotify/resolve-spotify-entity}}]]
-
+    ["/spotify" spotify/routes]
     ["/youtube" youtube/routes]
     ["/linear" linear/routes]
     ["/reddit" reddit/routes]

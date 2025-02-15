@@ -2,12 +2,12 @@
   "build electric.jar library artifact and demos"
   (:require [clojure.tools.build.api :as b]
             [org.corfield.build :as bb]
-             ; so as not to shell out to NPM for shadow
-            
-            ))
+            [clojure.pprint :as pprint]))
 
 (def version (b/git-process {:git-args "describe --tags --long --always --dirty"}))
-(def basis (b/create-basis {:project "deps.edn"}))
+(def basis (b/create-basis {:project "deps.edn"
+                           ;; Add data readers configuration
+                            :aliases [:build]}))
 
 (defn clean [opts]
   (bb/clean opts))
@@ -47,6 +47,8 @@
   (b/uber {:class-dir class-dir
            :uber-file (str (or jar-name (default-jar-name {:version version})))
            :basis     basis
-           :main      'prod}))
+           :main      'prod})
 
-(defn noop [_])                         ; run to preload mvn deps
+  (println "Uberjar build complete."))
+
+(defn noop [_])  ; run to preload mvn deps
