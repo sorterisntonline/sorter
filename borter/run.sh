@@ -11,7 +11,7 @@ set -a
 source .env
 set +a
 
-# Source environment variables from dev.env file if it exists
+# Source dev.env file if it exists
 if [ -f dev.env ]; then
     set -a
     source dev.env
@@ -19,4 +19,9 @@ if [ -f dev.env ]; then
 fi
 
 
-clj -J-Djdk.attach.allowAttachSelf -A:dev -X user/-main
+# Check if port argument is provided and pass it properly to Clojure
+if [ $# -eq 1 ]; then
+    clj -J-Djdk.attach.allowAttachSelf -A:dev -X prod/-main :port "$1"
+else
+    clj -J-Djdk.attach.allowAttachSelf -A:dev -X prod/-main
+fi

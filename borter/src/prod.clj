@@ -16,7 +16,7 @@
   [& {:keys [port] :or {port 8080}}]
   (println "starting repl with config" nrepl-config)
   (defonce server (nrepl.server/start-server :bind (:bind nrepl-config)
-                                           :port (:port nrepl-config)))
+                                             :port (:port nrepl-config)))
   (db/run-migrations)
   (http/start {:port port}))
 
