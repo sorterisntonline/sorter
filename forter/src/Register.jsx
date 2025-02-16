@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { current_session, fetchSession } from "./session"; // Updated import
-import { handleAuthReturn } from './utils/authUtils';
+import { handleAuthReturn, handleLogout } from './utils/authUtils';
 
 export const Register = () => {
   const [location, setLocation] = useLocation();
@@ -59,14 +59,7 @@ export const Register = () => {
         logged in as {current_session.value.user_name}{" "}
         <button
           className="border-2 cursor-pointer"
-          onClick={async () => { 
-            await fetch("/api/logout", {
-              method: "POST",
-              credentials: "include",
-            });
-            await fetchSession();
-            setLocation("/");
-          }}
+          onClick={handleLogout}
         >
           logout
         </button>

@@ -31,8 +31,12 @@ export const handleApiError = (error) => {
     showError("You need to be logged in to do that!", { showLogin: true });
   } else if (error.status === 403) {
     showError("You don't have permission to do that!");
+  } else if (error.status === 429) {
+    showError("Whoa there! Please slow down a bit.", { duration: 3000 });
   } else if (error.status === 400) {
     showError(error.message || "Something went wrong!");
+  } else if (error.status >= 500) {
+    showError("Problems on our end, sorry! Please try again in a moment.", { duration: 5000 });
   } else {
     showError("An unexpected error occurred.");
   }

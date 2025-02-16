@@ -129,7 +129,7 @@ function App({ tagid, isVoting }) {
   return (
     <>
       <div className={`min-h-screen flex flex-col ${isVoting ? 'h-screen' : ''}`}>
-        <AnnouncementBar />
+        <AnnouncementBar isVoting={isVoting} />
         <div className={`flex-1 ${!isVoting ? 'page-padding-top' : ''}`}>
           {tag.value && (
             <Tag 
