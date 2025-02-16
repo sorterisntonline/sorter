@@ -62,21 +62,23 @@
     {:get
      {:handler
       (fn [req]
+        (println "callback")
         (let [code (-> req :params (get "code"))
               return-path (-> req :params (get "state") codec/url-decode)
               redirect-uri (str (get-hostname) "/api/" domain-namespace "/callback")
               tokens (exchange-code provider code redirect-uri)
               token-info (get-token-info provider tokens)
               expires-in (* (get tokens "expires_in") 1000)
-              expires-at (-> (java.time.Instant/ofEpochMilli 
-                            (+ (System/currentTimeMillis) expires-in))
-                           (.atZone (java.time.ZoneId/systemDefault))
-                           .toOffsetDateTime)]
-          
-          ;; Store tokens in database
-          (db/exec! 
+              expires-at (-> (java.time.Instant/ofEpochMilli
+                              (+ (System/currentTimeMillis) expires-in))
+                             (.atZone (java.time.ZoneId/systemDefault))
+                             .toOffsetDateTime)
+              username (get token-info "username")]
+
+          ;; Store tokens in database with the Spotify username
+          (db/exec!
            (-> (h/insert-into :tokens)
-               (h/values [{:owner (-> req :session :user_name)
+               (h/values [{:owner username
                           :domain_pk_namespace domain-namespace
                           :access_token (get tokens "access_token")
                           :refresh_token (get tokens "refresh_token")
@@ -84,11 +86,13 @@
                           :token_info (json/write-str token-info)}])
                (h/on-conflict {:on-constraint :tokens_owner_domain_pk_namespace_key})
                (h/do-update-set {:access_token :EXCLUDED.access_token
-                                :refresh_token :EXCLUDED.refresh_token
-                                :expires_at :EXCLUDED.expires_at
-                                :token_info :EXCLUDED.token_info})))
+                                 :refresh_token :EXCLUDED.refresh_token
+                                 :expires_at :EXCLUDED.expires_at
+                                 :token_info :EXCLUDED.token_info})))
 
-          (redirect return-path)))}}]
+          ;; Set the session to use the Spotify username
+          (-> (redirect return-path)
+              (assoc :session (assoc (:session req) :user_name username)))))}}]
    
    ["/status"
     {:get

@@ -1,0 +1,17 @@
+[
+  {
+    "left_item_id": "1",
+    "right_item_id": "2",
+    "magnitude": 0.8
+  },
+  {
+    "left_item_id": "2",
+    "right_item_id": "3",
+    "magnitude": 0.6
+  },
+  {
+    "left_item_id": "3",
+    "right_item_id": "1",
+    "magnitude": 0.4
+  }
+] 

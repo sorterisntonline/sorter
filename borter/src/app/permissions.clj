@@ -106,10 +106,8 @@
 
   (let [tagid (-> req :body-params :tag_id)
         p (-> req :body-params :perms)]
-
     (when-not (= (get-owner tagid) (-> req :session :user_name))
-      (throw (ex-info "must own tag to modify its permissions" 
-                     {:status 403})))
+      (throw (ex-info "must own tag to modify its permissions" {:status 403})))
     
     (db/exec! (-> {:insert-into :perms
                    :values (for [[cap perm] p]

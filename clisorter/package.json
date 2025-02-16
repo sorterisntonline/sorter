@@ -4,8 +4,10 @@
   "version": "0.3.7",
   "type": "module",
   "scripts": {
-    "dev": "VITE_ENVIRONMENT=development vite build --watch --mode development",
-    "build": "VITE_ENVIRONMENT=production vite build --mode production",
+    "dev": "NODE_ENV=development vite build --watch --mode development",
+    "build": "NODE_ENV=production vite build --mode production",
+    "staging": "NODE_ENV=staging vite build --mode staging",
+    "production": "NODE_ENV=production vite build --mode production",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },
@@ -21,6 +23,7 @@
     "react-select": "^5.8.0",
     "react-twitter-widgets": "^1.11.0",
     "swr": "^2.2.4",
+    "timeago.js": "^4.0.2",
     "wouter": "^2.12.1",
     "zustand": "^5.0.2"
   },
