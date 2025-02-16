@@ -76,6 +76,37 @@ const initialRenderStats: RenderStats = {
     lastFrameTime: 0
 };
 
+// Add this new component above the AllSortViz component
+const SpeedSlider = ({ value, onChange, min, max, label }: {
+    value: number;
+    onChange: (value: number) => void;
+    min: number;
+    max: number;
+    label: string;
+}) => {
+    return (
+        <div style={{ marginTop: '10px' }}>
+            <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between',
+                marginBottom: '5px'
+            }}>
+                <label>{label}</label>
+                <span>{value.toFixed(1)}</span>
+            </div>
+            <input
+                type="range"
+                min={min}
+                max={max}
+                step={0.1}
+                value={value}
+                onChange={(e) => onChange(parseFloat(e.target.value))}
+                style={{ width: '100%' }}
+            />
+        </div>
+    );
+};
+
 /**
  * Basic 3D visualisation of all items and votes.
  * Informed by D3 force graphs.
@@ -110,9 +141,20 @@ export const AllSortViz = ({ width = 800, height = 600 }: AllSortVizProps) => {
     const [currentLinkLimit, setCurrentLinkLimit] = useState(1000);
 
     const [showWarning, setShowWarning] = useState(false);
-    const [isAutoRotateEnabled, setIsAutoRotateEnabled] = useState(false);
+    const [rotationSpeed, setRotationSpeed] = useState(0.5);
+    const [pendingRotationSpeed, setPendingRotationSpeed] = useState(0.5);
     const [showTooltip, setShowTooltip] = useState(false);
     const tooltipTimeoutRef = useRef<NodeJS.Timeout>();
+
+    // Add new state at the top of the AllSortViz component
+    const [showControlsHint, setShowControlsHint] = useState(true);
+
+    // Add new refs to store camera and controls state
+    const cameraStateRef = useRef<{
+        position: THREE.Vector3;
+        rotation: THREE.Euler;
+        target: THREE.Vector3;
+    }>();
 
     const cleanup = useCallback(() => {
         simulationRef.current?.stop();
@@ -146,10 +188,10 @@ export const AllSortViz = ({ width = 800, height = 600 }: AllSortVizProps) => {
         if (!containerRef.current) return;
         cleanup();
 
-        // Use current limits instead of state limits
         const activeItems = items.slice(0, currentItemLimit);
         const itemMap = new Map(activeItems.map(item => [item.id, item]));
         
+        // Current link filtering logic
         const links = votes
             .filter(vote => 
                 itemMap.has(vote.left_item_id) && 
@@ -161,8 +203,59 @@ export const AllSortViz = ({ width = 800, height = 600 }: AllSortVizProps) => {
                 value: vote.magnitude
             }));
 
-        // Create nodes
-        const geometry = new THREE.IcosahedronGeometry(3, 1);
+        // Let's add some debugging to understand our link numbers
+        console.log('Link statistics:', {
+            totalVotes: votes.length,
+            votesWithValidEndpoints: votes.filter(vote => 
+                itemMap.has(vote.left_item_id) && 
+                itemMap.has(vote.right_item_id)).length,
+            linksAfterLimit: links.length,
+            activeItemsCount: activeItems.length,
+            uniqueItemsInVotes: new Set([
+                ...votes.map(v => v.left_item_id),
+                ...votes.map(v => v.right_item_id)
+            ]).size
+        });
+
+        // Consider aggregating votes between the same pairs of items
+        const aggregatedLinks = new Map<string, Link>();
+        votes
+            .filter(vote => 
+                itemMap.has(vote.left_item_id) && 
+                itemMap.has(vote.right_item_id))
+            .forEach(vote => {
+                const source = itemMap.get(vote.left_item_id)!;
+                const target = itemMap.get(vote.right_item_id)!;
+                const linkKey = [source.id, target.id].sort().join('-');
+                
+                if (aggregatedLinks.has(linkKey)) {
+                    const existingLink = aggregatedLinks.get(linkKey)!;
+                    existingLink.value += vote.magnitude;
+                } else {
+                    aggregatedLinks.set(linkKey, {
+                        source,
+                        target,
+                        value: vote.magnitude
+                    });
+                }
+            });
+
+        // Use aggregated links instead of direct vote mapping
+        const finalLinks = Array.from(aggregatedLinks.values())
+            .slice(0, currentLinkLimit)
+            .sort((a, b) => b.value - a.value); // Sort by magnitude
+
+        console.log('Aggregated link statistics:', {
+            totalAggregatedLinks: aggregatedLinks.size,
+            finalLinksCount: finalLinks.length,
+            magnitudeRange: finalLinks.length > 0 ? {
+                min: Math.min(...finalLinks.map(l => l.value)),
+                max: Math.max(...finalLinks.map(l => l.value))
+            } : null
+        });
+
+        // Create nodes with updated geometry and material
+        const geometry = new THREE.IcosahedronGeometry(5, 1);
         const material = new THREE.MeshPhongMaterial({ 
             shininess: 100,
             transparent: true,
@@ -175,12 +268,12 @@ export const AllSortViz = ({ width = 800, height = 600 }: AllSortVizProps) => {
             activeItems.length
         );
 
-        // Initialize node positions
+        // Initialize node positions with better 3D distribution
         activeItems.forEach((item, index) => {
-            // Use spherical coordinates for better 3D distribution
-            const phi = Math.acos(-1 + (2 * index) / activeItems.length);
-            const theta = Math.sqrt(activeItems.length * Math.PI) * phi;
-            const radius = 100 + Math.random() * 50;
+            // Initialize with random positions in a sphere
+            const radius = 200;
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.acos((Math.random() * 2) - 1);
             
             item.x = radius * Math.sin(phi) * Math.cos(theta);
             item.y = radius * Math.sin(phi) * Math.sin(theta);
@@ -195,20 +288,24 @@ export const AllSortViz = ({ width = 800, height = 600 }: AllSortVizProps) => {
         sceneRef.current?.add(nodeMesh);
         activeNodesRef.current = [nodeMesh];
 
-        // Create links
-        const lineMaterial = new THREE.LineBasicMaterial({
-            color: 0xaaaaaa,
-            opacity: 0.3,
-            transparent: true,
-        });
-
-        const linkMeshes = links.map(link => {
+        // Create links with updated material
+        const maxMagnitude = Math.max(...finalLinks.map(link => link.value));
+        const linkMeshes = finalLinks.map(link => {
             const geometry = new THREE.BufferGeometry();
             const positions = new Float32Array([
                 link.source.x || 0, link.source.y || 0, link.source.z || 0,
                 link.target.x || 0, link.target.y || 0, link.target.z || 0
             ]);
             geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            
+            // Scale line opacity and width based on magnitude
+            const normalizedValue = Math.min(1, link.value / maxMagnitude);
+            const lineMaterial = new THREE.LineBasicMaterial({
+                color: 0xaaaaaa,
+                opacity: 0.2 + (normalizedValue * 0.8), // Scale from 0.2 to 1.0
+                transparent: true,
+                linewidth: 1 + (normalizedValue * 2) // Scale from 1 to 3
+            });
             
             const line = new THREE.Line(geometry, lineMaterial);
             sceneRef.current?.add(line);
@@ -217,20 +314,22 @@ export const AllSortViz = ({ width = 800, height = 600 }: AllSortVizProps) => {
 
         activeLinksRef.current = linkMeshes;
 
-        // Initialize force simulation
+        // Updated force simulation configuration
         const simulation = d3.forceSimulation<Item>(activeItems)
             .force("charge", d3.forceManyBody().strength(-200))
             .force("center", d3.forceCenter(0, 0).strength(0.05))
-            .force("link", d3.forceLink(links)
+            .force("link", d3.forceLink(finalLinks)
                 .id((d: any) => d.id)
                 .strength(0.1))
             .force("x", d3.forceX().strength(0.02))
             .force("y", d3.forceY().strength(0.02))
+            .force("z", d3.forceRadial(100, width / 2, height / 2).strength(0.02))
             .force("collision", d3.forceCollide().radius(20));
 
         simulation.on("tick", () => {
             // Update node positions
             activeItems.forEach((item, index) => {
+                if (!item.z) item.z = (Math.random() - 0.5) * 100;
                 const matrix = new THREE.Matrix4().setPosition(
                     item.x || 0,
                     item.y || 0,
@@ -242,8 +341,8 @@ export const AllSortViz = ({ width = 800, height = 600 }: AllSortVizProps) => {
 
             // Update link positions
             linkMeshes.forEach((line, i) => {
-                if (!line?.geometry || i >= links.length) return;
-                const link = links[i];
+                if (!line?.geometry || i >= finalLinks.length) return;
+                const link = finalLinks[i];
                 
                 const positions = new Float32Array([
                     link.source.x || 0, link.source.y || 0, link.source.z || 0,
@@ -256,7 +355,7 @@ export const AllSortViz = ({ width = 800, height = 600 }: AllSortVizProps) => {
         });
 
         simulationRef.current = simulation;
-    }, [currentItemLimit, currentLinkLimit, items, votes, cleanup]);
+    }, [currentItemLimit, currentLinkLimit, items, votes, cleanup, width, height]);
 
     // Load data
     useEffect(() => {
@@ -282,9 +381,15 @@ export const AllSortViz = ({ width = 800, height = 600 }: AllSortVizProps) => {
         scene.background = new THREE.Color(0xffffff);
         sceneRef.current = scene;
 
-        // Increase initial camera distance
         const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 2000);
-        camera.position.set(400, 400, 400);
+        
+        // If we have stored camera state, restore it, otherwise use default position
+        if (cameraStateRef.current) {
+            camera.position.copy(cameraStateRef.current.position);
+            camera.rotation.copy(cameraStateRef.current.rotation);
+        } else {
+            camera.position.set(400, 400, 400);
+        }
 
         // Use existing renderer if available
         let renderer = rendererRef.current;
@@ -299,9 +404,14 @@ export const AllSortViz = ({ width = 800, height = 600 }: AllSortVizProps) => {
         }
 
         const controls = new OrbitControls(camera, renderer.domElement);
+        // Restore controls target if we have it
+        if (cameraStateRef.current) {
+            controls.target.copy(cameraStateRef.current.target);
+        }
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
-        controls.autoRotate = isAutoRotating;
+        controls.autoRotate = true;
+        controls.autoRotateSpeed = rotationSpeed;
         controlsRef.current = controls;
 
         scene.add(new THREE.AmbientLight(0xffffff, 0.5));
@@ -352,7 +462,7 @@ export const AllSortViz = ({ width = 800, height = 600 }: AllSortVizProps) => {
             window.removeEventListener('resize', handleResize);
             cancelAnimationFrame(frameId);
         };
-    }, [width, height, isAutoRotating, initializeVisualization, cleanup, items.length, votes.length]);
+    }, [width, height, rotationSpeed, initializeVisualization, cleanup, items.length, votes.length]);
 
     // Add handleReset function
     const handleReset = useCallback(() => {
@@ -372,9 +482,24 @@ export const AllSortViz = ({ width = 800, height = 600 }: AllSortVizProps) => {
     };
 
     const applyChanges = () => {
+        // Store current camera and controls state before reinitializing
+        if (controlsRef.current && controlsRef.current.object instanceof THREE.PerspectiveCamera) {
+            const camera = controlsRef.current.object;
+            cameraStateRef.current = {
+                position: camera.position.clone(),
+                rotation: camera.rotation.clone(),
+                target: controlsRef.current.target.clone()
+            };
+        }
+
         setPendingChanges(false);
         setCurrentItemLimit(itemLimit);
         setCurrentLinkLimit(linkLimit);
+        setRotationSpeed(pendingRotationSpeed);
+        if (controlsRef.current) {
+            controlsRef.current.autoRotate = pendingRotationSpeed > 0;
+            controlsRef.current.autoRotateSpeed = pendingRotationSpeed;
+        }
         initializeVisualization();
     };
 
@@ -382,6 +507,7 @@ export const AllSortViz = ({ width = 800, height = 600 }: AllSortVizProps) => {
         setShowWarning(false);
         setItemLimit(currentItemLimit);
         setLinkLimit(currentLinkLimit);
+        setPendingRotationSpeed(rotationSpeed);
         setPendingChanges(false);
     };
 
@@ -451,6 +577,17 @@ export const AllSortViz = ({ width = 800, height = 600 }: AllSortVizProps) => {
                         warningThreshold={4500}
                     />
 
+                    <SpeedSlider
+                        value={pendingRotationSpeed}
+                        onChange={(value) => {
+                            setPendingRotationSpeed(value);
+                            setPendingChanges(true);
+                        }}
+                        min={0}
+                        max={5}
+                        label="Rotation Speed"
+                    />
+
                     {pendingChanges && (
                         <button
                             onClick={handleLoadChanges}
@@ -475,114 +612,36 @@ export const AllSortViz = ({ width = 800, height = 600 }: AllSortVizProps) => {
                     top: '20px',
                     right: '20px',
                 }}>
-                    <div className="controls-hint" style={{
-                        background: 'rgba(0,0,0,0.7)',
-                        color: 'white',
-                        padding: '10px',
-                        borderRadius: '5px',
-                        position: 'relative',
-                        zIndex: 1000
-                    }}>
-                        <p>🖱️ Left click + drag to rotate</p>
-                        <p>🖱️ Right click + drag to pan</p>
-                        <p>🖱️ Scroll to zoom</p>
+                    {showControlsHint && (
                         <div 
-                            style={{ position: 'relative' }}
-                            onMouseEnter={() => {
-                                setShowTooltip(true);
-                            }}
-                            onMouseLeave={(e) => {
-                                // Check if we're moving to the tooltip
-                                const tooltipEl = e.relatedTarget as HTMLElement;
-                                if (tooltipEl?.closest('.tooltip-container')) return;
-                                
-                                setShowTooltip(false);
+                            onClick={() => setShowControlsHint(false)}
+                            style={{
+                                position: 'absolute',
+                                top: '20px',
+                                right: '20px',
+                                background: 'rgba(0,0,0,0.7)',
+                                color: 'white',
+                                padding: '20px',
+                                borderRadius: '5px',
+                                cursor: 'pointer',
+                                zIndex: 1000,
+                                minWidth: '300px'
                             }}
                         >
-                            <button 
-                                onClick={() => {
-                                    if (controlsRef.current && !isAutoRotateEnabled) return;
-                                    controlsRef.current!.autoRotate = !isAutoRotating;
-                                    setIsAutoRotating(!isAutoRotating);
-                                }}
-                                style={{
-                                    padding: '5px 10px',
-                                    marginTop: '10px',
-                                    background: '#6c757d',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '3px',
-                                    cursor: isAutoRotateEnabled ? 'pointer' : 'not-allowed',
-                                    opacity: isAutoRotateEnabled ? 1 : 0.5
-                                }}
-                                disabled={!isAutoRotateEnabled}
-                            >
-                                {isAutoRotating ? '⏸ stop rotation' : '▶️ start rotation'}
-                            </button>
-                            {showTooltip && (
-                                <div 
-                                    className="tooltip-container"
-                                    style={{
-                                        position: 'absolute',
-                                        top: '100%',
-                                        left: '50%',
-                                        transform: 'translateX(-50%)',
-                                        background: 'rgba(0,0,0,0.6)',
-                                        padding: '8px',
-                                        borderRadius: '4px',
-                                        whiteSpace: 'normal',
-                                        marginTop: '8px',
-                                        width: '400px',
-                                        zIndex: 1000,
-                                        textAlign: 'center'
-                                    }}
-                                    onMouseLeave={(e) => {
-                                        // Only close if we're not moving to the button
-                                        const buttonEl = e.relatedTarget as HTMLElement;
-                                        if (buttonEl?.closest('button')) return;
-                                        
-                                        setShowTooltip(false);
-                                    }}
-                                >
-                                    {!isAutoRotateEnabled ? (
-                                        <span>
-                                            can't figure out how to implement this to actually pause the animation, it just resets everything.{' '}
-                                            <span 
-                                                onClick={() => setIsAutoRotateEnabled(true)}
-                                                style={{
-                                                    textDecoration: 'underline',
-                                                    cursor: 'pointer',
-                                                    color: '#007bff'
-                                                }}
-                                            >
-                                                enable if you want that
-                                            </span>
-                                        </span>
-                                    ) : (
-                                        <span>
-                                            see? it's annoying.{' '}
-                                            <span 
-                                                onClick={() => {
-                                                    setIsAutoRotateEnabled(false);
-                                                    if (controlsRef.current) {
-                                                        controlsRef.current.autoRotate = true;
-                                                        setIsAutoRotating(true);
-                                                    }
-                                                }}
-                                                style={{
-                                                    textDecoration: 'underline',
-                                                    cursor: 'pointer',
-                                                    color: '#007bff'
-                                                }}
-                                            >
-                                                disable if you want
-                                            </span>
-                                        </span>
-                                    )}
-                                </div>
-                            )}
+                            <p style={{ 
+                                margin: '12px 0',
+                                lineHeight: '1'
+                            }}>🖱️ Left click + drag to rotate</p>
+                            <p style={{ 
+                                margin: '12px 0',
+                                lineHeight: '1'
+                            }}>🖱️ Right click + drag to pan</p>
+                            <p style={{ 
+                                margin: '12px 0',
+                                lineHeight: '1'
+                            }}>🖱️ Scroll to zoom</p>
                         </div>
-                    </div>
+                    )}
                 </div>
 
                 <WarningModal
