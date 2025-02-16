@@ -22,9 +22,8 @@
             [app.login :as login]
             [app.spotify :as spotify]
             [app.item :as item]
-            [app.query :as query]
-
             [app.vote :as vote]
+            
             [app.permissions :as perms]
             [app.youtube :as youtube]
             [app.integrations :as integrations]
@@ -318,6 +317,43 @@
                                    (h/group-by :users/user_name)
                                    (h/join :votes [:= :votes/owner :users/user_name])))})
 
+(defn get-viz-items [req]
+  (let [limit (when-let [limit-str (-> req :query-params (get "limit"))]
+                (Integer/parseInt limit-str))
+        query (-> (h/select-distinct :items.id :items.title 
+                                   :items.domain_pk_namespace
+                                   :items.owner
+                                   :items.created_at)
+                 (h/from :items)
+                 (h/join :items_in_tags [:= :items.id :items_in_tags.item_id]))
+        query-with-limit (if limit 
+                          (h/limit query limit)
+                          query)
+        items (db/exec! query-with-limit)]
+    {:status 200 
+     :body items}))
+
+(defn get-viz-votes [req]
+  (let [limit (when-let [limit-str (-> req :query-params (get "limit"))]
+                (Integer/parseInt limit-str))
+        query (-> (h/select :votes.left_item_id 
+                           :votes.right_item_id
+                           :votes.magnitude
+                           :votes.owner
+                           :votes.created_at
+                           [:attributes.title :attribute_name])
+                 (h/from :votes)
+                 (h/left-join :attributes [:= :votes.attribute :attributes.id])
+                 (h/join [:items :left_items] [:= :votes.left_item_id :left_items.id])
+                 (h/join [:items :right_items] [:= :votes.right_item_id :right_items.id]))
+        query-with-limit (if limit 
+                          (h/limit query limit)
+                          query)
+        votes (db/exec! query-with-limit)]
+    {:status 200 
+     :body votes}))
+
+
 
 
 (def storage (storage/local-storage))
@@ -334,16 +370,28 @@
          (:user_name (:session req))))
 
   (get-quota [self req]
-    (if (or (= "tommy" (get-in req [:session :user_name]))
-            (= "discord" (get-in req [:session :user_name])))
-      Integer/MAX_VALUE  ; effectively no rate limit for tommy
-      quota))
+    (let [username (get-in req [:session :user_name])]
+      (cond
+        ;; tommy is always unlimited
+        (= "tommy" username) Integer/MAX_VALUE 
+        ;; zod, zudsniper, and jason are always unlimited
+        (or (= "zod" username)
+            (= "zudsniper" username)
+            (= "jason" username)) Integer/MAX_VALUE
+        ;; discord is always unlimited
+        (= "discord" username) Integer/MAX_VALUE
+        ;; admin is unlimited when NO_RATE_LIMITS is true
+        (and (= "admin" username)
+             (= "true" (System/getenv "NO_RATE_LIMITS"))) Integer/MAX_VALUE
+        ;; default case - use the specified quota
+        :else quota)))
 
   (get-ttl [self req]
     ttl))
 
 (def one-per-second {:storage storage :limit (UserRateLimit. 1 1 (java.time.Duration/ofSeconds 1))})
 (def one-per-minute {:storage storage :limit (UserRateLimit. 2 1 (java.time.Duration/ofMinutes 1))})
+(def five-per-minute {:storage storage :limit (UserRateLimit. 3 5 (java.time.Duration/ofMinutes 1))})
 
 
 (def routes
@@ -358,13 +406,12 @@
     ["/leaderboard" {:get {:handler #'get-leaderboard}}]
     ["/tag" {:get {:handler #'query-tags}
              :post {:middleware [[wrap-rate-limit one-per-minute]]
-                                :handler #'post-tag}
+                    :handler #'post-tag}
              :delete {:handler #'delete-tag}}]
     ["/users" {:get {:handler #'get-users}}]
     ["/tag/exists" {:get {:handler #'tag-slug-check}}]
     ["/tag/page" {:get {:handler #'tag-info-request}}]
     ["/tag/page2" {:get {:handler #'tag-info-request2}}]
-    ["/tag/query" {:get {:handler #'query/handle-tag-query}}]
     ["/tag/permissions" {:get {:handler #'perms/get-perms}
                          :post {:middleware [[wrap-rate-limit one-per-minute]]
                                 :handler #'perms/post-perms}}]
@@ -383,23 +430,20 @@
                :get {:handler #'login/current-session}}]
     ["/logout" {:post {:handler #'login/handle-logout}}]
 
-    ["/spotify" 
-     ["/auth" {:get {:handler spotify/handle-auth}}]
-     ["/callback" {:get {:handler spotify/handle-callback}}]
-     ["/status" {:get {:handler spotify/check-spotify-status}}]
-     ["/disconnect" {:post {:handler spotify/handle-disconnect}}]
-     ["/playlists" {:get {:handler spotify/get-playlists}
-                    :post {:handler spotify/post-playlist}}]
-     ["/resolve" {:post {:handler spotify/resolve-spotify-entity}}]]
-
+    ["/spotify" spotify/routes]
     ["/youtube" youtube/routes]
     ["/linear" linear/routes]
     ["/reddit" reddit/routes]
-    ["/twitter" twitter/routes] 
+    ["/twitter" twitter/routes]
 
     ["/integrations" integrations/routes]
     ["/comments" comments/routes]
-    ["/user_group" groups/routes]]])
+    ["/user_group" groups/routes]
+    ["/viz"
+     ["/items" {:get {:middleware [[wrap-rate-limit five-per-minute]]
+                              :handler #'get-viz-items}}]
+     ["/votes" {:get {:middleware [[wrap-rate-limit five-per-minute]]
+                              :handler #'get-viz-votes}}]]]])
 
 (defn wrap-dev-session
   "Middleware that injects a dev session when AUTO_LOGIN=true"
@@ -426,4 +470,3 @@
 (defn start [{:keys [port]}]
   (jetty/run-jetty #'app {:port port :join? false :host "0.0.0.0"})
   (println (str "http server running on port " port)))
-

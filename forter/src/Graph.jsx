@@ -141,52 +141,6 @@ const GraphInner = () => {
                             anchor: 'end',
                             align: 'top'
                         },
-                    },
-                    scales: {
-                        x: {
-                            grid: {
-                                color: 'var(--border-color)'
-                            },
-                            ticks: {
-                                color: 'var(--text-color)'
-                            },
-                            title: {
-                                display: true,
-                                text: attribute1.value.title,
-                                color: 'var(--text-color)',
-                                font: {
-                                    size: 14
-                                }
-                            }
-                        },
-                        y: {
-                            grid: {
-                                color: 'var(--border-color)'
-                            },
-                            ticks: {
-                                color: 'var(--text-color)'
-                            },
-                            title: {
-                                display: true,
-                                text: attribute2.value.title,
-                                color: 'var(--text-color)',
-                                font: {
-                                    size: 14
-                                }
-                            }
-                        }
-                    },
-                    onClick: (event, elements) => {
-                        if (elements.length > 0) {
-                            const dataIndex = elements[0].index;
-                            const clickedPoint = data[dataIndex];
-                            window.location.href = `/${tag.value.tag.id}/${tag.value.tag.slug}?item=${clickedPoint.id}`;
-                        }
-                    },
-                    onHover: (event, elements) => {
-                        document.body.style.cursor = elements.length ? 'pointer' : 'default';
-                    },
-                    plugins: {
                         tooltip: {
                             itemSort: function(a, b) {
                                 const distA = Math.sqrt(
@@ -254,7 +208,51 @@ const GraphInner = () => {
                                 }
                             }
                         }
-                    }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                color: 'var(--border-color)'
+                            },
+                            ticks: {
+                                color: 'var(--text-color)'
+                            },
+                            title: {
+                                display: true,
+                                text: attribute1.value.title,
+                                color: 'var(--text-color)',
+                                font: {
+                                    size: 14
+                                }
+                            }
+                        },
+                        y: {
+                            grid: {
+                                color: 'var(--border-color)'
+                            },
+                            ticks: {
+                                color: 'var(--text-color)'
+                            },
+                            title: {
+                                display: true,
+                                text: attribute2.value.title,
+                                color: 'var(--text-color)',
+                                font: {
+                                    size: 14
+                                }
+                            }
+                        }
+                    },
+                    onClick: (event, elements) => {
+                        if (elements.length > 0) {
+                            const dataIndex = elements[0].index;
+                            const clickedPoint = data[dataIndex];
+                            window.location.href = `/${tag.value.tag.id}/${tag.value.tag.slug}?item=${clickedPoint.id}`;
+                        }
+                    },
+                    onHover: (event, elements) => {
+                        document.body.style.cursor = elements.length ? 'pointer' : 'default';
+                    },
                 },
             });
         }

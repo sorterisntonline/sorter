@@ -24,6 +24,7 @@ import { MobileNewTagChooser } from './components/MobileNewTagChooser.jsx';
 import { TopNav } from './TopNav';  // Import the new TopNav
 import { handleLogout } from './utils/authUtils.js';
 import { NEW_TAG_ROUTES, NEW_ITEM_ROUTES } from './constants/navigation';
+import { AllSortViz } from './viz/AllSortViz.jsx';
 
 
 export const namespace = signal(false);
@@ -63,6 +64,7 @@ const Root = () => {
         >
           <Router>
             <Switch>
+              <Route path="/viz"><AllSortViz /></Route>
               <Route path="/login"><Login /></Route>
               <Route path="/register"><Register /></Route>
               <Route path="/feed">

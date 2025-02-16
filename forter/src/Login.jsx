@@ -38,7 +38,7 @@ export const Login = () => {
         setTimeout(() => setShake(false), 500);
       } else {
         await fetchSession();
-        handleAuthReturn();
+        authUtils.handleAuthReturn();
       }
     } finally {
       setIsLoading(false);
