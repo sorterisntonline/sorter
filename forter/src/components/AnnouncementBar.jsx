@@ -1,24 +1,41 @@
 import { useState, useEffect } from 'react';
 import { signal } from "@preact/signals-react";
 
+const ANNOUNCEMENT_SYSTEM_ENABLED = false; // Toggle this to enable/disable the entire announcement system
 const ANNOUNCEMENT_VERSION = "5";
 
 // Initialize the signal based on localStorage
 const storedVersion = localStorage.getItem('announcementBarVersion');
 const isClosed = localStorage.getItem('announcementBarClosed');
 export const showAnnouncement = signal(
-  storedVersion !== ANNOUNCEMENT_VERSION || !isClosed
+  ANNOUNCEMENT_SYSTEM_ENABLED && (storedVersion !== ANNOUNCEMENT_VERSION || !isClosed)
 );
 
 const AnnouncementBar = ({ 
   message = 'check out music.sorter.social to preview our experimental new look!',
   link = 'https://music.sorter.social',
-  baseColor = '#ff4d4d'
+  baseColor = '#ff4d4d',
+  isVoting = false  // Add this prop
 }) => {
   const [isVisible, setIsVisible] = useState(false);  // Start as hidden
   const [shouldRender, setShouldRender] = useState(showAnnouncement.value);
+  const isMobile = window.innerWidth < 1024;
 
   useEffect(() => {
+    // Don't show on mobile voting view
+    if (isMobile && isVoting) {
+      setIsVisible(false);
+      setShouldRender(false);
+      return;
+    }
+
+    // Only proceed if the announcement system is enabled
+    if (!ANNOUNCEMENT_SYSTEM_ENABLED) {
+      setIsVisible(false);
+      setShouldRender(false);
+      return;
+    }
+
     // Check localStorage on mount, including version check
     if (storedVersion !== ANNOUNCEMENT_VERSION) {
       localStorage.removeItem('announcementBarClosed');
@@ -33,7 +50,7 @@ const AnnouncementBar = ({
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [shouldRender]);
+  }, [shouldRender, isVoting, isMobile]);
 
   const handleClose = (e) => {
     e.preventDefault();
@@ -44,7 +61,8 @@ const AnnouncementBar = ({
     localStorage.setItem('announcementBarVersion', ANNOUNCEMENT_VERSION);
   };
 
-  if (!shouldRender) return null;
+  // Early return if system is disabled or if on mobile voting view
+  if (!ANNOUNCEMENT_SYSTEM_ENABLED || !shouldRender || (isMobile && isVoting)) return null;
 
   // Calculate lighter version of the color for gradient
   const lighterColor = baseColor + '99'; // Using alpha channel for lighter effect

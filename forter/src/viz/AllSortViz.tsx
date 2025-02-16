@@ -6,6 +6,7 @@ import { fetchVizData } from "../Network";
 import { VizErrorBoundary } from "./VizErrorBoundary";
 import { DangerSlider } from "./components/DangerSlider";
 import { WarningModal } from "./components/WarningModal";
+import { withAuth } from '../utils/withAuth';
 
 /**
  * Wanted a place to stash this code.
@@ -116,7 +117,7 @@ const SpeedSlider = ({ value, onChange, min, max, label }: {
  * @param height - height of the container
  * @returns - a div containing the 3D visualisation
  */
-export const AllSortViz = ({ width = 800, height = 600 }: AllSortVizProps) => {
+const AllSortVizComponent = ({ width = 800, height = 600 }: AllSortVizProps) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const controlsRef = useRef<OrbitControls | null>(null);
     const [isAutoRotating, setIsAutoRotating] = useState(true);
@@ -657,4 +658,5 @@ export const AllSortViz = ({ width = 800, height = 600 }: AllSortVizProps) => {
     );
 };
 
-export default AllSortViz;
+// Export the wrapped version
+export const AllSortViz = withAuth(AllSortVizComponent, { showError: true });

@@ -8,6 +8,9 @@ import { Item } from "./Item";
 import { VoteStreak } from './components/VoteStreak';
 import { getWavelength, wavelengthToColor, getRainbowColor } from './utils/colorUtils';
 import { getVoteEmoji } from './constants/voting_extras';
+import { handleApiError } from './ErrorHandler';
+import { withAuth } from './utils/withAuth';
+import { TopBanner } from './components/TopBanner';
 
 const calculateMargin = (magnitude) => {
   if (magnitude < 50) {
@@ -441,11 +444,12 @@ const MobileVotePanel = ({ left, right, onSubmitVote, voteCount }) => {
   );
 };
 
-export const VotePanel = ({ handleError, isMobile = false }) => {
+const VotePanelComponent = ({ handleError, isMobile = false }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [voteCount, setVoteCount] = useState(0);
   const [justVoted, setJustVoted] = useState(false);
+  const [isRateLimited, setIsRateLimited] = useState(false);
   
   if (tag.value.pair === undefined || !tag.value.pair[0] || !tag.value.pair[1]) {
     return <div className="text-xl">no pair</div>;
@@ -484,14 +488,24 @@ export const VotePanel = ({ handleError, isMobile = false }) => {
       magnitude.value = 50;
       await loadTag(tag.value.tag["id"]);
     } catch (error) {
-      console.log("Error caught in VotePanel:", error);
-      handleError(error);
+      if (error.status === 429) {
+        setIsRateLimited(true);
+      } else {
+        handleApiError(error);
+      }
     }
   };
 
   if (isMobile) {
     return (
       <>
+        <TopBanner
+          isOpen={isRateLimited}
+          onClose={() => setIsRateLimited(false)}
+          duration={5000}
+        >
+          Please consider your vote more carefully before submitting. You're voting too quickly!
+        </TopBanner>
         <MobileVotePanel 
           left={left} 
           right={right} 
@@ -506,47 +520,58 @@ export const VotePanel = ({ handleError, isMobile = false }) => {
   // Desktop version remains unchanged
   const { leftMargin, rightMargin } = calculateMargin(magnitude.value);
   return (
-    <div className="w-full justify-center page-padding-top">
-      <div className="text-xl flex flex-row items-end">
-        <div
-          className="flex-1"
-          style={{
-            left: 0,
-            width: "50%",
-            marginBottom: leftMargin,
-          }}
-        >
-          <ItemFull item={left} />
-        </div>
-        <div
-          className="flex-2"
-          style={{
-            right: 0,
-            width: "50%",
-            marginBottom: rightMargin,
-            justifyContent: "right",
-          }}
-        >
-          <ItemFull item={right} right={true} />
-        </div>
-      </div>
-      <input
-        className="w-full h-10 bg-gray-300 dark:bg-gray-600 appearance-none cursor-pointer"
-        type="range"
-        min="0"
-        max="100"
-        step="1"
-        value={magnitude.value}
-        onChange={(e) => {
-          magnitude.value = parseInt(e.target.value);
-        }}
-      />
-      <button
-        className="bigbutton border-8 w-full h-12 border-yellow-500"
-        onClick={submitVote}
+    <>
+      <TopBanner
+        isOpen={isRateLimited}
+        onClose={() => setIsRateLimited(false)}
+        duration={5000}
       >
-        vote
-      </button>
-    </div>
+        Please consider your vote more carefully before submitting. You're voting too quickly!
+      </TopBanner>
+      <div className="w-full justify-center page-padding-top">
+        <div className="text-xl flex flex-row items-end">
+          <div
+            className="flex-1"
+            style={{
+              left: 0,
+              width: "50%",
+              marginBottom: leftMargin,
+            }}
+          >
+            <ItemFull item={left} />
+          </div>
+          <div
+            className="flex-2"
+            style={{
+              right: 0,
+              width: "50%",
+              marginBottom: rightMargin,
+              justifyContent: "right",
+            }}
+          >
+            <ItemFull item={right} right={true} />
+          </div>
+        </div>
+        <input
+          className="w-full h-10 bg-gray-300 dark:bg-gray-600 appearance-none cursor-pointer"
+          type="range"
+          min="0"
+          max="100"
+          step="1"
+          value={magnitude.value}
+          onChange={(e) => {
+            magnitude.value = parseInt(e.target.value);
+          }}
+        />
+        <button
+          className="bigbutton border-8 w-full h-12 border-yellow-500"
+          onClick={submitVote}
+        >
+          vote
+        </button>
+      </div>
+    </>
   );
 };
+
+export const VotePanel = withAuth(VotePanelComponent, { showError: false });

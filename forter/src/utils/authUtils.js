@@ -1,23 +1,31 @@
-// Get the base domain for authentication based on current hostname
-const getAuthDomain = () => {
-  const hostname = window.location.hostname;
-  if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    return 'http://localhost:3000';
+// Get base URL based on Vite's mode
+const getBaseUrl = () => {
+  switch (import.meta.env.MODE) {
+    case 'production':
+      return 'https://sorter.social';
+    case 'staging':
+      return 'https://staging.sorter.social';
+    case 'development':
+    default:
+      // In development, use the current hostname
+      const protocol = window.location.protocol;
+      const hostname = window.location.hostname;
+      const port = window.location.port;
+      return `${protocol}//${hostname}${port ? ':' + port : ''}`;
   }
-  return 'https://sorter.social';
 };
 
 // Store the return path before redirecting
 export const redirectToLogin = () => {
   const currentPath = window.location.pathname;
   localStorage.setItem('authReturnPath', currentPath);
-  window.location.href = `${getAuthDomain()}/login`;
+  window.location.href = `${getBaseUrl()}/login`;
 };
 
 export const redirectToRegister = () => {
   const currentPath = window.location.pathname;
   localStorage.setItem('authReturnPath', currentPath);
-  window.location.href = `${getAuthDomain()}/register`;
+  window.location.href = `${getBaseUrl()}/register`;
 };
 
 // Function to handle return after successful auth
@@ -25,20 +33,12 @@ export const handleAuthReturn = () => {
   const returnPath = localStorage.getItem('authReturnPath');
   localStorage.removeItem('authReturnPath'); // Clean up
   
-  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const baseUrl = getBaseUrl();
   
-  if (returnPath && returnPath.includes('/music')) {
-    if (isLocalhost) {
-      window.location.href = `http://localhost:3000${returnPath}`;
-    } else {
-      window.location.href = `https://music.sorter.social${returnPath.replace('/music', '')}`;
-    }
+  if (returnPath) {
+    window.location.href = `${baseUrl}${returnPath}`;
   } else {
-    if (isLocalhost) {
-      window.location.href = 'http://localhost:3000';
-    } else {
-      window.location.href = 'https://sorter.social';
-    }
+    window.location.href = baseUrl;
   }
 };
 

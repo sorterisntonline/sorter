@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { current_session, fetchSession } from "./session";
-import { handleAuthReturn } from './utils/authUtils';
+import { handleAuthReturn, handleLogout } from './utils/authUtils';
 
 export const Login = () => {
   const [location, setLocation] = useLocation();
@@ -38,19 +38,11 @@ export const Login = () => {
         setTimeout(() => setShake(false), 500);
       } else {
         await fetchSession();
-        authUtils.handleAuthReturn();
+        handleAuthReturn();
       }
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleLogout = async () => {
-    await fetch("/api/logout", {
-      method: "POST",
-      credentials: "include",
-    });
-    await fetchSession();
   };
 
   if (current_session.value && current_session.value.user_name) {

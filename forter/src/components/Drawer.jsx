@@ -46,7 +46,7 @@ export const Drawer = ({ children, isOpen, onClose }) => {
       <div
         style={{ height: getDrawerHeight() }}
         className={`absolute bottom-0 left-0 right-0 bg-white dark:bg-gray-900 rounded-t-2xl shadow-lg 
-                   transform transition-all duration-300 ease-out
+                   transform transition-all duration-300 ease-out overflow-hidden
                    ${isOpen ? 'translate-y-0' : 'translate-y-full'}`}
       >
         {/* Handle */}
@@ -73,7 +73,7 @@ export const Drawer = ({ children, isOpen, onClose }) => {
         {/* Content */}
         <div 
           ref={contentRef}
-          className="overflow-y-auto h-[calc(100%-48px)]"
+          className="overflow-y-auto h-[calc(100%-3rem)] pt-0"
         >
           <div className="p-4">
             {children}
