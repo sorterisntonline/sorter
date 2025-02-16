@@ -401,8 +401,8 @@ export const AllSortViz = ({ width = 800, height = 600 }: AllSortVizProps) => {
             >
                 <div className="stats-overlay" style={{
                     position: 'absolute',
-                    top: '10px',
-                    left: '10px',
+                    top: '20px',
+                    left: '20px',
                     background: 'rgba(0,0,0,0.7)',
                     color: 'white',
                     padding: '10px',
@@ -470,17 +470,18 @@ export const AllSortViz = ({ width = 800, height = 600 }: AllSortVizProps) => {
                     )}
                 </div>
 
-                <div className="page-padding-top" style={{
+                <div style={{
                     position: 'absolute',
-                    top: 0,
-                    right: 0,
+                    top: '20px',
+                    right: '20px',
                 }}>
                     <div className="controls-hint" style={{
-                        margin: '10px',
                         background: 'rgba(0,0,0,0.7)',
                         color: 'white',
                         padding: '10px',
-                        borderRadius: '5px'
+                        borderRadius: '5px',
+                        position: 'relative',
+                        zIndex: 1000
                     }}>
                         <p>🖱️ Left click + drag to rotate</p>
                         <p>🖱️ Right click + drag to pan</p>
@@ -489,11 +490,6 @@ export const AllSortViz = ({ width = 800, height = 600 }: AllSortVizProps) => {
                             style={{ position: 'relative' }}
                             onMouseEnter={() => {
                                 setShowTooltip(true);
-                                if (isAutoRotateEnabled) {
-                                    tooltipTimeoutRef.current = setTimeout(() => {
-                                        setShowTooltip(true);
-                                    }, 1000);
-                                }
                             }}
                             onMouseLeave={(e) => {
                                 // Check if we're moving to the tooltip
@@ -501,9 +497,6 @@ export const AllSortViz = ({ width = 800, height = 600 }: AllSortVizProps) => {
                                 if (tooltipEl?.closest('.tooltip-container')) return;
                                 
                                 setShowTooltip(false);
-                                if (tooltipTimeoutRef.current) {
-                                    clearTimeout(tooltipTimeoutRef.current);
-                                }
                             }}
                         >
                             <button 
@@ -539,7 +532,7 @@ export const AllSortViz = ({ width = 800, height = 600 }: AllSortVizProps) => {
                                         borderRadius: '4px',
                                         whiteSpace: 'normal',
                                         marginTop: '8px',
-                                        maxWidth: '400px',  // Increased from 200px
+                                        width: '400px',
                                         zIndex: 1000,
                                         textAlign: 'center'
                                     }}
@@ -549,9 +542,6 @@ export const AllSortViz = ({ width = 800, height = 600 }: AllSortVizProps) => {
                                         if (buttonEl?.closest('button')) return;
                                         
                                         setShowTooltip(false);
-                                        if (tooltipTimeoutRef.current) {
-                                            clearTimeout(tooltipTimeoutRef.current);
-                                        }
                                     }}
                                 >
                                     {!isAutoRotateEnabled ? (
@@ -575,8 +565,8 @@ export const AllSortViz = ({ width = 800, height = 600 }: AllSortVizProps) => {
                                                 onClick={() => {
                                                     setIsAutoRotateEnabled(false);
                                                     if (controlsRef.current) {
-                                                        controlsRef.current.autoRotate = false;
-                                                        setIsAutoRotating(false);
+                                                        controlsRef.current.autoRotate = true;
+                                                        setIsAutoRotating(true);
                                                     }
                                                 }}
                                                 style={{
