@@ -25,6 +25,7 @@ import { TopNav } from './TopNav';  // Import the new TopNav
 import { handleLogout } from './utils/authUtils.js';
 import { NEW_TAG_ROUTES, NEW_ITEM_ROUTES } from './constants/navigation';
 import { AllSortViz } from './viz/AllSortViz.jsx';
+import { initializeTheme } from './utils/themeUtils';
 
 
 export const namespace = signal(false);
@@ -40,6 +41,7 @@ const LogoutRoute = () => {
 const Root = () => {
   useEffect(() => {
     fetchSession();
+    initializeTheme();
   }, []);
 
   const [location] = useLocation();

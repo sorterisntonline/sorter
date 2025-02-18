@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { dark_mode } from "./Profile";
+import { dark_mode } from "./utils/themeUtils";
 
 export const TagForm = ({ mutate, onClose }) => {
   const [title, setTitle] = useState("");

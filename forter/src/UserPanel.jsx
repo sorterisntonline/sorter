@@ -3,7 +3,7 @@ import Select from "react-select";
 import { current_session } from "./session";
 import { signal } from "@preact/signals-react";
 import { loadTag } from "./Network";
-import { dark_mode } from "./Profile";
+import { dark_mode } from "./utils/themeUtils";
 import { useEffect } from "react";
 
 const allUsers = {

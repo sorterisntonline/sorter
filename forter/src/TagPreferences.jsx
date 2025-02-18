@@ -4,7 +4,7 @@ import { current_session } from "./session";
 import Select from "react-select";
 import { useLocation } from "wouter";
 import { loadTag } from "./Network";
-import { dark_mode } from "./Profile";
+import { dark_mode } from "./utils/themeUtils";
 
 const UserPanel = ({ onChange, value, users }) => {
   const [selected, setSelected] = useState(

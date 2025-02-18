@@ -164,12 +164,13 @@ export const Tag = ({ isVoting, handleError, onSelectItem, onCloseItem }) => {
       </div>
       
       {/* Shared Mobile Drawer */}
-      {isMobileDevice() && selected_item.value && (
+      {isMobileDevice() && (selected_item.value || editing_item.value) && (
         <Drawer 
           isOpen={drawer_open.value} 
           onClose={() => {
             drawer_open.value = false;
             selected_item.value = null;
+            editing_item.value = null;
             onCloseItem?.();
           }}
         >
