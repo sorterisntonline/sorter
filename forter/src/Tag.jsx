@@ -98,7 +98,7 @@ export const Tag = ({ isVoting, handleError, onSelectItem, onCloseItem }) => {
             <TextSummary can_vote={can_vote} can_add={can_add} />
             
             <div className="flex lg:flex-row flex-col lg:space-x-24">
-              <div className="flex-1">
+              <div className={`${toggle.value ? 'lg:w-3/4' : 'lg:w-full'} transition-all duration-300`}>
                 <ItemsLists 
                   sorteditems={tag.value.sorted}
                   unsorteditems={tag.value.unsorted}
@@ -108,52 +108,54 @@ export const Tag = ({ isVoting, handleError, onSelectItem, onCloseItem }) => {
               </div>
               
               {/* Desktop sidebar */}
-              <div className="lg:ml-auto lg:w-1/4">
-                <div className="flex flex-col">
-                  <div
-                    className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
-                    onClick={() => toggle.value = !toggle.value}
-                    role="button"
-                  >
-                    {toggle.value ? "[more space <-]" : "[less space ->]"}
+              {toggle.value && (
+                <div className="lg:ml-auto lg:w-1/4">
+                  <div className="flex flex-col">
+                    <div
+                      className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
+                      onClick={() => toggle.value = !toggle.value}
+                      role="button"
+                    >
+                      {toggle.value ? "[more space <-]" : "[less space ->]"}
+                    </div>
+                    <div
+                      className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
+                      onClick={() => {
+                        useElo.value = !useElo.value;
+                        loadTag(undefined);
+                      }}
+                      role="button"
+                    >
+                      {useElo.value ? "[use pagerank]" : "[use elo]"}
+                    </div>
+                    <div
+                      className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
+                      onClick={() => {
+                        setLocation('/' + tag.value.tag.id + '/' + tag.value.tag.slug + '/graph');
+                      }}
+                      role="button"
+                    >
+                      [show graph]
+                    </div>
+                    <div
+                      className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
+                      onClick={() => {
+                        showPin.value = !showPin.value;
+                      }}
+                      role="button"
+                    >
+                      {showPin.value ? "[hide pin]" : "[show pin]"}
+                    </div>
                   </div>
-                  <div
-                    className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
-                    onClick={() => {
-                      useElo.value = !useElo.value;
-                      loadTag(undefined);
-                    }}
-                    role="button"
-                  >
-                    {useElo.value ? "[use pagerank]" : "[use elo]"}
-                  </div>
-                  <div
-                    className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
-                    onClick={() => {
-                      setLocation('/' + tag.value.tag.id + '/' + tag.value.tag.slug + '/graph');
-                    }}
-                    role="button"
-                  >
-                    [show graph]
-                  </div>
-                  <div
-                    className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
-                    onClick={() => {
-                      showPin.value = !showPin.value;
-                    }}
-                    role="button"
-                  >
-                    {showPin.value ? "[hide pin]" : "[show pin]"}
+                  <div className="page-padding-top hidden lg:block">
+                    <div className="sticky top-0 z-10">
+                      {(editing_item.value || selected_item.value) && 
+                        <ItemPanel onClose={onCloseItem} />
+                      }
+                    </div>
                   </div>
                 </div>
-                <div className="page-padding-top hidden lg:block">
-                  <div className="sticky top-0 z-10">
-                    {(editing_item.value || selected_item.value) && 
-                      <ItemPanel onClose={onCloseItem} />
-                    }
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
           </>
         )}

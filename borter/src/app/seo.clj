@@ -3,6 +3,9 @@
             [ring.util.response :as resp]
             [clojure.tools.logging :as log]))
 
+;; THIS IS NOT USED, WILL ADD SSR WHEN WE REFACTOR EVERYTHING USING LIKE NEXTJS OR HELMET or something
+
+
 (def environment
   (or (System/getenv "ENVIRONMENT") "development"))
 

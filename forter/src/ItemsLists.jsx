@@ -93,10 +93,10 @@ export const ItemsLists = ({ sorteditems = [], unsorteditems = [], skippedItems 
   };
 
   return (
-    <div className={" p-3 " + (toggle.value ? "lg:w-2/3" : "lg:w-1/3")}>
+    <div className={"p-3 w-full"}>
       <div className="lg:flex lg:space-x-12">
         {sorteditems?.length > 0 && (
-          <div className={unsorteditems?.length > 0 ? "lg:w-1/2" : "lg:w-full"}>
+          <div className={unsorteditems?.length > 0 ? "lg:w-1/2" : "w-full"}>
             <SortedList 
               items={sorteditems} 
               showAll={showAllSorted.value} 
@@ -106,7 +106,7 @@ export const ItemsLists = ({ sorteditems = [], unsorteditems = [], skippedItems 
           </div>
         )}
         {unsorteditems?.length > 0 && (
-          <div className={sorteditems?.length > 0 ? "lg:w-1/2" : "lg:w-full"}>
+          <div className={sorteditems?.length > 0 ? "lg:w-1/2" : "w-full"}>
             <UnsortedList 
               items={unsorteditems} 
               showAll={showAllUnsorted.value} 
