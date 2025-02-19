@@ -392,6 +392,7 @@
 (def one-per-second {:storage storage :limit (UserRateLimit. 1 1 (java.time.Duration/ofSeconds 1))})
 (def one-per-minute {:storage storage :limit (UserRateLimit. 2 1 (java.time.Duration/ofMinutes 1))})
 (def five-per-minute {:storage storage :limit (UserRateLimit. 3 5 (java.time.Duration/ofMinutes 1))})
+(def three-per-five-minutes {:storage storage :limit (UserRateLimit. 4 3 (java.time.Duration/ofMinutes 5))})
 
 
 (def routes
@@ -429,6 +430,16 @@
     ["/login" {:post {:handler #'login/handle-login}
                :get {:handler #'login/current-session}}]
     ["/logout" {:post {:handler #'login/handle-logout}}]
+    ["/send-confirmation" {:post {:middleware [[wrap-rate-limit three-per-five-minutes]]
+                                 :handler #'login/handle-resend-verification}}]
+    ["/verify" {:get {:middleware [[wrap-rate-limit five-per-minute]]
+                      :handler #'login/handle-verify-email}}]
+    ["/update-email" {:post {:middleware [[wrap-rate-limit three-per-five-minutes]]
+                            :handler #'login/handle-update-email}}]
+    ["/forgot-password" {:post {:middleware [[wrap-rate-limit three-per-five-minutes]]
+                               :handler #'login/handle-forgot-password}}]
+    ["/reset-password" {:post {:middleware [[wrap-rate-limit three-per-five-minutes]]
+                              :handler #'login/handle-reset-password}}]
 
     ["/spotify" spotify/routes]
     ["/youtube" youtube/routes]

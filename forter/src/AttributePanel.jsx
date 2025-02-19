@@ -2,7 +2,7 @@ import { tag } from "./App";
 import Creatable from "react-select/creatable"
 import { signal, computed } from "@preact/signals-react";
 import { loadTag } from "./Network";
-import { dark_mode } from "./Profile";
+import { dark_mode } from "./utils/themeUtils";
 import Select from "react-select";
 
 export const selected_attribute = computed(() => {

@@ -6,7 +6,7 @@ import { Spotify } from "./integrations/Spotify";
 import { Youtube } from "./integrations/Youtube";
 import { Linear } from "./integrations/Linear";
 import { RedditLogo } from "./RedditLogo";
-import { dark_mode } from "./Profile";
+import { dark_mode } from "./utils/themeUtils";
 import React from 'react';
 import { TagForm } from './TagForm';
 

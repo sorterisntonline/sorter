@@ -256,6 +256,9 @@ jobs:
             # borter/.env
             HOSTNAME=${{ secrets.HOSTNAME }}
 
+            # REPL Password
+            REPL_PASSWORD=${{ github.ref_name == 'production' && secrets.BORTER_REPL_PASSWORD || secrets.BORTER_REPL_PASSWORD_STAGING }}
+
             # Linear Integration
             BORTER_LINEAR_CLIENT_ID=${{ secrets.BORTER_LINEAR_CLIENT_ID }}
             BORTER_LINEAR_CLIENT_SECRET=${{ secrets.BORTER_LINEAR_CLIENT_SECRET }}
@@ -282,6 +285,8 @@ jobs:
             BORTER_YOUTUBE_REDIRECT_URIS=${{ secrets.BORTER_YOUTUBE_REDIRECT_URIS }}
             BORTER_YOUTUBE_JAVASCRIPT_ORIGINS=${{ secrets.BORTER_YOUTUBE_JAVASCRIPT_ORIGINS }}
             EOF
+
+            BORTER_SENDGRID_API_KEY=${{ secrets.BORTER_SENDGRID_API_KEY }}
 
             chmod 600 borter/.env 
 

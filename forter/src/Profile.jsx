@@ -6,23 +6,16 @@ import { signal, useSignal } from "@preact/signals-react";
 import { useLocation } from "wouter";
 import { redirectToLogin } from './utils/authUtils';
 import { withAuth } from './utils/withAuth';
+import { dark_mode, toggleDarkMode } from './utils/themeUtils';
 
-export const dark_mode = signal(localStorage.getItem("dark_mode") === "true");
 const body = document.getElementsByTagName("body").item(0);
 
 body.classList.add(dark_mode.value ? "dark" : "light");
 body.classList.add(dark_mode.value ? "bg-black" : "bg-white");
 
 const saveDarkMode = (e) => {
-    localStorage.setItem("dark_mode", e.target.checked);
-    dark_mode.value = e.target.checked;
-
-    body.classList.remove(dark_mode.value ? "light" : "dark");
-    body.classList.remove(dark_mode.value ? "bg-white" : "bg-black");
-    body.classList.add(dark_mode.value ? "dark" : "white");
-    body.classList.add(dark_mode.value ? "bg-black" : "bg-white");
+    toggleDarkMode(e.target.checked);
 }
-
 
 const fetcher = (arg) => fetch(arg).then((res) => res.json());
 const GroupRow = ({ group, users, mutate1 }) => {

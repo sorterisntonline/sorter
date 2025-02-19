@@ -121,10 +121,12 @@
   ;; (migratus/create (migratus-config) "slug-namespace-unique")
   ;; (migratus/create (migratus-config) "grant-tokens-privileges")
   ;; 
+  ;; (migratus/create (migratus-config) "add-password-reset-tokens-table")
   ;; (migratus/migrate (migratus-config))
   ;; (migratus/rollback (migratus-config))
   ;; (run-migrations)
   ;; (delete-items-in-tag 9)
   ;; (exec! {:delete-from :perms :where [:= :tag_id 9]})
+  (migratus/create (migratus-config) "add-token-expiration")
   ;; (exec! {:delete-from :tags :where [:= :id 9]})
   )

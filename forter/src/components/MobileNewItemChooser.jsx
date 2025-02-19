@@ -1,5 +1,6 @@
 import { FloatingActionButton } from './FloatingActionButton';
 import { editing_item } from '../ItemPanel';
+import { drawer_open } from '../App';
 
 export const MobileNewItemChooser = () => {
   const buttons = [
@@ -11,9 +12,10 @@ export const MobileNewItemChooser = () => {
       onClick: () => {
         if (editing_item.value) {
           editing_item.value = null;
+          drawer_open.value = false;
         } else {
           editing_item.value = {};
-          window.scrollTo({ top: 0, behavior: 'smooth' });
+          drawer_open.value = true;
         }
       },
       animate: { rotate: editing_item.value ? 45 : 0 },

@@ -25,7 +25,9 @@ import { TopNav } from './TopNav';  // Import the new TopNav
 import { handleLogout } from './utils/authUtils.js';
 import { NEW_TAG_ROUTES, NEW_ITEM_ROUTES } from './constants/navigation';
 import { AllSortViz } from './viz/AllSortViz.jsx';
-
+import { initializeTheme } from './utils/themeUtils';
+import { EmailVerification } from './EmailVerification';
+import { ForgotPassword, ResetPassword } from './ForgotPassword';
 
 export const namespace = signal(false);
 
@@ -40,6 +42,7 @@ const LogoutRoute = () => {
 const Root = () => {
   useEffect(() => {
     fetchSession();
+    initializeTheme();
   }, []);
 
   const [location] = useLocation();
@@ -140,6 +143,15 @@ const Root = () => {
               </Route>
               <Route path="/logout">
                 <LogoutRoute />
+              </Route>
+              <Route path="/verify">
+                <EmailVerification />
+              </Route>
+              <Route path="/forgot-password">
+                <ForgotPassword />
+              </Route>
+              <Route path="/reset-password">
+                <ResetPassword />
               </Route>
               {/* 404 catch-all route */}
               <Route path="/:rest*">
