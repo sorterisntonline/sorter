@@ -34,60 +34,59 @@ export function ForgotPassword() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white">
-            Reset your password
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
-            Enter your email address and we'll send you a link to reset your password.
-          </p>
-        </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="rounded-md shadow-sm -space-y-px">
-            <div>
-              <input
-                type="email"
-                required
-                className="appearance-none rounded relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-700 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white focus:outline-none focus:ring-purple-500 focus:border-purple-500 focus:z-10 sm:text-sm dark:bg-gray-800"
-                placeholder="Email address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
+    <div className="flex items-center justify-center min-h-screen bg-white dark:bg-black">
+      <div className="bg-gray-100 dark:bg-gray-800 p-6 shadow-md w-80">
+        <h2 className="text-2xl mb-4 text-center text-black dark:text-white">
+          Reset your password
+        </h2>
+        <p className="mb-4 text-center text-gray-700 dark:text-gray-300">
+          Enter your email address and we'll send you a link to reset your password.
+        </p>
+
+        <form className="space-y-4" onSubmit={handleSubmit}>
+          <div>
+            <input
+              type="email"
+              required
+              className="mt-1 p-2 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-black dark:text-white"
+              placeholder="email address"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
           </div>
 
           {status === 'success' && (
             <div className="text-sm text-green-600 dark:text-green-400">
-              If an account exists with that email, you'll receive password reset instructions shortly.
+              reset email sent (if account exists)
             </div>
           )}
           {status === 'error' && (
-            <div className="text-sm text-red-600 dark:text-red-400">
-              Something went wrong. Please try again.
+            <div className="text-sm text-red-500">
+              error, sorry
             </div>
           )}
 
-          <div>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50"
-            >
-              {isLoading ? 'Sending...' : 'Send reset link'}
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={isLoading}
+            className={`w-full p-2 transition-colors duration-200 text-white
+              ${isLoading 
+                ? 'bg-gray-400 dark:bg-gray-600' 
+                : 'bg-blue-500 dark:bg-blue-700 hover:bg-blue-600 dark:hover:bg-blue-800'
+              }`}
+          >
+            {isLoading ? 'sending...' : 'send reset link'}
+          </button>
 
-          <div className="text-sm text-center">
+          <p className="mt-4 text-center text-gray-700 dark:text-gray-200">
             <button
               type="button"
               onClick={() => setLocation('/login')}
-              className="font-medium text-purple-600 hover:text-purple-500 dark:text-purple-400 dark:hover:text-purple-300"
+              className="text-blue-500 cursor-pointer"
             >
-              Back to login
+              back to login
             </button>
-          </div>
+          </p>
         </form>
       </div>
     </div>
@@ -133,60 +132,61 @@ export function ResetPassword() {
 
   if (!token) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
-        <div className="text-center text-red-600 dark:text-red-400">
-          Invalid reset link. Please request a new password reset.
+      <div className="flex items-center justify-center min-h-screen bg-white dark:bg-black">
+        <div className="bg-gray-100 dark:bg-gray-800 p-6 shadow-md w-80">
+          <div className="text-center text-red-500">
+            token expired or otherwise not set - try again later
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white">
-            Set new password
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
-            Enter your new password below
-          </p>
-        </div>
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="rounded-md shadow-sm -space-y-px">
-            <div>
-              <input
-                type="password"
-                required
-                className="appearance-none rounded relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-700 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white focus:outline-none focus:ring-purple-500 focus:border-purple-500 focus:z-10 sm:text-sm dark:bg-gray-800"
-                placeholder="New password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                minLength="8"
-              />
-            </div>
+    <div className="flex items-center justify-center min-h-screen bg-white dark:bg-black">
+      <div className="bg-gray-100 dark:bg-gray-800 p-6 shadow-md w-80">
+        <h2 className="text-2xl mb-4 text-center text-black dark:text-white">
+          Set new password
+        </h2>
+        <p className="mb-4 text-center text-gray-700 dark:text-gray-300">
+          Enter your new password below
+        </p>
+
+        <form className="space-y-4" onSubmit={handleSubmit}>
+          <div>
+            <input
+              type="password"
+              required
+              className="mt-1 p-2 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-black dark:text-white"
+              placeholder="New password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              minLength="8"
+            />
           </div>
 
           {status === 'success' && (
             <div className="text-sm text-green-600 dark:text-green-400">
-              Password reset successful! Redirecting to login...
+              yup it worked
             </div>
           )}
           {status === 'error' && (
-            <div className="text-sm text-red-600 dark:text-red-400">
-              Something went wrong. Please try again or request a new reset link.
+            <div className="text-sm text-red-500">
+              expired or broken
             </div>
           )}
 
-          <div>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50"
-            >
-              {isLoading ? 'Resetting...' : 'Reset password'}
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={isLoading}
+            className={`w-full p-2 transition-colors duration-200 text-white
+              ${isLoading 
+                ? 'bg-gray-400 dark:bg-gray-600' 
+                : 'bg-blue-500 dark:bg-blue-700 hover:bg-blue-600 dark:hover:bg-blue-800'
+              }`}
+          >
+            {isLoading ? 'resetting...' : 'reset password'}
+          </button>
         </form>
       </div>
     </div>

@@ -127,5 +127,6 @@
   ;; (run-migrations)
   ;; (delete-items-in-tag 9)
   ;; (exec! {:delete-from :perms :where [:= :tag_id 9]})
+  (migratus/create (migratus-config) "add-token-expiration")
   ;; (exec! {:delete-from :tags :where [:= :id 9]})
   )

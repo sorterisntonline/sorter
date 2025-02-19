@@ -77,17 +77,23 @@
     ;; First delete any existing confirmations for this user
     (db/exec! (-> (h/delete-from :email_confirmations)
                  (h/where [:= :user_name username])))
-    ;; Then create the new confirmation
+    ;; Then create the new confirmation with expiration
     (db/exec! (-> (h/insert-into :email_confirmations)
                  (h/values [{:user_name username
-                            :token token}])))
+                           :token token
+                           :expires_at [:cast 
+                                      (str (-> (java.time.Duration/ofMinutes 10)
+                                             (.addTo (java.time.Instant/now))))
+                                      :timestamp]}])))
     token))
 
 (defn verify-email-token [token]
   (println "Verifying email token:" token)
   (let [confirmation (first (db/exec! (-> (h/select :*)
-                                          (h/from :email_confirmations)
-                                          (h/where [:= :token token]))))]
+                                         (h/from :email_confirmations)
+                                         (h/where [:and
+                                                 [:= :token token]
+                                                 [:> :expires_at [:cast (str (java.time.Instant/now)) :timestamp]]]))))]
     (when confirmation
       (db/exec! (-> (h/update :users)
                     (h/set {:email_verified true})
@@ -254,20 +260,22 @@
     ;; First delete any existing reset tokens for this user
     (db/exec! (-> (h/delete-from :password_reset_tokens)
                   (h/where [:= :user_name username])))
-    ;; Then create the new token
+    ;; Then create the new token with expiration
     (db/exec! (-> (h/insert-into :password_reset_tokens)
                   (h/values [{:user_name username
-                              :token token
-                              :created_at (java.time.Instant/now)}])))
+                             :token token
+                             :expires_at [:cast 
+                                        (str (-> (java.time.Duration/ofMinutes 10)
+                                               (.addTo (java.time.Instant/now))))
+                                        :timestamp]}])))
     token))
 
 (defn verify-reset-token [token]
   (let [reset-request (first (db/exec! (-> (h/select :*)
-                                           (h/from :password_reset_tokens)
-                                           (h/where [:and
-                                                     [:= :token token]
-                                                     [:> :created_at (-> (java.time.Duration/ofHours 24)
-                                                                         (.subtractFrom (java.time.Instant/now)))]]))))]
+                                          (h/from :password_reset_tokens)
+                                          (h/where [:and
+                                                   [:= :token token]
+                                                   [:> :expires_at [:cast (str (java.time.Instant/now)) :timestamp]]]))))]
     (when reset-request
       (:password_reset_tokens/user_name reset-request))))
 
