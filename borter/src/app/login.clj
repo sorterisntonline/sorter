@@ -19,14 +19,19 @@
 (defn create-email-content
   "Creates a standardized email structure with customizable content"
   [{:keys [to subject title message action-text action-url extra-text]}]
-  {:personalizations [{:to [{:email to}]}]
-   :from {:email "noreply@sorter.social"
-          :name "sorter noreply"}
-   :reply_to {:email "support@sorter.social"
-              :name "sorter support"}
-   :subject subject
-   :content [{:type "text/html"
-              :value (str "<!DOCTYPE html>
+  (let [env-suffix (case environment
+                    "staging" " (staging)"
+                    "development" " (testing)"
+                    "")  ; no suffix for production
+        full-subject (str subject env-suffix)]
+    {:personalizations [{:to [{:email to}]}]
+     :from {:email "noreply@sorter.social"
+            :name "sorter noreply"}
+     :reply_to {:email "support@sorter.social"
+                :name "sorter support"}
+     :subject full-subject
+     :content [{:type "text/html"
+                :value (str "<!DOCTYPE html>
 <html>
 <head>
   <meta charset='utf-8'>
@@ -48,7 +53,7 @@
     " (when extra-text (str "<p style='color: #666; font-size: 0.9em;'>" extra-text "</p>")) "
   </div>
 </body>
-</html>")}]})
+</html>")}]}))
 
 (defn send-verification-email [email username token]
   (when sendgrid-api-key
@@ -56,11 +61,11 @@
           verify-url (str base-url "/verify?token=" token)
           email-content (create-email-content
                         {:to email
-                         :subject "Verify your sorter account"
-                         :title "Welcome to sorter!"
-                         :message (str "<p>Hi " username ",</p>"
-                                     "<p>Please verify your email by clicking the link below:</p>")
-                         :action-text "Verify Email"
+                         :subject "verify your sorter account"
+                         :title "welcome to sorter!"
+                         :message (str "<p>hi " username ",</p>"
+                                     "<p>please verify your email by clicking below:</p>")
+                         :action-text "verify email"
                          :action-url verify-url})]
       (hc/post "https://api.sendgrid.com/v3/mail/send"
                {:headers {"Authorization" (str "Bearer " sendgrid-api-key)
@@ -106,9 +111,9 @@
   (let [token (-> r :query-params (get "token"))]
     (if (verify-email-token token)
       {:status 200
-       :body "Email verified successfully"}
+       :body "email verified successfully"}
       {:status 400
-       :body "Invalid or expired verification token"})))
+       :body "invalid or expired verification token"})))
 
 (defn is-placeholder-email? [email]
   (str/ends-with? email "@placeholder.com"))
@@ -121,23 +126,23 @@
                                           [:= :user_name login-id]
                                           [:= :email login-id]]))))]
     (if (nil? user)
-      {:status 401 :body "Invalid username/email or password"}
+      {:status 401 :body "invalid username/email or password"}
       (if (password/check (-> r :body-params :password) (:users/password_hash user))
         (cond
           (is-placeholder-email? (:users/email user))
           {:status 403 
-           :body "Please set your email address"}
+           :body "please set your email address"}
           
           (not (:users/email_verified user))
           {:status 403 
-           :body "Please verify your email before logging in"}
+           :body "please verify your email before logging in"}
           
           :else
           {:status 200 
            :body "logged in"
            :session {:user_name (:users/user_name user)}})
         {:status 401 
-         :body "Invalid username/email or password"}))))
+         :body "invalid username/email or password"}))))
 
 (defn validate-username [username]
   (let [regex #"^(?!_)(?!.*?_$)[a-zA-Z0-9_]{3,20}$"]
@@ -151,16 +156,16 @@
   (let [username (-> r :body-params :user_name)
         email (-> r :body-params :email)]
     (when-not (validate-username username)
-      (throw (ex-info "Invalid username" {:status 400})))
+      (throw (ex-info "invalid username" {:status 400})))
     (when-not (validate-email email)
-      (throw (ex-info "Invalid email address" {:status 400})))
+      (throw (ex-info "invalid email address" {:status 400})))
     
     (let [existing-user (first (db/exec! (-> (h/select :*)
                                             (h/from :users)
                                             (h/where [:= :email email]))))]
       (when (and existing-user 
                  (not (is-placeholder-email? (:users/email existing-user))))
-        (throw (ex-info "Email already registered" {:status 400}))))
+        (throw (ex-info "email already registered" {:status 400}))))
     
     (db/exec! (-> (h/insert-into :users)
                  (h/values [{:user_name username
@@ -172,7 +177,7 @@
       (send-verification-email email username token))
     
     {:status 200 
-     :body "Registration successful. Please check your email to verify your account."}))
+     :body "registration successful. please check your email to verify your account."}))
 
 (defn handle-resend-verification [r]
   (let [login-id (-> r :body-params :email)
@@ -184,18 +189,18 @@
                                             [:= :email login-id]]))))]
     (cond
       (nil? user)
-      {:status 401 :body "Invalid username/email or password"}
+      {:status 401 :body "invalid username/email or password"}
       
       (not (password/check password (:users/password_hash user)))
-      {:status 401 :body "Invalid username/email or password"}
+      {:status 401 :body "invalid username/email or password"}
       
       (:users/email_verified user)
-      {:status 400 :body "Email is already verified"}
+      {:status 400 :body "email is already verified"}
       
       :else
       (let [token (create-verification-token (:users/user_name user))]
         (send-verification-email (:users/email user) (:users/user_name user) token)
-        {:status 200 :body "Verification email sent"}))))
+        {:status 200 :body "verification email sent"}))))
 
 
 (defn reset-password [username new-pw]
@@ -233,7 +238,7 @@
       (send-verification-email new-email username token))
     
     {:status 200 
-     :body "Email updated. Please check your inbox for verification."}))
+     :body "email updated. please check your inbox for verification."}))
 
 
 (defn send-password-reset-email [email username token]
@@ -242,14 +247,14 @@
           reset-url (str base-url "/reset-password?token=" token)
           email-content (create-email-content
                         {:to email
-                         :subject "Reset your sorter password"
-                         :title "Password Reset Request"
-                         :message (str "<p>Hi " username ",</p>"
-                                     "<p>Someone (hopefully you) requested to reset your password. "
-                                     "Click the link below to set a new password:</p>")
-                         :action-text "Reset Password"
+                         :subject "reset your sorter password"
+                         :title "reset your password"
+                         :message (str "<p>hi " username ",</p>"
+                                     "<p>someone (hopefully you) asked to reset your password. "
+                                     "click below to set a new one:</p>")
+                         :action-text "reset password"
                          :action-url reset-url
-                         :extra-text "<p>If you didn't request this, you can safely ignore this email.</p>"})]
+                         :extra-text "<p>if you didn't request this, you can ignore this email</p>"})]
       (hc/post "https://api.sendgrid.com/v3/mail/send"
                {:headers {"Authorization" (str "Bearer " sendgrid-api-key)
                          "Content-Type" "application/json"}
@@ -291,10 +296,10 @@
          (:users/user_name user)
          token)
         {:status 200 
-         :body "If an account exists with that email, you will receive password reset instructions."})
+         :body "if an account exists with that email, you will receive password reset instructions."})
       ;; Return the same message even if email doesn't exist (security best practice)
       {:status 200 
-       :body "If an account exists with that email, you will receive password reset instructions."})))
+       :body "if an account exists with that email, you will receive password reset instructions."})))
 
 (defn handle-reset-password [r]
   (let [token (-> r :body-params :token)
@@ -307,6 +312,6 @@
         (db/exec! (-> (h/delete-from :password_reset_tokens)
                       (h/where [:= :token token])))
         {:status 200 
-         :body "Password has been reset successfully"})
+         :body "password has been reset successfully"})
       {:status 400 
-       :body "Invalid or expired reset token"})))
+       :body "invalid or expired reset token"})))
