@@ -121,6 +121,7 @@
   ;; (migratus/create (migratus-config) "slug-namespace-unique")
   ;; (migratus/create (migratus-config) "grant-tokens-privileges")
   ;; 
+  ;; (migratus/create (migratus-config) "add-password-reset-tokens-table")
   ;; (migratus/migrate (migratus-config))
   ;; (migratus/rollback (migratus-config))
   ;; (run-migrations)

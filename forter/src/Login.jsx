@@ -28,14 +28,24 @@ export const Login = () => {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: userEmail }),
+      body: JSON.stringify({ 
+        email: userEmail,
+        password: password 
+      }),
     });
     
     if (!response.ok) {
       const msg = await response.text();
-      setError(msg);
+      try {
+        const jsonMsg = JSON.parse(msg);
+        setError(jsonMsg.message || "Error sending verification email");
+      } catch {
+        setError(msg);
+      }
+      console.log("error sending verification email: ", msg);
     } else {
       setError("Verification email sent! Please check your inbox.");
+      console.log("sent verification email");
     }
   };
 
@@ -127,7 +137,7 @@ export const Login = () => {
         <div className="bg-gray-100 dark:bg-gray-800 p-6 shadow-md w-80 text-center">
           <h2 className="text-2xl mb-4 text-black dark:text-white">Email Verification Required</h2>
           <p className="text-gray-700 dark:text-gray-300 mb-4">
-            Please verify your email address before logging in.
+            Verify your email address before logging in.
           </p>
           <button
             onClick={handleResendVerification}
@@ -152,7 +162,7 @@ export const Login = () => {
         <div className="bg-gray-100 dark:bg-gray-800 p-6 shadow-md w-80">
           <h2 className="text-2xl mb-4 text-center text-black dark:text-white">Set Email Address</h2>
           <p className="text-gray-700 dark:text-gray-300 mb-4">
-            Please set your email address to continue.
+            Please add email address to continue.
           </p>
           <form onSubmit={handleEmailSubmit}>
             <input
@@ -210,6 +220,14 @@ export const Login = () => {
             onChange={handlePasswordChange}
             required
           />
+          <div className="mt-1 text-sm text-left">
+            <a 
+              href="/forgot-password" 
+              className="text-purple-600 dark:text-purple-400 hover:text-purple-500 dark:hover:text-purple-300"
+            >
+              forgot?
+            </a>
+          </div>
         </div>
         <button
           type="submit"
