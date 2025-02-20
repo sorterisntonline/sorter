@@ -6,13 +6,7 @@
             "projectRootPath": ["borter"],
             "nReplPortFile": [".nrepl-port"],
             "connectionType": "nrepl",
-            "autoSelectForConnect": true,
-            "hosts": [
-                {
-                    "host": "localhost",
-                    "port": 7888
-                }
-            ]
+            "autoSelectForConnect": true
         }
     ],
     "calva.autoConnectRepl": true
