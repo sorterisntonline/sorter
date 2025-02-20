@@ -1,40 +1,38 @@
 (ns app.http
-  (:require [reitit.ring :as ring]
-            [ring.adapter.jetty :as jetty]
-            [ring.middleware.params :as params]
-            [ring.middleware.session :as session]
-            [ring.middleware.resource :refer [wrap-resource]]
-            [ring.middleware.content-type :refer [wrap-content-type]]
-            [ring.util.response :as resp]
-
-            [io.staticweb.rate-limit.storage :as storage]
-            [io.staticweb.rate-limit.middleware :refer [ip-rate-limit wrap-rate-limit]]
-            [io.staticweb.rate-limit.limits :refer [RateLimit]]
-
-
-            [app.database :as db]
-            [muuntaja.middleware :as mw]
-            [muuntaja.core :as m]
-            [honey.sql.helpers :as h]
-            [sluj.core :refer [sluj]]
-            [hato.client :as hc]
-
-            [app.login :as login]
-            [app.spotify :as spotify]
-            [app.item :as item]
-            [app.vote :as vote]
-            
-            [app.permissions :as perms]
-            [app.youtube :as youtube]
-            [app.integrations :as integrations]
-            [app.linear :as linear]
-            [app.feed :as feed]
-            [app.comments :as comments]
-            [app.reddit :as reddit]
-            [app.twitter :as twitter]
-            [app.groups :as groups]
-            [app.health :as health]
-            [app.oauth :as oauth])
+  (:require
+   [app.comments :as comments]
+   [app.database :as db]
+   [app.feed :as feed]
+   [app.groups :as groups]
+   [app.health :as health]
+   [app.integrations :as integrations]
+   [app.item :as item]
+   [app.linear :as linear]
+   [app.login :as login]
+   [app.permissions :as perms]
+   [app.reddit :as reddit]
+   [app.seo :as seo]
+   [app.spotify :as spotify]
+   [app.twitter :as twitter]
+   [app.vote :as vote]
+   [app.youtube :as youtube]
+   [clojure.string :as str]
+   [clojure.tools.logging :as log]
+   [hato.client :as hc]
+   [honey.sql.helpers :as h]
+   [io.staticweb.rate-limit.limits :refer [RateLimit]]
+   [io.staticweb.rate-limit.middleware :refer [wrap-rate-limit]]
+   [io.staticweb.rate-limit.storage :as storage]
+   [muuntaja.core :as m]
+   [muuntaja.middleware :as mw]
+   [reitit.ring :as ring]
+   [ring.adapter.jetty :as jetty]
+   [ring.middleware.content-type :refer [wrap-content-type]]
+   [ring.middleware.params :as params]
+   [ring.middleware.resource :refer [wrap-resource]]
+   [ring.middleware.session :as session]
+   [ring.util.response :as resp]
+   [sluj.core :refer [sluj]])
   (:import
    [java.net URLEncoder]))
 
@@ -48,7 +46,7 @@
 (defn serve-index [request]
   (let [html-file (get-html-file request)]
     (-> (resp/resource-response html-file)
-        (resp/content-type)
+        (resp/content-type "text/html")
         (assoc :status 200))))
 
 (defn test [r]
@@ -230,7 +228,6 @@
                          (do
                            (when-not (= (item-owner (-> req :body-params :id)) username)
                              (throw (ex-info "must own item to update it" {:status 403})))
-
                            (item/update-item req))
                          (item/create-item req))}))
 
@@ -297,15 +294,16 @@
 
 (defn wrap-exception [handler]
   (fn [request]
-    (try (handler request)
-         (catch Exception e
-           (def e e)
-           (println "Exception:" e)
-           (let [message (ex-message e)]
-             message)
-           (merge {:status 500
-                   :body {:message (ex-message e)}}
-                  (ex-data e))))))
+    (try 
+      (handler request)
+      (catch Exception e
+        (log/error (str (ex-message e) " - " (type e)))  ; Log exception type and message
+        ;; Return a properly formatted response map
+        (-> (merge {:status 500
+                    :body {:message (ex-message e)}}
+                   (ex-data e))
+            ;; Ensure we have a response with proper headers
+            (update :headers merge {"Content-Type" "application/json"}))))))
 
 (defn get-users [req]
   {:status 200 :body (->> (-> (db/exec! (-> {:select [:users/user_name :owner] :from :users :where true}
@@ -395,11 +393,8 @@
 (def three-per-five-minutes {:storage storage :limit (UserRateLimit. 4 3 (java.time.Duration/ofMinutes 5))})
 
 
-(def routes
-  [["/" {:handler #'test}]
-   ["/music" {:handler #'test-2}]
-   ["/music/*" {:handler #'test-2}]
-   ["/api"
+(def api-routes
+  [["/api"
     ["/health" {:get {:handler #'health/check-health}}]
     ["/feed" {:get {:handler #'feed/get-feed}}]
     ["/frontpage" {:get {:handler #'feed/get-frontpage-feed}}]
@@ -456,6 +451,8 @@
      ["/votes" {:get {:middleware [[wrap-rate-limit five-per-minute]]
                               :handler #'get-viz-votes}}]]]])
 
+
+
 (defn wrap-dev-session
   "Middleware that injects a dev session when AUTO_LOGIN=true"
   [handler]
@@ -464,20 +461,37 @@
       (handler (assoc request :session {:user_name "admin"}))
       (handler request))))
 
-(def app
+(def api-handler
   (-> (ring/ring-handler
-       (ring/router routes)
-       #'test)
-
-      (wrap-exception)
-      (mw/wrap-params)
-      (params/wrap-params)
+       (ring/router api-routes)
+       (ring/create-default-handler
+         {:not-found (fn [_]
+                      {:status 404
+                       :headers {"Content-Type" "application/json"}
+                       :body {:error "API route not found"}})}))
+      wrap-exception
+      mw/wrap-params
+      params/wrap-params
       (mw/wrap-format muntaja)
-      (wrap-dev-session)
-      (session/wrap-session)
+      (session/wrap-session {:cookie-attrs {:same-site :lax}})))
+
+(def spa-handler
+  (-> (fn [req]
+        (serve-index req))
+      wrap-exception
       (wrap-resource "public")
-      (wrap-content-type)))
+      wrap-content-type
+      params/wrap-params
+      (session/wrap-session {:cookie-attrs {:same-site :lax}})
+      seo/wrap-seo))
+
+(def app
+  (-> (fn [req]
+        (if (str/starts-with? (:uri req) "/api")
+          (api-handler req)
+          (spa-handler req)))
+      wrap-dev-session))
 
 (defn start [{:keys [port]}]
   (jetty/run-jetty #'app {:port port :join? false :host "0.0.0.0"})
-  (println (str "http server running on port " port)))
+  (log/info (str "http server running on port " port)))

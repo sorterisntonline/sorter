@@ -1,13 +1,12 @@
 {
-    "calva.autoConnectRepl": true,
     "calva.replConnectSequences": [
         {
             "name": "Borter REPL",
             "projectType": "deps.edn",
-            "nReplPortFile": [".calva", "repl.calva-repl"],
+            "projectRootPath": ["borter"],
+            "nReplPortFile": [".nrepl-port"],
             "connectionType": "nrepl",
-            "autoSelectNs": true,
-            "customJackInCommandLine": "(cd borter; clojure -Sdeps '{:deps {nrepl/nrepl {:mvn/version,\"1.1.1\"},cider/cider-nrepl {:mvn/version,\"0.47.1\"}}}' -M -m nrepl.cmdline --middleware \"[cider.nrepl/cider-middleware]\")",
+            "autoSelectForConnect": true,
             "hosts": [
                 {
                     "host": "localhost",
@@ -15,5 +14,6 @@
                 }
             ]
         }
-    ]
+    ],
+    "calva.autoConnectRepl": true
 }

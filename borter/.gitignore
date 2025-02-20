@@ -8,6 +8,8 @@ resources/public/
 target/
 secrets.edn
 
+.nrepl-port
+
 src/app/gen_pw_admin.clj
 
 .env
