@@ -208,7 +208,7 @@ const LazyComponent = React.lazy(() => import('./LazyComponent'));
 ## 9. Additional Conventions 
  
 - **Placeholder Images**  
-  - If you need placeholder images in seed data or testing, use [https://placekitten.com/](https://placekitten.com/) .
+  - If you need placeholder images in seed data or testing, use [https://placekitten.com/](mdc:https:/placekitten.com) .
  
 - **Web Vitals** 
   - Keep performance in mind (Largest Contentful Paint, Cumulative Layout Shift, etc.). Optimize resource loading.
