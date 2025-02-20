@@ -1,0 +1,239 @@
+---
+description: use React, tailwind, prefer typescript, follow best practices, and some specifics regarding SSR.
+globs: *.tsx,*.jsx,src/**/*.js,src/**/*.ts
+---
+## High-Level Overview 
+ 
+- **Stack** : React for the frontend, Vite for building and bundling, Tailwind CSS and Framer Motion for styling and animations, and Shadcn UI when requested.
+ 
+- **Bundle and Serve** : Vite generates a single index.html and assets that the Node app serves. Any logic or meta tag manipulation that requires server response changes must happen in the server.
+ 
+- **Preferred Language** : TypeScript is recommended, but if the project is already using JavaScript, continuing with JavaScript is acceptable.
+
+
+---
+
+
+## 1. Code Style and Structure 
+ 
+- **Functional & Declarative** 
+  - Write concise, technical React code using functional and declarative programming patterns.
+
+  - Avoid classes; prefer modular functions and hooks.
+ 
+- **Descriptive Names**  
+  - Use descriptive variable and function names (e.g., `isLoading`, `hasError`, `fetchUserData`).
+ 
+- **File Organization**  
+  - Each file generally contains: 
+    1. **Exported component**
+ 
+    2. **Subcomponents**  (if small and only relevant to the main component)
+ 
+    3. **Helpers**  (utility functions local to this component)
+ 
+    4. **Static content**  (constant objects or arrays)
+ 
+    5. **Types**  (interfaces/types, if using TypeScript)
+ 
+- **Prefer DRY (Don’t Repeat Yourself)** 
+  - Break out shared logic into reusable hooks or utility modules.
+
+  - Keep code lean; avoid duplication with modular structures.
+
+
+---
+
+
+## 2. Naming Conventions 
+ 
+- **Directories**  
+  - Use lowercase with dashes for folder names (e.g., `components/auth-wizard`).
+ 
+- **Components**  
+  - Place all shared or global components in **Place all shared or global components in `src/components`** .
+ 
+  - Use **dash-case**  for component folder names (e.g., `new-component`).
+ 
+  - Within each folder, the main component file can be named `index.tsx` or `index.jsx` (or similar) if you prefer.
+ 
+- **Exports**  
+  - Favor **named exports**  for components (e.g., `export function MyComponent() {}`).
+
+
+---
+
+
+## 3. TypeScript Usage (with JavaScript Flexibility) 
+ 
+- **Preference**  
+  - TypeScript is **preferred**  for new code—use `.tsx` for React components and `.ts` for utilities.
+ 
+  - If the project is already in JavaScript, continuing with `.jsx`/.js is acceptable; no strict enforcement to migrate immediately.
+ 
+- **Interfaces over Types**  
+  - When using TypeScript, favor **interfaces**  over type aliases for objects.
+ 
+- **Avoid Enums** 
+  - Use union types or object maps instead of enums.
+ 
+- **Functional Components**  
+  - Define component props with interfaces (e.g., `interface Props { ... }`).
+
+
+---
+
+
+## 4. Syntax and Formatting 
+ 
+- **"function" Keyword**  
+  - Use `function` declarations over arrow functions for pure, named utility functions:
+
+```ts
+function formatName(name: string): string {
+  return name.trim().toUpperCase();
+}
+```
+ 
+- **Concise Conditionals**  
+  - For simple statements, avoid unnecessary braces:
+
+```ts
+if (!user) return null;
+```
+ 
+- **Declarative JSX** 
+  - Keep JSX clear and declarative; avoid complicated inline logic.
+
+
+---
+
+
+## 5. UI and Styling 
+ 
+- **Tailwind CSS** 
+  - Implement responsive design using Tailwind's utility-first approach.
+ 
+  - Follow mobile-first strategies (`sm:`, `md:`, `lg:`, etc.).
+ 
+- **Framer Motion** 
+  - Use Framer Motion for animations where appropriate. Keep animations minimal and purposeful.
+ 
+- **Shadcn UI** 
+  - When requested, incorporate Shadcn UI components; style them with Tailwind variants if needed.
+ 
+- **Consistent Theme** 
+  - Maintain consistent theming across your project, reusing utility classes, design tokens, or custom classes.
+
+
+---
+
+
+## 6. Performance Optimization 
+ 
+- **Minimize Re-renders** 
+  - Keep state local to components that truly need it.
+ 
+  - Use memoization (`React.memo`, `useCallback`, `useMemo`) if performance issues arise.
+ 
+- **Code Splitting**  
+  - Use React’s `lazy()` and `Suspense` to dynamically load non-critical parts of the UI:
+
+```tsx
+const LazyComponent = React.lazy(() => import('./LazyComponent'));
+```
+ 
+- **Optimize Images** 
+  - Use modern image formats (WebP).
+
+  - Include image size attributes for layout stability.
+
+  - Lazy-load images where possible.
+
+
+---
+
+
+## 7. Serving the Application with Vite and The Backend
+ 
+- **Single-Page App Build**  
+  - Use Vite to bundle and output a production-ready `index.html` and corresponding assets.
+ 
+- **Server Integration**  
+  - The backend **serves** the bundled files directly.
+ 
+  - Any server-side logic (e.g., dynamic meta tags for SEO) **must**  be handled on the backend side. You **cannot**  rely on client-side React for server-based SEO modifications.
+ 
+- **SEO and Meta Tags**  
+  - Since the frontend is a static bundle, dynamic meta tags or any advanced SEO features require logic at the **server**  layer (e.g., using server middleware, SSR approaches, or a templating engine if needed).
+
+
+---
+
+
+## 8. Project Structure 
+ 
+- **Recommended Folders** 
+
+```bash
+/src
+  ├── /components
+  │   ├── /ui
+  │   │   ├── button
+  │   │   ├── modal
+  │   │   └── card
+  │   ├── /forms
+  │   │   ├── text-field
+  │   │   └── select
+  │   └── /layout
+  │       ├── navbar
+  │       └── footer
+  ├── /pages (or /app, or /views)  // Your routes / main app container
+  └── main.(ts|js)x               // Your entry point if Vite uses it
+```
+ 
+- **Private Components** 
+  - If a component is used only in one feature or page, you can nest it in that feature’s folder to keep things modular.
+ 
+- **Shared Components**  
+  - Place reusable components that appear in multiple parts of the app in `/src/components`.
+ 
+- **Modular Approach**  
+  - For larger apps, consider grouping by feature or domain (e.g., `src/features/user`, `src/features/dashboard`) with internal components, hooks, and utilities.
+
+
+---
+
+
+## 9. Additional Conventions 
+ 
+- **Placeholder Images**  
+  - If you need placeholder images in seed data or testing, use [https://placekitten.com/](https://placekitten.com/) .
+ 
+- **Web Vitals** 
+  - Keep performance in mind (Largest Contentful Paint, Cumulative Layout Shift, etc.). Optimize resource loading.
+ 
+- **Future Expandability** 
+  - As your project evolves, reevaluate whether server-side rendering or advanced SEO tooling might be necessary. For now, rely on the server logic for all dynamic responses outside the React bundle.
+
+
+---
+
+
+### Summary 
+ 
+1. **Build React**  with Vite into static assets.
+ 
+2. **Serve**  those assets from the backend application.
+ 
+3. **Prefer TypeScript**  but JavaScript is acceptable where already in use.
+ 
+4. **Handle dynamic server responses**  (e.g., SEO meta tags) **on the backend side** , not via client code.
+ 
+5. **Use Tailwind**  for styling and **Framer Motion**  for animations.
+ 
+6. **Optional** : Use Shadcn UI components if requested.
+
+7. Keep code modular, readable, and optimized for performance.
+
+By adhering to these guidelines, you ensure a clean, maintainable, and performant React + Node.js application that leverages Vite for a speedy build process while using Tailwind, Framer Motion, and optional Shadcn UI for a modern, compelling UI experience.

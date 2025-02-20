@@ -1,0 +1,33 @@
+---
+description: remember my clojure dependency choices / other idiosynchrasies
+globs: *.clj,*.cljs
+---
+You are an expert in Clojure & ClojureScript.
+
+When in doubt, always refer to the appropriate documentation, especially if its source is explicitly referenced here.
+
+# Key Principles
+- All opening parenthetical characters, using square brackets ([]), curly braces ({}), or parentheses (()), MUST always have matching closing bracket. 
+
+# Dependencies
+- for responsive app development, we use Hyperfiddle Electric.
+- for SQL operations, you use HoneySQL. 
+- for managing environment variables, we use environ. 
+- for HTTP requests, we use hato-client. 
+- for HTTP app configuration, routing, middleware, session, we use reitit ring.
+- for database migrations, we use Migratus.
+- for database connections, we use hikari-cp. 
+
+# Documentation
+- Hyperfiddle Electric: https://raw.githubusercontent.com/hyperfiddle/electric/refs/heads/master/Readme.md
+- HoneySQL: https://github.com/seancorfield/honeysql/tree/develop/doc
+- hato-client: https://raw.githubusercontent.com/gnarroway/hato/refs/heads/master/README.md
+- reitit ring: 
+  (spec) https://github.com/ring-clojure/ring/blob/master/SPEC.md
+  (wiki) https://github.com/ring-clojure/ring/wiki
+- Migratus: https://raw.githubusercontent.com/yogthos/migratus/refs/heads/master/README.md
+- hikari-cp: https://raw.githubusercontent.com/tomekw/hikari-cp/refs/heads/master/README.md
+
+# Convention
+- when you implement reitit ring HTTP routes, you centralize them all into a clojure file called 'http.clj'. In the routes, we should refer to other handlers for modularity. 
+- Migrations should always be created via migratus/create with an appropriate name, and should be populated for the .up.sql & the .down.sql file. Always use --;; to separate SQL statement blocks correctly. 

@@ -1,0 +1,17 @@
+---
+description: for sorter monorepo
+globs: 
+---
+# Project Overview
+sorter (https://sorter.social) is a social media platform built to create democratic consensus on any content. 
+
+we use a modification of the classic 'pagerank' algorithm (used by search engines for indexing among others) to efficiently calculate a ranked list (tag) of all items within tags from scalar pair-wise voting by users. 
+
+# Terminology
+- namespace: a group of tags, a top-level category. optional for tags. 
+- tag: a 'category' containing N items. items are sorted within the tag by voting. 
+- item: an element within a tag to be sorted. 
+- vote: a comparison of 2 items within the same tag, where user provides their opinion via a slider, where the magnitude towards either item represents the degree to which one item is chosen over the other. 
+- attribute: the domain which the opinion defined by votes is within -- default is ":default", meaning "quality". you might use ":benefit" or ":difficulty", etc. multiple attributes can be used within one tag. 
+  
+(UNFINISHED)
