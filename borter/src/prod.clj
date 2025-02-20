@@ -3,6 +3,7 @@
   (:require  ; in prod, load app into server so it can accept clients
    clojure.string
    nrepl.server
+   [clojure.tools.logging :as log]  ; Add logging require
    [app.http :as http]
    [app.database :as db]))
 
@@ -29,11 +30,18 @@
 (defn -main
   "Run with `clj -M -m prod` or with optional port override {:port 3000}"
   [& {:keys [port] :or {port 8080}}]
-  (println "starting repl with config" (dissoc nrepl-config :auth))  ; don't log password
+  (log/info "\n ______   _____   ______ _______ _______  ______\n |_____] |     | |_____/    |    |______ |_____/\n |_____] |_____| |    \\_    |    |______ |    \\_\n")
+  (log/info "Starting Borter in" environment "environment")
+  (log/debug "Server configuration:" electric-server-config)
+  (log/info "Starting REPL with config" (dissoc nrepl-config :auth))  ; don't log password
   (defonce server (nrepl.server/start-server nrepl-config))
-  (db/run-migrations)
-  (http/start {:port port}))
-
-
-
-; On CLJS side we reuse src/user.cljs for prod entrypoint
+  (try
+    (db/run-migrations)
+    (log/info "Database migrations completed successfully")
+    (catch Exception e
+      (log/error e "Failed to run database migrations")))
+  (try
+    (http/start {:port port})
+    (log/info "HTTP server started successfully on port" port)
+    (catch Exception e
+      (log/error e "Failed to start HTTP server"))))

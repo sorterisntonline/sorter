@@ -12,3 +12,5 @@ src/app/gen_pw_admin.clj
 
 .env
 dev.env
+
+logs/

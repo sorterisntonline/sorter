@@ -1,2 +1,13 @@
 {
+    "calva.autoConnectRepl": {
+        "projectType": "deps.edn",
+        "commandName": "Borter REPL",
+        "jackInOrConnect": "connect",
+        "hosts": [
+            {
+                "host": "localhost",
+                "port": 7888
+            }
+        ]
+    }
 }
