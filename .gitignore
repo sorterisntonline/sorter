@@ -1,8 +1,7 @@
-.clj-kondo/
-.lsp/
+.clj-kondo
 .cursorrules
-.env
 .DS_Store
-
-# manage this ourselves i think 
+.env
 .cursorignore
+.lsp
+.vscode
