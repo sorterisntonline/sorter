@@ -1,3 +1,4 @@
-clisorter
-rustsorter
+clisorter/
+rustsorter/
 
+borter/database/pgdata/
