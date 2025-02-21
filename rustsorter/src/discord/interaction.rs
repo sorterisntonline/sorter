@@ -1,48 +1,89 @@
 mod create_tag;
 
+use std::{sync::Arc, time::Duration};
+
 use anyhow::anyhow;
-use create_tag::create_tag;
-use twilight_http::Client;
-use twilight_model::{
-    application::{
-        command::CommandType,
-        interaction::{Interaction, InteractionData},
-    },
-    id::{Id, marker::ApplicationMarker},
+use sparkle_interactions::{
+    InteractionHandle,
+    builder::InteractionResponseBuilder,
+    extract::ExtractInteractionData,
 };
-use twilight_util::builder::command::{CommandBuilder, StringBuilder};
+use twilight_model::{
+    application::interaction::Interaction,
+    channel::message::MessageFlags,
+    http::interaction::InteractionResponse,
+};
+use twilight_util::builder::{InteractionResponseDataBuilder, embed::EmbedBuilder};
 
-pub async fn create_commands(
-    http: &Client,
-    application_id: Id<ApplicationMarker>,
-) -> Result<(), anyhow::Error> {
-    let create_tag_command =
-        CommandBuilder::new("create_tag", "Create a tag", CommandType::ChatInput)
-            .option(StringBuilder::new("name", "Name of the tag").required(true));
+use super::{Context, Ok, embed::Color};
 
-    http.interaction(application_id)
-        .set_global_commands(&[create_tag_command.build()])
-        .await?;
+impl Context {
+    pub(super) async fn create_commands(&self) -> Result<(), anyhow::Error> {
+        self.http
+            .interaction(self.application_id)
+            .set_global_commands(&[create_tag::command()])
+            .await?;
 
-    Ok(())
+        Ok(())
+    }
+
+    pub(super) async fn handle_interaction(
+        self: Arc<Self>,
+        interaction: Interaction,
+    ) -> Result<(), anyhow::Error> {
+        let handle = InteractionHandle::new(
+            Arc::clone(&self.http),
+            self.application_id,
+            interaction.id,
+            interaction.token.clone(),
+        )
+        .respond_on_delay(
+            InteractionResponseBuilder::defer_send_message()
+                .ephemeral()
+                .build(),
+            Duration::from_secs(2),
+        );
+
+        let ctx = InteractionContext {
+            context: Arc::clone(&self),
+            handle: handle.clone(),
+            interaction,
+        };
+
+        let res = match ctx.interaction.data.as_ref().ok()?.custom_id().ok()? {
+            "create_tag" => ctx.create_tag().await,
+            _ => return Err(anyhow!("Unknown command")),
+        };
+
+        if let Err(err) = res {
+            handle.respond(error_response()).await?;
+            eprintln!("{err}");
+        }
+
+        Ok(())
+    }
 }
 
-pub async fn handle_interaction(
-    http: &Client,
-    application_id: Id<ApplicationMarker>,
+struct InteractionContext {
+    context: Arc<Context>,
+    handle: InteractionHandle,
     interaction: Interaction,
-) -> Result<(), anyhow::Error> {
-    let response = match interaction.data {
-        Some(InteractionData::ApplicationCommand(command)) => match command.name.as_str() {
-            "create_tag" => create_tag(http, *command, interaction.guild_id.unwrap()).await?,
-            _ => return Err(anyhow!("Unknown command: {}", command.name)),
-        },
-        _ => return Err(anyhow!("Unknown interaction type")),
-    };
+}
 
-    http.interaction(application_id)
-        .create_response(interaction.id, &interaction.token, &response)
-        .await?;
+fn error_response() -> InteractionResponse {
+    let embed = EmbedBuilder::new()
+        .title("An error occurred")
+        .description(
+            "Something went wrong while trying to execute this command. We're working on fixing \
+             the issue. Please try again later.",
+        )
+        .color(Color::Error.into())
+        .build();
 
-    Ok(())
+    let data = InteractionResponseDataBuilder::new()
+        .embeds([embed])
+        .flags(MessageFlags::EPHEMERAL)
+        .build();
+
+    InteractionResponseBuilder::send_message(data)
 }

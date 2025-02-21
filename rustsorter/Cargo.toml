@@ -6,15 +6,11 @@ version = "0.1.0"
 [lints.rust]
 absolute-paths-not-starting-with-crate = "warn"
 ambiguous-negative-literals = "warn"
-async-idents = "warn"
 deprecated-safe-2024 = "warn"
-disjoint-capture-migration = "warn"
 edition-2024-expr-fragment-specifier = "warn"
-elided-lifetime-in-path = "warn"
 elided-lifetimes-in-paths = "warn"
 explicit-outlives-requirements = "warn"
 ffi-unwind-calls = "warn"
-if-let-rescope = "warn"
 impl-trait-overcaptures = "warn"
 keyword-idents = "warn"
 keyword-idents-2018 = "warn"
@@ -27,7 +23,6 @@ missing-copy-implementations = "warn"
 missing-debug-implementations = "warn"
 missing-unsafe-on-extern = "warn"
 non-ascii-idents = "warn"
-or-patterns-back-compat = "warn"
 redundant-imports = "warn"
 redundant-lifetimes = "warn"
 rust-2021-incompatible-closure-captures = "warn"
@@ -37,7 +32,6 @@ rust-2021-prelude-collisions = "warn"
 rust-2024-guarded-string-incompatible-syntax = "warn"
 rust-2024-incompatible-pat = "warn"
 rust-2024-prelude-collisions = "warn"
-single-use-lifetime = "warn"
 single-use-lifetimes = "warn"
 trivial-casts = "warn"
 trivial-numeric-casts = "warn"
@@ -54,15 +48,19 @@ unused-import-braces = "warn"
 unused-lifetimes = "warn"
 unused-macro-rules = "warn"
 unused-qualifications = "warn"
-unused-results = "warn"
 variant-size-differences = "warn"
 
 [lints.clippy]
 blanket-clippy-restriction-lints = "allow"
 cargo = { level = "warn", priority = -1 }
+error-impl-error = "allow"
+exhaustive-enums = "allow"
+exhaustive-structs = "allow"
+field-scoped-visibility-modifiers = "allow"
 implicit-return = "allow"
 missing-docs-in-private-items = "allow"
 missing-errors-doc = "allow"
+missing-inline-in-public-items = "allow"
 missing-trait-methods = "allow"
 module-name-repetitions = "allow"
 multiple-crate-versions = "allow"
@@ -74,13 +72,17 @@ pattern-type-mismatch = "allow"
 pedantic = { level = "warn", priority = -1 }
 print-stderr = "allow"
 print-stdout = "allow"
+pub-use = "allow"
+pub-with-shorthand = "allow"
 question-mark-used = "allow"
+redundant-pub-crate = "allow"
 restriction = { level = "warn", priority = -1 }
 self-named-module-files = "allow"
 single-call-fn = "allow"
 single-char-lifetime-names = "allow"
 std-instead-of-alloc = "allow"
 std-instead-of-core = "allow"
+unused-trait-names = "allow"
 unwrap-used = "allow"
 wildcard-enum-match-arm = "allow"
 
@@ -104,6 +106,9 @@ reqwest = { version = "0.11", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1"
 slug = "0.1.5"
+sparkle_interactions = { version = "0.16", default-features = false, features = [
+    "respond_on_delay",
+] }
 sqlx = { version = "0.8.2", features = [
     "chrono",
     "postgres",
@@ -120,7 +125,7 @@ twilight-gateway = { version = "0.16", default-features = false, features = [
 ] }
 twilight-http = { version = "0.16", default-features = false, features = [
     "decompression",
-    "hickory",
+    # "hickory",
     "rustls-aws_lc_rs",
     "rustls-webpki-roots",
     "simd-json",
@@ -129,16 +134,6 @@ twilight-model = "0.16"
 twilight-util = { version = "0.16", default-features = false, features = [
     "builder",
 ] }
-
-[dev-dependencies]
-sqlx = { version = "0.8.2", features = [
-    "chrono",
-    "postgres",
-    "runtime-async-std-native-tls",
-    "uuid",
-] }
-
-[profile.release]
 
 [profile.staging]
 inherits = "dev"
