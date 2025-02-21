@@ -284,9 +284,9 @@ jobs:
             BORTER_YOUTUBE_CLIENT_SECRET=${{ secrets.BORTER_YOUTUBE_CLIENT_SECRET }}
             BORTER_YOUTUBE_REDIRECT_URIS=${{ secrets.BORTER_YOUTUBE_REDIRECT_URIS }}
             BORTER_YOUTUBE_JAVASCRIPT_ORIGINS=${{ secrets.BORTER_YOUTUBE_JAVASCRIPT_ORIGINS }}
-            EOF
 
             BORTER_SENDGRID_API_KEY=${{ secrets.BORTER_SENDGRID_API_KEY }}
+            EOF
 
             chmod 600 borter/.env 
 
