@@ -2,6 +2,7 @@
 edition = "2021"
 name = "rustsorter"
 version = "0.1.0"
+default-run = "rustsorter"
 
 [lints.rust]
 absolute-paths-not-starting-with-crate = "warn"
@@ -137,3 +138,5 @@ twilight-util = { version = "0.16", default-features = false, features = [
 
 [profile.staging]
 inherits = "dev"
+
+[profile.release]
