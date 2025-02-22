@@ -43,8 +43,21 @@ jobs:
       DEPLOY_ENV: ${{ (github.event_name == 'push' && github.ref_name == 'production') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'production') && 'production' || 'development' }}
       BRANCH: ${{ github.event_name == 'push' && github.ref_name || inputs.environment }}
       BUILD_MODE: ${{ (github.event_name == 'push' && github.ref_name == 'production') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'production') && 'prod' || 'development' }}
+      WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      DISCORD_WEBHOOK_URL: ${{ (github.ref_name == 'production' || inputs.environment == 'production') && vars.DISCORD_WEBHOOK_URL || vars.DISCORD_WEBHOOK_URL_STAGING }}
 
     steps:
+      # Add Discord notification step for build start
+      - name: Notify Build Start
+        uses: tsickert/discord-webhook@v6.0.0
+        with:
+          webhook-url: ${{ env.DISCORD_WEBHOOK_URL }}
+          embed-title: "[CI/CD] build started"
+          embed-url: ${{ env.WORKFLOW_URL }}
+          embed-color: "3447003"
+          embed-thumbnail-url: "https://img.icons8.com/fluency/144/settings.png"
+          embed-timestamp: ${{ fromJSON(github.event.head_commit.timestamp) || '' }}
+
       # Step 1: Checkout the repository
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -468,3 +481,51 @@ jobs:
                 sudo systemctl restart rustsorter.service
               fi
             fi
+
+      # Add notification for rustsorter skip/build
+      - name: Notify Rustsorter Status
+        uses: tsickert/discord-webhook@v6.0.0
+        if: success()
+        with:
+          webhook-url: ${{ env.DISCORD_WEBHOOK_URL }}
+          embed-title: ${{ steps.check_rust.outputs.skip_rust == 'true' && '[CI/CD] skipping rustsorter - no changes detected' || '[CI/CD] building rustsorter...' }}
+          embed-url: ${{ env.WORKFLOW_URL }}
+          embed-color: ${{ steps.check_rust.outputs.skip_rust == 'true' && '16776960' || '3447003' }}
+          embed-thumbnail-url: ${{ steps.check_rust.outputs.skip_rust == 'true' && 'https://img.icons8.com/fluency/144/stop--v1.png' || 'https://img.icons8.com/fluency/144/settings.png' }}
+          embed-timestamp: ${{ fromJSON(github.event.head_commit.timestamp) || '' }}
+
+      # Add notification for borter skip/build
+      - name: Notify Borter Status
+        uses: tsickert/discord-webhook@v6.0.0
+        if: success()
+        with:
+          webhook-url: ${{ env.DISCORD_WEBHOOK_URL }}
+          embed-title: ${{ steps.check_bort.outputs.skip_bort == 'true' && '[CI/CD] skipping borter - no changes detected' || '[CI/CD] building borter...' }}
+          embed-url: ${{ env.WORKFLOW_URL }}
+          embed-color: ${{ steps.check_bort.outputs.skip_bort == 'true' && '16776960' || '3447003' }}
+          embed-thumbnail-url: ${{ steps.check_bort.outputs.skip_bort == 'true' && 'https://img.icons8.com/fluency/144/stop--v1.png' || 'https://img.icons8.com/fluency/144/settings.png' }}
+          embed-timestamp: ${{ fromJSON(github.event.head_commit.timestamp) || '' }}
+
+      # Add notification for successful deployment
+      - name: Notify Successful Deployment
+        if: success() && steps.deploy.outcome == 'success'
+        uses: tsickert/discord-webhook@v6.0.0
+        with:
+          webhook-url: ${{ env.DISCORD_WEBHOOK_URL }}
+          embed-title: "[CI/CD] build succeeded"
+          embed-url: ${{ env.WORKFLOW_URL }}
+          embed-color: "5763719"
+          embed-thumbnail-url: "https://img.icons8.com/fluency/144/ok--v1.png"
+          embed-timestamp: ${{ fromJSON(github.event.head_commit.timestamp) || '' }}
+
+      # Add notification for fallback
+      - name: Notify Fallback
+        if: failure() && steps.deploy.outcome == 'failure'
+        uses: tsickert/discord-webhook@v6.0.0
+        with:
+          webhook-url: ${{ env.DISCORD_WEBHOOK_URL }}
+          embed-title: "[CI/CD] build failed - falling back to backup"
+          embed-url: ${{ env.WORKFLOW_URL }}
+          embed-color: "16753920"
+          embed-thumbnail-url: "https://img.icons8.com/fluency/144/backup-restore.png"
+          embed-timestamp: ${{ fromJSON(github.event.head_commit.timestamp) || '' }}
