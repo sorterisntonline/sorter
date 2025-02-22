@@ -160,45 +160,7 @@ jobs:
           git tag ${{ steps.new_tag.outputs.tag }}
           git push origin ${{ steps.new_tag.outputs.tag }}
 
-      # Step 5: Generate Release Notes
-      - name: Generate Release Notes
-        id: release_notes
-        run: |
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${{ github.sha }}^ 2>/dev/null || echo "")
-          if [ -z "$PREVIOUS_TAG" ]; then
-            NOTES=$(git log --pretty=format:'- %s' ${{ github.sha }})
-          else
-            NOTES=$(git log $PREVIOUS_TAG..${{ github.sha }} --pretty=format:'- %s')
-          fi
-          
-          if [ "${{ steps.check_rust.outputs.skip_rust }}" == "true" ]; then
-            NOTES="⏭️🦀 [SKIP-RUST] No changes detected in rustsorter - previous build retained.
-
-            ${NOTES}"
-          fi
-          
-          if [ "${{ steps.check_bort.outputs.skip_bort }}" == "true" ]; then
-            NOTES="⏭️ƛ [SKIP-BORT] No changes detected in borter components - previous builds retained.
-
-            ${NOTES}"
-          fi
-          
-          echo "notes<<EOF" >> $GITHUB_OUTPUT
-          echo "$NOTES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      # Step 6: Create GitHub Release
-      - name: Create GitHub Release
-        id: create_release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ steps.new_tag.outputs.tag }}
-          name: "Release ${{ steps.new_tag.outputs.tag }}"
-          body: "${{ steps.release_notes.outputs.notes }}"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # Step 7: Setup SSH for Deployment
+      # Step 5: Setup SSH for Deployment
       - name: Setup SSH for Deployment
         uses: webfactory/ssh-agent@v0.7.0
         with:
@@ -435,6 +397,46 @@ jobs:
 
             exit 0
 
+      # Step 7: Generate Release Notes
+      - name: Generate Release Notes
+        id: release_notes
+        if: success() && steps.deploy.outcome == 'success'
+        run: |
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${{ github.sha }}^ 2>/dev/null || echo "")
+          if [ -z "$PREVIOUS_TAG" ]; then
+            NOTES=$(git log --pretty=format:'- %s' ${{ github.sha }})
+          else
+            NOTES=$(git log $PREVIOUS_TAG..${{ github.sha }} --pretty=format:'- %s')
+          fi
+          
+          if [ "${{ steps.check_rust.outputs.skip_rust }}" == "true" ]; then
+            NOTES="⏭️🦀 [SKIP-RUST] No changes detected in rustsorter - previous build retained.
+
+            ${NOTES}"
+          fi
+          
+          if [ "${{ steps.check_bort.outputs.skip_bort }}" == "true" ]; then
+            NOTES="⏭️ƛ [SKIP-BORT] No changes detected in borter components - previous builds retained.
+
+            ${NOTES}"
+          fi
+          
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      # Step 8: Create GitHub Release
+      - name: Create GitHub Release
+        id: create_release
+        if: success() && steps.deploy.outcome == 'success'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.new_tag.outputs.tag }}
+          name: "Release ${{ steps.new_tag.outputs.tag }}"
+          body: "${{ steps.release_notes.outputs.notes }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       # New fallback step that runs on deploy failure
       - name: Fallback to Latest Backup
         if: failure() && steps.deploy.outcome == 'failure'
@@ -461,10 +463,8 @@ jobs:
               echo "Falling back to latest rustsorter backup..."
               LATEST_RUST=$(ls -t /home/deployer/backups/rustsorter | head -n1)
               if [ ! -z "$LATEST_RUST" ]; then
-                RUST_LIVE_DIR="/home/deployer/live/rustsorter/current"
-                mkdir -p "$RUST_LIVE_DIR"
-                rm -rf "$RUST_LIVE_DIR/*"
-                ln -sf /home/deployer/backups/rustsorter/"$LATEST_RUST"/* "$RUST_LIVE_DIR/"
+                rm -f /home/deployer/live/rustsorter/current
+                ln -sf "/home/deployer/backups/rustsorter/$LATEST_RUST" /home/deployer/live/rustsorter/current
                 sudo systemctl restart rustsorter.service
               fi
             fi
