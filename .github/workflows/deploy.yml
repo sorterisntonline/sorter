@@ -55,10 +55,11 @@ jobs:
           embed-title: "[CI/CD] build started"
           embed-url: ${{ env.WORKFLOW_URL }}
           embed-color: "3447003"
-          embed-thumbnail-url: "https://img.icons8.com/external-smashingstocks-basic-outline-smashing-stocks/53/external-startup-blockchain-cryptocurrency-smashingstocks-basic-outline-smashing-stocks.png"
+          embed-thumbnail-url: "https://img.icons8.com/external-smashingstocks-outline-color-smashing-stocks/66/external-rocket-space-smashingstocks-outline-color-smashing-stocks.png"
           embed-timestamp: ${{ github.event.head_commit.timestamp || '' }}
+          embed-description: ${{ vars.DISCORD_WEBHOOK_PING_ROLEID && format('<@&{0}>', vars.DISCORD_WEBHOOK_PING_ROLEID) || '' }}
           embed-author-name: ${{ github.triggering_actor || github.actor }}
-          embed-author-url: https://github.com/${{ github.triggering_actor || github.actor }}
+          embed-author-url: ${{ github.event.head_commit.url || format('{0}/{1}/commit/{2}', github.server_url, github.repository, github.sha) }}
           embed-author-icon-url: https://github.com/${{ github.triggering_actor || github.actor }}.png
 
       # Step 1: Checkout the repository
@@ -521,7 +522,8 @@ jobs:
           embed-thumbnail-url: "https://img.icons8.com/fluency/144/ok--v1.png"
           embed-timestamp: ${{ github.event.head_commit.timestamp || '' }}
           embed-description: |
-            [**Release**] [${{ steps.new_tag.outputs.tag }}](https://github.com/${{ github.repository }}/releases/tag/${{ steps.new_tag.outputs.tag }})
+            ${{ vars.DISCORD_WEBHOOK_PING_ROLEID && format('<@&{0}>', vars.DISCORD_WEBHOOK_PING_ROLEID) || '' }}
+            **Release:** [${{ steps.new_tag.outputs.tag }}](https://github.com/${{ github.repository }}/releases/tag/${{ steps.new_tag.outputs.tag }})
             
             ${{ steps.release_notes.outputs.notes }}
 
@@ -536,6 +538,7 @@ jobs:
           embed-color: "16753920"
           embed-thumbnail-url: "https://img.icons8.com/fluency/144/backup-restore.png"
           embed-timestamp: ${{ github.event.head_commit.timestamp || '' }}
+          embed-description: ${{ vars.DISCORD_WEBHOOK_PING_ROLEID && format('<@&{0}>', vars.DISCORD_WEBHOOK_PING_ROLEID) || '' }}
           embed-author-name: ${{ github.triggering_actor || github.actor }}
-          embed-author-url: https://github.com/${{ github.triggering_actor || github.actor }}
+          embed-author-url: ${{ github.event.head_commit.url || format('{0}/{1}/commit/{2}', github.server_url, github.repository, github.sha) }}
           embed-author-icon-url: https://github.com/${{ github.triggering_actor || github.actor }}.png
