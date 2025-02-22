@@ -56,7 +56,7 @@ jobs:
           embed-url: ${{ env.WORKFLOW_URL }}
           embed-color: "3447003"
           embed-thumbnail-url: "https://img.icons8.com/fluency/144/settings.png"
-          embed-timestamp: ${{ fromJSON(github.event.head_commit.timestamp) || '' }}
+          embed-timestamp: ${{ github.event.head_commit.timestamp || '' }}
 
       # Step 1: Checkout the repository
       - name: Checkout Code
@@ -492,7 +492,7 @@ jobs:
           embed-url: ${{ env.WORKFLOW_URL }}
           embed-color: ${{ steps.check_rust.outputs.skip_rust == 'true' && '16776960' || '3447003' }}
           embed-thumbnail-url: ${{ steps.check_rust.outputs.skip_rust == 'true' && 'https://img.icons8.com/fluency/144/stop--v1.png' || 'https://img.icons8.com/fluency/144/settings.png' }}
-          embed-timestamp: ${{ fromJSON(github.event.head_commit.timestamp) || '' }}
+          embed-timestamp: ${{ github.event.head_commit.timestamp || '' }}
 
       # Add notification for borter skip/build
       - name: Notify Borter Status
@@ -504,7 +504,7 @@ jobs:
           embed-url: ${{ env.WORKFLOW_URL }}
           embed-color: ${{ steps.check_bort.outputs.skip_bort == 'true' && '16776960' || '3447003' }}
           embed-thumbnail-url: ${{ steps.check_bort.outputs.skip_bort == 'true' && 'https://img.icons8.com/fluency/144/stop--v1.png' || 'https://img.icons8.com/fluency/144/settings.png' }}
-          embed-timestamp: ${{ fromJSON(github.event.head_commit.timestamp) || '' }}
+          embed-timestamp: ${{ github.event.head_commit.timestamp || '' }}
 
       # Add notification for successful deployment
       - name: Notify Successful Deployment
@@ -516,7 +516,7 @@ jobs:
           embed-url: ${{ env.WORKFLOW_URL }}
           embed-color: "5763719"
           embed-thumbnail-url: "https://img.icons8.com/fluency/144/ok--v1.png"
-          embed-timestamp: ${{ fromJSON(github.event.head_commit.timestamp) || '' }}
+          embed-timestamp: ${{ github.event.head_commit.timestamp || '' }}
 
       # Add notification for fallback
       - name: Notify Fallback
@@ -528,4 +528,4 @@ jobs:
           embed-url: ${{ env.WORKFLOW_URL }}
           embed-color: "16753920"
           embed-thumbnail-url: "https://img.icons8.com/fluency/144/backup-restore.png"
-          embed-timestamp: ${{ fromJSON(github.event.head_commit.timestamp) || '' }}
+          embed-timestamp: ${{ github.event.head_commit.timestamp || '' }}
