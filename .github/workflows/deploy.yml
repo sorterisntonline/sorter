@@ -55,8 +55,11 @@ jobs:
           embed-title: "[CI/CD] build started"
           embed-url: ${{ env.WORKFLOW_URL }}
           embed-color: "3447003"
-          embed-thumbnail-url: "https://img.icons8.com/fluency/144/settings.png"
+          embed-thumbnail-url: "https://img.icons8.com/external-smashingstocks-basic-outline-smashing-stocks/53/external-startup-blockchain-cryptocurrency-smashingstocks-basic-outline-smashing-stocks.png"
           embed-timestamp: ${{ github.event.head_commit.timestamp || '' }}
+          embed-author-name: ${{ github.triggering_actor || github.actor }}
+          embed-author-url: https://github.com/${{ github.triggering_actor || github.actor }}
+          embed-author-icon-url: https://github.com/${{ github.triggering_actor || github.actor }}.png
 
       # Step 1: Checkout the repository
       - name: Checkout Code
@@ -517,6 +520,10 @@ jobs:
           embed-color: "5763719"
           embed-thumbnail-url: "https://img.icons8.com/fluency/144/ok--v1.png"
           embed-timestamp: ${{ github.event.head_commit.timestamp || '' }}
+          embed-description: |
+            [**Release**] [${{ steps.new_tag.outputs.tag }}](https://github.com/${{ github.repository }}/releases/tag/${{ steps.new_tag.outputs.tag }})
+            
+            ${{ steps.release_notes.outputs.notes }}
 
       # Add notification for fallback
       - name: Notify Fallback
@@ -529,3 +536,6 @@ jobs:
           embed-color: "16753920"
           embed-thumbnail-url: "https://img.icons8.com/fluency/144/backup-restore.png"
           embed-timestamp: ${{ github.event.head_commit.timestamp || '' }}
+          embed-author-name: ${{ github.triggering_actor || github.actor }}
+          embed-author-url: https://github.com/${{ github.triggering_actor || github.actor }}
+          embed-author-icon-url: https://github.com/${{ github.triggering_actor || github.actor }}.png
