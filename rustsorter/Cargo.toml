@@ -134,6 +134,7 @@ twilight-model = "0.16"
 twilight-util = { version = "0.16", default-features = false, features = [
     "builder",
 ] }
+rustsorter = { path = ".." }
 
 [profile.staging]
 inherits = "dev"
