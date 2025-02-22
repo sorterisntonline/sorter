@@ -535,7 +535,7 @@ jobs:
           webhook-url: ${{ env.DISCORD_WEBHOOK_URL }}
           embed-title: "[CI/CD] build failed - falling back to backup"
           embed-url: ${{ env.WORKFLOW_URL }}
-          embed-color: "16753920"
+          embed-color: "15158332"
           embed-thumbnail-url: "https://img.icons8.com/fluency/144/backup-restore.png"
           embed-timestamp: ${{ github.event.head_commit.timestamp || '' }}
           embed-description: ${{ vars.DISCORD_WEBHOOK_PING_ROLEID && format('<@&{0}>', vars.DISCORD_WEBHOOK_PING_ROLEID) || '' }}
