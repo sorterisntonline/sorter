@@ -245,6 +245,7 @@ jobs:
             cat <<EOF > rustsorter/.env
             # rustsorter/.env
 
+            
             DISCORD_TOKEN=${{ secrets.RUSTSORTER_DISCORD_TOKEN }}
             EOF
 
@@ -333,7 +334,15 @@ jobs:
             else
               echo -e "\033[3mBuilding rustsorter...\033[0m"
               cd rustsorter
-              SQLX_OFFLINE=true /home/deployer/.cargo/bin/cargo build --profile ${{ env.BUILD_MODE == 'prod' && 'release' || 'staging' }}  
+              # Source the prod.env file before building
+              if [ -f "/home/deployer/prod.env" ]; then
+                source /home/deployer/prod.env
+                export DATABASE_URL
+              else
+                echo "WARNING: prod.env file not found at /home/deployer/prod.env, building with sqlx_offline"
+                SQLX_OFFLINE=true
+              fi
+              /home/deployer/.cargo/bin/cargo build --profile ${{ env.BUILD_MODE == 'prod' && 'release' || 'staging' }}  
               cd ..
             fi
 
