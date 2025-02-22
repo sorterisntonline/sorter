@@ -340,12 +340,12 @@ jobs:
               cd rustsorter
               # Source the prod.env file before building
               if [ -f "/home/deployer/prod.env" ]; then
-                source /home/deployer/prod.env
-                export DATABASE_URL
-                export SQLX_OFFLINE=false
-                echo "NOTE: database connected, using live for build"
+                #source /home/deployer/prod.env
+                #export DATABASE_URL
+                export SQLX_OFFLINE=true
+                #echo "NOTE: database connected, using live for build"
               else
-                echo "WARNING: prod.env file not found at /home/deployer/prod.env, building with sqlx_offline"
+                #echo "WARNING: prod.env file not found at /home/deployer/prod.env, building with sqlx_offline"
                 export SQLX_OFFLINE=true
               fi
               /home/deployer/.cargo/bin/cargo build --profile ${{ env.BUILD_MODE == 'prod' && 'release' || 'staging' }}  
