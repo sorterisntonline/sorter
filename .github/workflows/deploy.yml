@@ -188,7 +188,7 @@ jobs:
           embed-title: ${{ steps.check_rust.outputs.skip_rust == 'true' && '[CI/CD] skipping rustsorter - no changes detected' || '[CI/CD] building rustsorter...' }}
           embed-url: ${{ env.WORKFLOW_URL }}
           embed-color: ${{ steps.check_rust.outputs.skip_rust == 'true' && '16776960' || '3447003' }}
-          embed-thumbnail-url: ${{ steps.check_rust.outputs.skip_rust == 'true' && 'https://img.icons8.com/fluency/144/stop--v1.png' || 'https://img.icons8.com/deco/96/construction-worker.png' }}
+          embed-thumbnail-url: ${{ steps.check_rust.outputs.skip_rust == 'true' && 'https://img.icons8.com/fluency/144/stop--v1.png' || 'https://img.icons8.com/glyph-neue/64/FFFFFF/construction-worker.png' }}
           embed-timestamp: ${{ github.event.head_commit.timestamp || '' }}
 
       # Add notification for borter skip/build
@@ -200,7 +200,7 @@ jobs:
           embed-title: ${{ steps.check_bort.outputs.skip_bort == 'true' && '[CI/CD] skipping borter - no changes detected' || '[CI/CD] building borter...' }}
           embed-url: ${{ env.WORKFLOW_URL }}
           embed-color: ${{ steps.check_bort.outputs.skip_bort == 'true' && '16776960' || '3447003' }}
-          embed-thumbnail-url: ${{ steps.check_bort.outputs.skip_bort == 'true' && 'https://img.icons8.com/fluency/144/stop--v1.png' || 'https://img.icons8.com/deco/96/construction-worker.png' }}
+          embed-thumbnail-url: ${{ steps.check_bort.outputs.skip_bort == 'true' && 'https://img.icons8.com/fluency/144/stop--v1.png' || 'https://img.icons8.com/glyph-neue/64/FFFFFF/construction-worker.png' }}
           embed-timestamp: ${{ github.event.head_commit.timestamp || '' }}
 
       # Step 5: Setup SSH for Deployment
