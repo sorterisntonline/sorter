@@ -4,7 +4,7 @@
   "version": "1.5.0",
   "type": "module",
   "scripts": {
-    "build": "node scripts/update-env.js ${ENVIRONMENT:-development} && vite build --mode ${ENVIRONMENT:-development}",
+    "build": "(node scripts/update-env.js ${ENVIRONMENT:-development}) && vite build --mode ${ENVIRONMENT:-development}",
     "dev": "vite build --watch --mode development",
     "dev:client": "echo 'starting client-only dev server' && ENVIRONMENT=development vite",
     "development": "ENVIRONMENT=development npm run build --mode development",
