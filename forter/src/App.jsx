@@ -11,7 +11,6 @@ import { ItemPanel, editing_item, pinned_left, pinned_right } from "./ItemPanel"
 import { loadTag } from "./Network";
 import { Modal } from "./Modal";
 import { WarningPopup } from './components/WarningPopup';
-import { MetaTags } from "./MetaTags";
 import AnnouncementBar, { showAnnouncement } from './components/AnnouncementBar';
 import { IntegrationsPanel } from './integrations/IntegrationsPanel';
 import { MobileNewItemChooser } from './components/MobileNewItemChooser';

@@ -260,6 +260,11 @@ jobs:
             # Write borter/.env
             cat <<EOF > borter/.env
             # borter/.env
+            HOSTNAME=${{ github.ref_name == 'production' && vars.HOSTNAME || vars.HOSTNAME_STAGING }}
+
+            # Logging Configuration
+            BORTER_LOG_PATH=${{ github.ref_name == 'production' && vars.BORTER_LOG_PATH || vars.BORTER_LOG_PATH_STAGING }}
+            BORTER_LOG_LEVEL=${{ github.ref_name == 'production' && vars.BORTER_LOG_LEVEL || vars.BORTER_LOG_LEVEL_STAGING }}
 
             # REPL Password
             REPL_PASSWORD=${{ github.ref_name == 'production' && secrets.BORTER_REPL_PASSWORD || secrets.BORTER_REPL_PASSWORD_STAGING }}
@@ -290,7 +295,8 @@ jobs:
             BORTER_YOUTUBE_REDIRECT_URIS=${{ secrets.BORTER_YOUTUBE_REDIRECT_URIS }}
             BORTER_YOUTUBE_JAVASCRIPT_ORIGINS=${{ secrets.BORTER_YOUTUBE_JAVASCRIPT_ORIGINS }}
 
-            BORTER_SENDGRID_API_KEY=${{ secrets.BORTER_SENDGRID_API_KEY }}
+            # Sendgrid API Key
+            BORTER_SENDGRID_API_KEY=${{ github.ref_name == 'production' && secrets.BORTER_SENDGRID_API_KEY || secrets.BORTER_SENDGRID_API_KEY_STAGING }}
             EOF
 
             chmod 600 borter/.env 
@@ -312,6 +318,10 @@ jobs:
               echo -e "\033[3mBuilding forter...\033[0m"
               cd forter
               npm install
+              # Make the update script executable
+              chmod +x scripts/update-env.sh
+              # Apply environment-specific overrides
+              ./scripts/update-env.sh ${{ env.BRANCH }}
               npm run ${{ env.BRANCH }}
               cd ..
 

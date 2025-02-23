@@ -23,7 +23,7 @@
             [app.spotify :as spotify]
             [app.item :as item]
             [app.vote :as vote]
-            
+
             [app.permissions :as perms]
             [app.youtube :as youtube]
             [app.integrations :as integrations]
@@ -320,37 +320,37 @@
 (defn get-viz-items [req]
   (let [limit (when-let [limit-str (-> req :query-params (get "limit"))]
                 (Integer/parseInt limit-str))
-        query (-> (h/select-distinct :items.id :items.title 
-                                   :items.domain_pk_namespace
-                                   :items.owner
-                                   :items.created_at)
-                 (h/from :items)
-                 (h/join :items_in_tags [:= :items.id :items_in_tags.item_id]))
-        query-with-limit (if limit 
-                          (h/limit query limit)
-                          query)
+        query (-> (h/select-distinct :items.id :items.title
+                                     :items.domain_pk_namespace
+                                     :items.owner
+                                     :items.created_at)
+                  (h/from :items)
+                  (h/join :items_in_tags [:= :items.id :items_in_tags.item_id]))
+        query-with-limit (if limit
+                           (h/limit query limit)
+                           query)
         items (db/exec! query-with-limit)]
-    {:status 200 
+    {:status 200
      :body items}))
 
 (defn get-viz-votes [req]
   (let [limit (when-let [limit-str (-> req :query-params (get "limit"))]
                 (Integer/parseInt limit-str))
-        query (-> (h/select :votes.left_item_id 
-                           :votes.right_item_id
-                           :votes.magnitude
-                           :votes.owner
-                           :votes.created_at
-                           [:attributes.title :attribute_name])
-                 (h/from :votes)
-                 (h/left-join :attributes [:= :votes.attribute :attributes.id])
-                 (h/join [:items :left_items] [:= :votes.left_item_id :left_items.id])
-                 (h/join [:items :right_items] [:= :votes.right_item_id :right_items.id]))
-        query-with-limit (if limit 
-                          (h/limit query limit)
-                          query)
+        query (-> (h/select :votes.left_item_id
+                            :votes.right_item_id
+                            :votes.magnitude
+                            :votes.owner
+                            :votes.created_at
+                            [:attributes.title :attribute_name])
+                  (h/from :votes)
+                  (h/left-join :attributes [:= :votes.attribute :attributes.id])
+                  (h/join [:items :left_items] [:= :votes.left_item_id :left_items.id])
+                  (h/join [:items :right_items] [:= :votes.right_item_id :right_items.id]))
+        query-with-limit (if limit
+                           (h/limit query limit)
+                           query)
         votes (db/exec! query-with-limit)]
-    {:status 200 
+    {:status 200
      :body votes}))
 
 
@@ -373,7 +373,7 @@
     (let [username (get-in req [:session :user_name])]
       (cond
         ;; tommy is always unlimited
-        (= "tommy" username) Integer/MAX_VALUE 
+        (= "tommy" username) Integer/MAX_VALUE
         ;; zod, zudsniper, and jason are always unlimited
         (or (= "zod" username)
             (= "zudsniper" username)
@@ -431,15 +431,15 @@
                :get {:handler #'login/current-session}}]
     ["/logout" {:post {:handler #'login/handle-logout}}]
     ["/send-confirmation" {:post {:middleware [[wrap-rate-limit three-per-five-minutes]]
-                                 :handler #'login/handle-resend-verification}}]
+                                  :handler #'login/handle-resend-verification}}]
     ["/verify" {:get {:middleware [[wrap-rate-limit five-per-minute]]
                       :handler #'login/handle-verify-email}}]
     ["/update-email" {:post {:middleware [[wrap-rate-limit three-per-five-minutes]]
-                            :handler #'login/handle-update-email}}]
+                             :handler #'login/handle-update-email}}]
     ["/forgot-password" {:post {:middleware [[wrap-rate-limit three-per-five-minutes]]
-                               :handler #'login/handle-forgot-password}}]
+                                :handler #'login/handle-forgot-password}}]
     ["/reset-password" {:post {:middleware [[wrap-rate-limit three-per-five-minutes]]
-                              :handler #'login/handle-reset-password}}]
+                               :handler #'login/handle-reset-password}}]
 
     ["/spotify" spotify/routes]
     ["/youtube" youtube/routes]
@@ -452,9 +452,9 @@
     ["/user_group" groups/routes]
     ["/viz"
      ["/items" {:get {:middleware [[wrap-rate-limit five-per-minute]]
-                              :handler #'get-viz-items}}]
+                      :handler #'get-viz-items}}]
      ["/votes" {:get {:middleware [[wrap-rate-limit five-per-minute]]
-                              :handler #'get-viz-votes}}]]]])
+                      :handler #'get-viz-votes}}]]]])
 
 (defn wrap-dev-session
   "Middleware that injects a dev session when AUTO_LOGIN=true"

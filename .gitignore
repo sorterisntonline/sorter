@@ -4,4 +4,4 @@
 .env
 .cursorignore
 .lsp
-.vscode
+repomix-output.txt

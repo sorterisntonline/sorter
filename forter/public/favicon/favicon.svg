@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:svgjs="http://svgjs.dev/svgjs" width="1000" height="1000"><svg width="1000" height="1000" viewBox="0 0 1000 1000" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect x="100" y="100" width="800" height="144" fill="#FF5252"></rect>
+<rect x="100" y="264" width="636" height="144" fill="#FE8180"></rect>
+<rect x="100" y="428" width="472" height="144" fill="#FF9C9B"></rect>
+<rect x="100" y="592" width="308" height="144" fill="#FFCECE"></rect>
+<rect x="100" y="756" width="199" height="144" fill="#FFE6E5"></rect>
+</svg><style>@media (prefers-color-scheme: light) { :root { filter: none; } }
+@media (prefers-color-scheme: dark) { :root { filter: none; } }
+</style></svg>
