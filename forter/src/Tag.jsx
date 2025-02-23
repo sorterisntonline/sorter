@@ -85,10 +85,6 @@ export const Tag = ({ isVoting, handleError, onSelectItem, onCloseItem }) => {
 
   return (
     <>
-      <MetaTags 
-        title={`sorter - #${tag.value.tag.slug}`}
-        image="/logoanim.gif"
-      />
       <div className="dark:text-white justify-start">
         {isVoting ? (
           <Voting 

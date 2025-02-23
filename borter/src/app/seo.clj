@@ -23,41 +23,41 @@
 (def current-env (get env-config environment))
 
 (def base-meta
-  {:title (str "sorter.social - democratic consensus through pairwise voting" (:title-suffix current-env))
+  {:title (str "sorter - democratic consensus through pairwise voting" (:title-suffix current-env))
    :description "create ranked lists of anything through democratic consensus. vote on pairs of items to sort them into a meaningful order."
    :image (:image-url current-env)})
 
 ;; Define the routes that should get meta tags
 (def meta-tag-routes
   {;; Static routes
-   "/feed" {:title "Feed - Sorter Social"
-            :description "View your personalized feed of sorts and rankings"}
-   "/tags3" {:title "Tags - Sorter Social"
-             :description "Browse and discover sorting collections"}
-   "/tags2" {:title "Tags - Sorter Social"
-             :description "Browse and discover sorting collections"}
-   "/" {:title "Sorter Social"
-        :description "Create and share your rankings"}
-   "/viz" {:title "Visualization - Sorter Social"
-           :description "Visualize sorting data"}
-   "/faq" {:title "FAQ - Sorter Social"
-           :description "Frequently Asked Questions"}
-   "/integrations" {:title "Integrations - Sorter Social"
-                    :description "Connect your accounts"}
-   "/leaderboard" {:title "Leaderboard - Sorter Social"
-                   :description "Top sorters and rankings"}
-   "/profile" {:title "Profile - Sorter Social"
-               :description "Your profile and settings"}
+   "/feed" {:title "feed - sorter"
+            :description "view your personalized feed of sorts and rankings"}
+   "/tags3" {:title "tags - sorter"
+             :description "browse and discover sorting collections"}
+   "/tags2" {:title "tags - sorter"
+             :description "browse and discover sorting collections"}
+   "/" {:title "sorter"
+        :description "create and share your rankings"}
+   "/viz" {:title "visualization - sorter"
+           :description "visualize sorting data"}
+   "/faq" {:title "faq - sorter"
+           :description "frequently asked questions"}
+   "/integrations" {:title "integrations - sorter"
+                    :description "connect your accounts"}
+   "/leaderboard" {:title "leaderboard - sorter"
+                   :description "top sorters and rankings"}
+   "/profile" {:title "profile - sorter"
+               :description "your profile and settings"}
    
    ;; Dynamic routes
-   "/namespace/:namespace" {:title ":namespace Rankings - Sorter Social"
-                          :description "Browse :namespace items"}
-   "/:tagid/:slug" {:title ":slug - Sorter Social"
-                    :description "View and sort items in this collection"}
-   "/:tagid/:slug/voting" {:title "Vote - :slug - Sorter Social"
-                          :description "Vote on items in this collection"}
-   "/:tagid/:slug/graph" {:title "Graph - :slug - Sorter Social"
-                         :description "Visualize sorting results"}})
+   "/namespace/:namespace" {:title ":namespace rankings - sorter"
+                          :description "browse :namespace items"}
+   "/:tagid/:slug" {:title ":slug - sorter"
+                    :description "view and sort items in this collection"}
+   "/:tagid/:slug/voting" {:title "vote - :slug - sorter"
+                          :description "vote on items in this collection"}
+   "/:tagid/:slug/graph" {:title "graph - :slug - sorter"
+                         :description "visualize sorting results"}})
 
 (defn get-canonical-url
   "Constructs canonical URL from request"
@@ -107,7 +107,7 @@
                         params)]
       (merge
        {:og:type "website"
-        :og:site_name "Sorter Social"}
+        :og:site_name "sorter"}
        replaced-tags
        {:og:title (:title replaced-tags)
         :og:description (:description replaced-tags)}))))
@@ -119,8 +119,9 @@
                       "<meta name=\"description\" content=\"" (:description meta-tags) "\">\n"
                       "<meta property=\"og:title\" content=\"" (:title meta-tags) "\">\n"
                       "<meta property=\"og:description\" content=\"" (:description meta-tags) "\">\n"
-                      "<meta property=\"og:image\" content=\"" (:image meta-tags) "\">\n"
+                      "<meta property=\"og:image\" content=\"" (:image base-meta) "\">\n"
                       "<meta property=\"og:url\" content=\"" (:url meta-tags) "\">\n"
+                      "<meta property=\"og:site_name\" content=\"sorter\">\n"
                       "<link rel=\"canonical\" href=\"" (:url meta-tags) "\">\n"
                       "<meta name=\"twitter:card\" content=\"summary_large_image\">\n")]
     (str/replace body #"<head>" (str "<head>\n" meta-html))))
@@ -176,20 +177,31 @@
           (log/debug "Content-Type:" (get-in response [:headers "Content-Type"]))
           (if (and
                (= (:status response) 200)
-               (string? (:body response))
-               (or (nil? (get-in response [:headers "Content-Type"]))
-                   (str/includes? (get-in response [:headers "Content-Type"]) "text/html")))
+               (or
+                 ;; Handle string responses
+                 (and (string? (:body response))
+                      (or (nil? (get-in response [:headers "Content-Type"]))
+                          (str/includes? (get-in response [:headers "Content-Type"]) "text/html")))
+                 ;; Handle File responses with HTML content type
+                 (and (instance? java.io.File (:body response))
+                      (str/includes? (get-in response [:headers "Content-Type"]) "text/html"))))
             (do
               (log/debug "Applying SEO modifications to HTML response")
               (let [canonical-url (get-canonical-url request)
                     meta-tags     (when (should-add-meta-tags? uri)
-                                    (get-meta-tags request))]
+                                   (-> (get-meta-tags request)
+                                       (assoc :url canonical-url)
+                                       (assoc :image (:image base-meta))))
+                    ;; Convert File body to string if needed
+                    body-str (if (instance? java.io.File (:body response))
+                             (slurp (:body response))
+                             (:body response))]
                 (cond-> response
                   true
                   (assoc-in [:headers "Link"]
                             (str "<" canonical-url ">; rel=\"canonical\""))
                   meta-tags
-                  (-> (assoc :body (inject-meta-tags (:body response) meta-tags))
+                  (-> (assoc :body (inject-meta-tags body-str meta-tags))
                       (assoc-in [:headers "Content-Type"]
                                 "text/html; charset=utf-8")))))
             (do
