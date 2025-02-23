@@ -318,10 +318,6 @@ jobs:
               echo -e "\033[3mBuilding forter...\033[0m"
               cd forter
               npm install
-              # Make the update script executable
-              chmod +x scripts/update-env.sh
-              # Apply environment-specific overrides
-              ./scripts/update-env.sh ${{ env.BRANCH }}
               npm run ${{ env.BRANCH }}
               cd ..
 
