@@ -1,7 +1,7 @@
 {
   "name": "forter",
   "private": true,
-  "version": "0.2.1",
+  "version": "1.5.0",
   "type": "module",
   "scripts": {
     "build": "scripts/update-env.sh ${ENVIRONMENT:-development} && vite build --mode ${ENVIRONMENT:-development}",
