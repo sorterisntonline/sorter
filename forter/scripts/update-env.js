@@ -10,13 +10,16 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const environment = process.argv[2];
-const overridesDir = path.join('overrides', environment || 'development');
+// Get environment from ENVIRONMENT env var or fallback to command line arg
+const environment = process.env.ENVIRONMENT || process.argv[2] || 'development';
+const overridesDir = path.join('overrides', environment);
+const forterDir = path.resolve(__dirname, '..');  // Path to forter directory
 
 // Exit early if no environment specified
 if (!environment) {
     console.error('Error: Environment not specified');
-    console.error('Usage: node update-env.js <environment>');
+    console.error('Usage: ENVIRONMENT=<env> node update-env.js');
+    console.error('   or: node update-env.js <environment>');
     process.exit(1);
 }
 
@@ -45,13 +48,13 @@ try {
 }
 
 // Function to copy files recursively, respecting .gitignore
-function applyOverrides(sourceDir, targetDir) {
+function applyOverrides(sourceDir, targetDir = forterDir) {
     const files = fs.readdirSync(sourceDir, { withFileTypes: true });
 
     for (const file of files) {
         const sourcePath = path.join(sourceDir, file.name);
         const targetPath = path.join(targetDir, file.name);
-        const relativePath = path.relative(process.cwd(), targetPath);
+        const relativePath = path.relative(forterDir, targetPath);
 
         // Skip if file matches .gitignore patterns
         if (ignoreFilter.ignores(relativePath)) {
@@ -68,9 +71,7 @@ function applyOverrides(sourceDir, targetDir) {
     }
 }
 
-// Apply overrides
-if (fs.existsSync(overridesDir)) {
-    applyOverrides(overridesDir, '.');
-}
+// Apply overrides directly to the forter directory
+applyOverrides(overridesDir);
 
 console.log('Environment overrides applied successfully'); 
