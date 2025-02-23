@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 
-const fs = require('fs');
-const path = require('path');
-const ignore = require('ignore');
-const { execSync } = require('child_process');
+import fs from 'fs';
+import path from 'path';
+import ignore from 'ignore';
+import { execSync } from 'child_process';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const environment = process.argv[2];
 const overridesDir = path.join('overrides', environment || 'development');
