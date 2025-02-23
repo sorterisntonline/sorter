@@ -1,9 +1,9 @@
-use actix_web::{get, web, HttpResponse, Responder};
 use std::collections::{HashMap, HashSet};
 
+use actix_web::{HttpResponse, Responder, get, web};
+
 #[derive(serde::Deserialize, Debug)]
-struct HierarchyParams {
-}
+struct HierarchyParams {}
 
 #[derive(serde::Serialize)]
 #[serde(tag = "type")]
@@ -26,13 +26,13 @@ fn build_hierarchy(
 ) -> Vec<HierarchicalItem> {
     let mut adj: HashMap<i32, HashSet<i32>> = HashMap::new();
     let mut has_parent: HashSet<i32> = HashSet::new();
-    
+
     // Process edges
     let mut edges: Vec<(&crate::tag::Vote, f32)> = votes
         .iter()
         .map(|v| (v, (v.magnitude as f32 - 50.0).abs()))
         .collect();
-    
+
     edges.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
 
     // Process edges with confidence-based rules
@@ -73,7 +73,8 @@ fn build_hierarchy(
 
     // Process edges and build initial hierarchy
     let mut path = HashSet::new();
-    let mut trees = items.iter()
+    let mut trees = items
+        .iter()
         .filter(|item| !has_parent.contains(&item.id))
         .map(|item| build_tree(item, &adj, items, &mut path))
         .collect::<Vec<_>>();
@@ -81,14 +82,14 @@ fn build_hierarchy(
     // Find and fix duplicate nodes
     let mut node_parents: HashMap<i32, Vec<(i32, f32)>> = HashMap::new();
     collect_node_parents(&trees, None, item_id_to_elo, &mut node_parents);
-    
+
     // Remove duplicates, keeping only the parent with lowest ELO
     for (node_id, parents) in node_parents.iter() {
         if parents.len() > 1 {
             // Sort parents by ELO (ascending)
             let mut parents = parents.clone();
             parents.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-            
+
             // Skip the first parent (lowest ELO) and remove from others
             for (parent_id, _) in parents.iter().skip(1) {
                 remove_child_from_tree(&mut trees, *parent_id, *node_id);
@@ -103,12 +104,12 @@ fn build_hierarchy(
 fn would_create_cycle(adj: &HashMap<i32, HashSet<i32>>, parent: i32, child: i32) -> bool {
     let mut visited = HashSet::new();
     let mut stack = vec![child];
-    
+
     while let Some(current) = stack.pop() {
         if current == parent {
             return true;
         }
-        
+
         if visited.insert(current) {
             // Add all unvisited children to stack
             if let Some(children) = adj.get(&current) {
@@ -116,7 +117,7 @@ fn would_create_cycle(adj: &HashMap<i32, HashSet<i32>>, parent: i32, child: i32)
             }
         }
     }
-    
+
     false
 }
 
@@ -164,7 +165,7 @@ fn collect_node_parents(
     items: &[HierarchicalItem],
     parent_id: Option<i32>,
     item_id_to_elo: &HashMap<&i32, f32>,
-    node_parents: &mut HashMap<i32, Vec<(i32, f32)>>
+    node_parents: &mut HashMap<i32, Vec<(i32, f32)>>,
 ) {
     for item in items {
         if let Some(parent_id) = parent_id {
@@ -174,8 +175,13 @@ fn collect_node_parents(
                 .or_default()
                 .push((parent_id, parent_elo));
         }
-        
-        collect_node_parents(&item.children, Some(item.item.id), item_id_to_elo, node_parents);
+
+        collect_node_parents(
+            &item.children,
+            Some(item.item.id),
+            item_id_to_elo,
+            node_parents,
+        );
     }
 }
 
@@ -189,7 +195,7 @@ fn remove_child_from_tree(
             item.children.retain(|child| child.item.id != child_id);
             return true;
         }
-        
+
         if remove_child_from_tree(&mut item.children, parent_id, child_id) {
             return true;
         }
@@ -202,17 +208,19 @@ pub async fn hierarchy(
     data: web::Data<crate::AppState>,
     info: web::Query<HierarchyParams>,
 ) -> impl Responder {
-    let items = sqlx::query_as::<_, crate::tag::Item>("SELECT i.* FROM items i 
-JOIN tags t ON t.id::text = i.domain_pk 
-WHERE i.domain_pk_namespace = 'sorter.tag'")
-        .fetch_all(&data.db)
-        .await
-        .expect("Unable to fetch data from database");
+    let items = sqlx::query_as::<_, crate::tag::Item>(
+        "SELECT i.* FROM items i
+JOIN tags t ON t.id::text = i.domain_pk
+WHERE i.domain_pk_namespace = 'sorter.tag'",
+    )
+    .fetch_all(&data.db)
+    .await
+    .expect("Unable to fetch data from database");
 
     let votes = {
         let item_ids: Vec<i32> = items.iter().map(|item| item.id).collect();
         let query_str_votes = format!(
-            "SELECT * FROM votes WHERE 
+            "SELECT * FROM votes WHERE
                    (left_item_id = ANY($1) AND right_item_id = ANY($1))
                 ORDER BY edited_at DESC"
         );
@@ -281,4 +289,3 @@ WHERE i.domain_pk_namespace = 'sorter.tag'")
 
     HttpResponse::Ok().json(hierarchy)
 }
-

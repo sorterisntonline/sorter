@@ -1,4 +1,4 @@
-use actix_web::{get, web, HttpResponse, Responder};
+use actix_web::{HttpResponse, Responder, get, web};
 
 #[derive(serde::Deserialize, Debug)]
 struct FeedParams {
@@ -26,8 +26,8 @@ pub async fn feed(
     .unwrap();
 
     let query_str_votes = format!(
-        "SELECT * FROM votes WHERE 
-               (left_item_id IN (SELECT item_id FROM items_in_tags WHERE tag_id = {}) 
+        "SELECT * FROM votes WHERE
+               (left_item_id IN (SELECT item_id FROM items_in_tags WHERE tag_id = {})
             AND right_item_id IN (SELECT item_id FROM items_in_tags WHERE tag_id = {}))
             ORDER BY created_at DESC
             ",

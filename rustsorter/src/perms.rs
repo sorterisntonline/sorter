@@ -1,7 +1,7 @@
 use std::{collections::HashSet, hash::Hash};
 
 use actix_session::Session;
-use actix_web::{delete, get, post, web, HttpResponse, Responder};
+use actix_web::{HttpResponse, Responder, delete, get, post, web};
 
 #[derive(serde::Deserialize, Debug)]
 struct PermissionsParams {
@@ -20,17 +20,17 @@ use crate::types::ErrorJson;
 pub async fn insert_default_permissions(db: &sqlx::PgPool, tag_id: i32) {
     for perm in vec![
         Permission {
-            tag_id: tag_id,
+            tag_id,
             capability: "view".to_string(),
             user_id: "all".to_string(),
         },
         Permission {
-            tag_id: tag_id,
+            tag_id,
             capability: "vote".to_string(),
             user_id: "all".to_string(),
         },
         Permission {
-            tag_id: tag_id,
+            tag_id,
             capability: "add".to_string(),
             user_id: "none".to_string(),
         },
@@ -77,8 +77,10 @@ pub async fn can(
                 if perm.capability == action && users.contains(user_id.as_str()) {
                     return true;
                 } else if perm.capability == action {
-                    let group_membership = sqlx::query_as!(UsersInUsergroup,
-                        "SELECT * FROM users_in_usergroups WHERE user_id = $1 AND usergroup_id = $2",
+                    let group_membership = sqlx::query_as!(
+                        UsersInUsergroup,
+                        "SELECT * FROM users_in_usergroups WHERE user_id = $1 AND usergroup_id = \
+                         $2",
                         user_id,
                         perm.user_id
                     )

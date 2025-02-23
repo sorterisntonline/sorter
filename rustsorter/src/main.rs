@@ -1,14 +1,25 @@
-use actix_web::middleware::Logger;
-use actix_web::{web, App, HttpServer};
+pub mod discord;
+pub mod feed;
+pub mod frontpage;
+pub mod pagerank;
+pub mod pair;
+pub mod perms;
+pub mod tag;
+pub mod tag2;
+pub mod types;
+
+pub struct AppState {
+    pub db: sqlx::PgPool,
+}
+
+use std::{env, sync::Arc};
+
+use actix_web::{App, HttpServer, middleware::Logger, web};
 use dotenv::dotenv;
-use std::env;
-use std::sync::Arc;
 use tokio::sync::oneshot; // For clean shutdown
-use rustsorter::discord_bot;
-use rustsorter::AppState;
 
 #[actix_web::main]
-async fn main() -> std::io::Result<()> {
+async fn main() -> Result<(), anyhow::Error> {
     // Initialize logging and dotenv
     env_logger::init();
     dotenv().ok();
@@ -26,22 +37,21 @@ async fn main() -> std::io::Result<()> {
     // Shared application state
     let app_state = Arc::new(AppState { db: pool.clone() });
 
+    // Start the Discord bot
+    discord::start(&env::var("DISCORD_TOKEN").unwrap()).await?;
+
     // Graceful shutdown handling
     let (tx, rx) = oneshot::channel();
     let state_clone = Arc::clone(&app_state);
-    let discord_handle = tokio::spawn(async move {
-        let result = discord_bot::run(state_clone, rx).await;
-        result; // Handle errors from discord_bot.run (if any)
-    });
 
     // Start the HTTP server
     let server = HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(AppState { db: pool.clone() }))
-            .service(rustsorter::tag::hello)
-            .service(rustsorter::feed::feed)
-            .service(rustsorter::frontpage::hierarchy)
-            .service(rustsorter::tag2::hello2)
+            .service(tag::hello)
+            .service(feed::feed)
+            .service(frontpage::hierarchy)
+            .service(tag2::hello2)
             .wrap(Logger::default())
     })
     .bind(("127.0.0.1", 8081))?
@@ -49,8 +59,6 @@ async fn main() -> std::io::Result<()> {
 
     let _ = server.await;
     let _ = tx.send(());
-
-    discord_handle.await.expect("Discord bot failed to start");
 
     Ok(())
 }

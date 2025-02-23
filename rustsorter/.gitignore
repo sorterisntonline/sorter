@@ -1,6 +1,2 @@
-/target
-static/
-static/index.html
-data.csv
-ranking_error.png
+target
 .env
