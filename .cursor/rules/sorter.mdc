@@ -1,6 +1,6 @@
 ---
 description: for sorter monorepo
-globs: **
+globs: *
 ---
 # Project Overview
 sorter (https://sorter.social) is a social media platform built to create democratic consensus on any content. 

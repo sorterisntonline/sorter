@@ -321,13 +321,6 @@ jobs:
               npm run ${{ env.BRANCH }}
               cd ..
 
-              # Build clisorter
-              echo -e "\033[3mBuilding clisorter...\033[0m"
-              cd clisorter
-              npm install
-              npm run build # eventually this needs to include mode via branch or something like that
-              cd ..
-
               # Build borter
               echo -e "\033[3mBuilding borter...\033[0m"
               cd borter
