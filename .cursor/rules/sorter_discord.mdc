@@ -18,3 +18,5 @@ all referenced paths beyond this point start from the discord bot's project root
 # Discord Bot Development
 Commands: 
 Command implementations all go under commands/. When we need to update a specific command implementation, we must always update its corresponding metadata (in commands/metadata.ts).
+
+the interaction is already deferred by the command handler due to your deferType = CommandDeferType.PUBLIC setting.

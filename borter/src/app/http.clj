@@ -143,32 +143,72 @@
     (log/warn "Unauthorized attempt to create tag")
     (throw (ex-info "need to be logged in to make tag" {:status 401})))
 
-  (if (-> r :body-params :tag_id)
-    (do (when-not (perms/owns (-> r :body-params :tag_id)
-                            (-> r :session :user_name))
-          (log/warn "User" (-> r :session :user_name) "attempted to edit tag they don't own:" (-> r :body-params :tag_id))
-          (throw (ex-info "you can not edit tags you do not own" {:status 403})))
+  ;; Check for Discord context
+  (let [has-discord-context (boolean (:discord r))
+        domain-pk-ns (-> r :body-params :domain_pk_namespace)
+        domain-pk (-> r :body-params :domain_pk)
+        is-discord-channel (and domain-pk-ns domain-pk 
+                                (= domain-pk-ns "discord.channel"))
+        
+        ;; Check if tag already exists for this Discord channel
+        existing-tag (when (and is-discord-channel 
+                                (or has-discord-context 
+                                    (db/exec! {:select 1 
+                                               :from :users 
+                                               :where [:and 
+                                                       [:= :user_name (-> r :session :user_name)]
+                                                       [:not= :discord_id nil]]})))
+                       (first (db/exec! {:select :*
+                                         :from :tags
+                                         :where [:and
+                                                 [:= :tags/domain_pk_namespace domain-pk-ns]
+                                                 [:= :tags/domain_pk domain-pk]]})))]
+    
+    (cond
+      ;; Case 1: Explicit tag_id in request (standard update)
+      (-> r :body-params :tag_id)
+      (do (when-not (perms/owns (-> r :body-params :tag_id)
+                                (-> r :session :user_name))
+            (log/warn "User" (-> r :session :user_name) "attempted to edit tag they don't own:" (-> r :body-params :tag_id))
+            (throw (ex-info "you can not edit tags you do not own" {:status 403})))
 
-        (let [ret (db/exec! (-> (h/update :tags)
-                                (h/set (-> (-> r :body-params)
-                                           (assoc :edited_at [:now])
-                                           (dissoc :tag_id)))
-                                (h/where [:= :tags/id (-> r :body-params :tag_id)])))]
-          (log/info "Tag updated:" (-> r :body-params :tag_id))
-          (log/debug "Updated tag result:" ret)
-          {:status 200 :body (first ret)}))
+          (let [ret (db/exec! (-> (h/update :tags)
+                                  (h/set (-> (-> r :body-params)
+                                             (assoc :edited_at [:now])
+                                             (dissoc :tag_id)))
+                                  (h/where [:= :tags/id (-> r :body-params :tag_id)])))]
+            (log/info "Tag updated:" (-> r :body-params :tag_id))
+            (log/debug "Updated tag result:" ret)
+            {:status 200 :body (first ret)}))
+      
+      ;; Case 2: Discord channel tag exists (update)
+      (and is-discord-channel existing-tag)
+      (do (when-not (perms/owns (:tags/id existing-tag)
+                              (-> r :session :user_name))
+            (log/warn "User" (-> r :session :user_name) "attempted to edit Discord channel tag they don't own:" (:tags/id existing-tag))
+            (throw (ex-info "you can not edit tags you do not own" {:status 403})))
 
-    (do (let [ret (db/exec! (-> (h/insert-into :tags)
-                                (h/values [(merge
-                                            (-> r :body-params)
-                                            {:tags/slug (sluj (-> r :body-params :title))
-                                             :tags/owner (-> r :session :user_name)})])
-                                (h/returning :*)))
-              tagid (-> ret first :tags/id)]
-          (db/exec! (-> (h/insert-into :perms)
-                        (h/values (perms/public-permissions tagid))))
-          (log/info "New tag created:" tagid "by user:" (-> r :session :user_name))
-          {:status 200 :body (first ret)}))))
+          (let [ret (db/exec! (-> (h/update :tags)
+                                  (h/set (-> (-> r :body-params)
+                                             (assoc :edited_at [:now])))
+                                  (h/where [:= :tags/id (:tags/id existing-tag)])))]
+            (log/info "Discord channel tag updated:" (:tags/id existing-tag))
+            (log/debug "Updated Discord channel tag result:" ret)
+            {:status 200 :body (first ret)}))
+      
+      ;; Case 3: Create new tag
+      :else
+      (let [ret (db/exec! (-> (h/insert-into :tags)
+                              (h/values [(merge
+                                          (-> r :body-params)
+                                          {:tags/slug (sluj (-> r :body-params :title))
+                                           :tags/owner (-> r :session :user_name)})])
+                              (h/returning :*)))
+            tagid (-> ret first :tags/id)]
+        (db/exec! (-> (h/insert-into :perms)
+                      (h/values (perms/public-permissions tagid))))
+        (log/info "New tag created:" tagid "by user:" (-> r :session :user_name))
+        {:status 200 :body (first ret)}))))
 
 
 (defn delete-tag [req]
@@ -208,14 +248,49 @@
 (defn tag-slug-check [r]
   (let [title (-> r :query-params (get "title"))
         ns (sluj (or (-> r :query-params (get "ns")) ""))
-        slug (sluj title)]
-    {:status 200 :body {:slug slug
-                        :exists
-                        (not (empty? (db/exec! {:select :slug
-                                                :from :tags
-                                                :where [:and
-                                                        [:= :tags/slug slug]
-                                                        [:= :tags/ns ns]]})))}}))
+        slug (sluj title)
+        existing-tag (first (db/exec! {:select :*
+                                       :from :tags
+                                       :where [:and
+                                               [:= :tags/slug slug]
+                                               [:= :tags/ns ns]]}))]
+    {:status 200 :body (if existing-tag
+                         (assoc existing-tag :exists true)
+                         {:slug slug
+                          :exists false})}))
+
+(defn tag-exists-check [r]
+  (let [body (:body-params r)
+        title (:title body)
+        ns (sluj (or (:ns body) ""))
+        domain-pk-ns (:domain_pk_namespace body)
+        domain-pk (:domain_pk body)
+        
+        query (cond
+                ;; Use title + ns if available
+                title
+                {:select :*
+                 :from :tags
+                 :where [:and
+                         [:= :tags/slug (sluj title)]
+                         [:= :tags/ns ns]]}
+                
+                ;; Use domain identifiers if no title
+                (and domain-pk-ns domain-pk)
+                {:select :*
+                 :from :tags
+                 :where [:and
+                         [:= :tags/domain_pk_namespace domain-pk-ns]
+                         [:= :tags/domain_pk domain-pk]]}
+                
+                :else
+                (throw (ex-info "Either title or domain_pk_namespace+domain_pk are required" {:status 400})))]
+        
+    (let [existing-tag (first (db/exec! query))]
+      {:status 200 
+       :body (if existing-tag
+               (assoc existing-tag :exists true)
+               {:exists false})})))
 
 (defn vote-delete [r]
   (let [admin-users (get-admin-users)
@@ -348,6 +423,9 @@
                         "Body: [binary or stream]")})
       response)))
 
+(comment 
+  ;; deprecated! this is not secure and so there is no longer an endpoint for it
+  )
 (defn get-users [req]
   {:status 200 :body (->> (-> (db/exec! (-> {:select [:users/user_name :owner] :from :users :where true}
                                             (h/left-join :usergroups [:= :users/user_name
@@ -470,6 +548,95 @@
             (log/debug "Discord authentication failed or incomplete"))
           (handler request))))))
 
+(defn get-namespaces [r]
+  (let [username (-> r :session :user_name)
+        groups (when username
+                 (map :users_in_usergroups/usergroup_id
+                      (db/exec! {:select :* 
+                                 :from :users_in_usergroups
+                                 :where [:= :user_id username]})))]
+    
+    {:status 200 
+     :body 
+     {:namespaces 
+      (->> (db/exec! 
+            (-> (h/select-distinct :tags/ns)
+                (h/from :tags)
+                (h/join :perms [:= :perms/tag_id :tags/id])
+                (h/where [:or
+                          ;; Public namespaces
+                          [:and 
+                           [:= :perms/capability "view"]
+                           [:= :perms/user_id "all"]]
+                          ;; User owned namespaces
+                          (when username
+                            [:= :tags/owner username])
+                          ;; Namespaces with explicit permission for user
+                          (when username
+                            [:like :perms/user_id (str "%" username "%")])
+                          ;; Namespaces with permission for user's groups
+                          (when (seq groups)
+                            (into [:or] 
+                                  (map #(vector :like :perms/user_id (str "%" % "%")) 
+                                       groups)))])))
+           (map :tags/ns)
+           (filter identity) ;; Remove nil namespaces
+           (sort))}}))
+
+(defn get-user [req]
+  (let [user-name (get-in req [:query-params "user_name"])
+        email (get-in req [:query-params "email"])
+        loginid (get-in req [:query-params "login_id"])
+        discord-id (get-in req [:query-params "discord_id"])
+        
+        user (cond
+               ;; Direct lookup by user_name
+               user-name
+               (first (db/exec! (-> (h/select :*)
+                                    (h/from :users)
+                                    (h/where [:= :user_name user-name]))))
+               
+               ;; Direct lookup by email
+               email
+               (first (db/exec! (-> (h/select :*)
+                                    (h/from :users)
+                                    (h/where [:= :email email]))))
+               
+               ;; Lookup by loginid (could be username or email)
+               loginid
+               (first (db/exec! (-> (h/select :*)
+                                    (h/from :users)
+                                    (h/where [:or
+                                              [:= :user_name loginid]
+                                              [:= :email loginid]]))))
+               
+               ;; Lookup by discord_id
+               discord-id
+               (first (db/exec! (-> (h/select :*)
+                                    (h/from :users)
+                                    (h/where [:= :discord_id discord-id]))))
+               
+               :else nil)]
+    
+    (if user
+      ;; Check if this is a temporary Discord user
+      (let [is-temp-discord-user (string/starts-with? (:users/user_name user) "@discord_")
+            ;; Return only user_name and temporary flag for security
+            sanitized-user {:user_name (:users/user_name user)}
+            user-with-temp-flag (cond
+                                  is-temp-discord-user
+                                  (assoc sanitized-user :temporary true)
+                                  
+                                  (and discord-id (not is-temp-discord-user))
+                                  (assoc sanitized-user :temporary false)
+                                  
+                                  :else
+                                  sanitized-user)]
+        {:status 200 :body user-with-temp-flag})
+      
+      ;; User not found
+      {:status 404 :body {:message "user not found"}})))
+
 (def routes
   [["/" {:handler #'test}]
    ["/music" {:handler #'test-2}]
@@ -480,12 +647,14 @@
     ["/frontpage" {:get {:handler #'feed/get-frontpage-feed}}]
     ["/hierarchy" {:get {:handler #'feed/get-heirarchy}}]
     ["/leaderboard" {:get {:handler #'get-leaderboard}}]
+    ["/users" {:get {:handler #'get-user}}]
     ["/tag" {:get {:handler #'query-tags}
              :post {:middleware [[wrap-rate-limit one-per-minute]]
                     :handler #'post-tag}
              :delete {:handler #'delete-tag}}]
-    ["/users" {:get {:handler #'get-users}}]
-    ["/tag/exists" {:get {:handler #'tag-slug-check}}]
+    ["/tag/namespace" {:get {:handler #'get-namespaces}}]
+    ["/tag/exists" {:get {:handler #'tag-slug-check}
+                    :post {:handler #'tag-exists-check}}]
     ["/tag/page" {:get {:handler #'tag-info-request}}]
     ["/tag/page2" {:get {:handler #'tag-info-request2}}]
     ["/tag/permissions" {:get {:handler #'perms/get-perms}

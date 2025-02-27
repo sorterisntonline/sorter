@@ -20,16 +20,17 @@
     (let [;; First check if there's a linked account
           _ (log/debug "Checking for linked Discord user:" discord-user-id)
           linked-user (first (db/exec! (-> (h/select :users/*)
-                                          (h/from :users)
-                                          (h/where [:= :discord_id discord-user-id]))))
+                                           (h/from :users)
+                                           (h/where [:and
+                                                     [:= :discord_id discord-user-id]
+                                                     [:not [:like :user_name "@discord\\_%"]]]))))
           ;; If no linked account, check for temporary account
           temp-username (str "@discord_" discord-username)
           _ (log/debug "Checking for temp Discord user:" temp-username)
           temp-user (when-not linked-user
                       (first (db/exec! (-> (h/select :users/*)
-                                          (h/from :users)
-                                          (h/where [:= :user_name temp-username])))))]
-      
+                                           (h/from :users)
+                                           (h/where [:= :user_name temp-username])))))]
       (log/debug "Linked user found:" linked-user)
       (log/debug "Temp user found:" temp-user)
       
@@ -55,8 +56,8 @@
                           (h/values [{:user_name temp-username
                                       :email email
                                       :password_hash "" ; No password for temp accounts
-                                      :email_verified false ; Changed to false - temp accounts should require verification
-                                      }]))) ; Removed discord_id from temp accounts
+                                      :email_verified false ; Temp accounts require verification
+                                      :discord_id discord-user-id}]))) ; Added discord_id for temp accounts
             (log/info "Successfully created temp Discord user:" temp-username)
             (let [new-user (first (db/exec! (-> (h/select :users/*)
                                                 (h/from :users)

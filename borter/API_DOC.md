@@ -16,7 +16,9 @@ The backend uses **session-based authentication**. A valid session is typically 
   - [GET /tag](#get-apitag)
   - [POST /tag](#post-apitag)
   - [DELETE /tag](#delete-apitag)
+  - [GET /tag/namespace](#get-apitagnamespace)
   - [GET /tag/exists](#get-apitagexists)
+  - [POST /tag/exists](#post-apitagexists)
   - [GET /tag/page](#get-apitagpage)
   - [GET /tag/page2](#get-apitagpage2)
   - [Permissions on Tags](#permissions-on-tags)
@@ -150,6 +152,7 @@ The backend uses **session-based authentication**. A valid session is typically 
 ---
 
 ### **POST** `/api/tag`
+
 Creates (or updates) a tag. If `:tag_id` is provided, updates an existing tag. Otherwise, creates a new tag.
 
 | Requirement        | Details                                                                               |
@@ -159,11 +162,14 @@ Creates (or updates) a tag. If `:tag_id` is provided, updates an existing tag. O
 | **Response**       | **200** with JSON object of the newly created or updated tag.                         |
 | **Rate Limiting**  | Rate-limited to about 1 request / minute.                                            |
 
+**Special Case**: For Discord integration, if a request contains `domain_pk_namespace` = "discord.channel" and a valid `domain_pk`, the endpoint will check if a tag for this channel already exists. If it does, it will update that tag (permission checks apply).
+
 **If updating**: The backend checks that you **own** the tag. Otherwise, a 403 error is thrown.
 
 ---
 
 ### **DELETE** `/api/tag`
+
 Deletes an existing tag.
 
 | Requirement        | Details                                                                      |
@@ -174,18 +180,46 @@ Deletes an existing tag.
 
 ---
 
+### **GET** `/api/tag/namespace`
+
+Returns a list of all namespaces that the current user can view based on their permissions.
+
+| Requirement      | Details                                                                       |
+|------------------|-------------------------------------------------------------------------------|
+| **Auth**         | Session optional. If logged in, returns additional private namespaces.        |
+| **Query Params** | None                                                                          |
+| **Response**     | **200** with JSON: `{"namespaces": ["namespace1", "namespace2", ...]}`.       |
+| **Permissions**  | Includes namespaces from tags that the user: <br/>- Can view publicly<br/>- Owns<br/>- Has explicit view permission for<br/>- Has group-based view permission for |
+
+---
+
 ### **GET** `/api/tag/exists`
+
 Checks whether a given title and namespace would yield a conflicting slug in the database.
 
-| Requirement  | Details                                                                       |
-|--------------|-------------------------------------------------------------------------------|
-| **Auth**     | None.                                                                         |
+| Requirement      | Details                                                                       |
+|------------------|-------------------------------------------------------------------------------|
+| **Auth**         | None.                                                                         |
 | **Query Params** | - **title** (string, required). <br/> - **ns** (string, optional, for namespace). |
-| **Response** | **200** with JSON: ```{"slug": "...", "exists": true/false}```                |
+| **Response**     | **200** with JSON containing either:<br/>- Full tag object with `"exists": true` if found<br/>- `{"slug": "...", "exists": false}` if no match |
+
+---
+
+### **POST** `/api/tag/exists`
+
+Checks whether a tag exists based on either title+namespace or domain identifiers.
+
+| Requirement      | Details                                                                       |
+|------------------|-------------------------------------------------------------------------------|
+| **Auth**         | None.                                                                         |
+| **Request Body** | JSON with at least one of:<br/>- **title** (string) + optional **ns** (string)<br/>- **domain_pk_namespace** (string) + **domain_pk** (string) |
+| **Response**     | **200** with JSON containing either:<br/>- Full tag object with `"exists": true` if found<br/>- `{"exists": false}` if no match |
+| **Error**        | **400** if neither title nor domain identifiers are provided                  |
 
 ---
 
 ### **GET** `/api/tag/page`
+
 Proxies a request to the Rust aggregator endpoint `/api/tag/page`. Returns detailed page info about a tag, including sorted items, based on query parameters.
 
 | Requirement    | Details                                               |
@@ -197,7 +231,8 @@ Proxies a request to the Rust aggregator endpoint `/api/tag/page`. Returns detai
 ---
 
 ### **GET** `/api/tag/page2`
-Like `/api/tag/page`, but calls a slightly different aggregator route `/api/tag/page2`. Returns another variation of the tag’s data.
+
+Like `/api/tag/page`, but calls a slightly different aggregator route `/api/tag/page2`. Returns another variation of the tag's data.
 
 | Requirement    | Details                                       |
 |----------------|-----------------------------------------------|
@@ -210,6 +245,7 @@ Like `/api/tag/page`, but calls a slightly different aggregator route `/api/tag/
 ### Permissions on Tags
 
 #### **GET** `/api/tag/permissions`
+
 Returns the current list of permission records (capability vs user_id) for a given tag.
 
 | Requirement  | Details                                                   |
@@ -221,6 +257,7 @@ Returns the current list of permission records (capability vs user_id) for a giv
 ---
 
 #### **POST** `/api/tag/permissions`
+
 Sets or updates the permissions for a tag. This overwrites or upserts the capabilities.
 
 | Requirement      | Details                                                                 |
@@ -235,6 +272,7 @@ Sets or updates the permissions for a tag. This overwrites or upserts the capabi
 ## Votes
 
 ### **POST** `/api/vote`
+
 Records or updates a vote comparing two items. The **left_item_id**, **right_item_id**, and **magnitude** are used to represent user preference.
 
 | Requirement        | Details                                                                      |
@@ -248,6 +286,7 @@ Records or updates a vote comparing two items. The **left_item_id**, **right_ite
 ---
 
 ### **DELETE** `/api/vote`
+
 Deletes a vote by ID.
 
 | Requirement      | Details                                                       |
@@ -261,6 +300,7 @@ Deletes a vote by ID.
 ## Items
 
 ### **POST** `/api/item`
+
 Creates or updates an item (represents some entity to be sorted/ranked).
 
 | Requirement      | Details                                                                              |
@@ -276,6 +316,7 @@ Creates or updates an item (represents some entity to be sorted/ranked).
 ## Item Membership in Tags
 
 ### **GET** `/api/item/membership`
+
 Retrieves membership information for a given `item_id` across tags.
 
 | Requirement    | Details                                                                |
@@ -288,6 +329,7 @@ Retrieves membership information for a given `item_id` across tags.
 ---
 
 ### **POST** `/api/item/membership`
+
 Adds an item to a tag.
 
 | Requirement      | Details                                                                        |
@@ -299,6 +341,7 @@ Adds an item to a tag.
 ---
 
 ### **DELETE** `/api/item/membership`
+
 Removes an item from a tag.
 
 | Requirement      | Details                                                                                       |
@@ -312,6 +355,7 @@ Removes an item from a tag.
 ## Skipping Items
 
 ### **POST** `/api/item/skip`
+
 Marks an item as *skipped* for the current user.
 
 | Requirement      | Details                          |
@@ -323,6 +367,7 @@ Marks an item as *skipped* for the current user.
 ---
 
 ### **DELETE** `/api/item/skip`
+
 Unskips an item for the current user.
 
 | Requirement      | Details                          |
@@ -338,6 +383,7 @@ Unskips an item for the current user.
 ### Registration
 
 #### **POST** `/api/register`
+
 Creates a user account.
 
 | Requirement      | Details                                                                   |
@@ -352,6 +398,7 @@ Creates a user account.
 ### Login
 
 #### **POST** `/api/login`
+
 Logs in a user by username or email + password.
 
 | Requirement      | Details                                                                                        |
@@ -364,6 +411,7 @@ Logs in a user by username or email + password.
 ---
 
 #### **GET** `/api/login`
+
 Checks current session.
 
 | Requirement    | Details                                              |
@@ -376,6 +424,7 @@ Checks current session.
 ### Logout
 
 #### **POST** `/api/logout`
+
 Clears the current session.
 
 | Requirement    | Details                    |
@@ -388,7 +437,8 @@ Clears the current session.
 ## Email Verification
 
 ### **POST** `/api/send-confirmation`
-Resends a verification email if the user’s email is unverified.
+
+Resends a verification email if the user's email is unverified.
 
 | Requirement      | Must be logged in or supply valid credentials. |
 |------------------|-----------------------------------------------|
@@ -399,6 +449,7 @@ Resends a verification email if the user’s email is unverified.
 ---
 
 ### **GET** `/api/verify`
+
 Handles the verification link from an email.
 
 | Requirement  | None (public link).                     |
@@ -411,7 +462,8 @@ Handles the verification link from an email.
 ## Update Email
 
 #### **POST** `/api/update-email`
-Updates the user’s email and sets `email_verified = false`, then sends a new verification email.
+
+Updates the user's email and sets `email_verified = false`, then sends a new verification email.
 
 | Requirement    | Must be logged in.                                   |
 |----------------|------------------------------------------------------|
@@ -424,6 +476,7 @@ Updates the user’s email and sets `email_verified = false`, then sends a new v
 ## Password Reset
 
 ### **POST** `/api/forgot-password`
+
 Sends a password-reset email (if the email is known).  
 
 | Requirement    | No authentication.                                               |
@@ -435,6 +488,7 @@ Sends a password-reset email (if the email is known).
 ---
 
 ### **POST** `/api/reset-password`
+
 Resets the password using a valid reset token.
 
 | Requirement      | No authentication.                                               |
@@ -446,12 +500,24 @@ Resets the password using a valid reset token.
 
 ## Users List
 
-### **GET** `/api/users`
-Lists all users in the system, or partial user info. (Primarily for debugging or admin usage.)
+### **GET** `/api/users` (lookup)
 
-| Requirement    | Currently no auth required in the code (but subject to change). |
-|----------------|-----------------------------------------------------------------|
-| **Response**   | 200 => array of user records with minimal fields like `{"user_name": "...", "owner": ...}`. |
+looks up users by various identifiers.
+
+| requirement      | details                                                       |
+|------------------|---------------------------------------------------------------|
+| **auth**         | no authentication required.                                   |
+| **query params** | one of the following:<br/>- **user_name**: exact match lookup by username<br/>- **email**: exact match lookup by email<br/>- **login_id**: lookup by either username or email<br/>- **discord_id**: lookup by discord id |
+| **response**     | **200** with minimal JSON data if found<br/>**404** with `{"message": "user not found"}` if not found |
+| **security**     | only returns username and temporary status (if applicable), no sensitive information like email or IDs |
+
+**example response**:
+```json
+{
+  "user_name": "example_user",
+  "temporary": true  // only present when searching by discord_id, false if fully linked sorter account to discord account
+}
+```
 
 ---
 
@@ -460,13 +526,14 @@ Lists all users in the system, or partial user info. (Primarily for debugging or
 There is a central route `/api/integrations/status` that returns whether certain integrations (e.g. Spotify, YouTube) are connected for the current user. It requires a logged-in user.
 
 ### **GET** `/api/integrations/status`
+
 Returns a JSON with status flags. Example:
 ```json
 {
   "spotify": false,
   "youtube": false
 }
-````
+```
 
 | Requirement | Must be logged in.                              |
 | ----------- | ----------------------------------------------- |
@@ -481,17 +548,17 @@ All Spotify OAuth endpoints are grouped under `/api/spotify`. This uses standard
 **Key routes**:
 
 - **GET** `/api/spotify/auth`\
-  Redirects user to Spotify’s OAuth authorization page.\
+  Redirects user to Spotify's OAuth authorization page.\
   Query param: `redirect` (optional) => after success, user is brought back there.
 
 - **GET** `/api/spotify/callback`\
   Spotify OAuth callback. Exchange `code` for tokens, link them to the logged-in user.
 
 - **GET** `/api/spotify/status`\
-  Returns `{"connected": boolean}` if the user’s Spotify account is connected.
+  Returns `{"connected": boolean}` if the user's Spotify account is connected.
 
 - **POST** `/api/spotify/disconnect`\
-  Removes the Spotify tokens from the current user’s account, effectively disconnecting it.
+  Removes the Spotify tokens from the current user's account, effectively disconnecting it.
 
 - **GET** `/api/spotify/search`\
   Requires a query param `q`. Performs a Spotify search for albums, artists, and tracks.\
@@ -536,7 +603,7 @@ Endpoints under `/api/linear`:
 - **GET** `/api/linear/views`\
   Retrieve accessible Linear projects for the logged-in user.
 - **POST** `/api/linear/views`\
-  Body example: `{"id": "LinearProjectId"}` => attempts to sync that project’s issues into a sorter tag.
+  Body example: `{"id": "LinearProjectId"}` => attempts to sync that project's issues into a sorter tag.
 
 ---
 
@@ -547,7 +614,7 @@ Endpoints under `/api/reddit`.
 - **POST** `/api/reddit/make-sub`\
   Body: `{"subreddit": "funny"}` => Creates a tag for that subreddit.
 - **POST** `/api/reddit/refresh`\
-  Body: `{"tagid": <tag-id>}` => Refreshes from the subreddit’s /hot feed, adding them as items.
+  Body: `{"tagid": <tag-id>}` => Refreshes from the subreddit's /hot feed, adding them as items.
 
 ---
 
@@ -560,96 +627,6 @@ Endpoints under `/api/twitter`.
 - **GET** `/api/twitter/liked`\
   Fetch liked tweets of the logged-in user. Returns them in JSON.
 - **GET** `/api/twitter/page`\
-  Example endpoint to return or create monthly-based “x-<month>-<year>” tags.
+  Example endpoint to return or create monthly-based "x-<month>-<year>" tags.
 - **POST** `/api/twitter/import`\
-  Body: `{"tweets": [{...}, ...]}` => Import tweets as items.
-
----
-
-## Comments
-
-All comment-related endpoints are under `/api/comments`.
-
-- **GET** `/api/comments`\
-  Query param `coord`: e.g. `"item:123"`. Returns comments for that item.
-- **POST** `/api/comments`\
-  Body: `{"coord": "item:123", "parent_id": null, "body": "hello"}` => Creates a new comment.
-- **DELETE** `/api/comments`\
-  Query param or body param `id`: deletes a comment (must own it).
-
----
-
-## User Groups
-
-All user group endpoints are under `/api/user_group`.
-
-- **GET** `/api/user_group`\
-  Returns groups you own.
-
-- **POST** `/api/user_group`\
-  Body example:
-  ```json
-  {
-    "group_name": "someGroupName",
-    "users": ["alice", "bob"]
-  }
-  ```
-  Creates or updates a group with that name. Must be logged in.
-
-- **DELETE** `/api/user_group`\
-  Body: `{"group_name": "..."}`
-  Must be the owner to delete.
-
-- **GET** `/api/user_group/me`\
-  Lists groups **you** are a member of.
-
----
-
-## Visualization
-
-Endpoints under `/api/viz`.
-
-### **GET** `/api/viz/items`
-
-Returns all items in the database (or limited set) for a visualization.
-
-| Requirement      | No special auth, but rate-limited. |
-| ---------------- | ---------------------------------- |
-| **Query Params** | - **limit** (int, optional).       |
-| **Response**     | 200 => list of items.              |
-
-### **GET** `/api/viz/votes`
-
-Returns all votes (or a limited set) for a visualization.
-
-| Requirement      | No special auth, but rate-limited.               |
-| ---------------- | ------------------------------------------------ |
-| **Query Params** | - **limit** (int, optional)                      |
-| **Response**     | 200 => list of votes with magnitude, owner, etc. |
-
----
-
-## Error Handling
-
-In general, if an endpoint fails due to a user-related condition (e.g., invalid ID, missing permission, missing session), the response:
-
-- **401 Unauthorized**: Typically means "not logged in" or no session.
-- **403 Forbidden**: Typically means "you are logged in, but do not own or lack permission."
-- **400 Bad Request**: Malformed input or parameters.
-- **500 Internal Server Error**: Unexpected error or server exception.
-
-When errors occur, the response body is typically JSON with a structure like:
-
-```json
-{
-  "message": "Description of the error"
-}
-```
-
-and possibly additional data in `ex-data`.
-
----
-
-## Conclusion
-
-This API supports adding and managing tags, items, votes, user groups, and integrates with external services (Spotify, YouTube, etc.). For further details, refer to the Clojure code in the `app` namespace files. Remember that for read/write endpoints, **session-based authentication** is crucial. Ensure you handle cookies properly in your requests.
+  Body: `{"tweets": [{...}, ...]}`
