@@ -377,6 +377,7 @@
         ;; zod, zudsniper, and jason are always unlimited
         (or (= "zod" username)
             (= "zudsniper" username)
+            (= "lara" username)
             (= "jason" username)) Integer/MAX_VALUE
         ;; discord is always unlimited
         (= "discord" username) Integer/MAX_VALUE
