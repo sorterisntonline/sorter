@@ -4,8 +4,6 @@ import App from "./App.jsx";
 import "./index.css";
 import { Router, Route, Switch, useLocation } from "wouter";
 import { TagList } from "./TagList.jsx";
-import { TagList2 } from "./TagList2.jsx";
-import { TagList3 } from "./TagList3.jsx";
 import { tag, selected_item } from "./App.jsx";
 import { Login } from "./Login.jsx";
 import { Register } from "./Register.jsx";
@@ -23,7 +21,6 @@ import { MobileNav } from './MobileNav';
 import { MobileNewTagChooser } from './components/MobileNewTagChooser.jsx';
 import { TopNav } from './TopNav';  // Import the new TopNav
 import { handleLogout } from './utils/authUtils.js';
-import { NEW_TAG_ROUTES, NEW_ITEM_ROUTES } from './constants/navigation';
 import { AllSortViz } from './viz/AllSortViz.jsx';
 import { initializeTheme } from './utils/themeUtils';
 import { EmailVerification } from './EmailVerification';
@@ -49,7 +46,7 @@ const Root = () => {
   const isVoting = location.includes('/voting');
   
   // Only handle tag chooser here
-  const showTagChooser = NEW_TAG_ROUTES.includes(location) && current_session.value?.user_name;
+  const showTagChooser = current_session.value?.user_name;
 
   return (
     <React.StrictMode>
@@ -75,20 +72,6 @@ const Root = () => {
                   tag.value = null;
                   selected_item.value = false;
                   return <FrontpageFeed />;
-                }}
-              </Route>
-              <Route path="/tags3">
-                {(params) => {
-                  tag.value = null;
-                  selected_item.value = false;
-                  return <TagList3 />;
-                }}
-              </Route>
-              <Route path="/tags2">
-                {(params) => {
-                  tag.value = null;
-                  selected_item.value = false;
-                  return <TagList2 />;
                 }}
               </Route>
               <Route path="/">

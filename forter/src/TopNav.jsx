@@ -28,40 +28,7 @@ const ShowLink = () => {
 };
 
 const NavItem = ({ item }) => {
-  const [showDropdown, setShowDropdown] = useState(false);
-
-  if (!item.children) {
-    return <MyLink to={item.path}>{item.name}</MyLink>;
-  }
-
-  return (
-    <div
-      className="relative"
-      onMouseEnter={() => setShowDropdown(true)}
-      onMouseLeave={() => setShowDropdown(false)}
-    >
-      <MyLink to={item.path} className="flex items-center gap-1">
-        {item.name}
-        <span>▼</span>
-      </MyLink>
-      
-      {showDropdown && (
-        <div className="absolute top-full left-0 bg-white dark:bg-black border border-gray-200 
-          dark:border-gray-700 shadow-lg rounded-md overflow-hidden min-w-[120px] z-50"
-        >
-          {item.children.map(child => (
-            <MyLink
-              key={child.name}
-              to={child.path}
-              className="block w-full hover:bg-gray-100 dark:hover:bg-gray-800"
-            >
-              {child.name}
-            </MyLink>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+  return <MyLink to={item.path}>{item.name}</MyLink>;
 };
 
 export const TopNav = () => {
