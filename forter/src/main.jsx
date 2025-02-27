@@ -46,7 +46,7 @@ const Root = () => {
   const isVoting = location.includes('/voting');
   
   // Only handle tag chooser here
-  const showTagChooser = current_session.value?.user_name;
+  const showTagChooser = location == "/" && current_session.value?.user_name;
 
   return (
     <React.StrictMode>

@@ -18,7 +18,7 @@ export const MobileNewTagChooser = () => {
   });
 
   // Check if we should show the button
-  const shouldShow = current_session.value?.user_name;
+  const shouldShow = location == "/" && current_session.value?.user_name;
   
   if (!shouldShow) return null;
 
