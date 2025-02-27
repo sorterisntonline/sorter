@@ -1,0 +1,38 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "forter",
+      "path": "forter",
+      "problemMatcher": [],
+      "script": "dev",
+      "type": "npm"
+    },
+    {
+      "command": "open -g -a Docker && sleep 5 && ./run-postgres.sh",
+      "label": "postgres",
+      "options": {
+        "cwd": "borter/database"
+      },
+      "problemMatcher": [],
+      "type": "shell"
+    },
+    {
+      "command": "./run.sh",
+      "label": "borter",
+      "options": {
+        "cwd": "borter"
+      },
+      "problemMatcher": [],
+      "type": "shell"
+    },
+    {
+      "type": "cargo",
+      "label": "rustsorter",
+      "command": "run",
+      "options": {
+        "cwd": "rustsorter"
+      }
+    }
+  ]
+}
