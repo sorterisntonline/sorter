@@ -1,13 +1,24 @@
 {
-    "calva.replConnectSequences": [
-        {
-            "name": "Borter REPL",
-            "projectType": "deps.edn",
-            "projectRootPath": ["borter"],
-            "nReplPortFile": [".nrepl-port"],
-            "connectionType": "nrepl",
-            "autoSelectForConnect": true
-        }
-    ],
-    "calva.autoConnectRepl": true
+  "calva.replConnectSequences": [
+    {
+      "name": "Borter REPL",
+      "projectType": "deps.edn",
+      "projectRootPath": ["borter"],
+      "nReplPortFile": [".nrepl-port"],
+      "connectionType": "nrepl",
+      "autoSelectForConnect": true
+    }
+  ],
+  "calva.autoConnectRepl": true,
+  "sqltools.connections": [
+    {
+      "previewLimit": 50,
+      "server": "localhost",
+      "port": 5432,
+      "driver": "PostgreSQL",
+      "name": "sorter",
+      "database": "postgres",
+      "username": "postgres"
+    }
+  ]
 }
