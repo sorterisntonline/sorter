@@ -1,11 +1,13 @@
 (ns app.http
   (:require [reitit.ring :as ring]
+            [clojure.tools.logging :as log]
             [ring.adapter.jetty :as jetty]
             [ring.middleware.params :as params]
             [ring.middleware.session :as session]
             [ring.middleware.resource :refer [wrap-resource]]
             [ring.middleware.content-type :refer [wrap-content-type]]
             [ring.util.response :as resp]
+            [clojure.string :as string]
 
             [io.staticweb.rate-limit.storage :as storage]
             [io.staticweb.rate-limit.middleware :refer [ip-rate-limit wrap-rate-limit]]
@@ -34,14 +36,18 @@
             [app.twitter :as twitter]
             [app.groups :as groups]
             [app.health :as health]
-            [app.oauth :as oauth])
+            [app.oauth :as oauth]
+            [app.discord :as discord]
+            [app.discord-oauth :as discord-oauth])
   (:import
    [java.net URLEncoder]))
 
-(defn get-html-file [request] ; revert this for now because it breaks everything
+(defn get-html-file [request]
+  (log/debug "get-html-file called with host:" (-> request :headers (get "host")))
   (let [is-music (or (= "music.sorter.social" (-> request :headers (get "host")))
                      (= "/music" (:uri request)))
         html-file (if is-music "index2.html" "index.html")]
+    (log/debug "Selected HTML file:" html-file)
     (str "public/" html-file)))
 
 ;; Replace the existing test functions with a single handler
@@ -127,16 +133,20 @@
                 (h/from :tags)
                 (h/where [:= :tags/domain_pk_namespace "spotify.playlist"]))))
 
+(defn get-admin-users []
+  (when-let [admins (System/getenv "BORTER_STATIC_ADMINS")]
+    (set (clojure.string/split admins #","))))
+
 (defn post-tag [r]
+  (log/debug "post-tag called with body-params:" (:body-params r))
   (when (nil? (-> r :session :user_name))
+    (log/warn "Unauthorized attempt to create tag")
     (throw (ex-info "need to be logged in to make tag" {:status 401})))
 
   (if (-> r :body-params :tag_id)
-    (do (when (not=
-               (-> {:select :owner :from :tags
-                    :where [:= :tags/id (-> r :body-params :tag_id)]}
-                   db/exec! first :tags/owner)
-               (-> r :session :user_name))
+    (do (when-not (perms/owns (-> r :body-params :tag_id)
+                            (-> r :session :user_name))
+          (log/warn "User" (-> r :session :user_name) "attempted to edit tag they don't own:" (-> r :body-params :tag_id))
           (throw (ex-info "you can not edit tags you do not own" {:status 403})))
 
         (let [ret (db/exec! (-> (h/update :tags)
@@ -144,6 +154,8 @@
                                            (assoc :edited_at [:now])
                                            (dissoc :tag_id)))
                                 (h/where [:= :tags/id (-> r :body-params :tag_id)])))]
+          (log/info "Tag updated:" (-> r :body-params :tag_id))
+          (log/debug "Updated tag result:" ret)
           {:status 200 :body (first ret)}))
 
     (do (let [ret (db/exec! (-> (h/insert-into :tags)
@@ -155,15 +167,13 @@
               tagid (-> ret first :tags/id)]
           (db/exec! (-> (h/insert-into :perms)
                         (h/values (perms/public-permissions tagid))))
+          (log/info "New tag created:" tagid "by user:" (-> r :session :user_name))
           {:status 200 :body (first ret)}))))
 
 
 (defn delete-tag [req]
-  (let [tagid (-> req :params (get "id") Integer/parseInt)
-        tag (first (db/exec! {:select :tags/* :from :tags :where [:= :tags/id tagid]}))]
-
-    (when-not (= (-> req :session :user_name)
-                 (:tags/owner tag))
+  (let [tagid (-> req :params (get "id") Integer/parseInt)]
+    (when-not (perms/owns tagid (-> req :session :user_name))
       (throw (ex-info "must own tag" {:status 401})))
 
     (db/exec! {:delete-from :perms :where [:= :tag_id tagid]})
@@ -208,12 +218,16 @@
                                                         [:= :tags/ns ns]]})))}}))
 
 (defn vote-delete [r]
-  (when-not (= (-> r :session :user_name)
-               (-> (db/exec! (-> (h/select :owner) (h/from :votes)
-                                 (h/where
-                                  [:= :votes/id (-> r :body-params :vote_id)])))
-                   first :votes/owner))
-    (throw (ex-info "must own vote" {:status 401})))
+  (let [admin-users (get-admin-users)
+        username (-> r :session :user_name)
+        vote-owner (-> (db/exec! (-> (h/select :owner) 
+                                     (h/from :votes)
+                                     (h/where [:= :votes/id (-> r :body-params :vote_id)])))
+                       first 
+                       :votes/owner)]
+    (when-not (or (and admin-users (contains? admin-users username))
+                  (= username vote-owner))
+      (throw (ex-info "must own vote" {:status 401}))))
 
   (db/exec! (-> (h/delete-from :votes)
                 (h/where [:= :votes/id (-> r :body-params :vote_id)])))
@@ -224,11 +238,14 @@
                           db/exec! first :items/owner))
 (defn item-post [req]
   (let [username (-> req :session :user_name)
-        tagids [(-> req :body-params :tag_id)]]
+        tagids [(-> req :body-params :tag_id)]
+        admin-users (get-admin-users)
+        is-admin (and admin-users (contains? admin-users username))]
 
     {:status 200 :body (if (-> req :body-params :id)
                          (do
-                           (when-not (= (item-owner (-> req :body-params :id)) username)
+                           (when-not (or is-admin
+                                         (= (item-owner (-> req :body-params :id)) username))
                              (throw (ex-info "must own item to update it" {:status 403})))
 
                            (item/update-item req))
@@ -251,12 +268,16 @@
                                                     [:= :owner (-> r :session :user_name)]])))})})))
 
 (defn item-m-delete [r]
-  (when-not (= (-> r :session :user_name)
-               (-> (db/exec!
-                    (-> (h/select :owner) (h/from :items)
-                        (h/where [:= :items/id (-> r :body-params :item_id)])))
-                   first :items/owner))
-    (throw (ex-info "must own item to remove it from tag" {:status 401})))
+  (let [admin-users (get-admin-users)
+        username (-> r :session :user_name)
+        item-owner (-> (db/exec! (-> (h/select :owner) 
+                                     (h/from :items)
+                                     (h/where [:= :items/id (-> r :body-params :item_id)])))
+                       first 
+                       :items/owner)]
+    (when-not (or (and admin-users (contains? admin-users username))
+                  (= username item-owner))
+      (throw (ex-info "must own item to remove it from tag" {:status 401}))))
 
   (db/exec! (-> (h/delete-from :items_in_Tags)
                 (h/where [:and
@@ -297,15 +318,35 @@
 
 (defn wrap-exception [handler]
   (fn [request]
-    (try (handler request)
-         (catch Exception e
-           (def e e)
-           (println "Exception:" e)
-           (let [message (ex-message e)]
-             message)
-           (merge {:status 500
-                   :body {:message (ex-message e)}}
-                  (ex-data e))))))
+    (try
+      (handler request)
+      (catch Exception e
+        (log/error e "Exception in request handling")
+        (merge {:status 500
+                :body {:message (ex-message e)}}
+               (ex-data e))))))
+
+(defn wrap-request-logging [handler]
+  (fn [request]
+    (log/info "Request:" (:request-method request) (:uri request))
+    (log/debug "Full request details:" 
+               {:uri (:uri request)
+                :request-method (:request-method request)
+                :headers (:headers request)
+                :params (:params request)
+                :query-params (:query-params request)
+                :body-params (:body-params request)
+                :session (:session request)})
+    (let [response (handler request)]
+      (log/info "Response:" (:status response))
+      (log/debug "Full response details:" 
+                {:status (:status response)
+                 :headers (:headers response)
+                 :body (if (and (map? (:body response))
+                               (not (instance? java.io.InputStream (:body response))))
+                        (str "Body: " (:body response))
+                        "Body: [binary or stream]")})
+      response)))
 
 (defn get-users [req]
   {:status 200 :body (->> (-> (db/exec! (-> {:select [:users/user_name :owner] :from :users :where true}
@@ -370,19 +411,15 @@
          (:user_name (:session req))))
 
   (get-quota [self req]
-    (let [username (get-in req [:session :user_name])]
+    (let [username (get-in req [:session :user_name])
+          always-unlimited (-> (System/getenv "BORTER_STATIC_ADMINS")
+                               (clojure.string/split #",")
+                               (into []))]
       (cond
-        ;; tommy is always unlimited
-        (= "tommy" username) Integer/MAX_VALUE
-        ;; zod, zudsniper, and jason are always unlimited
-        (or (= "zod" username)
-            (= "zudsniper" username)
-            (= "jason" username)) Integer/MAX_VALUE
-        ;; discord is always unlimited
-        (= "discord" username) Integer/MAX_VALUE
-        ;; admin is unlimited when NO_RATE_LIMITS is true
-        (and (= "admin" username)
-             (= "true" (System/getenv "NO_RATE_LIMITS"))) Integer/MAX_VALUE
+        ;; All users are unlimited when NO_RATE_LIMITS is true
+        (= "true" (System/getenv "NO_RATE_LIMITS")) Integer/MAX_VALUE
+        ;; Check if the username is in the always unlimited set
+        (contains? always-unlimited username) Integer/MAX_VALUE
         ;; default case - use the specified quota
         :else quota)))
 
@@ -394,6 +431,44 @@
 (def five-per-minute {:storage storage :limit (UserRateLimit. 3 5 (java.time.Duration/ofMinutes 1))})
 (def three-per-five-minutes {:storage storage :limit (UserRateLimit. 4 3 (java.time.Duration/ofMinutes 5))})
 
+(defn wrap-discord-user-auth
+  "Middleware that adds user context for Discord requests"
+  [handler]
+  (fn [request]
+    (try
+      (log/info "DISCORD USER AUTH START" (:discord request))
+      (if-let [discord-context (:discord request)]
+        (let [user-id (:user-id discord-context)
+              username (:username discord-context)
+              user (discord/get-or-create-discord-user user-id username)
+              request-with-user (assoc-in request [:session :user_name] (:users/user_name user))]
+          (handler request-with-user))
+        (handler request))
+      (catch Exception e
+        (log/error e "CRITICAL: Unhandled exception in wrap-discord-user-auth")
+        (handler request)))))
+
+(defn wrap-discord-auth
+  "Middleware that authenticates requests from the Discord bot"
+  [handler]
+  (fn [request]
+    (let [auth-header (get-in request [:headers "authorization"])
+          discord-user-id (get-in request [:headers "x-discord-user-id"])
+          discord-username (get-in request [:headers "x-discord-username"])]
+      (log/debug "Discord auth attempt with user-id:" discord-user-id "username:" discord-username)
+      (if (and (discord/validate-discord-request auth-header)
+               discord-user-id
+               discord-username)
+        (do
+          (log/info "Discord authentication successful for discord user:" discord-username)
+          ;; Add Discord context to the request
+          (handler (assoc request :discord {:user-id discord-user-id
+                                            :username discord-username})))
+        ;; Continue without Discord context
+        (do
+          (when auth-header
+            (log/debug "Discord authentication failed or incomplete"))
+          (handler request))))))
 
 (def routes
   [["/" {:handler #'test}]
@@ -446,6 +521,7 @@
     ["/linear" linear/routes]
     ["/reddit" reddit/routes]
     ["/twitter" twitter/routes]
+    ["/discord" discord/routes]
 
     ["/integrations" integrations/routes]
     ["/comments" comments/routes]
@@ -468,16 +544,20 @@
   (-> (ring/ring-handler
        (ring/router routes)
        #'test)
-
+      (wrap-request-logging) 
+      (wrap-discord-user-auth)
+      (wrap-discord-auth) 
+      (wrap-dev-session)
+      (session/wrap-session)
       (wrap-exception)
       (mw/wrap-params)
       (params/wrap-params)
       (mw/wrap-format muntaja)
-      (wrap-dev-session)
-      (session/wrap-session)
       (wrap-resource "public")
       (wrap-content-type)))
 
 (defn start [{:keys [port]}]
+  (log/info "Starting HTTP server on port" port)
   (jetty/run-jetty #'app {:port port :join? false :host "0.0.0.0"})
+  (log/info "HTTP server running on port" port)
   (println (str "http server running on port " port)))

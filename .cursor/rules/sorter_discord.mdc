@@ -1,5 +1,5 @@
 ---
-description: the sorter discord bot implementation 
+description: the sorter discord bot implementation
 globs: discorter/*
 ---
 # Overview 
@@ -13,3 +13,8 @@ We should use discord embeds deeply, as well as custom buttons & views where the
 
 We will be TypeScript, discord.js, and 'Discord Bot TypeScript Template', which may optionally have its structure included. Follow the structure and setup that it uses whenever possible, as well as best practices that discord recommends themselves for developers. 
 
+all referenced paths beyond this point start from the discord bot's project root, which may or may not be the repository root (depending on if we're using a monorepo or not.) In our case it begins from discorter/.
+
+# Discord Bot Development
+Commands: 
+Command implementations all go under commands/. When we need to update a specific command implementation, we must always update its corresponding metadata (in commands/metadata.ts).

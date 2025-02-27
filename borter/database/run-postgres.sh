@@ -57,7 +57,20 @@ if [ ! -z "$PG_DUMP_DATA" ]; then
     for i in {1..30}; do
         if docker exec -e PGPASSWORD=password $NAME pg_isready -U postgres; then
             echo "PostgreSQL is ready. Importing data..."
-            docker exec -i -e PGPASSWORD=password $NAME psql -U postgres -d postgres < "$PG_DUMP_DATA"
+            
+            # Check if file is binary or text by looking at first bytes
+            if head -c 5 "$PG_DUMP_DATA" | grep -q "^PGDMP"; then
+                echo "Importing data from binary dump..."
+                # For binary dumps, use pg_restore with --data-only
+                docker exec -i -e PGPASSWORD=password $NAME pg_restore --data-only -U postgres -d postgres < "$PG_DUMP_DATA" || echo "Some errors occurred during import, but continuing..."
+            else
+                echo "Importing data from SQL text dump..."
+                # Use psql for text dumps
+                docker exec -i -e PGPASSWORD=password $NAME psql -U postgres -d postgres -c "BEGIN; SET CONSTRAINTS ALL DEFERRED;"
+                cat "$PG_DUMP_DATA" | docker exec -i -e PGPASSWORD=password $NAME psql -U postgres -d postgres -v ON_ERROR_STOP=0
+                docker exec -i -e PGPASSWORD=password $NAME psql -U postgres -d postgres -c "COMMIT;"
+            fi
+            
             echo "Data import completed"
             break
         fi

@@ -1,6 +1,7 @@
 import { REST } from '@discordjs/rest';
-import { Options, Partials } from 'discord.js';
+import { Options, Partials, Routes } from 'discord.js';
 import { createRequire } from 'node:module';
+import 'dotenv/config';
 
 import { Button } from './buttons/index.js';
 import { DevCommand, HelpCommand, InfoCommand, TestCommand, TagCommand } from './commands/chat/index.js';
@@ -60,15 +61,15 @@ async function start(): Promise<void> {
         new HelpCommand(),
         new InfoCommand(),
         new TestCommand(),
+        
+        // Sorter Chat Commands
         new TagCommand(),
-
+        
         // Message Context Commands
         new ViewDateSent(),
-
+        
         // User Context Commands
         new ViewDateJoined(),
-
-        // TODO: Add new commands here
     ];
 
     // Buttons
@@ -123,7 +124,36 @@ async function start(): Promise<void> {
                 ...Object.values(MessageCommandMetadata).sort((a, b) => (a.name > b.name ? 1 : -1)),
                 ...Object.values(UserCommandMetadata).sort((a, b) => (a.name > b.name ? 1 : -1)),
             ];
-            await commandRegistrationService.process(localCmds, process.argv);
+            
+            // For guild-specific command registration
+            if (process.argv[3] == 'register:guild' && Config.client.guildId) {
+                Logger.info(Logs.info.commandsAttemptGuild || 'Attempting to register commands to development server...');
+                
+                try {
+                    // Add "(developer command)" to descriptions for guild commands
+                    const guildCmds = localCmds.map(cmd => {
+                        const cmdCopy = { ...cmd };
+                        // Check if it's a ChatInput command type (which has description)
+                        if ('description' in cmdCopy && typeof cmdCopy.description === 'string') {
+                            cmdCopy.description = `${cmdCopy.description} (developer command)`;
+                        }
+                        return cmdCopy;
+                    });
+                    
+                    const guildId = Config.client.guildId;
+                    Logger.info(`Registering commands to guild: ${guildId}`);
+                    const data = await rest.put(
+                        Routes.applicationGuildCommands(Config.client.id || Config.client.clientId, guildId),
+                        { body: guildCmds }
+                    ) as any[];
+                    Logger.info(`Successfully registered ${data.length} commands to guild ${guildId}`);
+                    Logger.info(Logs.info.commandsRegisteredGuild || 'Commands registered to development server');
+                } catch (error) {
+                    Logger.error('Failed to register commands to development guild', error);
+                }
+            } else {
+                await commandRegistrationService.process(localCmds, process.argv);
+            }
         } catch (error) {
             Logger.error(Logs.error.commandAction, error);
         }

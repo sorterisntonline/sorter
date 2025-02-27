@@ -1,6 +1,7 @@
 (ns app.permissions
   (:require [app.database :as db]
-            [honey.sql.helpers :as h]))
+            [honey.sql.helpers :as h]
+            [clojure.string :as str]))
 
 
 (comment
@@ -46,17 +47,23 @@
                                                           [:= userid :user_id]
                                                           [:= group :usergroup_id]]}))))))
 
+(defn get-admin-users []
+  (when-let [admins (System/getenv "BORTER_STATIC_ADMINS")]
+    (set (clojure.string/split admins #","))))
+
 (defn can [action perms owner userid]
-  (or (= owner userid)
-      (let [voters (->> perms
-                        (filter #(= (:perms/capability %) action))
-                        (map :perms/user_id)
-                        (map #(clojure.string/split % #"\."))
-                        flatten
-                        set)]
-        (or (contains? voters "all")
-            (contains? voters userid)
-            (group-check voters userid)))))
+  (let [admin-users (get-admin-users)]
+    (or (and admin-users (contains? admin-users userid))
+        (= owner userid)
+        (let [voters (->> perms
+                          (filter #(= (:perms/capability %) action))
+                          (map :perms/user_id)
+                          (map #(clojure.string/split % #"\."))
+                          flatten
+                          set)]
+          (or (contains? voters "all")
+              (contains? voters userid)
+              (group-check voters userid))))))
 
 (defn get-tag-perms [tagid userid]
   (let [perms (->> (db/exec! (-> (h/select :*)
@@ -159,3 +166,8 @@
                 #:perms{:tag_id 46, :capability "view", :user_id "all"}]
                "tommy"
                "randomuser2")))
+
+(defn owns [tagid username]
+  (let [admin-users (get-admin-users)]
+    (or (and admin-users (contains? admin-users username))
+        (= (get-owner tagid) username))))

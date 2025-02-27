@@ -8,6 +8,7 @@ let Config = require('../../config/config.json');
 
 let logger = pino(
     {
+        level: Config.logging.level || 'info',
         formatters: {
             level: label => {
                 return { level: label };
@@ -34,6 +35,14 @@ export class Logger {
             logger.info(obj, message);
         } else {
             logger.info(message);
+        }
+    }
+
+    public static debug(message: string, obj?: any): void {
+        if (obj) {
+            logger.debug(obj, message);
+        } else {
+            logger.debug(message);
         }
     }
 

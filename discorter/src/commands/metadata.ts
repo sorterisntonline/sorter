@@ -4,6 +4,7 @@ import {
     PermissionsBitField,
     RESTPostAPIChatInputApplicationCommandsJSONBody,
     RESTPostAPIContextMenuApplicationCommandsJSONBody,
+    ApplicationCommandOptionType,
 } from 'discord.js';
 
 import { Args } from './index.js';
@@ -68,6 +69,33 @@ export const ChatCommandMetadata: {
         description_localizations: Lang.getRefLocalizationMap('commandDescs.test'),
         dm_permission: true,
         default_member_permissions: undefined,
+    },
+    TAG: {
+        type: ApplicationCommandType.ChatInput,
+        name: 'tag',
+        description: 'create and link a sorter tag to this channel',
+        dm_permission: false,
+        default_member_permissions: PermissionFlagsBits.ManageChannels.toString(),
+        options: [
+            {
+                name: 'title',
+                description: 'the title of the tag (defaults to channel name if not provided)',
+                type: ApplicationCommandOptionType.String,
+                required: false,
+            },
+            {
+                name: 'description',
+                description: 'a description of what this tag is for',
+                type: ApplicationCommandOptionType.String,
+                required: false,
+            },
+            {
+                name: 'namespace',
+                description: 'optional namespace for the tag',
+                type: ApplicationCommandOptionType.String,
+                required: false,
+            },
+        ],
     },
 };
 
