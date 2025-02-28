@@ -94,9 +94,9 @@ export const ItemsLists = ({ sorteditems = [], unsorteditems = [], skippedItems 
 
   return (
     <div className={"p-3 w-full"}>
-      <div className="lg:flex lg:space-x-12">
+      <div className="flex flex-col space-y-8">
         {sorteditems?.length > 0 && (
-          <div className={unsorteditems?.length > 0 ? "lg:w-1/2" : "w-full"}>
+          <div className="w-full">
             <SortedList 
               items={sorteditems} 
               showAll={showAllSorted.value} 
@@ -106,7 +106,7 @@ export const ItemsLists = ({ sorteditems = [], unsorteditems = [], skippedItems 
           </div>
         )}
         {unsorteditems?.length > 0 && (
-          <div className={sorteditems?.length > 0 ? "lg:w-1/2" : "w-full"}>
+          <div className="w-full">
             <UnsortedList 
               items={unsorteditems} 
               showAll={showAllUnsorted.value} 
@@ -117,7 +117,7 @@ export const ItemsLists = ({ sorteditems = [], unsorteditems = [], skippedItems 
         )}
       </div>
       {skippedItems?.length > 0 && (
-        <div>
+        <div className="mt-8">
           <div>
             <div>
               <div colSpan="2">skipped items</div>
