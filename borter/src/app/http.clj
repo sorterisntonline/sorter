@@ -54,7 +54,7 @@
 (defn serve-index [request]
   (let [html-file (get-html-file request)]
     (-> (resp/resource-response html-file)
-        (resp/content-type)
+        (resp/content-type "text/html")
         (assoc :status 200))))
 
 (defn test [r]

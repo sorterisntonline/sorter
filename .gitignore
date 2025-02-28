@@ -5,3 +5,5 @@
 .cursorignore
 .lsp
 repomix-output.txt
+
+!.clj-kondo/config.edn
