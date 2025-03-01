@@ -27,12 +27,12 @@
       "type": "shell"
     },
     {
-      "type": "cargo",
-      "label": "rustsorter",
       "command": "run",
+      "label": "rustsorter",
       "options": {
         "cwd": "rustsorter"
-      }
+      },
+      "type": "cargo"
     }
   ]
 }
