@@ -1,6 +1,5 @@
 import { tag, useElo } from "./App";
 import { errors } from "./ErrorPanel";
-import { pinned_left, pinned_right } from "./ItemPanel";
 import { namespace } from "./main";
 import { selected_users } from "./UserPanel";
 import { handleApiError } from './ErrorHandler';
@@ -15,8 +14,6 @@ const buildQueryParams = ({ tagid }) => {
   const url = new URLSearchParams("");
   if (tag_id && tag_id !== -1) url.append("id", tag_id);
   if (users !== "all") url.append("users", users);
-  if (pinned_left.value) url.append("pinned_left", pinned_left.value);
-  if (pinned_right.value) url.append("pinned_right", pinned_right.value);
   if (elo) url.append("elo", true);
   if (attribute) url.append("attribute", attribute.title);
   if (namespace.value) url.append("namespace", namespace.value);

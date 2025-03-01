@@ -67,21 +67,10 @@ const TikTokEmbed = ({ item }) => {
   </div >
 }
 
-export const pinned_left = signal(false);
-export const pinned_right = signal(false);
-
 export const ItemFull = ({ item, right, skipped, mutate }) => {
   right = right || false;
   skipped = skipped || false;
   const isMobileDevice = () => window.innerWidth < 1024;
-
-  const pinLeft = () => {
-    pinned_left.value = pinned_left.value === item.id ? false : item.id;
-  };
-
-  const pinRight = () => {
-    pinned_right.value = pinned_right.value === item.id ? false : item.id;
-  };
 
   const toggleSkip = async () => {
     await makeRequest("POST", "/api/item/skip", {
@@ -159,16 +148,10 @@ export const ItemFull = ({ item, right, skipped, mutate }) => {
           </div>
         )
       }
-      {/* Pin buttons - hidden on mobile */}
+      {/* Skip button - hidden on mobile */}
       {!isMobileDevice() && (
         <div>
           <div>
-            <button onClick={pinLeft} className="border-2 bigbutton w-fit">
-              {pinned_left.value === item.id ? "📍 unpin left" : "📌 pin left"}
-            </button>
-            <button onClick={pinRight} className="border-2 bigbutton w-fit">
-              {pinned_right.value === item.id ? "📍 unpin right" : "📌 pin right"}
-            </button>
             {!skipped &&
               <button onClick={toggleSkip} className="border-2 bigbutton w-fit">
                 skip
@@ -236,24 +219,6 @@ export const ItemPanel = () => {
     editing_item.value = item;
   };
 
-  const showPinnedLeft = () => {
-    if (pinned_left.value) {
-      const pinnedItem = items_by_id.value[pinned_left.value];
-      if (pinnedItem) {
-        selected_item.value = pinnedItem;
-      }
-    }
-  };
-
-  const showPinnedRight = () => {
-    if (pinned_right.value) {
-      const pinnedItem = items_by_id.value[pinned_right.value];
-      if (pinnedItem) {
-        selected_item.value = pinnedItem;
-      }
-    }
-  };
-
   const onRemoveTag = async (tagid) => {
     //selected_item.value = false;
     await makeRequest("DELETE", "/api/item/membership", {
@@ -295,26 +260,6 @@ export const ItemPanel = () => {
 
   const content = (
     <div className="w-full" ref={contentRef}>
-      {/* Pin navigation buttons - hidden on mobile */}
-      {!isMobileDevice() && (
-        <div className="flex justify-between mb-4">
-          <button 
-            onClick={showPinnedLeft}
-            className={`border-2 bigbutton ${!pinned_left.value && 'opacity-50'}`}
-            disabled={!pinned_left.value}
-          >
-            📍 Left Pin
-          </button>
-          <button 
-            onClick={showPinnedRight}
-            className={`border-2 bigbutton ${!pinned_right.value && 'opacity-50'}`}
-            disabled={!pinned_right.value}
-          >
-            📍 Right Pin
-          </button>
-        </div>
-      )}
-
       {item && (
         <div className="flex flex-col">
           <h1 className="text-3xl">{item.title}</h1>

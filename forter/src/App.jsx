@@ -7,7 +7,7 @@ import { UserPanel, resetSelectedUsers, selected_users } from "./UserPanel";
 
 import { ErrorPanel } from "./ErrorPanel";
 import { VotePanel } from "./VotePanel";
-import { ItemPanel, editing_item, pinned_left, pinned_right } from "./ItemPanel";
+import { ItemPanel, editing_item } from "./ItemPanel";
 import { loadTag } from "./Network";
 import { Modal } from "./Modal";
 import { WarningPopup } from './components/WarningPopup';
@@ -84,7 +84,6 @@ const truncateText = (text, length) => {
 };
 
 export const toggle = signal(true);
-export const showPin = signal(false);
 
 export const showAllSorted = signal(true);
 export const showAllUnsorted = signal(true);

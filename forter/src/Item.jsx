@@ -1,7 +1,5 @@
 import { signal } from "@preact/signals-react";
 import { selected_item, toggle } from "./App";
-import { pinned_left, pinned_right } from "./ItemPanel";
-import { showPin } from "./App";
 
 const formatNumber = (number) => {
   // take only 3 digits
@@ -51,28 +49,6 @@ export const Item = ({ item }) => {
           <td className="flex">
             {item.vote_count &&
               <div className="float-right text-gray-500">{item.num_comments > 0 ? <>{item.num_comments} comments</> : <></>} {item.vote_count} votes</div>}
-            {showPin.value && <div className="text-gray-500">
-              <input
-                type="checkbox"
-                checked={item.id === pinned_left.value}
-                onChange={() => {
-                  if (item.id === pinned_right.value) {
-                    pinned_right.value = null;
-                  }
-                  pinned_left.value = item.id === pinned_left.value ? null : item.id;
-                }}
-              />
-              <input
-                type="checkbox"
-                checked={item.id === pinned_right.value}
-                onChange={() => {
-                  if (item.id === pinned_left.value) {
-                    pinned_left.value = null;
-                  }
-                  pinned_right.value = item.id === pinned_right.value ? null : item.id;
-                }}
-              />
-            </div>}
           </td>
         </div>
       </li>
