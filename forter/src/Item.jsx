@@ -42,14 +42,14 @@ export const Item = ({ item }) => {
             {item.elo === undefined ? (
               <></>
             ) : (
-              <td className="px-4">{formatNumber(item.elo)}</td>
+              <span className="px-4">{formatNumber(item.elo)}</span>
             )}
-            <td>{truncateText(item["title"], toggle.value ? 99999 : 15)}</td>
+            <span>{truncateText(item["title"], toggle.value ? 99999 : 15)}</span>
           </div>
-          <td className="flex">
+          <div className="flex">
             {item.vote_count &&
               <div className="float-right text-gray-500">{item.num_comments > 0 ? <>{item.num_comments} comments</> : <></>} {item.vote_count} votes</div>}
-          </td>
+          </div>
         </div>
       </li>
     </>
