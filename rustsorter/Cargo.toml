@@ -1,8 +1,8 @@
 [package]
+default-run = "rustsorter"
 edition = "2021"
 name = "rustsorter"
 version = "0.1.0"
-default-run = "rustsorter"
 
 [lints.rust]
 absolute-paths-not-starting-with-crate = "warn"
@@ -107,9 +107,6 @@ reqwest = { version = "0.11", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1"
 slug = "0.1.5"
-sparkle_interactions = { version = "0.16", default-features = false, features = [
-    "respond_on_delay",
-] }
 sqlx = { version = "0.8.2", features = [
     "chrono",
     "postgres",
@@ -117,24 +114,6 @@ sqlx = { version = "0.8.2", features = [
     "uuid",
 ] }
 tokio = { version = "1.21.2", features = ["macros", "rt-multi-thread"] }
-twilight-gateway = { version = "0.16", default-features = false, features = [
-    "rustls-aws_lc_rs",
-    "rustls-webpki-roots",
-    "simd-json",
-    "twilight-http",
-    "zlib-simd",
-] }
-twilight-http = { version = "0.16", default-features = false, features = [
-    "decompression",
-    # "hickory",
-    "rustls-aws_lc_rs",
-    "rustls-webpki-roots",
-    "simd-json",
-] }
-twilight-model = "0.16"
-twilight-util = { version = "0.16", default-features = false, features = [
-    "builder",
-] }
 
 [profile.staging]
 inherits = "dev"

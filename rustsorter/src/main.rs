@@ -1,4 +1,3 @@
-pub mod discord;
 pub mod feed;
 pub mod frontpage;
 pub mod pagerank;
@@ -36,9 +35,6 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // Shared application state
     let app_state = Arc::new(AppState { db: pool.clone() });
-
-    // Start the Discord bot
-    discord::start(&env::var("DISCORD_TOKEN").unwrap()).await?;
 
     // Graceful shutdown handling
     let (tx, rx) = oneshot::channel();
