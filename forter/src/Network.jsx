@@ -1,4 +1,4 @@
-import { tag, useElo } from "./App";
+import { tag } from "./App";
 import { errors } from "./ErrorPanel";
 import { namespace } from "./main";
 import { selected_users } from "./UserPanel";
@@ -9,12 +9,9 @@ const buildQueryParams = ({ tagid }) => {
   const users = selected_users.value.map((user) => user.value).join(".");
   const attribute = tag.value && tag.value.selected_attribute;
 
-  const elo = useElo.value;
-
   const url = new URLSearchParams("");
   if (tag_id && tag_id !== -1) url.append("id", tag_id);
   if (users !== "all") url.append("users", users);
-  if (elo) url.append("elo", true);
   if (attribute) url.append("attribute", attribute.title);
   if (namespace.value) url.append("namespace", namespace.value);
 

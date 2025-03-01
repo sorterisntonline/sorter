@@ -25,7 +25,6 @@ import { Tag } from './Tag';
 import { Item } from './Item';
 import { TextSummary } from './components/TextSummary';
 
-export const useElo = signal(false);
 export const tag = signal(false);
 export const selected_item = signal(false);
 export const drawer_open = signal(false);

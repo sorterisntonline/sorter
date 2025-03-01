@@ -8,7 +8,6 @@ import { IntegrationsPanel } from "./integrations/IntegrationsPanel";
 import { ItemsLists } from "./ItemsLists";
 import { ItemPanel } from "./ItemPanel";
 import { toggle } from "./App";
-import { useElo } from "./App";
 import { MobileNewItemChooser } from "./components/MobileNewItemChooser";
 import { WarningPopup } from "./components/WarningPopup";
 import { errorState, clearError } from "./ErrorHandler";
@@ -116,16 +115,6 @@ export const Tag = ({ isVoting, handleError, onSelectItem, onCloseItem }) => {
                       role="button"
                     >
                       {toggle.value ? "[more space <-]" : "[less space ->]"}
-                    </div>
-                    <div
-                      className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
-                      onClick={() => {
-                        useElo.value = !useElo.value;
-                        loadTag(undefined);
-                      }}
-                      role="button"
-                    >
-                      {useElo.value ? "[use pagerank]" : "[use elo]"}
                     </div>
                     <div
                       className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
