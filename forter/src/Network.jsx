@@ -92,16 +92,3 @@ const fetchData = async () => {
     throw error;
   }
 };
-
-export const fetchVizData = async () => {
-  try {
-    const [itemsResponse, votesResponse] = await Promise.all([
-      makeRequest('GET', '/api/viz/items'),
-      makeRequest('GET', '/api/viz/votes')
-    ]);
-    return { items: itemsResponse, votes: votesResponse };
-  } catch (error) {
-    handleApiError(error);
-    throw error;
-  }
-};

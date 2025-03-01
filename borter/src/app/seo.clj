@@ -37,8 +37,6 @@
             :description "view your personalized feed of sorts and rankings"}
    "/" {:title "sorter"
         :description "create and share your rankings"}
-   "/viz" {:title "visualization - sorter"
-           :description "visualize sorting data"}
    "/faq" {:title "faq - sorter"
            :description "frequently asked questions"}
    "/integrations" {:title "integrations - sorter"

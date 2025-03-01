@@ -21,7 +21,6 @@ import { MobileNav } from './MobileNav';
 import { MobileNewTagChooser } from './components/MobileNewTagChooser.jsx';
 import { TopNav } from './TopNav';  // Import the new TopNav
 import { handleLogout } from './utils/authUtils.js';
-import { AllSortViz } from './viz/AllSortViz.jsx';
 import { initializeTheme } from './utils/themeUtils';
 import { EmailVerification } from './EmailVerification';
 import { ForgotPassword, ResetPassword } from './ForgotPassword';
@@ -64,7 +63,6 @@ const Root = () => {
         >
           <Router>
             <Switch>
-              <Route path="/viz"><AllSortViz /></Route>
               <Route path="/login"><Login /></Route>
               <Route path="/register"><Register /></Route>
               <Route path="/feed">
