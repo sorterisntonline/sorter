@@ -1,5 +1,8 @@
 (ns app.http
   (:require [reitit.ring :as ring]
+            [reitit.ring.malli]
+            [reitit.coercion.malli]
+            [reitit.ring.coercion :as coercion]
             [reitit.swagger-ui :as swagger-ui]
             [reitit.openapi :as openapi]
             [clojure.tools.logging :as log]
@@ -643,12 +646,6 @@
                                                             :in :header
                                                             :name "Example-Api-Key"}}}}
            :handler (openapi/create-openapi-handler)}}]
-   (swagger-ui/create-swagger-ui-handler
-    {:path "/"
-     :config {:validatorUrl nil
-              :urls [{:name "openapi", :url "openapi.json"}]
-              :urls.primaryName "openapi"
-              :operationsSorter "alpha"}})
    ["/" {:handler default-handler}]
    
    ["/api"
