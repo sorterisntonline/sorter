@@ -28,7 +28,8 @@
         environ/environ {:mvn/version "1.2.0"} ; Corrected dependency
         clj-commons/clj-yaml {:mvn/version "1.0.29"}
         com.wsscode/pathom3 {:mvn/version "2025.01.16-alpha"}
-        nrepl/nrepl {:mvn/version "1.1.1"}}
+        nrepl/nrepl {:mvn/version "1.1.1"}
+        metosin/ring-swagger-ui {:mvn/version "5.9.0"}}
  :aliases {:dev
            {:extra-deps
             {binaryage/devtools {:mvn/version "1.0.6"}

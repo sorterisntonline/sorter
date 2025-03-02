@@ -1,5 +1,7 @@
 (ns app.http
   (:require [reitit.ring :as ring]
+            [reitit.swagger-ui :as swagger-ui]
+            [reitit.openapi :as openapi]
             [clojure.tools.logging :as log]
             [ring.adapter.jetty :as jetty]
             [ring.middleware.params :as params]
@@ -20,7 +22,8 @@
             [honey.sql.helpers :as h]
             [sluj.core :refer [sluj]]
             [hato.client :as hc]
-
+            
+            
             [app.login :as login]
             [app.spotify :as spotify]
             [app.item :as item]
@@ -630,7 +633,24 @@
   (fn [_] (resp/content-type (resp/resource-response "public/index.html") "text/html")))
 
 (def routes
-  [["/" {:handler default-handler}]
+  [["/openapi.json"
+    {:get {:no-doc true
+           :openapi {:info {:title "my-api"
+                            :description "openapi3 docs with [malli](https://github.com/metosin/malli) and reitit-ring"
+                            :version "0.0.1"}
+                     ;; used in /secure APIs below
+                     :components {:securitySchemes {"auth" {:type :apiKey
+                                                            :in :header
+                                                            :name "Example-Api-Key"}}}}
+           :handler (openapi/create-openapi-handler)}}]
+   (swagger-ui/create-swagger-ui-handler
+    {:path "/"
+     :config {:validatorUrl nil
+              :urls [{:name "openapi", :url "openapi.json"}]
+              :urls.primaryName "openapi"
+              :operationsSorter "alpha"}})
+   ["/" {:handler default-handler}]
+   
    ["/api"
     ["/health" {:get {:handler #'health/check-health}}]
     ["/feed" {:get {:handler #'feed/get-feed}}]
