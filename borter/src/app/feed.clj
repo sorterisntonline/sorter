@@ -4,7 +4,6 @@
             [app.permissions :as perms]
             [clojure.set :as set]
             [hato.client :as hc]
-            [clj-async-profiler.core :as prof]
             [next.jdbc.types :as typ]
             [borkdude.deflet :refer [deflet]])
   (:import [java.util Date]))

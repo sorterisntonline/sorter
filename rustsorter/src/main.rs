@@ -1,12 +1,9 @@
-pub mod discord;
 pub mod feed;
 pub mod frontpage;
 pub mod pagerank;
 pub mod pair;
 pub mod perms;
 pub mod tag;
-pub mod tag2;
-pub mod types;
 
 pub struct AppState {
     pub db: sqlx::PgPool,
@@ -37,13 +34,6 @@ async fn main() -> Result<(), anyhow::Error> {
     // Shared application state
     let app_state = Arc::new(AppState { db: pool.clone() });
 
-    // Start the Discord bot
-    discord::start(&env::var("DISCORD_TOKEN").unwrap()).await?;
-
-    // Graceful shutdown handling
-    let (tx, rx) = oneshot::channel();
-    let state_clone = Arc::clone(&app_state);
-
     // Start the HTTP server
     let server = HttpServer::new(move || {
         App::new()
@@ -51,14 +41,10 @@ async fn main() -> Result<(), anyhow::Error> {
             .service(tag::hello)
             .service(feed::feed)
             .service(frontpage::hierarchy)
-            .service(tag2::hello2)
             .wrap(Logger::default())
     })
-    .bind(("127.0.0.1", 8081))?
-    .run();
+    .bind(("127.0.0.1", 8081)).expect("unable to bind on port 8081")
+    .run().await?;
 
-    let _ = server.await;
-    let _ = tx.send(());
-
-    Ok(())
+    Ok(server)
 }

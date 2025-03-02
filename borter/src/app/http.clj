@@ -57,17 +57,6 @@
         (resp/content-type "text/html")
         (assoc :status 200))))
 
-(defn test [r]
-  (let [host (-> r :headers (get "host"))
-        hostname (System/getenv "HOSTNAME")]
-    (if (and host hostname
-             (re-find (re-pattern (str "music.*\\." hostname "$")) host))
-      (resp/content-type (resp/resource-response "public/index2.html") "text/html")
-      (resp/content-type (resp/resource-response "public/index.html") "text/html"))))
-
-(defn test-2 [r]
-  (resp/content-type (resp/resource-response "public/index2.html") "text/html"))
-
 (defn count-votes [tag]
   (let [subquery (-> (h/select :items_in_tags/item_id)
                      (h/from :items_in_tags)
@@ -396,7 +385,7 @@
     (try
       (handler request)
       (catch Exception e
-        (log/error e "Exception in request handling")
+        (log/error "Exception in request handling" e)
         (merge {:status 500
                 :body {:message (ex-message e)}}
                (ex-data e))))))
@@ -407,7 +396,6 @@
     (log/debug "Full request details:" 
                {:uri (:uri request)
                 :request-method (:request-method request)
-                :headers (:headers request)
                 :params (:params request)
                 :query-params (:query-params request)
                 :body-params (:body-params request)
@@ -521,7 +509,8 @@
               user (discord/get-or-create-discord-user user-id username)
               request-with-user (assoc-in request [:session :user_name] (:users/user_name user))]
           (handler request-with-user))
-        (handler request))
+        (do
+          (handler request)))
       (catch Exception e
         (log/error e "CRITICAL: Unhandled exception in wrap-discord-user-auth")
         (handler request)))))
@@ -637,10 +626,11 @@
       ;; User not found
       {:status 404 :body {:message "user not found"}})))
 
+(def default-handler
+  (fn [_] (resp/content-type (resp/resource-response "public/index.html") "text/html")))
+
 (def routes
-  [["/" {:handler #'test}]
-   ["/music" {:handler #'test-2}]
-   ["/music/*" {:handler #'test-2}]
+  [["/" {:handler default-handler}]
    ["/api"
     ["/health" {:get {:handler #'health/check-health}}]
     ["/feed" {:get {:handler #'feed/get-feed}}]
@@ -712,7 +702,7 @@
 (def app
   (-> (ring/ring-handler
        (ring/router routes)
-       #'test)
+       default-handler)
       (wrap-request-logging) 
       (wrap-discord-user-auth)
       (wrap-discord-auth) 

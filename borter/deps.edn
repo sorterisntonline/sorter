@@ -5,7 +5,6 @@
         org.slf4j/slf4j-api {:mvn/version "2.0.7"}
         ch.qos.logback/logback-classic {:mvn/version "1.4.11"}
         ch.qos.logback/logback-core {:mvn/version "1.4.11"}
-        org.codehaus.janino/janino {:mvn/version "3.1.10"}
         cider/cider-nrepl {:mvn/version "0.52.0"}
         metosin/reitit {:mvn/version "0.7.0-alpha7"}
         ring/ring-jetty-adapter {:mvn/version "1.11.0-RC1"}
@@ -22,11 +21,8 @@
         com.github.seancorfield/honeysql {:mvn/version "2.5.1103"}
         org.postgresql/postgresql {:mvn/version "42.5.1"}
         crypto-password/crypto-password {:mvn/version "0.3.0"}
-        instaparse/instaparse {:mvn/version "1.4.12"}
         migratus/migratus {:mvn/version "1.4.9"}
-        com.hyperfiddle/rcf {:mvn/version "20220926-202227"}
         com.github.rawleyfowler/sluj {:mvn/version "1.0.2"}
-        com.clojure-goes-fast/clj-async-profiler {:mvn/version "1.2.0"}
         io.github.borkdude/deflet {:mvn/version "0.1.0"}
         ring-ratelimit/ring-ratelimit {:mvn/version "0.2.3"}
         environ/environ {:mvn/version "1.2.0"} ; Corrected dependency

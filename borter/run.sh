@@ -7,8 +7,8 @@ export ENVIRONMENT=development
 export DATABASE_URL=postgres://postgres:password@localhost:5432/postgres
 
 # logs
-#export BORTER_LOG_LEVEL=DEBUG  # Set appropriate log level for development
-#export BORTER_LOG_PATH="./logs"  # Set local log path for development
+export BORTER_LOG_LEVEL=DEBUG  # Set appropriate log level for development
+export BORTER_LOG_PATH="./logs"  # Set local log path for development
 
 
 
