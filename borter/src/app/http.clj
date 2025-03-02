@@ -650,7 +650,8 @@
    
    ["/api"
     ["/health" {:get {:handler #'health/check-health}}]
-    ["/feed" {:get {:handler #'feed/get-feed}}]
+    ["/feed" {:get {:parameters {:query [:map [:tag_id int?]]}
+                    :handler #'feed/get-feed}}]
     ["/frontpage" {:get {:handler #'feed/get-frontpage-feed}}]
     ["/hierarchy" {:get {:handler #'feed/get-heirarchy}}]
     ["/leaderboard" {:get {:handler #'get-leaderboard}}]
@@ -718,9 +719,13 @@
 
 (def app
   (-> (ring/ring-handler
-       (ring/router routes)
+       (ring/router routes
+                    {:data {:coercion (reitit.coercion.malli/create {})}
+                     :middleware [openapi/openapi-feature
+                                  coercion/coerce-response-middleware
+                                  coercion/coerce-request-middleware]})
        default-handler)
-      (wrap-request-logging) 
+      (wrap-request-logging)
       (wrap-discord-user-auth)
       (wrap-discord-auth) 
       (wrap-dev-session)
