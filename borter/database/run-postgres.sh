@@ -193,8 +193,8 @@ if [ ! -z "$PG_DUMP_DATA" ]; then
     # Stop the temporary container
     docker stop $NAME
 
-    # Start the final container
-    exec docker run --rm --name $NAME \
+    # Start the final container in the background (removed 'exec')
+    docker run --rm --name $NAME \
         --volume `pwd`/pgdata:/var/lib/pgsql/data \
         --volume `pwd`/mnt_data:/mnt/data \
         --volume `pwd`/pg_hba.conf:/etc/postgresql/pg_hba.conf \
@@ -208,7 +208,10 @@ if [ ! -z "$PG_DUMP_DATA" ]; then
         ${DOCKER_REPO}:${TAG} \
         postgres \
         -c 'config_file=/etc/postgresql/postgresql.conf' \
-        -c 'hba_file=/etc/postgresql/pg_hba.conf'
+        -c 'hba_file=/etc/postgresql/pg_hba.conf' &
+        
+    echo "Waiting for container to start and PostgreSQL to initialize..."
+    sleep 10  # Add initial wait for the container to start
 else
     # Start container in background
     docker run --rm --name $NAME \
