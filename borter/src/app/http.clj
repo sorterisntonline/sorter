@@ -638,50 +638,147 @@
 (def routes
   [["/openapi.json"
     {:get {:no-doc true
-           :openapi {:info {:title "my-api"
-                            :description "openapi3 docs with [malli](https://github.com/metosin/malli) and reitit-ring"
-                            :version "0.0.1"}
-                     ;; used in /secure APIs below
+           :openapi {:info {:title "Sorter API"
+                            :description "API for sorter.social - a platform for democratic consensus on any content"
+                            :version "1.0.1"}
+                     :tags [{:name "Authentication" :description "User authentication endpoints"}
+                            {:name "Tags" :description "Tag management endpoints"}
+                            {:name "Items" :description "Item management endpoints"}
+                            {:name "Votes" :description "Voting endpoints"}
+                            {:name "Feed" :description "Feed and frontpage endpoints"}
+                            {:name "Integrations" :description "External service integration endpoints"}]
                      :components {:securitySchemes {"auth" {:type :apiKey
                                                             :in :header
                                                             :name "Example-Api-Key"}}}}
            :handler (openapi/create-openapi-handler)}}]
-   ["/" {:handler default-handler}]
    
+   ["/" {:no-doc true
+         :handler default-handler}]
+
    ["/api"
-    ["/health" {:get {:handler #'health/check-health}}]
-    ["/feed" {:get {:parameters {:query [:map [:tag_id int?]]}
+    ["/health" {:get {:summary "Health check endpoint"
+                      :tags ["System"]
+                      :description "Simple health check to verify the API is running"
+                      :responses {200 {:description "Health status"}}
+                      :handler #'health/check-health}}]
+    ["/feed" {:get {:summary "Get feed for a tag"
+                    :tags ["Feed"]
+                    :description "Retrieves feed items for a specific tag"
+                    :parameters {:query [:map [:tag_id int?]]}
+                    :responses {200 {:description "Feed items"}}
                     :handler #'feed/get-feed}}]
-    ["/frontpage" {:get {:handler #'feed/get-frontpage-feed}}]
-    ["/hierarchy" {:get {:handler #'feed/get-heirarchy}}]
-    ["/leaderboard" {:get {:handler #'get-leaderboard}}]
-    ["/users" {:get {:handler #'get-user}}]
-    ["/tag" {:get {:handler #'query-tags}
+    ["/frontpage" {:get {:summary "Get frontpage feed"
+                         :tags ["Feed"]
+                         :description "Retrieves a 'frontpage' feed showing recent activity"
+                         :handler #'feed/get-frontpage-feed}}]
+    ["/hierarchy" {:get {:summary "Get tag hierarchy"
+                         :tags ["Feed"]
+                         :description "Returns a hierarchy data structure for tags"
+                         :handler #'feed/get-heirarchy}}]
+    ["/leaderboard" {:get {:summary "Get user leaderboard"
+                           :tags ["Users"]
+                           :description "Returns aggregated voting statistics by user"
+                           :handler #'get-leaderboard}}]
+    ["/users" {:get {:summary "Lookup users"
+                     :tags ["Users"]
+                     :description "Lookup users by various identifiers"
+                     :parameters {:query [:map
+                                          [:user_name {:optional true} string?]
+                                          [:email {:optional true} string?]
+                                          [:login_id {:optional true} string?]
+                                          [:discord_id {:optional true} string?]]}
+                     :responses {200 {:description "User found"}
+                                 404 {:description "User not found"}}
+                     :handler #'get-user}}]
+    ["/tag" {:get {:summary "List accessible tags"
+                   :tags ["Tags"]
+                   :description "Lists tags the user has access to, separated into categories"
+                   :responses {200 {:description "Available tags"}}
+                   :handler #'query-tags}
              :post {:middleware [[wrap-rate-limit one-per-minute]]
+                    :summary "Create or update tag"
+                    :tags ["Tags"]
+                    :description "Creates a new tag or updates an existing one"
+                    :responses {200 {:description "Tag created/updated successfully"}
+                                401 {:description "Authentication required"}
+                                403 {:description "Not authorized to edit this tag"}}
                     :handler #'post-tag}
-             :delete {:handler #'delete-tag}}]
-    ["/tag/namespace" {:get {:handler #'get-namespaces}}]
-    ["/tag/exists" {:get {:handler #'tag-slug-check}
-                    :post {:handler #'tag-exists-check}}]
+             :delete {:summary "Delete tag"
+                      :tags ["Tags"]
+                      :description "Deletes an existing tag"
+                      :responses {200 {:description "Tag deleted successfully"}
+                                  401 {:description "Authentication required"}}
+                      :handler #'delete-tag}}]
+    ["/tag/namespace" {:get {:summary "List available namespaces"
+                             :tags ["Tags"]
+                             :description "Returns a list of all namespaces the current user can view"
+                             :responses {200 {:description "List of accessible namespaces"}}
+                             :handler #'get-namespaces}}]
+    ["/tag/exists" {:get {:summary "Check if tag exists by title"
+                          :tags ["Tags"]
+                          :description "Checks if a tag with given title exists"
+                          :responses {200 {:description "Existence check results"}}
+                          :handler #'tag-slug-check}
+                    :post {:summary "Check if tag exists"
+                           :tags ["Tags"]
+                           :description "Checks if a tag exists by various identifiers"
+                           :responses {200 {:description "Existence check results"}
+                                       400 {:description "Invalid request parameters"}}
+                           :handler #'tag-exists-check}}]
     ["/tag/page" {:get {:handler #'tag-info-request}}]
     ["/tag/page2" {:get {:handler #'tag-info-request2}}]
     ["/tag/permissions" {:get {:handler #'perms/get-perms}
                          :post {:middleware [[wrap-rate-limit one-per-minute]]
                                 :handler #'perms/post-perms}}]
     ["/vote" {:post {:middleware [[wrap-rate-limit one-per-second]]
+                     :summary "Record a vote"
+                     :tags ["Votes"]
+                     :description "Records a user's vote comparing two items"
+                     :responses {200 {:description "Vote recorded"}
+                                 401 {:description "Authentication required"}}
                      :handler #'vote/vote-post}
-              :delete {:handler #'vote-delete}}]
+              :delete {:summary "Delete a vote"
+                       :tags ["Votes"]
+                       :description "Deletes a vote by ID"
+                       :responses {200 {:description "Vote deleted"}
+                                   401 {:description "Not authorized to delete this vote"}}
+                       :handler #'vote-delete}}]
     ["/item" {:middleware [[wrap-rate-limit one-per-second]]
-              :post {:handler #'item-post}}]
+              :post {:summary "Create or update item"
+                     :tags ["Items"]
+                     :description "Creates a new item or updates an existing one"
+                     :responses {200 {:description "Item created/updated"}
+                                 401 {:description "Authentication required"}
+                                 403 {:description "Not authorized to update this item"}}
+                     :handler #'item-post}}]
     ["/item/membership" {:get {:handler #'item-m-get}
                          :delete {:handler #'item-m-delete}
                          :post {:handler #'item-m-post}}]
     ["/item/skip" {:post {:handler #'item-skip}
                    :delete {:handler #'item-skip-delete}}]
-    ["/register" {:post {:handler #'login/handle-register}}]
-    ["/login" {:post {:handler #'login/handle-login}
-               :get {:handler #'login/current-session}}]
-    ["/logout" {:post {:handler #'login/handle-logout}}]
+    ["/register" {:post {:summary "Register user"
+                         :tags ["Authentication"]
+                         :description "Creates a new user account and sends verification email"
+                         :responses {200 {:description "Registration successful"}
+                                     400 {:description "Invalid registration data"}}
+                         :handler #'login/handle-register}}]
+    ["/login" {:post {:summary "Login"
+                      :tags ["Authentication"]
+                      :description "Authenticates user by username/email and password"
+                      :responses {200 {:description "Logged in successfully"}
+                                  401 {:description "Invalid credentials"}
+                                  403 {:description "Email verification required"}}
+                      :handler #'login/handle-login}
+               :get {:summary "Get current session"
+                     :tags ["Authentication"]
+                     :description "Returns information about the current session"
+                     :responses {200 {:description "Current session information"}}
+                     :handler #'login/current-session}}]
+    ["/logout" {:post {:summary "Logout"
+                       :tags ["Authentication"]
+                       :description "Ends the current session"
+                       :responses {200 {:description "Logged out successfully"}}
+                       :handler #'login/handle-logout}}]
     ["/send-confirmation" {:post {:middleware [[wrap-rate-limit three-per-five-minutes]]
                                   :handler #'login/handle-resend-verification}}]
     ["/verify" {:get {:middleware [[wrap-rate-limit five-per-minute]]
@@ -707,7 +804,13 @@
      ["/items" {:get {:middleware [[wrap-rate-limit five-per-minute]]
                       :handler #'get-viz-items}}]
      ["/votes" {:get {:middleware [[wrap-rate-limit five-per-minute]]
-                      :handler #'get-viz-votes}}]]]])
+                      :handler #'get-viz-votes}}]]]
+   ["/docs/*"
+    {:get {:no-doc true
+           :handler (swagger-ui/create-swagger-ui-handler
+                     {:url "/openapi.json"
+                      :config {:validatorUrl nil
+                               :operationsSorter "alpha"}})}}]])
 
 (defn wrap-dev-session
   "Middleware that injects a dev session when AUTO_LOGIN=true"
