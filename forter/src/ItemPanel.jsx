@@ -220,12 +220,13 @@ export const ItemPanel = () => {
   };
 
   const onRemoveTag = async (tagid) => {
-    //selected_item.value = false;
     await makeRequest("DELETE", "/api/item/membership", {
       "item_id": item["id"],
       "tag_id": tagid,
     });
-    mutate();
+
+    selected_item.value = null;
+    loadTag(tag.value.tag.id);
   };
 
   const unskip = async () => {
