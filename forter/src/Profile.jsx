@@ -66,7 +66,7 @@ const GroupRow = ({ group, users, mutate1 }) => {
 
 
 const ProfileComponent = () => {
-    const { data: users, error, isLoading } = useSWR("/api/users", fetcher);
+    const { data: user, error, isLoading } = useSWR("/api/users?user_name=" + current_session.value.user_name, fetcher);
     const { data, error: error1, isLoading: isLoading1, mutate: mutate1 } = useSWR("/api/user_group", fetcher);
     const { data: mygroups, error: error2, isLoading: isLoading2, mutate: mutate2 } = useSWR("/api/user_group/me", fetcher);
     const [_, setLocation] = useLocation();
@@ -74,6 +74,7 @@ const ProfileComponent = () => {
     const selected_users = useSignal([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
+    const users = [user]
 
     if (isLoading || isLoading1 || isLoading2) return <h1>loading...</h1>;
     if (error || error1 || error2) return <h1>error</h1>;

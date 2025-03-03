@@ -123,9 +123,9 @@ export const TagPreferences = ({ onSubmit }) => {
 
   const [users, setUsers] = useState([]);
   useEffect(() => { //ewwwwww
-    fetch("/api/users")
+    fetch("/api/users?user_name=" + current_session.value.user_name)
       .then((r) => r.json())
-      .then((r) => setUsers(r));
+      .then((r) => setUsers([r]));
   }, []);
 
   const canEditPerms =
