@@ -109,13 +109,15 @@ export const Tag = ({ isVoting, handleError, onSelectItem, onCloseItem }) => {
               {toggle.value ? (
                 <div className="lg:ml-24 lg:w-1/4">
                   <div className="flex flex-col">
-                    <div
-                      className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
-                      onClick={() => toggle.value = !toggle.value}
-                      role="button"
-                    >
-                      {toggle.value ? "[more space <-]" : "[less space ->]"}
-                    </div>
+                    {!isMobileDevice() && (
+                      <div
+                        className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
+                        onClick={() => toggle.value = !toggle.value}
+                        role="button"
+                      >
+                        {"[more space <-]"}
+                      </div>
+                    )}
                     <div
                       className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
                       onClick={() => {
@@ -134,7 +136,7 @@ export const Tag = ({ isVoting, handleError, onSelectItem, onCloseItem }) => {
                     </div>
                   </div>
                 </div>
-              ) : (
+              ) : !isMobileDevice() && (
                 <div
                   className="cursor-pointer border-1 border-gray-300 whitespace-nowrap"
                   onClick={() => toggle.value = !toggle.value}
