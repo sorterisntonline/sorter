@@ -172,6 +172,11 @@ export const ItemPanel = () => {
   const [isAddingToAnotherTag, setIsAddingToAnotherTag] = useState(false);
   const isMobileDevice = () => window.innerWidth < 1024;
   const contentRef = useRef(null);
+  
+  const { data, error, isLoading, mutate } = useSWR(
+    "/api/item/membership?item_id=" + (item?.id ?? -1),
+    fetcher
+  );
 
   useEffect(() => {
     // When drawer opens, scroll content to top
@@ -203,11 +208,6 @@ export const ItemPanel = () => {
   if (!item && !editing_item.value) {
     return null;
   }
-
-  const { data, error, isLoading, mutate } = useSWR(
-    "/api/item/membership?item_id=" + (item?.id ?? -1),
-    fetcher
-  );
 
   if (isLoading) return <h1>loading...</h1>;
   if (error) return <h1>error</h1>;
