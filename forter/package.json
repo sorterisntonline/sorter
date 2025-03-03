@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/update-env.js $ENVIRONMENT && vite build --mode $ENVIRONMENT",
-    "dev": "ENVIRONMENT=development && NODE_ENV=development vite build --mode development --watch ",
+    "dev": "export ENVIRONMENT=development && vite build --mode development --watch ",
     "dev:client": "echo 'starting client-only dev server' && ENVIRONMENT=development vite",
     "development": "ENVIRONMENT=development npm run build --mode development",
     "staging": "cross-env ENVIRONMENT=staging npm run build",
