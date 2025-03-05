@@ -426,9 +426,9 @@
                         "Body: [binary or stream]")})
       response)))
 
-(comment 
+(comment) 
   ;; deprecated! this is not secure and so there is no longer an endpoint for it
-  )
+  
 (defn get-users [req]
   {:status 200 :body (->> (-> (db/exec! (-> {:select [:users/user_name :owner] :from :users :where true}
                                             (h/left-join :usergroups [:= :users/user_name
@@ -646,7 +646,7 @@
 
 ;; Define schemas using malli syntax
 (def ErrorSchema
-  [:map
+  [:map 
    [:message :string]])
 
 (def TagSchema
@@ -724,7 +724,7 @@
                       :securityDefinitions {"auth" {:type :apiKey
                                                                    :in :cookie
                                                                    :name "ring-session"}}}}
-            :handler (swagger/create-swagger-handler)}]
+          :handler (swagger/create-swagger-handler)}]
 
    ["/" {:no-doc true ;; passes through our React frontend! 
          :handler default-handler}]
@@ -736,11 +736,11 @@
                       :responses {200 {:description "Health status"
                                        :content {:default {:schema [:map
                                                                     [:status :string]
-                                                                    [:version :string]
+                                                                    [:version :string] 
                                                                     [:database :string]]
-                                                           :example {:status "ok"
-                                                                     :version "1.0.1"
-                                                                     :database "connected"}}}}}
+                                                           :examples {:status "ok"}
+                                                           :version "1.0.1"
+                                                           :database "connected"}}}}
                       :handler #'health/check-health}}]
     ["/feed" {:get {:summary "Get feed for a tag"
                     :tags ["Feed"]
@@ -749,38 +749,38 @@
                                          [:tag_id {:description "ID of the tag to get feed for"} :int]]}
                     :responses {200 {:description "Feed items"
                                      :content {:default {:schema [:map
-                                                                  [:items [:vector #'ItemSchema]]
+                                                                  [:items [:vector ItemSchema]]
                                                                   :example {:items [{:id 1 :title "Example Item" :description "Description" :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
                                                                             :votes [{:id 1 :left_item_id 1 :right_item_id 2 :magnitude 1 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
                                                                             :users ["user1" "user2"]}]}}}
-                    400 {:description "Invalid tag ID"
-                         :content {:default {:schema #'ErrorSchema
-                                             :example {:message "Invalid tag ID"}}}}}
-              :handler #'feed/get-feed}}]
+                                400 {:description "Invalid tag ID"
+                                     :content {:default {:schema ErrorSchema
+                                                         :example {:message "Invalid tag ID"}}}}}
+                    :handler #'feed/get-feed}}]
     ["/frontpage" {:get {:summary "Get frontpage feed"
                          :tags ["Feed"]
                          :description "Retrieves a 'frontpage' feed showing recent activity across all accessible tags"
                          :responses {200 {:description "Frontpage feed items"
                                           :content {:default {:schema [:map
-                                                                       [:items [:vector #'ItemSchema]]
-                                                                       [:votes [:vector #'VoteSchema]]
-                                                                       [:tags [:vector #'TagSchema]]]
+                                                                       [:items [:vector ItemSchema]]
+                                                                       [:votes [:vector VoteSchema]]
+                                                                       [:tags [:vector TagSchema]]]
                                                               :example {:items [{:id 1 :title "Example Item" 
                                                                                  :owner "user1"
                                                                                  :created_at "2023-01-01T12:00:00Z"}]
-                                                                                :votes [{:id 1 :left_item_id 1 :right_item_id 2 
-                                                                                         :magnitude 1 :owner "user1"
-                                                                                         :created_at "2023-01-01T12:00:00Z"}]
+                                                                               :votes [{:id 1 :left_item_id 1 :right_item_id 2 
+                                                                                        :magnitude 1 :owner "user1"
+                                                                                        :created_at "2023-01-01T12:00:00Z"}]
                                                                                 :tags [{:id 1 :title "Example Tag" 
                                                                                         :slug "example-tag"
                                                                                         :owner "user1"
                                                                                         :created_at "2023-01-01T12:00:00Z"}]}}}}}}
-                         :handler #'feed/get-frontpage-feed}]
+                        :handler #'feed/get-frontpage-feed}]
     ["/hierarchy" {:get {:summary "Get tag hierarchy"
                          :tags ["Feed"]
                          :description "Returns a hierarchical data structure for tags, organized by namespace"
                          :responses {200 {:description "Tag hierarchy"
-                                          :content {:default {:schema [:map-of :string [:vector #'TagSchema]]
+                                          :content {:default {:schema [:map-of :string [:vector TagSchema]]
                                                               :example {:namespace [{:id 1 :title "Tag 1" :slug "tag-1" :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
                                                                         :namespace2 [{:id 2 :title "Tag 2" :slug "tag-2" :owner "user1" :created_at "2023-01-01T12:00:00Z"}]}}}}}
                          :handler #'feed/get-heirarchy}}]
@@ -803,10 +803,10 @@
                                           [:login_id {:description "Login ID (username or email) to lookup" :optional true} :string]
                                           [:discord_id {:description "Discord ID to lookup" :optional true} :string]]}
                      :responses {200 {:description "User found"
-                                      :content {:default {:schema #'UserSchema
+                                      :content {:default {:schema UserSchema
                                                           :example {:user_name "example_user" :temporary false}}}}
                                  404 {:description "User not found"
-                                      :content {:default {:schema #'ErrorSchema
+                                      :content {:default {:schema ErrorSchema
                                                           :example {:message "user not found"}}}}}
                      :handler #'get-user}}]
     ["/tag" {:get {:summary "List accessible tags"
@@ -814,9 +814,9 @@
                    :description "Lists tags the user has access to, separated into public, private, and unlisted categories"
                    :responses {200 {:description "Available tags"
                                     :content {:default {:schema [:map
-                                                                 [:public [:vector #'TagSchema]]
-                                                                 [:private [:vector #'TagSchema]]
-                                                                 [:unlisted [:vector #'TagSchema]]
+                                                                 [:public [:vector TagSchema]]
+                                                                 [:private [:vector TagSchema]]
+                                                                 [:unlisted [:vector TagSchema]]
                                                                  [:namespaces [:vector [:map
                                                                                         [:domain_pk_namespace :string]
                                                                                         [:count :int]]]]]
@@ -839,7 +839,7 @@
                                         [:domain_pk_namespace {:description "Domain namespace (e.g., 'spotify.playlist')" :optional true} :string]
                                         [:domain_pk {:description "Domain primary key" :optional true} :string]]}
                     :responses {200 {:description "Tag created/updated successfully"
-                                     :content {:default {:schema #'TagSchema
+                                     :content {:default {:schema TagSchema
                                                          :example {:id 1
                                                                    :title "New Tag"
                                                                    :description "A new tag for sorting items"
@@ -848,10 +848,10 @@
                                                                    :owner "user1"
                                                                    :created_at "2023-01-01T12:00:00Z"}}}}
                                 401 {:description "Authentication required"
-                                     :content {:default {:schema #'ErrorSchema
+                                     :content {:default {:schema ErrorSchema
                                                          :example {:message "need to be logged in to make tag"}}}}
                                 403 {:description "Not authorized to edit this tag"
-                                     :content {:default {:schema #'ErrorSchema
+                                     :content {:default {:schema ErrorSchema
                                                          :example {:message "you can not edit tags you do not own"}}}}}
                     :handler #'post-tag}
 
@@ -864,7 +864,7 @@
                                        :content {:default {:schema [:map [:deleted :boolean]]
                                                            :example {:deleted true}}}}
                                   401 {:description "Authentication required"
-                                       :content {:default {:schema #'ErrorSchema
+                                       :content {:default {:schema ErrorSchema
                                                            :example {:message "must own tag"}}}}}
                       :handler #'delete-tag}}]
     ["/tag/namespace" {:get {:summary "List available namespaces"
@@ -905,7 +905,7 @@
                                                                          [:title {:optional true} :string]]
                                                                 :example {:exists false}}}}
                                        400 {:description "Invalid request parameters"
-                                            :content {:default {:schema #'ErrorSchema
+                                            :content {:default {:schema ErrorSchema
                                                                 :example {:message "Either title or domain_pk_namespace+domain_pk are required"}}}}}
                            :handler #'tag-exists-check}}]
     ["/tag/page" {:get {:handler #'tag-info-request}}]
@@ -924,7 +924,7 @@
                                          [:tag_id {:description "ID of the tag context for this vote"} :int]
                                          [:attribute {:description "Optional attribute ID for this vote" :optional true} :int]]}
                      :responses {200 {:description "Vote recorded"
-                                      :content {:default {:schema #'VoteSchema
+                                      :content {:default {:schema VoteSchema
                                                           :example {:id 1
                                                                     :left_item_id 1
                                                                     :right_item_id 2
@@ -932,7 +932,7 @@
                                                                     :owner "user1"
                                                                     :created_at "2023-01-01T12:00:00Z"}}}}
                                  401 {:description "Authentication required"
-                                      :content {:default {:schema #'ErrorSchema
+                                      :content {:default {:schema ErrorSchema
                                                           :example {:message "must be logged in to vote"}}}}}
                      :handler #'vote/vote-post}
               :delete {:summary "Delete a vote"
@@ -944,7 +944,7 @@
                                         :content {:default {:schema [:map [:ok :boolean]]
                                                             :example {:ok true}}}}
                                    401 {:description "Not authorized to delete this vote"
-                                        :content {:default {:schema #'ErrorSchema
+                                        :content {:default {:schema ErrorSchema
                                                             :example {:message "must own vote"}}}}}
                        :handler #'vote-delete}}]
     ["/item" {:middleware [[wrap-rate-limit one-per-second]]
@@ -959,17 +959,17 @@
                                          [:domain_pk_namespace {:description "Domain namespace" :optional true} :string]
                                          [:domain_pk {:description "Domain primary key" :optional true} :string]]}
                      :responses {200 {:description "Item created/updated"
-                                      :content {:default {:schema #'ItemSchema
+                                      :content {:default {:schema ItemSchema
                                                           :example {:id 1
                                                                     :title "New Item"
                                                                     :description "An item description"
                                                                     :owner "user1"
                                                                     :created_at "2023-01-01T12:00:00Z"}}}}
                                  401 {:description "Authentication required"
-                                      :content {:default {:schema #'ErrorSchema
+                                      :content {:default {:schema ErrorSchema
                                                           :example {:message "must be logged in to create items"}}}}}
                      403 {:description "Not authorized to update this item"
-                          :content {:default {:schema #'ErrorSchema
+                          :content {:default {:schema ErrorSchema
                                               :example {:message "must own item to update it"}}}}}
               :handler #'item-post}]
     ["/item/membership" {:get {:handler #'item-m-get}
@@ -989,27 +989,27 @@
                                                                        [:success :boolean]
                                                                        [:message :string]]
                                                               :example {:success true :message "Verification email sent"}}}}}
-                                     400 {:description "Invalid registration data"
-                                          :content {:default {:schema #'ErrorSchema
-                                                              :example {:message "Username already taken"}}}}}
-                         :handler #'login/handle-register}]
+                                    400 {:description "Invalid registration data"
+                                         :content {:default {:schema ErrorSchema
+                                                             :example {:message "Username already taken"}}}}}
+                        :handler #'login/handle-register}]
     ["/login" {:post {:summary "Login"
                       :tags ["Authentication"]
                       :description "Authenticates user by username/email and password"
                       :request {:description "Login request body"
                                 :content {:application/json [:map
-                                          [:login_id {:description "Username or email"} :string]
-                                          [:password {:description "User password"} :string]]}}
+                                                             [:login_id {:description "Username or email"} :string]
+                                                             [:password {:description "User password"} :string]]}}
                       :responses {200 {:description "Logged in successfully"
                                        :content {:default {:schema [:map
                                                                     [:success :boolean]
                                                                     [:user_name :string]]
                                                            :example {:success true :user_name "example_user"}}}}
                                   401 {:description "Invalid credentials"
-                                       :content {:default {:schema #'ErrorSchema
+                                       :content {:default {:schema ErrorSchema
                                                            :example {:message "Invalid username or password"}}}}
                                   403 {:description "Email verification required"
-                                       :content {:default {:schema #'ErrorSchema
+                                       :content {:default {:schema ErrorSchema
                                                            :example {:message "Please verify your email address"}}}}}
                       :handler #'login/handle-login}
 
@@ -1090,26 +1090,26 @@
                                         :default-values true
                                                        ;; malli options
                                         :options nil})
-                     :muutaja m/instance
-                     :middleware [;; swagger & openapi
-                           swagger/swagger-feature
-                           openapi/openapi-feature
+                            :muutaja m/instance
+                            :middleware [;; swagger & openapi
+                                         swagger/swagger-feature
+                                         openapi/openapi-feature
                            ;; query-params & form-params
-                           parameters/parameters-middleware
+                                         parameters/parameters-middleware
                            ;; content-negotiation
-                           muuntaja/format-negotiate-middleware
+                                         muuntaja/format-negotiate-middleware
                            ;; encoding response body
-                           muuntaja/format-response-middleware
+                                         muuntaja/format-response-middleware
                            ;; exception handling
-                           exception/exception-middleware
+                                         exception/exception-middleware
                            ;; decoding request body
-                           muuntaja/format-request-middleware
+                                         muuntaja/format-request-middleware
                            ;; coercing response bodys
-                           coercion/coerce-response-middleware
+                                         coercion/coerce-response-middleware
                            ;; coercing request parameters
-                           coercion/coerce-request-middleware
+                                         coercion/coerce-request-middleware
                            ;; multipart
-                           multipart/multipart-middleware]}})
+                                         multipart/multipart-middleware]}})
        default-handler)
       (wrap-request-logging)
       (wrap-discord-user-auth)

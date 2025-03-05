@@ -10,4 +10,7 @@
         }
     ],
     "calva.autoConnectRepl": true,
+    "[clojure]": {
+        "editor.autoClosingBrackets": "never"
+    },
 }
