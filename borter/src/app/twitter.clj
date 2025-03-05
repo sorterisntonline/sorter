@@ -185,7 +185,7 @@
   
 
 (comment
-  (db/exec! {:delete-from :tags :where [:= :slug tag-slug]} )
+  (db/exec! {:delete-from :tags :where [:= :slug "tag-slug"]} )
   (db/exec! {:delete-from :tags :where [:= :slug "all-xeets"]} ))
 
 (comment

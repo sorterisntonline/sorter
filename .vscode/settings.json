@@ -9,5 +9,5 @@
             "autoSelectForConnect": true
         }
     ],
-    "calva.autoConnectRepl": true
+    "calva.autoConnectRepl": true,
 }
