@@ -393,8 +393,6 @@
                           [:= :owner (-> req :session :user_name)]])))
   {:status 200 :body {:ok true}})
 
-(def muntaja (m/create  (assoc-in m/default-options [:formats "application/json" :encoder-opts] {:encode-key-fn name})))
-
 (defn wrap-exception [handler]
   (fn [request]
     (try
@@ -710,25 +708,22 @@
            :handler (openapi/create-openapi-handler)}}]
    ["/swagger.json"
     {:get {:no-doc true
-            :swagger {:info {:title "Sorter API"
-                             :description "API for sorter.social - a platform for democratic consensus on any content"
-                             :version "1.0.1"}
-                      :tags [{:name "Authentication" :description "User authentication endpoints"}
-                             {:name "Tags" :description "Tag management endpoints"}
-                             {:name "Items" :description "Item management endpoints"}
-                             {:name "Votes" :description "Voting endpoints"}
-                             {:name "Feed" :description "Feed and frontpage endpoints"}
-                             {:name "Integrations" :description "External service integration endpoints"}
-                             {:name "Users" :description "User management endpoints"}
-                             {:name "System" :description "System and health endpoints"}]
-                      :securityDefinitions {"auth" {:type :apiKey
-                                                                   :in :cookie
-                                                                   :name "ring-session"}}}}
-          :handler (swagger/create-swagger-handler)}]
+           :swagger {:info {:title "Sorter API"
+                            :description "API for sorter.social - a platform for democratic consensus on any content"
+                            :version "1.0.1"}
+                     :tags [{:name "Authentication" :description "User authentication endpoints"}
+                            {:name "Tags" :description "Tag management endpoints"}
+                            {:name "Items" :description "Item management endpoints"}
+                            {:name "Votes" :description "Voting endpoints"}
+                            {:name "Feed" :description "Feed and frontpage endpoints"}
+                            {:name "Integrations" :description "External service integration endpoints"}
+                            {:name "Users" :description "User management endpoints"}
+                            {:name "System" :description "System and health endpoints"}]
+                     :securityDefinitions {"auth" {:type :apiKey
+                                                   :in :cookie
+                                                   :name "ring-session"}}}}
+     :handler (swagger/create-swagger-handler)}]
 
-   ["/" {:no-doc true ;; passes through our React frontend! 
-         :handler default-handler}]
-   
    ["/api"
     ["/health" {:get {:summary "Health check endpoint"
                       :tags ["System"]
@@ -776,7 +771,7 @@
                                                                                               :slug "example-tag"
                                                                                               :owner "user1"
                                                                                               :created_at "2023-01-01T12:00:00Z"}]}}}}}}}}
-                        :handler feed/get-frontpage-feed}] 
+                   :handler feed/get-frontpage-feed}] 
     ["/leaderboard" {:get {:summary "Get user leaderboard"
                            :tags ["Users"]
                            :description "Returns aggregated voting statistics by user, sorted by vote count"
@@ -833,12 +828,12 @@
                     :responses {200 {:description "Tag created/updated successfully"
                                      :content {:default {:schema TagSchema
                                                          :examples {:ok {:value { :id 1
-                                                                                  :title "New Tag"
-                                                                                  :description "A new tag for sorting items"
-                                                                                  :slug "new-tag"
-                                                                                  :ns "example"
-                                                                                  :owner "user1"
-                                                                                  :created_at "2023-01-01T12:00:00Z"}}}}}}
+                                                                                 :title "New Tag"
+                                                                                 :description "A new tag for sorting items"
+                                                                                 :slug "new-tag"
+                                                                                 :ns "example"
+                                                                                 :owner "user1"
+                                                                                 :created_at "2023-01-01T12:00:00Z"}}}}}}
                                 401 {:description "Authentication required"
                                      :content {:default {:schema ErrorSchema
                                                          :examples {:ok {:value {:message "need to be logged in to make tag"}}}}}}
@@ -880,7 +875,7 @@
                                                                         [:id {:optional true} :int]
                                                                         [:title {:optional true} :string]]
                                                                :examples {:ok {:value {:slug "example-tag" :exists false}}}}}}}}
-                         :handler tag-slug-check
+                    :handler tag-slug-check
 
                     :post {:summary "Check if tag exists"
                            :tags ["Tags"]
@@ -984,7 +979,7 @@
                                      400 {:description "Invalid registration data"
                                           :content {:default {:schema ErrorSchema
                                                               :examples {:ok {:value {:message "Username already taken"}}}}}}}}
-                        :handler login/handle-register}]
+                  :handler login/handle-register}]
     ["/login" {:post {:summary "Login"
                       :tags ["Authentication"]
                       :description "Authenticates user by username/email and password"
@@ -1048,6 +1043,12 @@
                       :handler get-viz-items}}]
      ["/votes" {:get {:middleware [[wrap-rate-limit five-per-minute]]
                       :handler get-viz-votes}}]]]
+   
+   ["/" {:no-doc true 
+         :handler default-handler}]
+   
+   ["/*" {:get {:conflicting true
+                :handler (ring/create-resource-handler)}}]
    ["/docs/*"
     {:get {:no-doc true
            :handler (swagger-ui/create-swagger-ui-handler
@@ -1066,54 +1067,46 @@
       (handler (assoc request :session {:user_name "admin"}))
       (handler request))))
 
+(def muntaja (m/create m/default-options))
+
 (def app
   (-> (ring/ring-handler
        (ring/router routes
                     {:validate spec/validate
-                     :exception pretty/exception
-                     :data {:coercion (reitit.coercion.malli/create
-                                       {;; set of keys to include in error messages
-                                        :error-keys #{#_:type :coercion :in :schema :value :errors :humanized #_:transformed}
-                                                       ;; schema identity function (default: close all map schemas)
-                                        :compile mu/closed-schema
-                                                       ;; strip-extra-keys (affects only predefined transformers)
-                                        :strip-extra-keys true
-                                                       ;; add/set default values
-                                        :default-values true
-                                                       ;; malli options
-                                        :options nil})
-                            :muutaja m/instance
-                            :middleware [;; swagger & openapi
-                                         swagger/swagger-feature
-                                         openapi/openapi-feature
-                                         ;; query-params & form-params
-                                         parameters/parameters-middleware
-                                         ;; content-negotiation
-                                         muuntaja/format-negotiate-middleware
-                                         ;; encoding response body
-                                         muuntaja/format-response-middleware
-                                         ;; exception handling
-                                         exception/exception-middleware
-                                         ;; decoding request body
-                                         muuntaja/format-request-middleware
-                                         ;; coercing response bodys
-                                         coercion/coerce-response-middleware
-                                         ;; coercing request parameters
-                                         coercion/coerce-request-middleware
-                                         ;; multipart
-                                         multipart/multipart-middleware]}})
-       default-handler)
-      (wrap-request-logging)
-      (wrap-discord-user-auth)
-      (wrap-discord-auth) 
-      (wrap-dev-session)
-      (session/wrap-session)
-      (wrap-exception)
-      (mw/wrap-params)
-      (params/wrap-params)
-      (mw/wrap-format muntaja)
-      (wrap-resource "public")
-      (wrap-content-type)))
+                     #_:exception #_pretty/exception
+                     :conflicts nil
+                     :data {:coercion (reitit.coercion.malli/create)
+                            :muuntaja m/instance
+                            :middleware
+                            [
+                             ;; query-params & form-params
+                             swagger/swagger-feature
+                             openapi/openapi-feature
+                             parameters/parameters-middleware
+                             ;; content-negotiation
+                             muuntaja/format-negotiate-middleware
+                             ;; encoding response body
+                             muuntaja/format-response-middleware
+                             ;; exception handling
+                             #_exception/exception-middleware
+                             ;; decoding request body
+                             muuntaja/format-request-middleware
+                             ;; coercing response bodys
+                             coercion/coerce-response-middleware
+                             ;; coercing request parameters
+                             coercion/coerce-request-middleware]}}))))
+
+(comment (wrap-request-logging)
+         (wrap-discord-user-auth)
+         (wrap-discord-auth) 
+         (wrap-dev-session)
+         (session/wrap-session)
+         (wrap-exception)
+         (mw/wrap-params)
+         (params/wrap-params)
+         (mw/wrap-format muntaja)
+         (wrap-resource "public")
+         (wrap-content-type))
 
 (defn start [{:keys [port]}]
   (log/info "Starting HTTP server on port" port)
