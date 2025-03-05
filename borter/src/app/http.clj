@@ -749,13 +749,14 @@
                                          [:tag_id {:description "ID of the tag to get feed for"} :int]]}
                     :responses {200 {:description "Feed items"
                                      :content {:default {:schema [:map
-                                                                  [:items [:vector ItemSchema]]
-                                                                  :example {:items [{:id 1 :title "Example Item" :description "Description" :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
-                                                                            :votes [{:id 1 :left_item_id 1 :right_item_id 2 :magnitude 1 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
-                                                                            :users ["user1" "user2"]}]}}}
+                                                                  [:items [:vector ItemSchema]]]
+                                                         :examples {:ok {:description "Feed items retrieved"
+                                                                         :value {:items [{:id 1 :title "Example Item" :description "Description" :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
+                                                                                 :votes [{:id 1 :left_item_id 1 :right_item_id 2 :magnitude 1 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
+                                                                                 :users ["user1" "user2"]}}}}}}
                                 400 {:description "Invalid tag ID"
                                      :content {:default {:schema ErrorSchema
-                                                         :example {:message "Invalid tag ID"}}}}}
+                                                         :examples {:ok {:value {:message "Invalid tag ID"}}}}}}}
                     :handler #'feed/get-feed}}]
     ["/frontpage" {:get {:summary "Get frontpage feed"
                          :tags ["Feed"]
@@ -765,25 +766,17 @@
                                                                        [:items [:vector ItemSchema]]
                                                                        [:votes [:vector VoteSchema]]
                                                                        [:tags [:vector TagSchema]]]
-                                                              :example {:items [{:id 1 :title "Example Item" 
-                                                                                 :owner "user1"
-                                                                                 :created_at "2023-01-01T12:00:00Z"}]
-                                                                               :votes [{:id 1 :left_item_id 1 :right_item_id 2 
-                                                                                        :magnitude 1 :owner "user1"
-                                                                                        :created_at "2023-01-01T12:00:00Z"}]
-                                                                                :tags [{:id 1 :title "Example Tag" 
-                                                                                        :slug "example-tag"
-                                                                                        :owner "user1"
-                                                                                        :created_at "2023-01-01T12:00:00Z"}]}}}}}}
-                        :handler #'feed/get-frontpage-feed}]
-    ["/hierarchy" {:get {:summary "Get tag hierarchy"
-                         :tags ["Feed"]
-                         :description "Returns a hierarchical data structure for tags, organized by namespace"
-                         :responses {200 {:description "Tag hierarchy"
-                                          :content {:default {:schema [:map-of :string [:vector TagSchema]]
-                                                              :example {:namespace [{:id 1 :title "Tag 1" :slug "tag-1" :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
-                                                                        :namespace2 [{:id 2 :title "Tag 2" :slug "tag-2" :owner "user1" :created_at "2023-01-01T12:00:00Z"}]}}}}}
-                         :handler #'feed/get-heirarchy}}]
+                                                              :examples {:ok {:value {:items [{:id 1 :title "Example Item"}] 
+                                                                                      :owner "user1"
+                                                                                      :created_at "2023-01-01T12:00:00Z"
+                                                                                      :votes [{:id 1 :left_item_id 1 :right_item_id 2} 
+                                                                                              :magnitude 1 :owner "user1"
+                                                                                              :created_at "2023-01-01T12:00:00Z"]
+                                                                                      :tags [{:id 1 :title "Example Tag" 
+                                                                                              :slug "example-tag"
+                                                                                              :owner "user1"
+                                                                                              :created_at "2023-01-01T12:00:00Z"}]}}}}}}}}
+                        :handler #'feed/get-frontpage-feed}] 
     ["/leaderboard" {:get {:summary "Get user leaderboard"
                            :tags ["Users"]
                            :description "Returns aggregated voting statistics by user, sorted by vote count"
@@ -791,23 +784,22 @@
                                             :content {:default {:schema [:vector [:map
                                                                                   [:user_name :string]
                                                                                   [:count :int]]]
-                                                                :example [{:user_name "user1" :count 150}
-                                                                          {:user_name "user2" :count 120}]}}}}}
+                                                                :examples {:ok {:value [{:user_name "user1" :count 150}
+                                                                                        {:user_name "user2" :count 120}]}}}}}}}
                      :handler #'get-leaderboard}]
     ["/users" {:get {:summary "Lookup users"
                      :tags ["Users"]
                      :description "Lookup users by various identifiers (username, email, login ID, or Discord ID)"
-                     :parameters {:query [:map
-                                          [:user_name {:description "Username to lookup" :optional true} :string]
+                     :parameters {:query [:map                                         [:user_name {:description "Username to lookup" :optional true} :string]
                                           [:email {:description "Email to lookup" :optional true} :string]
                                           [:login_id {:description "Login ID (username or email) to lookup" :optional true} :string]
                                           [:discord_id {:description "Discord ID to lookup" :optional true} :string]]}
                      :responses {200 {:description "User found"
                                       :content {:default {:schema UserSchema
-                                                          :example {:user_name "example_user" :temporary false}}}}
+                                                          :examples {:ok {:value {:user_name "example_user" :temporary false}}}}}}
                                  404 {:description "User not found"
                                       :content {:default {:schema ErrorSchema
-                                                          :example {:message "user not found"}}}}}
+                                                          :examples {:ok {:value {:message "user not found"}}}}}}}
                      :handler #'get-user}}]
     ["/tag" {:get {:summary "List accessible tags"
                    :tags ["Tags"]
@@ -820,10 +812,10 @@
                                                                  [:namespaces [:vector [:map
                                                                                         [:domain_pk_namespace :string]
                                                                                         [:count :int]]]]]
-                                                        :example {:public [{:id 1 :title "Public Tag" :slug "public-tag" :vote_count 10 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
-                                                                  :private [{:id 2 :title "Private Tag" :slug "private-tag" :vote_count 5 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
-                                                                  :unlisted [{:id 3 :title "Unlisted Tag" :slug "unlisted-tag" :vote_count 2 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
-                                                                  :namespaces [{:domain_pk_namespace "spotify.playlist" :count 15}]}}}}}
+                                                        :examples {:ok {:value {:public [{:id 1 :title "Public Tag" :slug "public-tag" :vote_count 10 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
+                                                                                :private [{:id 2 :title "Private Tag" :slug "private-tag" :vote_count 5 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
+                                                                                :unlisted [{:id 3 :title "Unlisted Tag" :slug "unlisted-tag" :vote_count 2 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
+                                                                                :namespaces [{:domain_pk_namespace "spotify.playlist" :count 15}]}}}}}}}
                    :handler #'query-tags}
 
              :post {:middleware [[wrap-rate-limit one-per-minute]]
@@ -840,19 +832,19 @@
                                         [:domain_pk {:description "Domain primary key" :optional true} :string]]}
                     :responses {200 {:description "Tag created/updated successfully"
                                      :content {:default {:schema TagSchema
-                                                         :example {:id 1
-                                                                   :title "New Tag"
-                                                                   :description "A new tag for sorting items"
-                                                                   :slug "new-tag"
-                                                                   :ns "example"
-                                                                   :owner "user1"
-                                                                   :created_at "2023-01-01T12:00:00Z"}}}}
+                                                         :examples {:ok {:value { :id 1
+                                                                                  :title "New Tag"
+                                                                                  :description "A new tag for sorting items"
+                                                                                  :slug "new-tag"
+                                                                                  :ns "example"
+                                                                                  :owner "user1"
+                                                                                  :created_at "2023-01-01T12:00:00Z"}}}}}}
                                 401 {:description "Authentication required"
                                      :content {:default {:schema ErrorSchema
-                                                         :example {:message "need to be logged in to make tag"}}}}
+                                                         :examples {:ok {:value {:message "need to be logged in to make tag"}}}}}}
                                 403 {:description "Not authorized to edit this tag"
                                      :content {:default {:schema ErrorSchema
-                                                         :example {:message "you can not edit tags you do not own"}}}}}
+                                                         :examples {:ok {:value {:message "you can not edit tags you do not own"}}}}}}}
                     :handler #'post-tag}
 
              :delete {:summary "Delete tag"
@@ -862,10 +854,10 @@
                                            [:id {:description "ID of the tag to delete"} :string]]}
                       :responses {200 {:description "Tag deleted successfully"
                                        :content {:default {:schema [:map [:deleted :boolean]]
-                                                           :example {:deleted true}}}}
+                                                           :examples {:ok {:value {:deleted true}}}}}}
                                   401 {:description "Authentication required"
                                        :content {:default {:schema ErrorSchema
-                                                           :example {:message "must own tag"}}}}}
+                                                           :examples {:ok {:value {:message "must own tag"}}}}}}} 
                       :handler #'delete-tag}}]
     ["/tag/namespace" {:get {:summary "List available namespaces"
                              :tags ["Tags"]
@@ -873,7 +865,7 @@
                              :responses {200 {:description "List of accessible namespaces"
                                               :content {:default {:schema [:map
                                                                            [:namespaces [:vector :string]]]
-                                                                  :example {:namespaces ["music" "movies" "books"]}}}}}
+                                                                  :examples {:ok {:value {:namespaces ["music" "movies" "books"]}}}}}}} 
                              :handler #'get-namespaces}}]
     ["/tag/exists" {:get {:summary "Check if tag exists by title"
                           :tags ["Tags"]
@@ -887,8 +879,8 @@
                                                                         [:exists :boolean]
                                                                         [:id {:optional true} :int]
                                                                         [:title {:optional true} :string]]
-                                                               :example {:slug "example-tag" :exists false}}}}}
-                          :handler #'tag-slug-check}
+                                                               :examples {:ok {:value {:slug "example-tag" :exists false}}}}}}}}
+                         :handler #'tag-slug-check
 
                     :post {:summary "Check if tag exists"
                            :tags ["Tags"]
@@ -903,10 +895,10 @@
                                                                          [:exists :boolean]
                                                                          [:id {:optional true} :int]
                                                                          [:title {:optional true} :string]]
-                                                                :example {:exists false}}}}
+                                                                :examples {:ok {:value {:exists false}}}}}}
                                        400 {:description "Invalid request parameters"
                                             :content {:default {:schema ErrorSchema
-                                                                :example {:message "Either title or domain_pk_namespace+domain_pk are required"}}}}}
+                                                                :examples {:ok {:value {:message "Either title or domain_pk_namespace+domain_pk are required"}}}}}}}
                            :handler #'tag-exists-check}}]
     ["/tag/page" {:get {:handler #'tag-info-request}}]
     ["/tag/page2" {:get {:handler #'tag-info-request2}}]
@@ -925,15 +917,15 @@
                                          [:attribute {:description "Optional attribute ID for this vote" :optional true} :int]]}
                      :responses {200 {:description "Vote recorded"
                                       :content {:default {:schema VoteSchema
-                                                          :example {:id 1
-                                                                    :left_item_id 1
-                                                                    :right_item_id 2
-                                                                    :magnitude 3
-                                                                    :owner "user1"
-                                                                    :created_at "2023-01-01T12:00:00Z"}}}}
+                                                          :examples {:ok {:value {:id 1
+                                                                                  :left_item_id 1
+                                                                                  :right_item_id 2
+                                                                                  :magnitude 3
+                                                                                  :owner "user1"
+                                                                                  :created_at "2023-01-01T12:00:00Z"}}}}}}
                                  401 {:description "Authentication required"
                                       :content {:default {:schema ErrorSchema
-                                                          :example {:message "must be logged in to vote"}}}}}
+                                                          :examples {:ok {:value {:message "must be logged in to vote"}}}}}}}
                      :handler #'vote/vote-post}
               :delete {:summary "Delete a vote"
                        :tags ["Votes"]
@@ -942,10 +934,10 @@
                                            [:vote_id {:description "ID of the vote to delete"} :int]]}
                        :responses {200 {:description "Vote deleted"
                                         :content {:default {:schema [:map [:ok :boolean]]
-                                                            :example {:ok true}}}}
+                                                            :examples {:ok {:value {:ok true}}}}}}
                                    401 {:description "Not authorized to delete this vote"
                                         :content {:default {:schema ErrorSchema
-                                                            :example {:message "must own vote"}}}}}
+                                                            :examples {:ok {:value {:message "must own vote"}}}}}}}
                        :handler #'vote-delete}}]
     ["/item" {:middleware [[wrap-rate-limit one-per-second]]
               :post {:summary "Create or update item"
@@ -960,17 +952,17 @@
                                          [:domain_pk {:description "Domain primary key" :optional true} :string]]}
                      :responses {200 {:description "Item created/updated"
                                       :content {:default {:schema ItemSchema
-                                                          :example {:id 1
-                                                                    :title "New Item"
-                                                                    :description "An item description"
-                                                                    :owner "user1"
-                                                                    :created_at "2023-01-01T12:00:00Z"}}}}
+                                                          :examples {:ok {:value {:id 1
+                                                                                  :title "New Item"
+                                                                                  :description "An item description"
+                                                                                  :owner "user1"
+                                                                                  :created_at "2023-01-01T12:00:00Z"}}}}}}
                                  401 {:description "Authentication required"
                                       :content {:default {:schema ErrorSchema
-                                                          :example {:message "must be logged in to create items"}}}}}
-                     403 {:description "Not authorized to update this item"
-                          :content {:default {:schema ErrorSchema
-                                              :example {:message "must own item to update it"}}}}}
+                                                          :examples {:ok {:value {:message "must be logged in to create items"}}}}}}
+                                 403 {:description "Not authorized to update this item"
+                                      :content {:default {:schema ErrorSchema
+                                                          :examples {:ok {:value {:message "must own item to update it"}}}}}}}}
               :handler #'item-post}]
     ["/item/membership" {:get {:handler #'item-m-get}
                          :delete {:handler #'item-m-delete}
@@ -988,10 +980,10 @@
                                           :content {:default {:schema [:map
                                                                        [:success :boolean]
                                                                        [:message :string]]
-                                                              :example {:success true :message "Verification email sent"}}}}}
-                                    400 {:description "Invalid registration data"
+                                                              :examples {:ok {:value {:success true :message "Verification email sent"}}}}}}
+                                     400 {:description "Invalid registration data"}
                                          :content {:default {:schema ErrorSchema
-                                                             :example {:message "Username already taken"}}}}}
+                                                             :examples {:ok {:value {:message "Username already taken"}}}}}}}
                         :handler #'login/handle-register}]
     ["/login" {:post {:summary "Login"
                       :tags ["Authentication"]
@@ -1004,13 +996,13 @@
                                        :content {:default {:schema [:map
                                                                     [:success :boolean]
                                                                     [:user_name :string]]
-                                                           :example {:success true :user_name "example_user"}}}}
+                                                           :examples {:ok {:value {:success true :user_name "example_user"}}}}}}
                                   401 {:description "Invalid credentials"
                                        :content {:default {:schema ErrorSchema
-                                                           :example {:message "Invalid username or password"}}}}
+                                                           :examples {:ok {:value {:message "Invalid username or password"}}}}}}
                                   403 {:description "Email verification required"
                                        :content {:default {:schema ErrorSchema
-                                                           :example {:message "Please verify your email address"}}}}}
+                                                           :examples {:ok {:value {:message "Please verify your email address"}}}}}}}
                       :handler #'login/handle-login}
 
                :get {:summary "Get current session"
@@ -1019,7 +1011,7 @@
                      :responses {200 {:description "Current session information"
                                       :content {:default {:schema [:map
                                                                    [:user_name {:optional true} :string]]
-                                                          :example {:user_name "example_user"}}}}}
+                                                          :examples {:ok {:value {:user_name "example_user"}}}}}}}
                      :handler #'login/current-session}}]
 
     ["/logout" {:post {:summary "Logout"
@@ -1027,7 +1019,7 @@
                        :description "Ends the current session"
                        :responses {200 {:description "Logged out successfully"
                                         :content {:default {:schema [:map [:success :boolean]]
-                                                            :example {:success true}}}}}
+                                                            :examples {:ok {:value {:success true}}}}}}}
                        :handler #'login/handle-logout}}]
 
     ["/send-confirmation" {:post {:middleware [[wrap-rate-limit three-per-five-minutes]]
