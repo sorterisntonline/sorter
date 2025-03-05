@@ -82,6 +82,8 @@ export const TagList = () => {
   if (isLoading) return <h1 className="pt-4"> loading... </h1>;
   if (error) return <h1 className="pt-4"> error </h1>;
 
+  console.log(data);
+
   const sortedArray = data.public.sort(
     (a, b) => b.item_count + b.vote_count - (a.item_count + a.vote_count)
   );

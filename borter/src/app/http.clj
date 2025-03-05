@@ -589,17 +589,17 @@
 
 (def TagSchema
   [:map
-   [:id :int]
-   [:title :string]
-   [:description {:optional true} :string]
-   [:slug :string]
-   [:ns {:optional true} :string]
-   [:owner :string]
-   [:created_at {:format "date-time"} :string]
-   [:edited_at {:optional true :format "date-time"} :string]
-   [:unlisted {:optional true} :boolean]
-   [:domain_pk_namespace {:optional true} :string]
-   [:domain_pk {:optional true} :string]
+   [:tags/id :int]
+   [:tags/title :string]
+   [:tags/description :string]
+   [:tags/slug :string]
+   [:tags/ns :string]
+   [:tags/owner :string]
+   [:tags/created_at inst?]
+   [:tags/edited_at inst?]
+   [:tags/unlisted :boolean]
+   [:tags/domain_pk_namespace [:maybe :string]]
+   [:tags/domain_pk [:maybe :string]]
    [:vote_count {:optional true} :int]])
 
 (def ItemSchema
@@ -739,14 +739,10 @@
                                :content {:default {:schema [:map
                                                             [:public [:vector TagSchema]]
                                                             [:private [:vector TagSchema]]
-                                                            [:unlisted [:vector TagSchema]]
-                                                            [:namespaces [:vector [:map
-                                                                                   [:domain_pk_namespace :string]
-                                                                                   [:count :int]]]]]
+                                                            [:unlisted [:vector TagSchema]]]
                                                    :examples {:ok {:value {:public [{:id 1 :title "Public Tag" :slug "public-tag" :vote_count 10 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
                                                                            :private [{:id 2 :title "Private Tag" :slug "private-tag" :vote_count 5 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
-                                                                           :unlisted [{:id 3 :title "Unlisted Tag" :slug "unlisted-tag" :vote_count 2 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
-                                                                           :namespaces [{:domain_pk_namespace "spotify.playlist" :count 15}]}}}}}}}
+                                                                           :unlisted [{:id 3 :title "Unlisted Tag" :slug "unlisted-tag" :vote_count 2 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]}}}}}}}
               :handler query-tags}
              :post {:middleware [[wrap-rate-limit one-per-minute]]
                     :summary "Create or update tag"
@@ -995,16 +991,16 @@
 
 (defn error-response [exception request]
   (def exception exception)
-  {:status 500
-   :body {:exception
-          (->>
-           exception
-           Throwable->map
-           (setval [:via ALL :data :request] NONE)
-           (setval [:via ALL :data :coercion] NONE)
-           (setval [:data :request] NONE)
-           (setval [:data :coercion] NONE)
-           pr-str)}})
+  (cond
+    (and (= (type exception) clojure.lang.ExceptionInfo)
+         (= :reitit.coercion/response-coercion (:type (ex-data exception))))
+    {:status 500
+     :body {:exception (read-string (pr-str (first (:errors  (ex-data exception)))))
+            :data (:body (:response (ex-data exception)))}}
+
+    :else
+    {:status 500
+     :body {:exception (->> exception Throwable->map)}}))
 
 (def exception-middleware
   (exception/create-exception-middleware
@@ -1014,8 +1010,10 @@
              (log/error "error" (:uri request) e)
              (error-response e request))})))
 
-(def muntaja (m/create m/default-options))
-
+(def m-instance (m/create
+                 (-> m/default-options
+                     (assoc-in [:formats "application/json" :encoder-opts]
+                               {:encode-key-fn name}))))
 (def app
   (-> (ring/ring-handler
        (ring/router routes
@@ -1023,7 +1021,7 @@
                      :exception pretty/exception
                      :conflicts nil
                      :data {:coercion (reitit.coercion.malli/create)
-                            :muuntaja m/instance
+                            :muuntaja m-instance
                             :middleware
                             [session/wrap-session
                              wrap-dev-session
