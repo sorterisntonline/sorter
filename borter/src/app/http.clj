@@ -11,9 +11,12 @@
             [clojure.tools.logging :as log]
             [ring.adapter.jetty :as jetty]
             [ring.middleware.params :as params]
+            
             [ring.middleware.session :as session]
             [ring.middleware.resource :refer [wrap-resource]]
             [ring.middleware.content-type :refer [wrap-content-type]]
+            [ring.middleware.reload :refer [wrap-reload]]
+            
             [ring.util.response :as resp]
             [clojure.string :as string]
             
@@ -393,16 +396,6 @@
                           [:= :owner (-> req :session :user_name)]])))
   {:status 200 :body {:ok true}})
 
-(defn wrap-exception [handler]
-  (fn [request]
-    (try
-      (handler request)
-      (catch Exception e
-        (log/error "Exception in request handling" e)
-        (merge {:status 500
-                :body {:message (ex-message e)}}
-               (ex-data e))))))
-
 (defn wrap-request-logging [handler]
   (fn [request]
     (log/info "Request:" (:request-method request) (:uri request))
@@ -416,12 +409,12 @@
     (let [response (handler request)]
       (log/info "Response:" (:status response))
       (log/debug "Full response details:" 
-                {:status (:status response)
-                 :headers (:headers response)
-                 :body (if (and (map? (:body response))
-                               (not (instance? java.io.InputStream (:body response))))
-                        (str "Body: " (:body response))
-                        "Body: [binary or stream]")})
+                 {:status (:status response)
+                  :headers (:headers response)
+                  :body (if (and (map? (:body response))
+                                 (not (instance? java.io.InputStream (:body response))))
+                          (str "Body: " (:body response))
+                          "Body: [binary or stream]")})
       response)))
 
 (comment) 
@@ -977,10 +970,7 @@
     ["/login" {:post {:summary "Login"
                       :tags ["Authentication"]
                       :description "Authenticates user by username/email and password"
-                      :request {:description "Login request body"
-                                :content {:default {:schema [:map
-                                                             [:login_id {:description "Username or email"} :string]
-                                                             [:password {:description "User password"} :string]]}}}
+                      :request {:description "Login request body"}
                       :responses {200 {:description "Logged in successfully"
                                        :content {:default {:schema [:map
                                                                     [:success :boolean]
@@ -997,10 +987,6 @@
                :get {:summary "Get current session"
                      :tags ["Authentication"]
                      :description "Returns information about the current session"
-                     :responses {200 {:description "Current session information"
-                                      :content {:default {:schema [:map
-                                                                   [:user_name {:optional true} :string]]
-                                                          :examples {:ok {:value {:user_name "example_user"}}}}}}}
                      :handler login/current-session}}]
 
     ["/logout" {:post {:summary "Logout"
@@ -1041,8 +1027,6 @@
    ["/" {:no-doc true 
          :handler default-handler}]
    
-   ["/*" {:get {:conflicting true
-                :handler (ring/create-resource-handler)}}]
    ["/docs/*"
     {:get {:no-doc true
            :handler (swagger-ui/create-swagger-ui-handler
@@ -1068,28 +1052,34 @@
   (-> (ring/ring-handler
        (ring/router routes
                     {:validate spec/validate
-                     #_:exception #_pretty/exception
+                     :exception pretty/exception
                      :conflicts nil
                      :data {:coercion (reitit.coercion.malli/create)
                             :muuntaja m/instance
                             :middleware
-                            [
-                             ;; query-params & form-params
+                            [session/wrap-session
                              swagger/swagger-feature
+                             ;; query-params & form-params
                              openapi/openapi-feature
                              parameters/parameters-middleware
-                             ;; content-negotiation
                              muuntaja/format-negotiate-middleware
-                             ;; encoding response body
+                             ;; content-negotiation
                              muuntaja/format-response-middleware
+                             ;; encoding response body
+                             exception/exception-middleware
                              ;; exception handling
-                             #_exception/exception-middleware
-                             ;; decoding request body
                              muuntaja/format-request-middleware
-                             ;; coercing response bodys
+                             ;; decoding request body
                              coercion/coerce-response-middleware
+                             ;; coercing response bodys
+                             coercion/coerce-request-middleware
                              ;; coercing request parameters
-                             coercion/coerce-request-middleware]}}))))
+                             ]}})
+       (-> #'default-handler
+           (wrap-resource "public")
+           (wrap-content-type))
+        ;; needd so that /feed frontend routes hit index.html
+       )))
 
 (comment (wrap-request-logging)
          (wrap-discord-user-auth)

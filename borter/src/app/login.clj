@@ -4,6 +4,7 @@
             [honey.sql.helpers :as h]
             [hato.client :as hc]
             [clojure.data.json :as json]
+            [clojure.tools.logging :as log]
             [clojure.string :as str]))
 
 (def sendgrid-api-key (System/getenv "BORTER_SENDGRID_API_KEY"))
@@ -212,6 +213,8 @@
   {:status 200 :body "ok" :session {}})
 
 (defn current-session [r]
+  (def r r)
+  (log/error "ssssss")
   {:status 200 :body (-> r :session)})
 
 (defn handle-update-email [r]
