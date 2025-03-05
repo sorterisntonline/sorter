@@ -125,7 +125,7 @@
   
   ;; so that we remove old ones
   (db/exec! (-> {:delete-from :items_in_tags
-                 :where [:= :tag_id (-> r :tags/id)]} ))
+                 :where [:= :tag_id (-> r :tags/id)]}))
   
   (db/exec! (-> {:insert-into :items_in_tags
                  :values (map (fn [item] {:item_id (-> item :items/id)
@@ -135,6 +135,6 @@
 
   {:status 200 :body {:message "ok"}})
 
-(def routes [["/callback" {:get {:handler #'handle-callback}}]
-             ["/views" {:get {:handler #'get-views}
-                        :post {:handler #'project-sync-tag}}]])
+(def routes [["/callback" {:get {:handler handle-callback}}]
+             ["/views" {:get {:handler get-views}
+                        :post {:handler project-sync-tag}}]])

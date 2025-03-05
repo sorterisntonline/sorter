@@ -13,4 +13,4 @@
   (spotify/get-self (spotify/refresh-token-for (-> r :session :user_name)))
   (spotify/get-self (:tokens/access_token (spotify/get-token-for (-> r :session :user_name)))))
 
-(def routes [["/status" {:get {:handler #'get-integrations}}]])
+(def routes [["/status" {:get {:handler get-integrations}}]])

@@ -34,7 +34,7 @@
     
     (def req req)
     
-    (def yesterday (days-ago (-> req :params (get "day") Integer/parseInt)) )
+    (def yesterday (days-ago (-> req :params (get "day") Integer/parseInt)))
     
     "TODO check if tags are public"
     (def items (->> (db/exec! (-> {:select [:items/*
@@ -43,12 +43,12 @@
                                             [:tags/slug :tag_slug]]
                                    :from [:items]
                                    :where [:and
-                                           [:< :items/created_at (:start yesterday) ]
-                                           [:> :items/created_at (:end yesterday) ]
-                                           [:= :tags/unlisted false ]]
-                                   :order-by [:items/created_at] }
+                                           [:< :items/created_at (:start yesterday)]
+                                           [:> :items/created_at (:end yesterday)]
+                                           [:= :tags/unlisted false]]
+                                   :order-by [:items/created_at]}
                                   (h/join :items_in_tags [:= :item_id :items/id])
-                                  (h/join :tags [:= :tags/id :items_in_tags/tag_id]) ))
+                                  (h/join :tags [:= :tags/id :items_in_tags/tag_id])))
                     (filter (fn [item]
                               (perms/can-tag
                                (:tags/tag_id item)
@@ -63,10 +63,10 @@
                                                [:items/id :item_id]]
                                       :from [:comments]
                                       :where [:and
-                                              [:< :comments/created_at (:start yesterday) ]
-                                              [:> :comments/created_at (:end yesterday) ]
+                                              [:< :comments/created_at (:start yesterday)]
+                                              [:> :comments/created_at (:end yesterday)]
                                               [:= :tags/unlisted false]]
-                                      :order-by [:comments/created_at] }
+                                      :order-by [:comments/created_at]}
                                      (h/join :items_in_tags [:and
                                                              [:= :item_id :comments/pk]
                                                              [:= :comments/pk_namespace "item"]])
@@ -88,11 +88,11 @@
                                            [:< :votes/created_at (:start yesterday)]
                                            [:> :votes/created_at (:end yesterday)]
                                            [:= :tags/unlisted false]]
-                                   :order-by [:votes/created_at] }
+                                   :order-by [:votes/created_at]}
                                   (h/join [:items :left_item] [:= :votes/left_item_id :left_item/id])
                                   (h/join [:items :right_item] [:= :votes/right_item_id :right_item/id])
                                   (h/join :items_in_tags [:= :left_item/id :items_in_tags/item_id])
-                                  (h/join :tags [:= :tags/id :items_in_tags/tag_id] )))
+                                  (h/join :tags [:= :tags/id :items_in_tags/tag_id])))
                     (filter (fn [item]
                               (perms/can-tag
                                (:tags/tag_id item)

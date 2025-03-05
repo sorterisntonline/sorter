@@ -84,7 +84,7 @@
   {:status 200 :body {:ok true}})
 
 
-(def routes [["" {:get {:handler #'get-groups}
-                  :post {:handler #'post-group}
-                  :delete {:handler #'delete-group}}]
-             ["/me" {:get {:handler #'get-my-groups}}]])
+(def routes [["" {:get {:handler get-groups}
+                  :post {:handler post-group}
+                  :delete {:handler delete-group}}]
+             ["/me" {:get {:handler get-my-groups}}]])

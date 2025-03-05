@@ -741,7 +741,7 @@
                                                            :examples {:status "ok"}
                                                            :version "1.0.1"
                                                            :database "connected"}}}}
-                      :handler #'health/check-health}}]
+                      :handler health/check-health}}]
     ["/feed" {:get {:summary "Get feed for a tag"
                     :tags ["Feed"]
                     :description "Retrieves feed items for a specific tag, including recent votes and activity"
@@ -757,7 +757,7 @@
                                 400 {:description "Invalid tag ID"
                                      :content {:default {:schema ErrorSchema
                                                          :examples {:ok {:value {:message "Invalid tag ID"}}}}}}}
-                    :handler #'feed/get-feed}}]
+                    :handler feed/get-feed}}]
     ["/frontpage" {:get {:summary "Get frontpage feed"
                          :tags ["Feed"]
                          :description "Retrieves a 'frontpage' feed showing recent activity across all accessible tags"
@@ -776,7 +776,7 @@
                                                                                               :slug "example-tag"
                                                                                               :owner "user1"
                                                                                               :created_at "2023-01-01T12:00:00Z"}]}}}}}}}}
-                        :handler #'feed/get-frontpage-feed}] 
+                        :handler feed/get-frontpage-feed}] 
     ["/leaderboard" {:get {:summary "Get user leaderboard"
                            :tags ["Users"]
                            :description "Returns aggregated voting statistics by user, sorted by vote count"
@@ -786,7 +786,7 @@
                                                                                   [:count :int]]]
                                                                 :examples {:ok {:value [{:user_name "user1" :count 150}
                                                                                         {:user_name "user2" :count 120}]}}}}}}}
-                     :handler #'get-leaderboard}]
+                     :handler get-leaderboard}]
     ["/users" {:get {:summary "Lookup users"
                      :tags ["Users"]
                      :description "Lookup users by various identifiers (username, email, login ID, or Discord ID)"
@@ -800,7 +800,7 @@
                                  404 {:description "User not found"
                                       :content {:default {:schema ErrorSchema
                                                           :examples {:ok {:value {:message "user not found"}}}}}}}
-                     :handler #'get-user}}]
+                     :handler get-user}}]
     ["/tag" {:get {:summary "List accessible tags"
                    :tags ["Tags"]
                    :description "Lists tags the user has access to, separated into public, private, and unlisted categories"
@@ -816,7 +816,7 @@
                                                                                 :private [{:id 2 :title "Private Tag" :slug "private-tag" :vote_count 5 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
                                                                                 :unlisted [{:id 3 :title "Unlisted Tag" :slug "unlisted-tag" :vote_count 2 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
                                                                                 :namespaces [{:domain_pk_namespace "spotify.playlist" :count 15}]}}}}}}}
-                   :handler #'query-tags}
+                   :handler query-tags}
 
              :post {:middleware [[wrap-rate-limit one-per-minute]]
                     :summary "Create or update tag"
@@ -845,7 +845,7 @@
                                 403 {:description "Not authorized to edit this tag"
                                      :content {:default {:schema ErrorSchema
                                                          :examples {:ok {:value {:message "you can not edit tags you do not own"}}}}}}}
-                    :handler #'post-tag}
+                    :handler post-tag}
 
              :delete {:summary "Delete tag"
                       :tags ["Tags"]
@@ -858,7 +858,7 @@
                                   401 {:description "Authentication required"
                                        :content {:default {:schema ErrorSchema
                                                            :examples {:ok {:value {:message "must own tag"}}}}}}} 
-                      :handler #'delete-tag}}]
+                      :handler delete-tag}}]
     ["/tag/namespace" {:get {:summary "List available namespaces"
                              :tags ["Tags"]
                              :description "Returns a list of all namespaces the current user can view"
@@ -866,7 +866,7 @@
                                               :content {:default {:schema [:map
                                                                            [:namespaces [:vector :string]]]
                                                                   :examples {:ok {:value {:namespaces ["music" "movies" "books"]}}}}}}} 
-                             :handler #'get-namespaces}}]
+                             :handler get-namespaces}}]
     ["/tag/exists" {:get {:summary "Check if tag exists by title"
                           :tags ["Tags"]
                           :description "Checks if a tag with given title exists"
@@ -880,7 +880,7 @@
                                                                         [:id {:optional true} :int]
                                                                         [:title {:optional true} :string]]
                                                                :examples {:ok {:value {:slug "example-tag" :exists false}}}}}}}}
-                         :handler #'tag-slug-check
+                         :handler tag-slug-check
 
                     :post {:summary "Check if tag exists"
                            :tags ["Tags"]
@@ -899,12 +899,12 @@
                                        400 {:description "Invalid request parameters"
                                             :content {:default {:schema ErrorSchema
                                                                 :examples {:ok {:value {:message "Either title or domain_pk_namespace+domain_pk are required"}}}}}}}
-                           :handler #'tag-exists-check}}]
-    ["/tag/page" {:get {:handler #'tag-info-request}}]
-    ["/tag/page2" {:get {:handler #'tag-info-request2}}]
-    ["/tag/permissions" {:get {:handler #'perms/get-perms}
+                           :handler tag-exists-check}}]
+    ["/tag/page" {:get {:handler tag-info-request}}]
+    ["/tag/page2" {:get {:handler tag-info-request2}}]
+    ["/tag/permissions" {:get {:handler perms/get-perms}
                          :post {:middleware [[wrap-rate-limit one-per-minute]]
-                                :handler #'perms/post-perms}}]
+                                :handler perms/post-perms}}]
     ["/vote" {:post {:middleware [[wrap-rate-limit one-per-second]]
                      :summary "Record a vote"
                      :tags ["Votes"]
@@ -926,7 +926,7 @@
                                  401 {:description "Authentication required"
                                       :content {:default {:schema ErrorSchema
                                                           :examples {:ok {:value {:message "must be logged in to vote"}}}}}}}
-                     :handler #'vote/vote-post}
+                     :handler vote/vote-post}
               :delete {:summary "Delete a vote"
                        :tags ["Votes"]
                        :description "Deletes a vote by ID. User must be the owner of the vote or an admin."
@@ -937,8 +937,8 @@
                                                             :examples {:ok {:value {:ok true}}}}}}
                                    401 {:description "Not authorized to delete this vote"
                                         :content {:default {:schema ErrorSchema
-                                                            :examples {:ok {:value {:message "must own vote"}}}}}}}
-                       :handler #'vote-delete}}]
+                                                            :examples {:ok {:value {:message "must own vote"}}}}}}} 
+                       :handler vote-delete}}]
     ["/item" {:middleware [[wrap-rate-limit one-per-second]]
               :post {:summary "Create or update item"
                      :tags ["Items"]
@@ -963,12 +963,12 @@
                                  403 {:description "Not authorized to update this item"
                                       :content {:default {:schema ErrorSchema
                                                           :examples {:ok {:value {:message "must own item to update it"}}}}}}}}
-              :handler #'item-post}]
-    ["/item/membership" {:get {:handler #'item-m-get}
-                         :delete {:handler #'item-m-delete}
-                         :post {:handler #'item-m-post}}]
-    ["/item/skip" {:post {:handler #'item-skip}
-                   :delete {:handler #'item-skip-delete}}]
+              :handler item-post}]
+    ["/item/membership" {:get {:handler item-m-get}
+                         :delete {:handler item-m-delete}
+                         :post {:handler item-m-post}}]
+    ["/item/skip" {:post {:handler item-skip}
+                   :delete {:handler item-skip-delete}}]
     ["/register" {:post {:summary "Register user"
                          :tags ["Authentication"]
                          :description "Creates a new user account and sends verification email"
@@ -981,10 +981,10 @@
                                                                        [:success :boolean]
                                                                        [:message :string]]
                                                               :examples {:ok {:value {:success true :message "Verification email sent"}}}}}}
-                                     400 {:description "Invalid registration data"}
-                                         :content {:default {:schema ErrorSchema
-                                                             :examples {:ok {:value {:message "Username already taken"}}}}}}}
-                        :handler #'login/handle-register}]
+                                     400 {:description "Invalid registration data"
+                                          :content {:default {:schema ErrorSchema
+                                                              :examples {:ok {:value {:message "Username already taken"}}}}}}}}
+                        :handler login/handle-register}]
     ["/login" {:post {:summary "Login"
                       :tags ["Authentication"]
                       :description "Authenticates user by username/email and password"
@@ -1003,7 +1003,7 @@
                                   403 {:description "Email verification required"
                                        :content {:default {:schema ErrorSchema
                                                            :examples {:ok {:value {:message "Please verify your email address"}}}}}}}
-                      :handler #'login/handle-login}
+                      :handler login/handle-login}
 
                :get {:summary "Get current session"
                      :tags ["Authentication"]
@@ -1012,7 +1012,7 @@
                                       :content {:default {:schema [:map
                                                                    [:user_name {:optional true} :string]]
                                                           :examples {:ok {:value {:user_name "example_user"}}}}}}}
-                     :handler #'login/current-session}}]
+                     :handler login/current-session}}]
 
     ["/logout" {:post {:summary "Logout"
                        :tags ["Authentication"]
@@ -1020,18 +1020,18 @@
                        :responses {200 {:description "Logged out successfully"
                                         :content {:default {:schema [:map [:success :boolean]]
                                                             :examples {:ok {:value {:success true}}}}}}}
-                       :handler #'login/handle-logout}}]
+                       :handler login/handle-logout}}]
 
     ["/send-confirmation" {:post {:middleware [[wrap-rate-limit three-per-five-minutes]]
-                                  :handler #'login/handle-resend-verification}}]
+                                  :handler login/handle-resend-verification}}]
     ["/verify" {:get {:middleware [[wrap-rate-limit five-per-minute]]
-                      :handler #'login/handle-verify-email}}]
+                      :handler login/handle-verify-email}}]
     ["/update-email" {:post {:middleware [[wrap-rate-limit three-per-five-minutes]]
-                             :handler #'login/handle-update-email}}]
+                             :handler login/handle-update-email}}]
     ["/forgot-password" {:post {:middleware [[wrap-rate-limit three-per-five-minutes]]
-                                :handler #'login/handle-forgot-password}}]
+                                :handler login/handle-forgot-password}}]
     ["/reset-password" {:post {:middleware [[wrap-rate-limit three-per-five-minutes]]
-                               :handler #'login/handle-reset-password}}]
+                               :handler login/handle-reset-password}}]
 
     ["/spotify" spotify/routes]
     ["/youtube" youtube/routes]
@@ -1045,9 +1045,9 @@
     ["/user_group" groups/routes]
     ["/viz"
      ["/items" {:get {:middleware [[wrap-rate-limit five-per-minute]]
-                      :handler #'get-viz-items}}]
+                      :handler get-viz-items}}]
      ["/votes" {:get {:middleware [[wrap-rate-limit five-per-minute]]
-                      :handler #'get-viz-votes}}]]]
+                      :handler get-viz-votes}}]]]
    ["/docs/*"
     {:get {:no-doc true
            :handler (swagger-ui/create-swagger-ui-handler

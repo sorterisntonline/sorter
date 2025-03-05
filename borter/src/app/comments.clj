@@ -27,12 +27,12 @@
   (def req req)
   (-> req :params :id)
   (when-not (= (-> req :session :user_name)
-               (-> {:select [:owner] :from :comments :where [:= :id (-> req :params :id)] }
+               (-> {:select [:owner] :from :comments :where [:= :id (-> req :params :id)]}
                    db/exec! first :comments/owner))
-    (throw (ex-info "must own comment to delete it" {:status 401 })))
+    (throw (ex-info "must own comment to delete it" {:status 401})))
   
   {:status 200 :body (db/exec! {:delete-from :comments :where [:= :id (-> req :params :id)]})})
 
-(def routes [["" {:get {:handler #'get-comments}
-                  :post {:handler #'post-comment}
-                  :delete {:handler #'delete-comment}}]])
+(def routes [["" {:get {:handler get-comments}
+                  :post {:handler post-comment}
+                  :delete {:handler delete-comment}}]])

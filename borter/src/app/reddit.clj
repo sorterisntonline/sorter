@@ -130,6 +130,6 @@
                        {:item_id iid :tag_id (-> t :tags/id)})})
   {:status 200 :body {:message "ok"}})
 
-(def routes [["/refresh" {:post {:handler #'handle-refresh}}]
-             ["/make-sub" {:post {:handler #'handle-make-sub}}]])
+(def routes [["/refresh" {:post {:handler handle-refresh}}]
+             ["/make-sub" {:post {:handler handle-make-sub}}]])
 

@@ -88,8 +88,8 @@
     (let [existing-user (first (db/exec! (-> (h/select :users/*)
                                              (h/from :users)
                                              (h/where [:and 
-                                                      [:= :discord_id discord-user-id]
-                                                      [:not= :user_name sorter-username]]))))]
+                                                       [:= :discord_id discord-user-id]
+                                                       [:not= :user_name sorter-username]]))))]
       
       (if existing-user
         ;; Already linked to another account - warn the user
@@ -106,6 +106,6 @@
 ;; Add routes definition at the end of the file
 (def routes 
   (concat
-    [["/link" {:post {:handler #'handle-account-link}}]]
+    [["/link" {:post {:handler handle-account-link}}]]
     ;; Include OAuth routes from discord-oauth directly
     discord-oauth/oauth-routes))
