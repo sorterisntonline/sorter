@@ -5,6 +5,7 @@
             [reitit.ring.coercion :as coercion]
             [reitit.swagger-ui :as swagger-ui]
             [reitit.openapi :as openapi]
+            [reitit.swagger :as swagger]
             [clojure.tools.logging :as log]
             [ring.adapter.jetty :as jetty]
             [ring.middleware.params :as params]
@@ -44,7 +45,8 @@
             [app.health :as health]
             [app.oauth :as oauth]
             [app.discord :as discord]
-            [app.discord-oauth :as discord-oauth])
+            [app.discord-oauth :as discord-oauth]
+            [app.api-keys :as api-keys])
   (:import
    [java.net URLEncoder]))
 
@@ -417,9 +419,9 @@
                         "Body: [binary or stream]")})
       response)))
 
-(comment 
+(comment) 
   ;; deprecated! this is not secure and so there is no longer an endpoint for it
-  )
+  
 (defn get-users [req]
   {:status 200 :body (->> (-> (db/exec! (-> {:select [:users/user_name :owner] :from :users :where true}
                                             (h/left-join :usergroups [:= :users/user_name
@@ -508,7 +510,7 @@
   [handler]
   (fn [request]
     (try
-      (log/info "DISCORD USER AUTH START" (:discord request))
+      ;;(log/info "DISCORD USER AUTH START" (:discord request))
       (if-let [discord-context (:discord request)]
         (let [user-id (:user-id discord-context)
               username (:username discord-context)
@@ -636,62 +638,166 @@
   (fn [_] (resp/content-type (resp/resource-response "public/index.html") "text/html")))
 
 (def routes
-  [["/openapi.json"
+  [["/swagger.json"
+    {:get {:no-doc true
+           :swagger {:info {:title "my-api"
+                            :description "swagger docs with [malli](https://github.com/metosin/malli) and reitit-ring"
+                            :version "0.0.1"}
+                            ;; used in /secure APIs below
+                     :securityDefinitions {"auth" {:type :apiKey
+                                                   :in :header
+                                                   :name "Example-Api-Key"}}
+                     :tags [{:name "files", :description "file api"}
+                            {:name "math", :description "math api"}]}
+           :handler (swagger/create-swagger-handler)}}]
+   ["/openapi.json"
     {:get {:no-doc true
            :openapi {:info {:title "my-api"
                             :description "openapi3 docs with [malli](https://github.com/metosin/malli) and reitit-ring"
                             :version "0.0.1"}
-                     ;; used in /secure APIs below
+                            ;; used in /secure APIs below
                      :components {:securitySchemes {"auth" {:type :apiKey
                                                             :in :header
                                                             :name "Example-Api-Key"}}}}
-           :handler (openapi/create-openapi-handler)}}]
-   ["/" {:handler default-handler}]
+           :handler (openapi/create-openapi-handler)}}] 
    
+   ["/" {:no-doc true
+         :handler default-handler}]
+
    ["/api"
-    ["/health" {:get {:handler #'health/check-health}}]
-    ["/feed" {:get {:parameters {:query [:map [:tag_id int?]]}
-                    :handler #'feed/get-feed}}]
-    ["/frontpage" {:get {:handler #'feed/get-frontpage-feed}}]
-    ["/hierarchy" {:get {:handler #'feed/get-heirarchy}}]
-    ["/leaderboard" {:get {:handler #'get-leaderboard}}]
-    ["/users" {:get {:handler #'get-user}}]
-    ["/tag" {:get {:handler #'query-tags}
+    ["/health" {:get {:summary "Health check endpoint"
+                      :tags ["System"]
+                      :description "Simple health check to verify the API is running"
+                      :responses {200 {:description "Health status"}}
+                      :handler health/check-health}}]
+    ["/feed" {:get {:summary "Get feed for a tag"
+                    :tags ["Feed"]
+                    :description "Retrieves feed items for a specific tag"
+                    :parameters {:query [:map [:tag_id int?]]}
+                    :responses {200 {:description "Feed items"}}
+                    :handler feed/get-feed}}]
+    ["/frontpage" {:get {:summary "Get frontpage feed"
+                         :tags ["Feed"]
+                         :description "Retrieves a 'frontpage' feed showing recent activity"
+                         :handler feed/get-frontpage-feed}}]
+    ["/hierarchy" {:get {:summary "Get tag hierarchy"
+                         :tags ["Feed"]
+                         :description "Returns a hierarchy data structure for tags"
+                         :handler feed/get-heirarchy}}]
+    ["/leaderboard" {:get {:summary "Get user leaderboard"
+                           :tags ["Users"]
+                           :description "Returns aggregated voting statistics by user"
+                           :handler get-leaderboard}}]
+    ["/users" {:get {:summary "Lookup users"
+                     :tags ["Users"]
+                     :description "Lookup users by various identifiers"
+                     :parameters {:query [:map
+                                          [:user_name {:optional true} string?]
+                                          [:email {:optional true} string?]
+                                          [:login_id {:optional true} string?]
+                                          [:discord_id {:optional true} string?]]}
+                     :responses {200 {:description "User found"}
+                                 404 {:description "User not found"}}
+                     :handler get-user}}]
+    ["/tag" {:get {:summary "List accessible tags"
+                   :tags ["Tags"]
+                   :description "Lists tags the user has access to, separated into categories"
+                   :responses {200 {:description "Available tags"}}
+                   :handler query-tags}
              :post {:middleware [[wrap-rate-limit one-per-minute]]
-                    :handler #'post-tag}
-             :delete {:handler #'delete-tag}}]
-    ["/tag/namespace" {:get {:handler #'get-namespaces}}]
-    ["/tag/exists" {:get {:handler #'tag-slug-check}
-                    :post {:handler #'tag-exists-check}}]
-    ["/tag/page" {:get {:handler #'tag-info-request}}]
-    ["/tag/page2" {:get {:handler #'tag-info-request2}}]
-    ["/tag/permissions" {:get {:handler #'perms/get-perms}
+                    :summary "Create or update tag"
+                    :tags ["Tags"]
+                    :description "Creates a new tag or updates an existing one"
+                    :responses {200 {:description "Tag created/updated successfully"}
+                                401 {:description "Authentication required"}
+                                403 {:description "Not authorized to edit this tag"}}
+                    :handler post-tag}
+             :delete {:summary "Delete tag"
+                      :tags ["Tags"]
+                      :description "Deletes an existing tag"
+                      :responses {200 {:description "Tag deleted successfully"}
+                                  401 {:description "Authentication required"}}
+                      :handler delete-tag}}]
+    ["/tag/namespace" {:get {:summary "List available namespaces"
+                             :tags ["Tags"]
+                             :description "Returns a list of all namespaces the current user can view"
+                             :responses {200 {:description "List of accessible namespaces"}}
+                             :handler get-namespaces}}]
+    ["/tag/exists" {:get {:summary "Check if tag exists by title"
+                          :tags ["Tags"]
+                          :description "Checks if a tag with given title exists"
+                          :responses {200 {:description "Existence check results"}}
+                          :handler tag-slug-check}
+                    :post {:summary "Check if tag exists"
+                           :tags ["Tags"]
+                           :description "Checks if a tag exists by various identifiers"
+                           :responses {200 {:description "Existence check results"}
+                                       400 {:description "Invalid request parameters"}}
+                           :handler tag-exists-check}}]
+    ["/tag/page" {:get {:handler tag-info-request}}]
+    ["/tag/page2" {:get {:handler tag-info-request2}}]
+    ["/tag/permissions" {:get {:handler perms/get-perms}
                          :post {:middleware [[wrap-rate-limit one-per-minute]]
-                                :handler #'perms/post-perms}}]
+                                :handler perms/post-perms}}]
     ["/vote" {:post {:middleware [[wrap-rate-limit one-per-second]]
-                     :handler #'vote/vote-post}
-              :delete {:handler #'vote-delete}}]
+                     :summary "Record a vote"
+                     :tags ["Votes"]
+                     :description "Records a user's vote comparing two items"
+                     :responses {200 {:description "Vote recorded"}
+                                 401 {:description "Authentication required"}}
+                     :handler vote/vote-post}
+              :delete {:summary "Delete a vote"
+                       :tags ["Votes"]
+                       :description "Deletes a vote by ID"
+                       :responses {200 {:description "Vote deleted"}
+                                   401 {:description "Not authorized to delete this vote"}}
+                       :handler vote-delete}}]
     ["/item" {:middleware [[wrap-rate-limit one-per-second]]
-              :post {:handler #'item-post}}]
-    ["/item/membership" {:get {:handler #'item-m-get}
-                         :delete {:handler #'item-m-delete}
-                         :post {:handler #'item-m-post}}]
-    ["/item/skip" {:post {:handler #'item-skip}
-                   :delete {:handler #'item-skip-delete}}]
-    ["/register" {:post {:handler #'login/handle-register}}]
-    ["/login" {:post {:handler #'login/handle-login}
-               :get {:handler #'login/current-session}}]
-    ["/logout" {:post {:handler #'login/handle-logout}}]
+              :post {:summary "Create or update item"
+                     :tags ["Items"]
+                     :description "Creates a new item or updates an existing one"
+                     :responses {200 {:description "Item created/updated"}
+                                 401 {:description "Authentication required"}
+                                 403 {:description "Not authorized to update this item"}}
+                     :handler item-post}}]
+    ["/item/membership" {:get {:handler item-m-get}
+                         :delete {:handler item-m-delete}
+                         :post {:handler item-m-post}}]
+    ["/item/skip" {:post {:handler item-skip}
+                   :delete {:handler item-skip-delete}}]
+    ["/register" {:post {:summary "Register user"
+                         :tags ["Authentication"]
+                         :description "Creates a new user account and sends verification email"
+                         :responses {200 {:description "Registration successful"}
+                                     400 {:description "Invalid registration data"}}
+                         :handler login/handle-register}}]
+    ["/login" {:post {:summary "Login"
+                      :tags ["Authentication"]
+                      :description "Authenticates user by username/email and password"
+                      :responses {200 {:description "Logged in successfully"}
+                                  401 {:description "Invalid credentials"}
+                                  403 {:description "Email verification required"}}
+                      :handler login/handle-login}
+               :get {:summary "Get current session"
+                     :tags ["Authentication"]
+                     :description "Returns information about the current session"
+                     :responses {200 {:description "Current session information"}}
+                     :handler login/current-session}}]
+    ["/logout" {:post {:summary "Logout"
+                       :tags ["Authentication"]
+                       :description "Ends the current session"
+                       :responses {200 {:description "Logged out successfully"}}
+                       :handler login/handle-logout}}]
     ["/send-confirmation" {:post {:middleware [[wrap-rate-limit three-per-five-minutes]]
-                                  :handler #'login/handle-resend-verification}}]
+                                  :handler login/handle-resend-verification}}]
     ["/verify" {:get {:middleware [[wrap-rate-limit five-per-minute]]
-                      :handler #'login/handle-verify-email}}]
+                      :handler login/handle-verify-email}}]
     ["/update-email" {:post {:middleware [[wrap-rate-limit three-per-five-minutes]]
-                             :handler #'login/handle-update-email}}]
+                             :handler login/handle-update-email}}]
     ["/forgot-password" {:post {:middleware [[wrap-rate-limit three-per-five-minutes]]
-                                :handler #'login/handle-forgot-password}}]
+                                :handler login/handle-forgot-password}}]
     ["/reset-password" {:post {:middleware [[wrap-rate-limit three-per-five-minutes]]
-                               :handler #'login/handle-reset-password}}]
+                               :handler login/handle-reset-password}}]
 
     ["/spotify" spotify/routes]
     ["/youtube" youtube/routes]
@@ -705,9 +811,37 @@
     ["/user_group" groups/routes]
     ["/viz"
      ["/items" {:get {:middleware [[wrap-rate-limit five-per-minute]]
-                      :handler #'get-viz-items}}]
+                      :handler get-viz-items}}]
      ["/votes" {:get {:middleware [[wrap-rate-limit five-per-minute]]
-                      :handler #'get-viz-votes}}]]]])
+                      :handler get-viz-votes}}]] 
+    ["/keys" api-keys/routes]
+    ["/docs/*"
+     {:get {:no-doc true
+            :handler (swagger-ui/create-swagger-ui-handler
+                      {:url "/openapi.json"
+                       :config {:validatorUrl nil 
+                                :operationsSorter "alpha"}})}}]]])
+   
+
+(defn wrap-api-key-auth
+  "Middleware that authenticates requests via API key if present"
+  [handler]
+  (fn [request]
+    (let [api-key (get-in request [:headers "x-api-key"])]
+      (if api-key
+        (if-let [username (api-keys/validate-api-key api-key)]
+          ;; API key is valid, add user to session
+          (do
+            (log/debug "API key authentication successful for user:" username)
+            (handler (assoc-in request [:session :user_name] username)))
+          ;; Invalid API key
+          (do
+            (log/warn "Invalid API key attempt")
+            {:status 403
+             :body "no authorization"}))
+        ;; No API key in request, continue with normal authentication
+        (handler request)))))
+
 
 (defn wrap-dev-session
   "Middleware that injects a dev session when AUTO_LOGIN=true"
@@ -717,9 +851,9 @@
       (handler (assoc request :session {:user_name "admin"}))
       (handler request))))
 
-(def app
+(def app 
   (-> (ring/ring-handler
-       (ring/router routes
+       (ring/router routes 
                     {:data {:coercion (reitit.coercion.malli/create {})}
                      :middleware [openapi/openapi-feature
                                   coercion/coerce-response-middleware
@@ -729,6 +863,7 @@
       (wrap-discord-user-auth)
       (wrap-discord-auth) 
       (wrap-dev-session)
+      (wrap-api-key-auth)
       (session/wrap-session)
       (wrap-exception)
       (mw/wrap-params)
