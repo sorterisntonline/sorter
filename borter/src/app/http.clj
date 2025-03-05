@@ -56,25 +56,12 @@
             [app.health :as health]
             [app.oauth :as oauth]
             [app.discord :as discord]
-            [app.discord-oauth :as discord-oauth])
+            [app.discord-oauth :as discord-oauth]
+            [com.rpl.specter :refer :all])
   (:import
    [java.net URLEncoder]))
 
-(defn get-html-file [request]
-  (log/debug "get-html-file called with host:" (-> request :headers (get "host")))
-  (let [is-music (or (= "music.sorter.social" (-> request :headers (get "host")))
-                     (= "/music" (:uri request)))
-        html-file (if is-music "index2.html" "index.html")]
-    (log/debug "Selected HTML file:" html-file)
-    (str "public/" html-file)))
-
 ;; Replace the existing test functions with a single handler
-(defn serve-index [request]
-  (let [html-file (get-html-file request)]
-    (-> (resp/resource-response html-file)
-        (resp/content-type "text/html")
-        (assoc :status 200))))
-
 (defn count-votes [tag]
   (let [subquery (-> (h/select :items_in_tags/item_id)
                      (h/from :items_in_tags)
@@ -133,7 +120,7 @@
                                    [:= :tags/owner (-> r :session :user_name)]
                                    false)])))
          (map count-votes))
-    :namespaces (db/exec! "select domain_pk_namespace count(*) from items group by domain_pk_namespace")}})
+    #_:namespaces #_(db/exec! "select domain_pk_namespace count(*) from items group_by domain_pk_namespace")}})
 
 (comment
   (db/exec! (-> (h/select :*)
@@ -502,46 +489,6 @@
 (def one-per-minute {:storage storage :limit (UserRateLimit. 2 1 (java.time.Duration/ofMinutes 1))})
 (def five-per-minute {:storage storage :limit (UserRateLimit. 3 5 (java.time.Duration/ofMinutes 1))})
 (def three-per-five-minutes {:storage storage :limit (UserRateLimit. 4 3 (java.time.Duration/ofMinutes 5))})
-
-(defn wrap-discord-user-auth
-  "Middleware that adds user context for Discord requests"
-  [handler]
-  (fn [request]
-    (try
-      (log/info "DISCORD USER AUTH START" (:discord request))
-      (if-let [discord-context (:discord request)]
-        (let [user-id (:user-id discord-context)
-              username (:username discord-context)
-              user (discord/get-or-create-discord-user user-id username)
-              request-with-user (assoc-in request [:session :user_name] (:users/user_name user))]
-          (handler request-with-user))
-        (do
-          (handler request)))
-      (catch Exception e
-        (log/error e "CRITICAL: Unhandled exception in wrap-discord-user-auth")
-        (handler request)))))
-
-(defn wrap-discord-auth
-  "Middleware that authenticates requests from the Discord bot"
-  [handler]
-  (fn [request]
-    (let [auth-header (get-in request [:headers "authorization"])
-          discord-user-id (get-in request [:headers "x-discord-user-id"])
-          discord-username (get-in request [:headers "x-discord-username"])]
-      (log/debug "Discord auth attempt with user-id:" discord-user-id "username:" discord-username)
-      (if (and (discord/validate-discord-request auth-header)
-               discord-user-id
-               discord-username)
-        (do
-          (log/info "Discord authentication successful for discord user:" discord-username)
-          ;; Add Discord context to the request
-          (handler (assoc request :discord {:user-id discord-user-id
-                                            :username discord-username})))
-        ;; Continue without Discord context
-        (do
-          (when auth-header
-            (log/debug "Discord authentication failed or incomplete"))
-          (handler request))))))
 
 (defn get-namespaces [r]
   (let [username (-> r :session :user_name)
@@ -1047,8 +994,17 @@
       (handler request))))
 
 (defn error-response [exception request]
+  (def exception exception)
   {:status 500
-   :body {:exception (Throwable->map exception)}})
+   :body {:exception
+          (->>
+           exception
+           Throwable->map
+           (setval [:via ALL :data :request] NONE)
+           (setval [:via ALL :data :coercion] NONE)
+           (setval [:data :request] NONE)
+           (setval [:data :coercion] NONE)
+           pr-str)}})
 
 (def exception-middleware
   (exception/create-exception-middleware
@@ -1072,39 +1028,18 @@
                             [session/wrap-session
                              wrap-dev-session
                              swagger/swagger-feature
-                             ;; query-params & form-params
                              openapi/openapi-feature
                              parameters/parameters-middleware
                              muuntaja/format-negotiate-middleware
-                             ;; content-negotiation
                              muuntaja/format-response-middleware
-                             ;; encoding response body
-                             exception-middleware
-                             ;; exception handling
                              muuntaja/format-request-middleware
-                             ;; decoding request body
+                             exception-middleware
                              coercion/coerce-response-middleware
-                             ;; coercing response bodys
                              coercion/coerce-request-middleware
-                             ;; coercing request parameters
                              ]}})
        (-> #'default-handler
            (wrap-resource "public")
-           (wrap-content-type))
-       ;; needd so that /feed frontend routes hit index.html
-       )))
-
-(comment (wrap-request-logging)
-         (wrap-discord-user-auth)
-         (wrap-discord-auth) 
-         (wrap-dev-session)
-         (session/wrap-session)
-         (wrap-exception)
-         (mw/wrap-params)
-         (params/wrap-params)
-         (mw/wrap-format muntaja)
-         (wrap-resource "public")
-         (wrap-content-type))
+           (wrap-content-type)))))
 
 (defn start [{:keys [port]}]
   (log/info "Starting HTTP server on port" port)
