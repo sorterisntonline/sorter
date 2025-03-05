@@ -408,9 +408,9 @@
   ;; deprecated! this is not secure and so there is no longer an endpoint for it
   
 (defn get-users [req]
-  {:status 200 :body (->> (-> (db/exec! (-> {:select [:users/user_name :owner] :from :users :where true}
-                                            (h/left-join :usergroups [:= :users/user_name
-                                                                      :usergroups/user_name])))))})
+  {:status 200 :body (db/exec! (-> {:select [:users/user_name :owner] :from :users :where true}
+                                   (h/left-join :usergroups [:= :users/user_name
+                                                             :usergroups/user_name])))})
 
 (defn get-leaderboard [req]
   {:status 200 :body (db/exec! (-> {:select [:users/user_name [[:count :votes/*]]] :from :users}
@@ -712,7 +712,7 @@
                            :description "Returns aggregated voting statistics by user, sorted by vote count"
                            :responses {200 {:description "User leaderboard"
                                             :content {:default {:schema [:vector [:map
-                                                                                  [:user_name :string]
+                                                                                  [:users/user_name :string]
                                                                                   [:count :int]]]
                                                                 :examples {:ok {:value [{:user_name "user1" :count 150}
                                                                                         {:user_name "user2" :count 120}]}}}}}}}
