@@ -732,10 +732,7 @@
                                        :content {:default {:schema [:map
                                                                     [:status :string]
                                                                     [:version :string] 
-                                                                    [:database :string]]
-                                                           :examples {:status "ok"}
-                                                           :version "1.0.1"
-                                                           :database "connected"}}}}
+                                                                    [:database :string]]}}}}
                       :handler health/check-health}}]
     ["/feed" {:get {:summary "Get feed for a tag"
                     :tags ["Feed"]
@@ -764,9 +761,7 @@
                                                               :examples {:ok {:value {:items [{:id 1 :title "Example Item"}] 
                                                                                       :owner "user1"
                                                                                       :created_at "2023-01-01T12:00:00Z"
-                                                                                      :votes [{:id 1 :left_item_id 1 :right_item_id 2} 
-                                                                                              :magnitude 1 :owner "user1"
-                                                                                              :created_at "2023-01-01T12:00:00Z"]
+                                                                                      :votes [{:id 1 :left_item_id 1 :right_item_id 2 :magnitude 40}]
                                                                                       :tags [{:id 1 :title "Example Tag" 
                                                                                               :slug "example-tag"
                                                                                               :owner "user1"
@@ -796,23 +791,23 @@
                                       :content {:default {:schema ErrorSchema
                                                           :examples {:ok {:value {:message "user not found"}}}}}}}
                      :handler get-user}}]
-    ["/tag" {:get {:summary "List accessible tags"
-                   :tags ["Tags"]
-                   :description "Lists tags the user has access to, separated into public, private, and unlisted categories"
-                   :responses {200 {:description "Available tags"
-                                    :content {:default {:schema [:map
-                                                                 [:public [:vector TagSchema]]
-                                                                 [:private [:vector TagSchema]]
-                                                                 [:unlisted [:vector TagSchema]]
-                                                                 [:namespaces [:vector [:map
-                                                                                        [:domain_pk_namespace :string]
-                                                                                        [:count :int]]]]]
-                                                        :examples {:ok {:value {:public [{:id 1 :title "Public Tag" :slug "public-tag" :vote_count 10 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
-                                                                                :private [{:id 2 :title "Private Tag" :slug "private-tag" :vote_count 5 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
-                                                                                :unlisted [{:id 3 :title "Unlisted Tag" :slug "unlisted-tag" :vote_count 2 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
-                                                                                :namespaces [{:domain_pk_namespace "spotify.playlist" :count 15}]}}}}}}}
-                   :handler query-tags}
-
+    ["/tag" {:get
+             {:summary "List accessible tags"
+              :tags ["Tags"]
+              :description "Lists tags the user has access to, separated into public, private, and unlisted categories"
+              :responses {200 {:description "Available tags"
+                               :content {:default {:schema [:map
+                                                            [:public [:vector TagSchema]]
+                                                            [:private [:vector TagSchema]]
+                                                            [:unlisted [:vector TagSchema]]
+                                                            [:namespaces [:vector [:map
+                                                                                   [:domain_pk_namespace :string]
+                                                                                   [:count :int]]]]]
+                                                   :examples {:ok {:value {:public [{:id 1 :title "Public Tag" :slug "public-tag" :vote_count 10 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
+                                                                           :private [{:id 2 :title "Private Tag" :slug "private-tag" :vote_count 5 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
+                                                                           :unlisted [{:id 3 :title "Unlisted Tag" :slug "unlisted-tag" :vote_count 2 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
+                                                                           :namespaces [{:domain_pk_namespace "spotify.playlist" :count 15}]}}}}}}}
+              :handler query-tags}
              :post {:middleware [[wrap-rate-limit one-per-minute]]
                     :summary "Create or update tag"
                     :tags ["Tags"]
@@ -827,7 +822,7 @@
                                         [:domain_pk {:description "Domain primary key" :optional true} :string]]}
                     :responses {200 {:description "Tag created/updated successfully"
                                      :content {:default {:schema TagSchema
-                                                         :examples {:ok {:value { :id 1
+                                                         :examples {:ok {:value {:id 1
                                                                                  :title "New Tag"
                                                                                  :description "A new tag for sorting items"
                                                                                  :slug "new-tag"
@@ -841,7 +836,6 @@
                                      :content {:default {:schema ErrorSchema
                                                          :examples {:ok {:value {:message "you can not edit tags you do not own"}}}}}}}
                     :handler post-tag}
-
              :delete {:summary "Delete tag"
                       :tags ["Tags"]
                       :description "Deletes an existing tag. User must be the owner of the tag."
@@ -984,9 +978,9 @@
                       :tags ["Authentication"]
                       :description "Authenticates user by username/email and password"
                       :request {:description "Login request body"
-                                :content {:application/json [:map
+                                :content {:default {:schema [:map
                                                              [:login_id {:description "Username or email"} :string]
-                                                             [:password {:description "User password"} :string]]}}
+                                                             [:password {:description "User password"} :string]]}}}
                       :responses {200 {:description "Logged in successfully"
                                        :content {:default {:schema [:map
                                                                     [:success :boolean]
@@ -1058,6 +1052,7 @@
                                       {:name "openapi", :url "openapi.json"}]
                                :urls.primaryName "openapi"
                                :operationsSorter "alpha"}})}}]])
+
 
 (defn wrap-dev-session
   "Middleware that injects a dev session when AUTO_LOGIN=true"
