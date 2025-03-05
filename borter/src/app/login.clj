@@ -209,13 +209,8 @@
                 (h/set {:password_hash (password/encrypt new-pw)})
                 (h/where [:= :user_name username]))))
 
-(defn handle-logout [r]
-  {:status 200 :body "ok" :session {}})
-
-(defn current-session [r]
-  (def r r)
-  (log/error "ssssss")
-  {:status 200 :body (-> r :session)})
+(defn handle-logout [r] {:status 200 :body "ok" :session {}})
+(defn current-session [r] {:status 200 :body (-> r :session)})
 
 (defn handle-update-email [r]
   (let [username (-> r :body-params :user_name)

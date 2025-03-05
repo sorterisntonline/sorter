@@ -1046,6 +1046,18 @@
       (handler (assoc request :session {:user_name "admin"}))
       (handler request))))
 
+(defn error-response [exception request]
+  {:status 500
+   :body {:exception (Throwable->map exception)}})
+
+(def exception-middleware
+  (exception/create-exception-middleware
+   (merge exception/default-handlers
+          {::exception/wrap
+           (fn [handler e request]
+             (log/error "error" (:uri request) e)
+             (error-response e request))})))
+
 (def muntaja (m/create m/default-options))
 
 (def app
@@ -1058,6 +1070,7 @@
                             :muuntaja m/instance
                             :middleware
                             [session/wrap-session
+                             wrap-dev-session
                              swagger/swagger-feature
                              ;; query-params & form-params
                              openapi/openapi-feature
@@ -1066,7 +1079,7 @@
                              ;; content-negotiation
                              muuntaja/format-response-middleware
                              ;; encoding response body
-                             exception/exception-middleware
+                             exception-middleware
                              ;; exception handling
                              muuntaja/format-request-middleware
                              ;; decoding request body
@@ -1078,7 +1091,7 @@
        (-> #'default-handler
            (wrap-resource "public")
            (wrap-content-type))
-        ;; needd so that /feed frontend routes hit index.html
+       ;; needd so that /feed frontend routes hit index.html
        )))
 
 (comment (wrap-request-logging)
