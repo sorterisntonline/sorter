@@ -638,27 +638,14 @@
   (fn [_] (resp/content-type (resp/resource-response "public/index.html") "text/html")))
 
 (def routes
-  [["/swagger.json"
+  [["/openapi.json"
     {:get {:no-doc true
-           :swagger {:info {:title "my-api"
-                            :description "swagger docs with [malli](https://github.com/metosin/malli) and reitit-ring"
-                            :version "0.0.1"}
-                            ;; used in /secure APIs below
-                     :securityDefinitions {"auth" {:type :apiKey
-                                                   :in :header
-                                                   :name "Example-Api-Key"}}
-                     :tags [{:name "files", :description "file api"}
-                            {:name "math", :description "math api"}]}
-           :handler (swagger/create-swagger-handler)}}]
-   ["/openapi.json"
-    {:get {:no-doc true
-           :openapi {:info {:title "my-api"
-                            :description "openapi3 docs with [malli](https://github.com/metosin/malli) and reitit-ring"
-                            :version "0.0.1"}
-                            ;; used in /secure APIs below
+           :openapi {:info {:title "sorter-api"
+                            :description "openapi3 docs for sorter api"
+                            :version "0.0.1"} 
                      :components {:securitySchemes {"auth" {:type :apiKey
                                                             :in :header
-                                                            :name "Example-Api-Key"}}}}
+                                                            :name "x-api-key"}}}}
            :handler (openapi/create-openapi-handler)}}] 
    
    ["/" {:no-doc true
@@ -814,7 +801,10 @@
                       :handler get-viz-items}}]
      ["/votes" {:get {:middleware [[wrap-rate-limit five-per-minute]]
                       :handler get-viz-votes}}]] 
-    ["/keys" api-keys/routes]
+    ["/keys" 
+     {:tags #{"secure"}
+      :openapi {:security [{"auth" []}]}} 
+     api-keys/routes]
     ["/docs/*"
      {:get {:no-doc true
             :handler (swagger-ui/create-swagger-ui-handler

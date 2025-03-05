@@ -188,12 +188,14 @@
 
 ;; Define routes for API key management
 (def routes
-  [["/create"
+  [["/"
     {:get {:summary "List all active API keys for a user"
+           :tags ["Users" "API Keys"]
            :responses {200 {:description "List of active API keys"}
                        401 {:description "Unauthorized - User not logged in"}}
            :handler list-api-keys}
      :post {:summary "Generate a new API key"
+            :tags ["Users" "API Keys"]
             :parameters {:body [:map 
                                 [:name {:json-schema/example "my-key"} string?]
                                 [:api_key {:json-schema/example "sort_1234567890_1234567890"} string?]]}
@@ -207,6 +209,7 @@
             :handler generate-api-key}}]
    ["/regenerate"
     {:post {:summary "Regenerate an existing API key by name"
+            :tags ["Users" "API Keys"]
             :parameters {:body [:map 
                                 [:name {:json-schema/example "my-key"} string?]]}
             :responses {200 {:description "API key regenerated successfully"
@@ -221,6 +224,7 @@
             :handler regenerate-api-key}}]
    ["/revoke"
     {:post {:summary "Revoke an API key by name"
+            :tags ["Users" "API Keys"]
             :parameters {:body [:map 
                                 [:name {:json-schema/example "my-key"} string?]]}
             :responses {200 {:description "API key revoked successfully"
