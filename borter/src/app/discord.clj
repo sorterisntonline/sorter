@@ -106,6 +106,7 @@
 ;; Add routes definition at the end of the file
 (def routes 
   (concat
-    [["/link" {:post {:handler handle-account-link}}]]
+    [["/link" {:post {:no-doc false
+                      :handler handle-account-link}}]]
     ;; Include OAuth routes from discord-oauth directly
     discord-oauth/oauth-routes))

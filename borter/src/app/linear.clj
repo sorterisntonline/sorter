@@ -135,6 +135,9 @@
 
   {:status 200 :body {:message "ok"}})
 
-(def routes [["/callback" {:get {:handler handle-callback}}]
-             ["/views" {:get {:handler get-views}
-                        :post {:handler project-sync-tag}}]])
+(def routes [["/callback" {:get {:no-doc false
+                                 :handler handle-callback}}]
+             ["/views" {:get {:no-doc false
+                              :handler get-views}
+                        :post {:no-doc false
+                               :handler project-sync-tag}}]])

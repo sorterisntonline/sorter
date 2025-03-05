@@ -7,7 +7,7 @@
             [reitit.swagger :as swagger]
             [reitit.swagger-ui :as swagger-ui]
             [reitit.openapi :as openapi]
-            [reitit.dev.pretty :as pretty]
+            [reitit.dev.pretty :as pretty] 
             [clojure.tools.logging :as log]
             [ring.adapter.jetty :as jetty]
             [ring.middleware.params :as params]
@@ -57,7 +57,8 @@
             [app.oauth :as oauth]
             [app.discord :as discord]
             [app.discord-oauth :as discord-oauth]
-            [com.rpl.specter :refer :all])
+            [com.rpl.specter :refer :all]
+            [app.api-keys :as api-keys])
   (:import
    [java.net URLEncoder]))
 
@@ -192,11 +193,15 @@
       
       ;; Case 3: Create new tag
       :else
-      (let [ret (db/exec! (-> (h/insert-into :tags)
-                              (h/values [(merge
-                                          (-> r :body-params)
-                                          {:tags/slug (sluj (-> r :body-params :title))
-                                           :tags/owner (-> r :session :user_name)})])
+      (let [body-params (-> r :body-params)
+            ns (-> body-params :ns)
+            tag-values (merge
+                        (dissoc body-params :ns)
+                        (when (and ns (not= ns "")) {:tags/ns ns})
+                        {:tags/slug (sluj (-> body-params :title))
+                         :tags/owner (-> r :session :user_name)})
+            ret (db/exec! (-> (h/insert-into :tags)
+                              (h/values [tag-values])
                               (h/returning :*)))
             tagid (-> ret first :tags/id)]
         (db/exec! (-> (h/insert-into :perms)
@@ -490,6 +495,46 @@
 (def five-per-minute {:storage storage :limit (UserRateLimit. 3 5 (java.time.Duration/ofMinutes 1))})
 (def three-per-five-minutes {:storage storage :limit (UserRateLimit. 4 3 (java.time.Duration/ofMinutes 5))})
 
+(defn wrap-discord-user-auth
+  "Middleware that adds user context for Discord requests"
+  [handler]
+  (fn [request]
+    (try
+      ;;(log/info "DISCORD USER AUTH START" (:discord request))
+      (if-let [discord-context (:discord request)]
+        (let [user-id (:user-id discord-context)
+              username (:username discord-context)
+              user (discord/get-or-create-discord-user user-id username)
+              request-with-user (assoc-in request [:session :user_name] (:users/user_name user))]
+          (handler request-with-user))
+        (do
+          (handler request)))
+      (catch Exception e
+        (log/error e "CRITICAL: Unhandled exception in wrap-discord-user-auth")
+        (handler request)))))
+
+(defn wrap-discord-auth
+  "Middleware that authenticates requests from the Discord bot"
+  [handler]
+  (fn [request]
+    (let [auth-header (get-in request [:headers "authorization"])
+          discord-user-id (get-in request [:headers "x-discord-user-id"])
+          discord-username (get-in request [:headers "x-discord-username"])]
+      (log/debug "Discord auth attempt with user-id:" discord-user-id "username:" discord-username)
+      (if (and (discord/validate-discord-request auth-header)
+               discord-user-id
+               discord-username)
+        (do
+          (log/info "Discord authentication successful for discord user:" discord-username)
+          ;; Add Discord context to the request
+          (handler (assoc request :discord {:user-id discord-user-id
+                                            :username discord-username})))
+        ;; Continue without Discord context
+        (do
+          (when auth-header
+            (log/debug "Discord authentication failed or incomplete"))
+          (handler request))))))
+
 (defn get-namespaces [r]
   (let [username (-> r :session :user_name)
         groups (when username
@@ -591,9 +636,9 @@
   [:map
    [:tags/id :int]
    [:tags/title :string]
-   [:tags/description :string]
+   [:tags/description [:maybe :string]]
    [:tags/slug :string]
-   [:tags/ns :string]
+   [:tags/ns [:maybe :string]]
    [:tags/owner :string]
    [:tags/created_at inst?]
    [:tags/edited_at inst?]
@@ -608,7 +653,7 @@
    [:title :string]
    [:description {:optional true} :string]
    [:owner :string]
-   [:created_at {:format "date-time"} :string]
+   [:created_at :string]
    [:domain_pk_namespace {:optional true} :string]
    [:domain_pk {:optional true} :string]])
 
@@ -619,7 +664,7 @@
    [:right_item_id :int]
    [:magnitude :int]
    [:owner :string]
-   [:created_at {:format "date-time"} :string]
+   [:created_at :string]
    [:attribute {:optional true} :int]])
 
 (def UserSchema
@@ -634,38 +679,29 @@
            :openapi {:info {:title "Sorter API"
                             :description "API for sorter.social - a platform for democratic consensus on any content"
                             :version "1.0.1"}
-                     :tags [{:name "Authentication" :description "User authentication endpoints"}
+                     :tags [{:name "System" :description "System and health endpoints"}
+                            {:name "Authentication" :description "User authentication endpoints"}
+                            {:name "API Keys" :description "API key management endpoints"}
                             {:name "Tags" :description "Tag management endpoints"}
                             {:name "Items" :description "Item management endpoints"}
                             {:name "Votes" :description "Voting endpoints"}
-                            {:name "Feed" :description "Feed and frontpage endpoints"}
-                            {:name "Integrations" :description "External service integration endpoints"}
                             {:name "Users" :description "User management endpoints"}
-                            {:name "System" :description "System and health endpoints"}]
-                     :components {:securitySchemes {"cookieAuth" {:type :apiKey
+                            {:name "Comments" :description "Comment management endpoints"}
+                            {:name "Groups" :description "Group management endpoints"}
+                            {:name "Feed" :description "Feed and frontpage endpoints"}
+                            {:name "Integrations" :description "External service integration endpoints"}] 
+                     :components {:securitySchemes {"apiKeyAuth" {:type :apiKey
+                                                                  :in :header
+                                                                  :name "x-api-key"}
+                                                    "cookieAuth" {:type :apiKey
                                                                   :in :cookie
                                                                   :name "ring-session"}}}}
-           :handler (openapi/create-openapi-handler)}}]
-   ["/swagger.json"
-    {:get {:no-doc true
-           :swagger {:info {:title "Sorter API"
-                            :description "API for sorter.social - a platform for democratic consensus on any content"
-                            :version "1.0.1"}
-                     :tags [{:name "Authentication" :description "User authentication endpoints"}
-                            {:name "Tags" :description "Tag management endpoints"}
-                            {:name "Items" :description "Item management endpoints"}
-                            {:name "Votes" :description "Voting endpoints"}
-                            {:name "Feed" :description "Feed and frontpage endpoints"}
-                            {:name "Integrations" :description "External service integration endpoints"}
-                            {:name "Users" :description "User management endpoints"}
-                            {:name "System" :description "System and health endpoints"}]
-                     :securityDefinitions {"auth" {:type :apiKey
-                                                   :in :cookie
-                                                   :name "ring-session"}}}}
-     :handler (swagger/create-swagger-handler)}]
+           :handler (openapi/create-openapi-handler)}}] 
 
-   ["/api"
-    ["/health" {:get {:summary "Health check endpoint"
+   ["/api" 
+    {:no-doc true}
+    ["/health" {:get {:no-doc false
+                      :summary "Health check endpoint"
                       :tags ["System"]
                       :description "Simple health check to verify the API is running"
                       :responses {200 {:description "Health status"
@@ -674,7 +710,8 @@
                                                                     [:version :string] 
                                                                     [:database :string]]}}}}
                       :handler health/check-health}}]
-    ["/feed" {:get {:summary "Get feed for a tag"
+    ["/feed" {:get {:no-doc false
+                    :summary "Get feed for a tag"
                     :tags ["Feed"]
                     :description "Retrieves feed items for a specific tag, including recent votes and activity"
                     :parameters {:query [:map
@@ -690,7 +727,8 @@
                                      :content {:default {:schema ErrorSchema
                                                          :examples {:ok {:value {:message "Invalid tag ID"}}}}}}}
                     :handler feed/get-feed}}]
-    ["/frontpage" {:get {:summary "Get frontpage feed"
+    ["/frontpage" {:get {:no-doc false
+                         :summary "Get frontpage feed"
                          :tags ["Feed"]
                          :description "Retrieves a 'frontpage' feed showing recent activity across all accessible tags"
                          :responses {200 {:description "Frontpage feed items"
@@ -707,7 +745,8 @@
                                                                                               :owner "user1"
                                                                                               :created_at "2023-01-01T12:00:00Z"}]}}}}}}}}
                    :handler feed/get-frontpage-feed}] 
-    ["/leaderboard" {:get {:summary "Get user leaderboard"
+    ["/leaderboard" {:get {:no-doc false
+                           :summary "Get user leaderboard"
                            :tags ["Users"]
                            :description "Returns aggregated voting statistics by user, sorted by vote count"
                            :responses {200 {:description "User leaderboard"
@@ -717,7 +756,8 @@
                                                                 :examples {:ok {:value [{:user_name "user1" :count 150}
                                                                                         {:user_name "user2" :count 120}]}}}}}}}
                      :handler get-leaderboard}]
-    ["/users" {:get {:summary "Lookup users"
+    ["/users" {:get {:no-doc false
+                     :summary "Lookup users"
                      :tags ["Users"]
                      :description "Lookup users by various identifiers (username, email, login ID, or Discord ID)"
                      :parameters {:query [:map                                         [:user_name {:description "Username to lookup" :optional true} :string]
@@ -731,20 +771,23 @@
                                       :content {:default {:schema ErrorSchema
                                                           :examples {:ok {:value {:message "user not found"}}}}}}}
                      :handler get-user}}]
-    ["/tag" {:get
-             {:summary "List accessible tags"
-              :tags ["Tags"]
-              :description "Lists tags the user has access to, separated into public, private, and unlisted categories"
-              :responses {200 {:description "Available tags"
-                               :content {:default {:schema [:map
-                                                            [:public [:vector TagSchema]]
-                                                            [:private [:vector TagSchema]]
-                                                            [:unlisted [:vector TagSchema]]]
-                                                   :examples {:ok {:value {:public [{:id 1 :title "Public Tag" :slug "public-tag" :vote_count 10 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
-                                                                           :private [{:id 2 :title "Private Tag" :slug "private-tag" :vote_count 5 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
-                                                                           :unlisted [{:id 3 :title "Unlisted Tag" :slug "unlisted-tag" :vote_count 2 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]}}}}}}}
-              :handler query-tags}
-             :post {:middleware [[wrap-rate-limit one-per-minute]]
+    ["/tag" {:get {:no-doc false 
+                   :summary "List accessible tags" 
+                   :tags ["Tags"] 
+                   :description "Lists tags the user has access to, separated into public, private, and unlisted categories" 
+                   :responses {200 {:description "Available tags"
+                                    :content {:default {:schema [:map
+                                                                  [:public [:vector TagSchema]]
+                                                                  [:private [:vector TagSchema]]
+                                                                  [:unlisted [:vector TagSchema]]]
+                                                        :examples {:ok {:value {:public [{:id 1 :title "Public Tag" :slug "public-tag" :vote_count 10 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
+                                                                                :private [{:id 2 :title "Private Tag" :slug "private-tag" :vote_count 5 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
+                                                                                :unlisted [{:id 3 :title "Unlisted Tag" :slug "unlisted-tag" :vote_count 2 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]}}}}}}} 
+                   :handler query-tags} 
+             :post {:no-doc false
+                    :openapi {:security [{"apiKeyAuth" []
+                                          "cookieAuth" []}]}
+                    :middleware [[wrap-rate-limit one-per-minute]]
                     :summary "Create or update tag"
                     :tags ["Tags"]
                     :description "Creates a new tag or updates an existing one. For updates, include tag_id. For new tags, omit tag_id."
@@ -772,7 +815,10 @@
                                      :content {:default {:schema ErrorSchema
                                                          :examples {:ok {:value {:message "you can not edit tags you do not own"}}}}}}}
                     :handler post-tag}
-             :delete {:summary "Delete tag"
+             :delete {:no-doc false
+                      :openapi {:security [{"apiKeyAuth" []
+                                            "cookieAuth" []}]}
+                      :summary "Delete tag"
                       :tags ["Tags"]
                       :description "Deletes an existing tag. User must be the owner of the tag."
                       :parameters {:query [:map
@@ -784,7 +830,8 @@
                                        :content {:default {:schema ErrorSchema
                                                            :examples {:ok {:value {:message "must own tag"}}}}}}} 
                       :handler delete-tag}}]
-    ["/tag/namespace" {:get {:summary "List available namespaces"
+    ["/tag/namespace" {:get {:no-doc false
+                             :summary "List available namespaces"
                              :tags ["Tags"]
                              :description "Returns a list of all namespaces the current user can view"
                              :responses {200 {:description "List of accessible namespaces"
@@ -792,7 +839,8 @@
                                                                            [:namespaces [:vector :string]]]
                                                                   :examples {:ok {:value {:namespaces ["music" "movies" "books"]}}}}}}} 
                              :handler get-namespaces}}]
-    ["/tag/exists" {:get {:summary "Check if tag exists by title"
+    ["/tag/exists" {:get {:no-doc false
+                          :summary "Check if tag exists by title"
                           :tags ["Tags"]
                           :description "Checks if a tag with given title exists"
                           :parameters {:query [:map
@@ -807,7 +855,8 @@
                                                                :examples {:ok {:value {:slug "example-tag" :exists false}}}}}}}}
                     :handler tag-slug-check
 
-                    :post {:summary "Check if tag exists"
+                    :post {:no-doc false
+                           :summary "Check if tag exists"
                            :tags ["Tags"]
                            :description "Checks if a tag exists by various identifiers"
                            :parameters {:body [:map
@@ -825,12 +874,23 @@
                                             :content {:default {:schema ErrorSchema
                                                                 :examples {:ok {:value {:message "Either title or domain_pk_namespace+domain_pk are required"}}}}}}}
                            :handler tag-exists-check}}]
-    ["/tag/page" {:get {:handler tag-info-request}}]
-    ["/tag/page2" {:get {:handler tag-info-request2}}]
-    ["/tag/permissions" {:get {:handler perms/get-perms}
-                         :post {:middleware [[wrap-rate-limit one-per-minute]]
+    ["/tag/page" {:get {:no-doc false
+                        :tags ["Tags"]
+                        :handler tag-info-request}}]
+    ["/tag/page2" {:get {:no-doc false
+                         :tags ["Tags"]
+                         :handler tag-info-request2}}]
+    ["/tag/permissions" {:get {:no-doc false
+                               :tags ["Tags"]
+                               :handler perms/get-perms}
+                         :post {:no-doc false
+                                :tags ["Tags"]
+                                :middleware [[wrap-rate-limit one-per-minute]]
                                 :handler perms/post-perms}}]
-    ["/vote" {:post {:middleware [[wrap-rate-limit one-per-second]]
+    ["/vote" {:post {:no-doc false
+                     :openapi {:security [{"apiKeyAuth" []
+                                           "cookieAuth" []}]}
+                     :middleware [[wrap-rate-limit one-per-second]]
                      :summary "Record a vote"
                      :tags ["Votes"]
                      :description "Records a user's vote comparing two items. The magnitude indicates the strength of preference."
@@ -852,7 +912,10 @@
                                       :content {:default {:schema ErrorSchema
                                                           :examples {:ok {:value {:message "must be logged in to vote"}}}}}}}
                      :handler vote/vote-post}
-              :delete {:summary "Delete a vote"
+              :delete {:no-doc false
+                       :openapi {:security [{"apiKeyAuth" []
+                                             "cookieAuth" []}]}
+                       :summary "Delete a vote"
                        :tags ["Votes"]
                        :description "Deletes a vote by ID. User must be the owner of the vote or an admin."
                        :parameters {:body [:map
@@ -865,7 +928,10 @@
                                                             :examples {:ok {:value {:message "must own vote"}}}}}}} 
                        :handler vote-delete}}]
     ["/item" {:middleware [[wrap-rate-limit one-per-second]]
-              :post {:summary "Create or update item"
+              :post {:no-doc false
+                     :openapi {:security [{"apiKeyAuth" []
+                                           "cookieAuth" []}]}
+                     :summary "Create or update item"
                      :tags ["Items"]
                      :description "Creates a new item or updates an existing one"
                      :parameters {:body [:map
@@ -889,12 +955,23 @@
                                       :content {:default {:schema ErrorSchema
                                                           :examples {:ok {:value {:message "must own item to update it"}}}}}}}}
               :handler item-post}]
-    ["/item/membership" {:get {:handler item-m-get}
-                         :delete {:handler item-m-delete}
-                         :post {:handler item-m-post}}]
-    ["/item/skip" {:post {:handler item-skip}
-                   :delete {:handler item-skip-delete}}]
-    ["/register" {:post {:summary "Register user"
+    ["/item/membership" {:get {:no-doc false
+                               :tags ["Items"]
+                               :handler item-m-get}
+                         :delete {:no-doc false
+                                  :tags ["Items"]
+                                  :handler item-m-delete}
+                         :post {:no-doc false
+                                :tags ["Items"]
+                                :handler item-m-post}}]
+    ["/item/skip" {:post {:no-doc false
+                          :tags ["Items"]
+                          :handler item-skip}
+                   :delete {:no-doc false
+                            :tags ["Items"]
+                            :handler item-skip-delete}}]
+    ["/register" {:post {:no-doc false
+                         :summary "Register user"
                          :tags ["Authentication"]
                          :description "Creates a new user account and sends verification email"
                          :parameters {:body [:map
@@ -910,10 +987,13 @@
                                           :content {:default {:schema ErrorSchema
                                                               :examples {:ok {:value {:message "Username already taken"}}}}}}}}
                   :handler login/handle-register}]
-    ["/login" {:post {:summary "Login"
+    ["/login" {:post {:no-doc false
+                      :summary "Login"
                       :tags ["Authentication"]
                       :description "Authenticates user by username/email and password"
-                      :request {:description "Login request body"}
+                      :parameters {:body [:map
+                                          [:user_name {:description "Username or email"} :string]
+                                          [:password {:description "Password"} :string]]}
                       :responses {200 {:description "Logged in successfully"
                                        :content {:default {:schema [:map
                                                                     [:success :boolean]
@@ -927,12 +1007,15 @@
                                                            :examples {:ok {:value {:message "Please verify your email address"}}}}}}}
                       :handler login/handle-login}
 
-               :get {:summary "Get current session"
+               :get {:no-doc false
+                     :summary "Get current session"
                      :tags ["Authentication"]
                      :description "Returns information about the current session"
                      :handler login/current-session}}]
 
-    ["/logout" {:post {:summary "Logout"
+    ["/logout" {:post {:no-doc false
+                       :openapi {:security [{"cookieAuth" []}]}
+                       :summary "Logout"
                        :tags ["Authentication"]
                        :description "Ends the current session"
                        :responses {200 {:description "Logged out successfully"
@@ -940,45 +1023,80 @@
                                                             :examples {:ok {:value {:success true}}}}}}}
                        :handler login/handle-logout}}]
 
-    ["/send-confirmation" {:post {:middleware [[wrap-rate-limit three-per-five-minutes]]
+    ["/send-confirmation" {:post {:no-doc false
+                                  :openapi {:security [{"cookieAuth" []}]}
+                                  :tags ["Authentication"]
+                                  :middleware [[wrap-rate-limit three-per-five-minutes]]
                                   :handler login/handle-resend-verification}}]
-    ["/verify" {:get {:middleware [[wrap-rate-limit five-per-minute]]
+    ["/verify" {:get {:no-doc false
+                      :openapi {:security [{"cookieAuth" []}]}
+                      :tags ["Authentication"]
+                      :middleware [[wrap-rate-limit five-per-minute]]
                       :handler login/handle-verify-email}}]
-    ["/update-email" {:post {:middleware [[wrap-rate-limit three-per-five-minutes]]
+    ["/update-email" {:post {:no-doc false
+                             :openapi {:security [{"cookieAuth" []}]}
+                             :tags ["Authentication"]
+                             :middleware [[wrap-rate-limit three-per-five-minutes]]
                              :handler login/handle-update-email}}]
-    ["/forgot-password" {:post {:middleware [[wrap-rate-limit three-per-five-minutes]]
+    ["/forgot-password" {:post {:no-doc false
+                                :openapi {:security [{"cookieAuth" []}]}
+                                :tags ["Authentication"]
+                                :middleware [[wrap-rate-limit three-per-five-minutes]]
                                 :handler login/handle-forgot-password}}]
-    ["/reset-password" {:post {:middleware [[wrap-rate-limit three-per-five-minutes]]
+    ["/reset-password" {:post {:no-doc false
+                               :openapi {:security [{"cookieAuth" []}]}
+                               :tags ["Authentication"]
+                               :middleware [[wrap-rate-limit three-per-five-minutes]]
                                :handler login/handle-reset-password}}]
 
-    ["/spotify" spotify/routes]
-    ["/youtube" youtube/routes]
-    ["/linear" linear/routes]
-    ["/reddit" reddit/routes]
-    ["/twitter" twitter/routes]
-    ["/discord" discord/routes]
+    ["/spotify" {:tags ["Integrations"]} spotify/routes]
+    ["/youtube" {:tags ["Integrations"]} youtube/routes]
+    ["/linear" {:tags ["Integrations"]} linear/routes]
+    ["/reddit" {:tags ["Integrations"]} reddit/routes]
+    ["/twitter" {:tags ["Integrations"]} twitter/routes]
+    ["/discord" {:tags ["Integrations"]} discord/routes]
 
-    ["/integrations" integrations/routes]
-    ["/comments" comments/routes]
-    ["/user_group" groups/routes]
-    ["/viz"
-     ["/items" {:get {:middleware [[wrap-rate-limit five-per-minute]]
+    ["/integrations" {:tags ["Integrations"]} integrations/routes]
+    ["/comments" {:tags ["Comments"]} comments/routes]
+    ["/user_group" {:tags ["Groups"]} groups/routes]
+    ["/viz" 
+     ["/items" {:get {:no-doc true
+                      :middleware [[wrap-rate-limit five-per-minute]]
                       :handler get-viz-items}}]
-     ["/votes" {:get {:middleware [[wrap-rate-limit five-per-minute]]
-                      :handler get-viz-votes}}]]]
+     ["/votes" {:get {:no-doc true
+                      :middleware [[wrap-rate-limit five-per-minute]]
+                      :handler get-viz-votes}}]] 
+    ["/keys" {:tags #{"API Keys"} 
+              :openapi {:security [{"apiKeyAuth" []
+                                    "cookieAuth" []}]}
+              :middleware [[wrap-rate-limit five-per-minute]]} 
+     api-keys/routes]
+    ["/docs/*"
+     {:get {:no-doc true
+            :handler (swagger-ui/create-swagger-ui-handler
+                      {:url "/openapi.json"
+                       :config {:validatorUrl nil 
+                                :operationsSorter "alpha"}})}}]]])
    
-   ["/" {:no-doc true 
-         :handler default-handler}]
-   
-   ["/docs/*"
-    {:get {:no-doc true
-           :handler (swagger-ui/create-swagger-ui-handler
-                     {:path "/"
-                      :config {:validatorUrl nil
-                               :urls [{:name "swagger", :url "swagger.json"}
-                                      {:name "openapi", :url "openapi.json"}]
-                               :urls.primaryName "openapi"
-                               :operationsSorter "alpha"}})}}]])
+
+(defn wrap-api-key-auth
+  "Middleware that authenticates requests via API key if present"
+  [handler]
+  (fn [request]
+    (let [api-key (get-in request [:headers "x-api-key"])]
+      (if api-key
+        (if-let [username (api-keys/validate-api-key api-key)]
+          ;; API key is valid, add user to session
+          (do
+            (log/debug "API key authentication successful for user:" username)
+            (handler (assoc-in request [:session :user_name] username)))
+          ;; Invalid API key
+          (do
+            (log/warn "Invalid API key attempt")
+            {:status 403
+             :body "no authorization"}))
+        ;; No API key in request, continue with normal authentication
+        (handler request)))))
 
 
 (defn wrap-dev-session
@@ -1024,7 +1142,8 @@
                             :muuntaja m-instance
                             :middleware
                             [session/wrap-session
-                             wrap-dev-session
+                             wrap-api-key-auth
+                             wrap-dev-session 
                              swagger/swagger-feature
                              openapi/openapi-feature
                              parameters/parameters-middleware
@@ -1033,8 +1152,8 @@
                              muuntaja/format-request-middleware
                              exception-middleware
                              coercion/coerce-response-middleware
-                             coercion/coerce-request-middleware
-                             ]}})
+                             coercion/coerce-request-middleware]}})
+                             
        (-> #'default-handler
            (wrap-resource "public")
            (wrap-content-type)))))

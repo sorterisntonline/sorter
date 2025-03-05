@@ -33,6 +33,9 @@
   
   {:status 200 :body (db/exec! {:delete-from :comments :where [:= :id (-> req :params :id)]})})
 
-(def routes [["" {:get {:handler get-comments}
-                  :post {:handler post-comment}
-                  :delete {:handler delete-comment}}]])
+(def routes [["" {:get {:no-doc false
+                        :handler get-comments}
+                  :post {:no-doc false
+                         :handler post-comment}
+                  :delete {:no-doc false
+                           :handler delete-comment}}]])

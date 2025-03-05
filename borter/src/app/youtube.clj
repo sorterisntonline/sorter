@@ -128,8 +128,10 @@
              
   {:status 200 :body {:liked true}})
 
-(def routes [["/callback" {:get {:handler handle-callback}}]
-             ["/playlist" {:post {:handler start-tracking-liked}}]])
+(def routes [["/callback" {:get {:no-doc false
+                                :handler handle-callback}}]
+             ["/playlist" {:post {:no-doc false
+                                  :handler start-tracking-liked}}]])
 
 
 

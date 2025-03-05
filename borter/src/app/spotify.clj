@@ -517,8 +517,10 @@
 (def routes 
   (concat
     so/oauth-routes  ; Use the pre-defined OAuth routes
-    [["/resolve" {:post {:handler resolve-spotify-entity}}]
-     ["/search" {:get {:handler search-endpoint}}]]))
+    [["/resolve" {:post {:no-doc false
+                         :handler resolve-spotify-entity}}]
+     ["/search" {:get {:no-doc false
+                       :handler search-endpoint}}]]))
 
 (defn clean-spotify-data! []
   ;; First remove votes for spotify items

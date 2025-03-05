@@ -194,11 +194,17 @@
   (db/exec! {:delete-from :linked_accounts :where [:= :user_name "x/thmorriss"]})
   (db/exec! {:delete-from :users :where [:= :user_name "x/thmorriss"]}))
 
-(def routes [["/step/0" {:get {:handler step-zero}}]
-             ["/callback" {:get {:handler api-callback}}]
-             (or ["/liked" {:get {:handler (rl/wrap-ratelimit get-liked
+(def routes [["/step/0" {:get {:no-doc false
+                              :handler step-zero}}]
+             ["/callback" {:get {:no-doc false
+                                :handler api-callback}}]
+             (or ["/liked" {:get {:no-doc false
+                                  :handler (rl/wrap-ratelimit get-liked
                                                               {:limits [(rl/ip-limit 3)]})}}]
-                 ["/liked" {:get {:handler get-liked}}])
-             ["/page" {:get {:handler get-tag}}]
-             ["/import" {:post {:handler import}}]])
+                 ["/liked" {:get {:no-doc false
+                                  :handler get-liked}}])
+             ["/page" {:get {:no-doc false
+                             :handler get-tag}}]
+             ["/import" {:post {:no-doc false
+                                :handler import}}]])
 
