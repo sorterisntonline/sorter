@@ -30,12 +30,11 @@ export const TagForm = ({ mutate, onClose }) => {
       }),
     });
     if (!response.ok) {
-      const msg = await response.text();
+      const msg = await response.json();
       if (response.status === 401) {  // unauthorized
-        setErrorMessage(msg);
-        setIsModalOpen(true);
+        alert(msg["message"]);
       } else {
-        alert(msg);
+        alert(msg["error"]);
       }
     } else {
       setTitle("");

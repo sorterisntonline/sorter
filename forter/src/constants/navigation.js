@@ -4,15 +4,6 @@ export const NAV_ITEMS = [
     path: '/' 
   },
   { 
-    name: 'Tags', 
-    path: '/',
-    children: [
-      { name: 'Block', path: '/' },
-      { name: 'List', path: '/tags2' },
-      { name: 'Tree', path: '/tags3' }
-    ]
-  },
-  { 
     name: 'Feed', 
     path: '/feed' 
   },
@@ -25,9 +16,6 @@ export const NAV_ITEMS = [
     path: '/leaderboard' 
   }
 ];
-
-// Routes where the new tag button should be shown
-export const NEW_TAG_ROUTES = ['/', '/tags2', '/tags3'];
 
 // Routes where the new item button should be shown (any tag view that's not voting)
 export const NEW_ITEM_ROUTES = [

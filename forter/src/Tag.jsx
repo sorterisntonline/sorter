@@ -8,8 +8,6 @@ import { IntegrationsPanel } from "./integrations/IntegrationsPanel";
 import { ItemsLists } from "./ItemsLists";
 import { ItemPanel } from "./ItemPanel";
 import { toggle } from "./App";
-import { useElo } from "./App";
-import { showPin } from "./App";
 import { MobileNewItemChooser } from "./components/MobileNewItemChooser";
 import { WarningPopup } from "./components/WarningPopup";
 import { errorState, clearError } from "./ErrorHandler";
@@ -97,7 +95,7 @@ export const Tag = ({ isVoting, handleError, onSelectItem, onCloseItem }) => {
             <IntegrationsPanel />
             <TextSummary can_vote={can_vote} can_add={can_add} />
             
-            <div className="flex lg:flex-row flex-col lg:space-x-24">
+            <div className="flex lg:flex-row flex-col">
               <div className={`${toggle.value ? 'lg:w-3/4' : 'lg:w-full'} transition-all duration-300`}>
                 <ItemsLists 
                   sorteditems={tag.value.sorted}
@@ -108,26 +106,18 @@ export const Tag = ({ isVoting, handleError, onSelectItem, onCloseItem }) => {
               </div>
               
               {/* Desktop sidebar */}
-              {toggle.value && (
-                <div className="lg:ml-auto lg:w-1/4">
+              {toggle.value ? (
+                <div className="lg:ml-24 lg:w-1/4">
                   <div className="flex flex-col">
-                    <div
-                      className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
-                      onClick={() => toggle.value = !toggle.value}
-                      role="button"
-                    >
-                      {toggle.value ? "[more space <-]" : "[less space ->]"}
-                    </div>
-                    <div
-                      className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
-                      onClick={() => {
-                        useElo.value = !useElo.value;
-                        loadTag(undefined);
-                      }}
-                      role="button"
-                    >
-                      {useElo.value ? "[use pagerank]" : "[use elo]"}
-                    </div>
+                    {!isMobileDevice() && (
+                      <div
+                        className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
+                        onClick={() => toggle.value = !toggle.value}
+                        role="button"
+                      >
+                        {"[more space <-]"}
+                      </div>
+                    )}
                     <div
                       className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
                       onClick={() => {
@@ -136,15 +126,6 @@ export const Tag = ({ isVoting, handleError, onSelectItem, onCloseItem }) => {
                       role="button"
                     >
                       [show graph]
-                    </div>
-                    <div
-                      className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
-                      onClick={() => {
-                        showPin.value = !showPin.value;
-                      }}
-                      role="button"
-                    >
-                      {showPin.value ? "[hide pin]" : "[show pin]"}
                     </div>
                   </div>
                   <div className="page-padding-top hidden lg:block">
@@ -155,7 +136,16 @@ export const Tag = ({ isVoting, handleError, onSelectItem, onCloseItem }) => {
                     </div>
                   </div>
                 </div>
-              )}
+              ) : !isMobileDevice() && (
+                <div
+                  className="cursor-pointer border-1 border-gray-300 whitespace-nowrap"
+                  onClick={() => toggle.value = !toggle.value}
+                  role="button"
+                >
+                  {"[->]"}
+                </div>
+              )
+            }
             </div>
           </>
         )}

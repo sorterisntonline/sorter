@@ -1,6 +1,5 @@
-import { tag, useElo } from "./App";
+import { tag } from "./App";
 import { errors } from "./ErrorPanel";
-import { pinned_left, pinned_right } from "./ItemPanel";
 import { namespace } from "./main";
 import { selected_users } from "./UserPanel";
 import { handleApiError } from './ErrorHandler';
@@ -10,14 +9,9 @@ const buildQueryParams = ({ tagid }) => {
   const users = selected_users.value.map((user) => user.value).join(".");
   const attribute = tag.value && tag.value.selected_attribute;
 
-  const elo = useElo.value;
-
   const url = new URLSearchParams("");
   if (tag_id && tag_id !== -1) url.append("id", tag_id);
   if (users !== "all") url.append("users", users);
-  if (pinned_left.value) url.append("pinned_left", pinned_left.value);
-  if (pinned_right.value) url.append("pinned_right", pinned_right.value);
-  if (elo) url.append("elo", true);
   if (attribute) url.append("attribute", attribute.title);
   if (namespace.value) url.append("namespace", namespace.value);
 
@@ -93,19 +87,6 @@ const fetchData = async () => {
       throw { status: response.status, message: await response.text() };
     }
     return await response.json();
-  } catch (error) {
-    handleApiError(error);
-    throw error;
-  }
-};
-
-export const fetchVizData = async () => {
-  try {
-    const [itemsResponse, votesResponse] = await Promise.all([
-      makeRequest('GET', '/api/viz/items'),
-      makeRequest('GET', '/api/viz/votes')
-    ]);
-    return { items: itemsResponse, votes: votesResponse };
   } catch (error) {
     handleApiError(error);
     throw error;

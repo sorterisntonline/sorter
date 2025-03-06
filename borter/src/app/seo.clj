@@ -35,14 +35,8 @@
   {;; Static routes
    "/feed" {:title "feed - sorter"
             :description "view your personalized feed of sorts and rankings"}
-   "/tags3" {:title "tags - sorter"
-             :description "browse and discover sorting collections"}
-   "/tags2" {:title "tags - sorter"
-             :description "browse and discover sorting collections"}
    "/" {:title "sorter"
         :description "create and share your rankings"}
-   "/viz" {:title "visualization - sorter"
-           :description "visualize sorting data"}
    "/faq" {:title "faq - sorter"
            :description "frequently asked questions"}
    "/integrations" {:title "integrations - sorter"

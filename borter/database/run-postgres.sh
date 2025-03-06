@@ -11,8 +11,10 @@ echo "{:jdbc-url \"postgres://postgres:password@localhost:${HOST_PORT}/postgres\
 # Function to check if pgdata directory contains database files
 data_exists() {
     # Check if pgdata directory exists and contains PG_VERSION file or other database files
-    if [ -d "`pwd`/pgdata" ] && sudo test -f "`pwd`/pgdata/pgdata14/PG_VERSION"; then
+    if [ -d "`pwd`/pgdata" ] && test -f "`pwd`/pgdata/pgdata14/PG_VERSION" 2>/dev/null; then
         return 0  # Data exists
+    elif [ -d "`pwd`/pgdata" ] && sudo test -f "`pwd`/pgdata/pgdata14/PG_VERSION" 2>/dev/null; then
+        return 0  # Data exists (needed sudo)
     else
         return 1  # No data
     fi
@@ -43,7 +45,13 @@ if [ "$DATA_EXISTS" = true ] && [ ! -z "$PG_DUMP_DATA" ]; then
     read -p "Database data exists. Replace existing data with $PG_DUMP_DATA? [y/N] " response
     if [[ "$response" =~ ^[Yy]$ ]]; then
         echo "Removing existing data directory completely..."
-        sudo rm -rf `pwd`/pgdata
+        # Try without sudo first
+        if rm -rf `pwd`/pgdata 2>/dev/null; then
+            echo "Removed data directory without sudo"
+        else
+            echo "Elevated permissions required to remove data directory"
+            sudo rm -rf `pwd`/pgdata
+        fi
     else
         echo "Keeping existing data"
         PG_DUMP_DATA=""
@@ -53,7 +61,19 @@ fi
 # Initialize IMPORT_SUCCESS variable to track whether import succeeded
 IMPORT_SUCCESS=false
 
-# If PG_DUMP_DATA is provided, wait for PostgreSQL to start and import the data
+# Start container in background
+if [ ! -z "$PG_DUMP_DATA" ]; then
+    echo "Starting temporary container for data import..."
+else
+    echo "Starting PostgreSQL container..."
+fi
+
+# Check if the image exists locally
+if ! docker images ${DOCKER_REPO}:${TAG} | grep -q ${TAG}; then
+    echo "PostgreSQL image not found locally. Pulling ${DOCKER_REPO}:${TAG}..."
+    docker pull ${DOCKER_REPO}:${TAG}
+fi
+
 if [ ! -z "$PG_DUMP_DATA" ]; then
     # Start container in background temporarily
     docker run --rm --name $NAME \
@@ -72,8 +92,9 @@ if [ ! -z "$PG_DUMP_DATA" ]; then
         -c 'config_file=/etc/postgresql/postgresql.conf' \
         -c 'hba_file=/etc/postgresql/pg_hba.conf' &
 
-    echo "Waiting for PostgreSQL to start..."
-    sleep 5  # Give PostgreSQL time to start
+    # Wait for container to start
+    echo "Waiting for container to start and PostgreSQL to initialize..."
+    sleep 10  # Increased initial wait time
 
     # Try to connect until successful or timeout
     for i in {1..30}; do
@@ -172,8 +193,8 @@ if [ ! -z "$PG_DUMP_DATA" ]; then
     # Stop the temporary container
     docker stop $NAME
 
-    # Start the final container
-    exec docker run --rm --name $NAME \
+    # Start the final container in the background (removed 'exec')
+    docker run --rm --name $NAME \
         --volume `pwd`/pgdata:/var/lib/pgsql/data \
         --volume `pwd`/mnt_data:/mnt/data \
         --volume `pwd`/pg_hba.conf:/etc/postgresql/pg_hba.conf \
@@ -187,7 +208,10 @@ if [ ! -z "$PG_DUMP_DATA" ]; then
         ${DOCKER_REPO}:${TAG} \
         postgres \
         -c 'config_file=/etc/postgresql/postgresql.conf' \
-        -c 'hba_file=/etc/postgresql/pg_hba.conf'
+        -c 'hba_file=/etc/postgresql/pg_hba.conf' &
+        
+    echo "Waiting for container to start and PostgreSQL to initialize..."
+    sleep 10  # Add initial wait for the container to start
 else
     # Start container in background
     docker run --rm --name $NAME \
@@ -205,12 +229,19 @@ else
         postgres \
         -c 'config_file=/etc/postgresql/postgresql.conf' \
         -c 'hba_file=/etc/postgresql/pg_hba.conf' &
+        
+    # Wait for container to start
+    echo "Waiting for container to start and PostgreSQL to initialize..."
+    sleep 10  # Add initial wait similar to the import path
 fi
 
-# Wait for PostgreSQL to be ready before creating admin user
-echo "Waiting for PostgreSQL to start..."
-for i in {1..30}; do
-    if docker exec -e PGPASSWORD=password $NAME pg_isready -U postgres; then
+# Improve the wait-for-ready logic
+echo "Checking if PostgreSQL is accepting connections..."
+MAX_ATTEMPTS=60  # Increased from 30 to 60
+for i in $(seq 1 $MAX_ATTEMPTS); do
+    echo "Attempt $i of $MAX_ATTEMPTS..."
+    if docker exec -e PGPASSWORD=password $NAME pg_isready -U postgres 2>/dev/null; then
+        echo "PostgreSQL is ready!"
         echo "PostgreSQL is ready. Ensuring admin user exists..."
         docker exec -i -e PGPASSWORD=password $NAME psql -U postgres -d postgres << EOF
 -- First delete existing admin user

@@ -5,7 +5,6 @@ import { NAV_ITEMS } from './constants/navigation';
 
 export const MobileNav = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [expandedItem, setExpandedItem] = useState(null);
   const [location, setLocation] = useLocation();
 
   // Hide nav if we're in voting mode
@@ -13,20 +12,13 @@ export const MobileNav = () => {
     return null;
   }
 
-  const handleNavClick = (path, hasChildren) => {
-    if (!hasChildren) {
-      setLocation(path);
-      setIsOpen(false);
-      setExpandedItem(null);
-    }
+  const handleNavClick = (path) => {
+    setLocation(path);
+    setIsOpen(false);
   };
 
   const handleItemClick = (item) => {
-    if (item.children) {
-      setExpandedItem(expandedItem === item.name ? null : item.name);
-    } else {
-      handleNavClick(item.path, false);
-    }
+    handleNavClick(item.path);
   };
 
   const renderNavItem = (item) => (
@@ -36,41 +28,7 @@ export const MobileNav = () => {
         className="py-4 text-lg cursor-pointer dark:text-white text-left flex justify-between items-center"
       >
         <span>{item.name}</span>
-        {item.children && (
-          <svg
-            className={`w-5 h-5 transform transition-transform duration-200 ${
-              expandedItem === item.name ? 'rotate-90' : ''
-            }`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M19 9l-7 7-7-7"
-            />
-          </svg>
-        )}
       </div>
-      {item.children && (
-        <div
-          className={`overflow-hidden transition-all duration-200 ease-in-out ${
-            expandedItem === item.name ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
-          }`}
-        >
-          {item.children.map(child => (
-            <div
-              key={child.name}
-              onClick={() => handleNavClick(child.path, false)}
-              className="py-2 pl-4 text-base cursor-pointer dark:text-white text-left"
-            >
-              {child.name}
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 
