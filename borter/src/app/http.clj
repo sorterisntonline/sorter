@@ -131,83 +131,86 @@
 (defn get-admin-users []
   (when-let [admins (System/getenv "BORTER_STATIC_ADMINS")]
     (set (clojure.string/split admins #","))))
+    (defn post-tag [r]
+      (log/debug "post-tag called with body-params:" (:body-params r))
+      (when (nil? (-> r :session :user_name))
+        (log/warn "Unauthorized attempt to create tag")
+        (throw (ex-info "need to be logged in to make tag" {:status 401})))
 
-(defn post-tag [r]
-  (log/debug "post-tag called with body-params:" (:body-params r))
-  (when (nil? (-> r :session :user_name))
-    (log/warn "Unauthorized attempt to create tag")
-    (throw (ex-info "need to be logged in to make tag" {:status 401})))
-
-  ;; Check for Discord context
-  (let [has-discord-context (boolean (:discord r))
-        domain-pk-ns (-> r :body-params :domain_pk_namespace)
-        domain-pk (-> r :body-params :domain_pk)
-        is-discord-channel (and domain-pk-ns domain-pk 
-                                (= domain-pk-ns "discord.channel"))
+      ;; Check for Discord context
+      (let [has-discord-context (boolean (:discord r))
+            domain-pk-ns (-> r :body-params :domain_pk_namespace)
+            domain-pk (-> r :body-params :domain_pk)
+            is-discord-channel (and domain-pk-ns domain-pk 
+                                    (= domain-pk-ns "discord.channel"))
+            
+            ;; Get tag ID (preferring 'id' over 'tag_id')
+            tag-id (or (-> r :body-params :id)
+                       (-> r :body-params :tag_id))
+            
+            ;; Check if tag already exists for this Discord channel
+            existing-tag (when (and is-discord-channel 
+                                    (or has-discord-context 
+                                        (db/exec! {:select 1 
+                                                   :from :users 
+                                                   :where [:and 
+                                                           [:= :user_name (-> r :session :user_name)]
+                                                           [:not= :discord_id nil]]})))
+                           (first (db/exec! {:select :*
+                                             :from :tags
+                                             :where [:and
+                                                     [:= :tags/domain_pk_namespace domain-pk-ns]
+                                                     [:= :tags/domain_pk domain-pk]]})))]
         
-        ;; Check if tag already exists for this Discord channel
-        existing-tag (when (and is-discord-channel 
-                                (or has-discord-context 
-                                    (db/exec! {:select 1 
-                                               :from :users 
-                                               :where [:and 
-                                                       [:= :user_name (-> r :session :user_name)]
-                                                       [:not= :discord_id nil]]})))
-                       (first (db/exec! {:select :*
-                                         :from :tags
-                                         :where [:and
-                                                 [:= :tags/domain_pk_namespace domain-pk-ns]
-                                                 [:= :tags/domain_pk domain-pk]]})))]
-    
-    (cond
-      ;; Case 1: Explicit tag_id in request (standard update)
-      (-> r :body-params :tag_id)
-      (do (when-not (perms/owns (-> r :body-params :tag_id)
-                                (-> r :session :user_name))
-            (log/warn "User" (-> r :session :user_name) "attempted to edit tag they don't own:" (-> r :body-params :tag_id))
-            (throw (ex-info "you can not edit tags you do not own" {:status 403})))
+        (cond
+          ;; Case 1: Explicit tag id in request (standard update)
+          tag-id
+          (do (when-not (perms/owns tag-id (-> r :session :user_name))
+                (log/warn "User" (-> r :session :user_name) "attempted to edit tag they don't own:" tag-id)
+                (throw (ex-info "you can not edit tags you do not own" {:status 403})))
 
-          (let [ret (db/exec! (-> (h/update :tags)
-                                  (h/set (-> (-> r :body-params)
-                                             (assoc :edited_at [:now])
-                                             (dissoc :tag_id)))
-                                  (h/where [:= :tags/id (-> r :body-params :tag_id)])))]
-            (log/info "Tag updated:" (-> r :body-params :tag_id))
-            (log/debug "Updated tag result:" ret)
-            {:status 200 :body (first ret)}))
-      
-      ;; Case 2: Discord channel tag exists (update)
-      (and is-discord-channel existing-tag)
-      (do (when-not (perms/owns (:tags/id existing-tag)
-                              (-> r :session :user_name))
-            (log/warn "User" (-> r :session :user_name) "attempted to edit Discord channel tag they don't own:" (:tags/id existing-tag))
-            (throw (ex-info "you can not edit tags you do not own" {:status 403})))
+              (let [ret (db/exec! (-> (h/update :tags)
+                                      (h/set (-> (-> r :body-params)
+                                                 (assoc :edited_at [:now])
+                                                 (dissoc :tag_id :id)))
+                                      (h/where [:= :tags/id tag-id])))]
+                (log/info "Tag updated:" tag-id)
+                (log/debug "Updated tag result:" ret)
+                {:status 200 :body (first ret)}))
+          
+          ;; Case 2: Discord channel tag exists (update)
+          (and is-discord-channel existing-tag)
+          (do (when-not (perms/owns (:tags/id existing-tag)
+                                  (-> r :session :user_name))
+                (log/warn "User" (-> r :session :user_name) "attempted to edit Discord channel tag they don't own:" (:tags/id existing-tag))
+                (throw (ex-info "you can not edit tags you do not own" {:status 403})))
 
-          (let [ret (db/exec! (-> (h/update :tags)
-                                  (h/set (-> (-> r :body-params)
-                                             (assoc :edited_at [:now])))
-                                  (h/where [:= :tags/id (:tags/id existing-tag)])))]
-            (log/info "Discord channel tag updated:" (:tags/id existing-tag))
-            (log/debug "Updated Discord channel tag result:" ret)
-            {:status 200 :body (first ret)}))
-      
-      ;; Case 3: Create new tag
-      :else
-      (let [body-params (-> r :body-params)
-            ns (-> body-params :ns)
-            tag-values (merge
-                        (dissoc body-params :ns)
-                        (when (and ns (not= ns "")) {:tags/ns ns})
-                        {:tags/slug (sluj (-> body-params :title))
-                         :tags/owner (-> r :session :user_name)})
-            ret (db/exec! (-> (h/insert-into :tags)
-                              (h/values [tag-values])
-                              (h/returning :*)))
-            tagid (-> ret first :tags/id)]
-        (db/exec! (-> (h/insert-into :perms)
-                      (h/values (perms/public-permissions tagid))))
-        (log/info "New tag created:" tagid "by user:" (-> r :session :user_name))
-        {:status 200 :body (first ret)}))))
+              (let [ret (db/exec! (-> (h/update :tags)
+                                      (h/set (-> (-> r :body-params)
+                                                 (assoc :edited_at [:now])
+                                                 (dissoc :tag_id :id)))
+                                      (h/where [:= :tags/id (:tags/id existing-tag)])))]
+                (log/info "Discord channel tag updated:" (:tags/id existing-tag))
+                (log/debug "Updated Discord channel tag result:" ret)
+                {:status 200 :body (first ret)}))
+          
+          ;; Case 3: Create new tag
+          :else
+          (let [body-params (-> r :body-params)
+                ns (-> body-params :ns)
+                tag-values (merge
+                            (dissoc body-params :ns :tag_id :id)
+                            (when (and ns (not= ns "")) {:tags/ns ns})
+                            {:tags/slug (sluj (-> body-params :title))
+                             :tags/owner (-> r :session :user_name)})
+                ret (db/exec! (-> (h/insert-into :tags)
+                                  (h/values [tag-values])
+                                  (h/returning :*)))
+                tagid (-> ret first :tags/id)]
+            (db/exec! (-> (h/insert-into :perms)
+                          (h/values (perms/public-permissions tagid))))
+            (log/info "New tag created:" tagid "by user:" (-> r :session :user_name))
+            {:status 200 :body (first ret)}))))
 
 
 (defn delete-tag [req]
@@ -254,7 +257,8 @@
                                                [:= :tags/slug slug]
                                                [:= :tags/ns ns]]}))]
     {:status 200 :body (if existing-tag
-                         (assoc existing-tag :exists true)
+                         (assoc existing-tag 
+                                :exists true)
                          {:slug slug
                           :exists false})}))
 
@@ -792,7 +796,7 @@
                     :tags ["Tags"]
                     :description "Creates a new tag or updates an existing one. For updates, include tag_id. For new tags, omit tag_id."
                     :parameters {:body [:map
-                                        [:tag_id {:description "ID of tag to update (omit for new tags)" :optional true} :int]
+                                        [:id {:description "ID of tag to update (omit for new tags)" :optional true} :int]
                                         [:title {:description "Title of the tag"} :string]
                                         [:description {:description "Description of the tag" :optional true} :string]
                                         [:ns {:description "Namespace for the tag" :optional true} :string]
