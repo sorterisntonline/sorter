@@ -47,11 +47,10 @@ export const ProfileHoverPane = ({ onClose }) => {
           profile
         </button>
         <button
-          className="w-full text-left py-2 px-4 rounded text-gray-400 dark:text-gray-500 cursor-not-allowed"
-          disabled
-          title="we haven't gotten to implementing this yet!"
+          className="w-full text-left py-2 px-4 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+          onClick={() => handleNavigation("/keys")}
         >
-          settings
+          API keys
         </button>
         <button
           className="w-full text-left py-2 px-4 rounded text-gray-400 dark:text-gray-500 cursor-not-allowed"

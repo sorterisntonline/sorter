@@ -131,86 +131,86 @@
 (defn get-admin-users []
   (when-let [admins (System/getenv "BORTER_STATIC_ADMINS")]
     (set (clojure.string/split admins #","))))
-    (defn post-tag [r]
-      (log/debug "post-tag called with body-params:" (:body-params r))
-      (when (nil? (-> r :session :user_name))
-        (log/warn "Unauthorized attempt to create tag")
-        (throw (ex-info "need to be logged in to make tag" {:status 401})))
+(defn post-tag [r]
+  (log/debug "post-tag called with body-params:" (:body-params r))
+  (when (nil? (-> r :session :user_name))
+    (log/warn "Unauthorized attempt to create tag")
+    (throw (ex-info "need to be logged in to make tag" {:status 401})))
 
       ;; Check for Discord context
-      (let [has-discord-context (boolean (:discord r))
-            domain-pk-ns (-> r :body-params :domain_pk_namespace)
-            domain-pk (-> r :body-params :domain_pk)
-            is-discord-channel (and domain-pk-ns domain-pk 
-                                    (= domain-pk-ns "discord.channel"))
+  (let [has-discord-context (boolean (:discord r))
+        domain-pk-ns (-> r :body-params :domain_pk_namespace)
+        domain-pk (-> r :body-params :domain_pk)
+        is-discord-channel (and domain-pk-ns domain-pk 
+                                (= domain-pk-ns "discord.channel"))
             
             ;; Get tag ID (preferring 'id' over 'tag_id')
-            tag-id (or (-> r :body-params :id)
-                       (-> r :body-params :tag_id))
+        tag-id (or (-> r :body-params :id)
+                   (-> r :body-params :tag_id))
             
             ;; Check if tag already exists for this Discord channel
-            existing-tag (when (and is-discord-channel 
-                                    (or has-discord-context 
-                                        (db/exec! {:select 1 
-                                                   :from :users 
-                                                   :where [:and 
-                                                           [:= :user_name (-> r :session :user_name)]
-                                                           [:not= :discord_id nil]]})))
-                           (first (db/exec! {:select :*
-                                             :from :tags
-                                             :where [:and
-                                                     [:= :tags/domain_pk_namespace domain-pk-ns]
-                                                     [:= :tags/domain_pk domain-pk]]})))]
+        existing-tag (when (and is-discord-channel 
+                                (or has-discord-context 
+                                    (db/exec! {:select 1 
+                                               :from :users 
+                                               :where [:and 
+                                                       [:= :user_name (-> r :session :user_name)]
+                                                       [:not= :discord_id nil]]})))
+                       (first (db/exec! {:select :*
+                                         :from :tags
+                                         :where [:and
+                                                 [:= :tags/domain_pk_namespace domain-pk-ns]
+                                                 [:= :tags/domain_pk domain-pk]]})))]
         
-        (cond
+    (cond
           ;; Case 1: Explicit tag id in request (standard update)
-          tag-id
-          (do (when-not (perms/owns tag-id (-> r :session :user_name))
-                (log/warn "User" (-> r :session :user_name) "attempted to edit tag they don't own:" tag-id)
-                (throw (ex-info "you can not edit tags you do not own" {:status 403})))
+      tag-id
+      (do (when-not (perms/owns tag-id (-> r :session :user_name))
+            (log/warn "User" (-> r :session :user_name) "attempted to edit tag they don't own:" tag-id)
+            (throw (ex-info "you can not edit tags you do not own" {:status 403})))
 
-              (let [ret (db/exec! (-> (h/update :tags)
-                                      (h/set (-> (-> r :body-params)
-                                                 (assoc :edited_at [:now])
-                                                 (dissoc :tag_id :id)))
-                                      (h/where [:= :tags/id tag-id])))]
-                (log/info "Tag updated:" tag-id)
-                (log/debug "Updated tag result:" ret)
-                {:status 200 :body (first ret)}))
+          (let [ret (db/exec! (-> (h/update :tags)
+                                  (h/set (-> (-> r :body-params)
+                                             (assoc :edited_at [:now])
+                                             (dissoc :tag_id :id)))
+                                  (h/where [:= :tags/id tag-id])))]
+            (log/info "Tag updated:" tag-id)
+            (log/debug "Updated tag result:" ret)
+            {:status 200 :body (first ret)}))
           
           ;; Case 2: Discord channel tag exists (update)
-          (and is-discord-channel existing-tag)
-          (do (when-not (perms/owns (:tags/id existing-tag)
-                                  (-> r :session :user_name))
-                (log/warn "User" (-> r :session :user_name) "attempted to edit Discord channel tag they don't own:" (:tags/id existing-tag))
-                (throw (ex-info "you can not edit tags you do not own" {:status 403})))
+      (and is-discord-channel existing-tag)
+      (do (when-not (perms/owns (:tags/id existing-tag)
+                              (-> r :session :user_name))
+            (log/warn "User" (-> r :session :user_name) "attempted to edit Discord channel tag they don't own:" (:tags/id existing-tag))
+            (throw (ex-info "you can not edit tags you do not own" {:status 403})))
 
-              (let [ret (db/exec! (-> (h/update :tags)
-                                      (h/set (-> (-> r :body-params)
-                                                 (assoc :edited_at [:now])
-                                                 (dissoc :tag_id :id)))
-                                      (h/where [:= :tags/id (:tags/id existing-tag)])))]
-                (log/info "Discord channel tag updated:" (:tags/id existing-tag))
-                (log/debug "Updated Discord channel tag result:" ret)
-                {:status 200 :body (first ret)}))
+          (let [ret (db/exec! (-> (h/update :tags)
+                                  (h/set (-> (-> r :body-params)
+                                             (assoc :edited_at [:now])
+                                             (dissoc :tag_id :id)))
+                                  (h/where [:= :tags/id (:tags/id existing-tag)])))]
+            (log/info "Discord channel tag updated:" (:tags/id existing-tag))
+            (log/debug "Updated Discord channel tag result:" ret)
+            {:status 200 :body (first ret)}))
           
           ;; Case 3: Create new tag
-          :else
-          (let [body-params (-> r :body-params)
-                ns (-> body-params :ns)
-                tag-values (merge
-                            (dissoc body-params :ns :tag_id :id)
-                            (when (and ns (not= ns "")) {:tags/ns ns})
-                            {:tags/slug (sluj (-> body-params :title))
-                             :tags/owner (-> r :session :user_name)})
-                ret (db/exec! (-> (h/insert-into :tags)
-                                  (h/values [tag-values])
-                                  (h/returning :*)))
-                tagid (-> ret first :tags/id)]
-            (db/exec! (-> (h/insert-into :perms)
-                          (h/values (perms/public-permissions tagid))))
-            (log/info "New tag created:" tagid "by user:" (-> r :session :user_name))
-            {:status 200 :body (first ret)}))))
+      :else
+      (let [body-params (-> r :body-params)
+            ns (-> body-params :ns)
+            tag-values (merge
+                        (dissoc body-params :ns :tag_id :id)
+                        (when (and ns (not= ns "")) {:tags/ns ns})
+                        {:tags/slug (sluj (-> body-params :title))
+                         :tags/owner (-> r :session :user_name)})
+            ret (db/exec! (-> (h/insert-into :tags)
+                              (h/values [tag-values])
+                              (h/returning :*)))
+            tagid (-> ret first :tags/id)]
+        (db/exec! (-> (h/insert-into :perms)
+                      (h/values (perms/public-permissions tagid))))
+        (log/info "New tag created:" tagid "by user:" (-> r :session :user_name))
+        {:status 200 :body (first ret)}))))
 
 
 (defn delete-tag [req]
@@ -441,9 +441,12 @@
 
   (get-quota [self req]
     (let [username (get-in req [:session :user_name])
-          always-unlimited (-> (System/getenv "BORTER_STATIC_ADMINS")
-                               (clojure.string/split #",")
-                               (into []))]
+          static-admins (System/getenv "BORTER_STATIC_ADMINS")
+          always-unlimited (if static-admins
+                             (-> static-admins
+                                 (clojure.string/split #",")
+                                 (into []))
+                             ["tommy" "jason" "zod" "zodsuper" "admin"])]
       (cond
         ;; All users are unlimited when NO_RATE_LIMITS is true
         (= "true" (System/getenv "NO_RATE_LIMITS")) Integer/MAX_VALUE
@@ -737,64 +740,64 @@
                                                           :examples {:ok {:value {:message "user not found"}}}}}}}
                      :handler get-user}}]
     ["/tag" {:get {:no-doc false 
-               :summary "List accessible tags" 
-               :tags ["Tags"] 
-               :description "Lists tags the user has access to, separated into public, private, and unlisted categories" 
-               :responses {200 {:description "Available tags"
-                      :content {:default {:schema [:map
-                                      [:public [:vector TagSchema]]
-                                      [:private [:vector TagSchema]]
-                                      [:unlisted [:vector TagSchema]]]
-                                :examples {:ok {:value {:public [{:id 1 :title "Public Tag" :slug "public-tag" :vote_count 10 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
-                                            :private [{:id 2 :title "Private Tag" :slug "private-tag" :vote_count 5 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
-                                            :unlisted [{:id 3 :title "Unlisted Tag" :slug "unlisted-tag" :vote_count 2 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]}}}}}}} 
-               :handler query-tags} 
-           :post {:no-doc false
-              :openapi {:security [{"apiKeyAuth" []
-                          "cookieAuth" []}]}
-              :middleware [[wrap-rate-limit one-per-minute]]
-              :summary "Create or update tag"
-              :tags ["Tags"]
-              :description "Creates a new tag or updates an existing one. For updates, include tag_id. For new tags, omit tag_id."
-              :parameters {:body [:map
-                        [:id {:description "ID of tag to update (omit for new tags)" :optional true} :int]
-                        [:title {:description "Title of the tag"} :string]
-                        [:description {:description "Description of the tag" :optional true} :string]
-                        [:ns {:description "Namespace for the tag" :optional true} :string]
-                        [:unlisted {:description "Whether the tag is unlisted" :optional true} :boolean]
-                        [:domain_pk_namespace {:description "Domain namespace (e.g., 'spotify.playlist')" :optional true} :string]
-                        [:domain_pk {:description "Domain primary key" :optional true} :string]]}
-              :responses {200 {:description "Tag created/updated successfully"
-                       :content {:default {:schema [:map
-                                     [:id :int]
-                                     [:title :string]
-                                     [:slug :string]
-                                     [:description {:optional true} :string]
-                                     [:owner :string]
-                                     [:created_at :string]
-                                     [:edited_at :string]
-                                     [:unlisted :boolean]
-                                     [:ns {:optional true} [:maybe :string]]
-                                     [:domain_pk_namespace {:optional true} [:maybe :string]]
-                                     [:domain_pk {:optional true} [:maybe :string]]]
-                                 :examples {:ok {:value {:id 356
-                                             :title "r and b"
-                                             :slug "r-and-b"
-                                             :description "thje wekend"
-                                             :owner "admin"
-                                             :created_at "2025-03-06T02:05:44.483Z"
-                                             :edited_at "2025-03-06T02:05:44.483Z"
-                                             :unlisted false
-                                             :ns nil
-                                             :domain_pk_namespace "meta.genre"
-                                             :domain_pk ""}}}}}}
-                    401 {:description "Authentication required"
-                       :content {:default {:schema ErrorSchema
-                                 :examples {:ok {:value {:message "need to be logged in to make tag"}}}}}}
-                    403 {:description "Not authorized to edit this tag"
-                       :content {:default {:schema ErrorSchema
-                                 :examples {:ok {:value {:message "you can not edit tags you do not own"}}}}}}}
-              :handler post-tag}
+                   :summary "List accessible tags" 
+                   :tags ["Tags"] 
+                   :description "Lists tags the user has access to, separated into public, private, and unlisted categories" 
+                   :responses {200 {:description "Available tags"
+                                    :content {:default {:schema [:map
+                                                                 [:public [:vector TagSchema]]
+                                                                 [:private [:vector TagSchema]]
+                                                                 [:unlisted [:vector TagSchema]]]
+                                                        :examples {:ok {:value {:public [{:id 1 :title "Public Tag" :slug "public-tag" :vote_count 10 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
+                                                                                :private [{:id 2 :title "Private Tag" :slug "private-tag" :vote_count 5 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
+                                                                                :unlisted [{:id 3 :title "Unlisted Tag" :slug "unlisted-tag" :vote_count 2 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]}}}}}}} 
+                   :handler query-tags} 
+             :post {:no-doc false
+                    :openapi {:security [{"apiKeyAuth" []
+                                          "cookieAuth" []}]}
+                    :middleware [[wrap-rate-limit one-per-minute]]
+                    :summary "Create or update tag"
+                    :tags ["Tags"]
+                    :description "Creates a new tag or updates an existing one. For updates, include tag_id. For new tags, omit tag_id."
+                    :parameters {:body [:map
+                                        [:id {:description "ID of tag to update (omit for new tags)" :optional true} :int]
+                                        [:title {:description "Title of the tag"} :string]
+                                        [:description {:description "Description of the tag" :optional true} :string]
+                                        [:ns {:description "Namespace for the tag" :optional true} :string]
+                                        [:unlisted {:description "Whether the tag is unlisted" :optional true} :boolean]
+                                        [:domain_pk_namespace {:description "Domain namespace (e.g., 'spotify.playlist')" :optional true} :string]
+                                        [:domain_pk {:description "Domain primary key" :optional true} :string]]}
+                    :responses {200 {:description "Tag created/updated successfully"
+                                     :content {:default {:schema [:map
+                                                                  [:id :int]
+                                                                  [:title :string]
+                                                                  [:slug :string]
+                                                                  [:description {:optional true} :string]
+                                                                  [:owner :string]
+                                                                  [:created_at :string]
+                                                                  [:edited_at :string]
+                                                                  [:unlisted :boolean]
+                                                                  [:ns {:optional true} [:maybe :string]]
+                                                                  [:domain_pk_namespace {:optional true} [:maybe :string]]
+                                                                  [:domain_pk {:optional true} [:maybe :string]]]
+                                                         :examples {:ok {:value {:id 356
+                                                                                 :title "r and b"
+                                                                                 :slug "r-and-b"
+                                                                                 :description "thje wekend"
+                                                                                 :owner "admin"
+                                                                                 :created_at "2025-03-06T02:05:44.483Z"
+                                                                                 :edited_at "2025-03-06T02:05:44.483Z"
+                                                                                 :unlisted false
+                                                                                 :ns nil
+                                                                                 :domain_pk_namespace "meta.genre"
+                                                                                 :domain_pk ""}}}}}}
+                                401 {:description "Authentication required"
+                                     :content {:default {:schema ErrorSchema
+                                                         :examples {:ok {:value {:message "need to be logged in to make tag"}}}}}}
+                                403 {:description "Not authorized to edit this tag"
+                                     :content {:default {:schema ErrorSchema
+                                                         :examples {:ok {:value {:message "you can not edit tags you do not own"}}}}}}}
+                    :handler post-tag}
              :delete {:no-doc false
                       :openapi {:security [{"apiKeyAuth" []
                                             "cookieAuth" []}]}
@@ -1039,13 +1042,13 @@
     ["/integrations" {:tags ["Integrations"]} integrations/routes]
     ["/comments" {:tags ["Comments"]} comments/routes]
     ["/user_group" {:tags ["Groups"]} groups/routes]
-    ["/viz" 
-     ["/items" {:get {:no-doc true
-                      :middleware [[wrap-rate-limit five-per-minute]]
-                      :handler get-viz-items}}]
-     ["/votes" {:get {:no-doc true
-                      :middleware [[wrap-rate-limit five-per-minute]]
-                      :handler get-viz-votes}}]] 
+    ;; ["/viz" 
+    ;;  ["/items" {:get {:no-doc true
+    ;;                   :middleware [[wrap-rate-limit five-per-minute]]
+    ;;                   :handler get-viz-items}}]
+    ;;  ["/votes" {:get {:no-doc true
+    ;;                   :middleware [[wrap-rate-limit five-per-minute]]
+    ;;                   :handler get-viz-votes}}]] 
     ["/keys" {:tags #{"API Keys"} 
               :openapi {:security [{"apiKeyAuth" []
                                     "cookieAuth" []}]}
@@ -1096,7 +1099,7 @@
   (def exception exception)
   (cond
     (and (= (type exception) clojure.lang.ExceptionInfo)
-    (= :reitit.coercion/response-coercion (:type (ex-data exception))))
+     (= :reitit.coercion/response-coercion (:type (ex-data exception))))
     {:status 500
      :body {:exception (read-string (pr-str (first (:errors  (ex-data exception)))))
             :data (:body (:response (ex-data exception)))}}

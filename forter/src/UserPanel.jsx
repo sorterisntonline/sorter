@@ -11,7 +11,7 @@ const allUsers = {
   label: "@all",
 };
 const users = new URLSearchParams(window.location.search).get('users');
-export const selected_users = signal(users ? users.split('.').map(user => {
+export const selected_users = signal(users && typeof users === 'string' ? users.split('.').map(user => {
   return { value: user, label: '@' + user };
 }) : [allUsers]);
 

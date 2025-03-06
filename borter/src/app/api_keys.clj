@@ -33,17 +33,28 @@
         uuid-part (str (UUID/randomUUID))]
     (str "sort_" user-hash "_" uuid-part)))
 
+(defn create-api-key-preview
+  "Create a preview of an API key showing first 8 chars and last 4"
+  [api-key]
+  (when api-key
+    (let [length (count api-key)]
+      (if (< length 13)
+        api-key  ;; If key is too short, just return it
+        (str (subs api-key 0 8) "..." (subs api-key (- length 4)))))))
+
 (defn create-api-key-record
   "Create and store a new API key in the database"
   [username key-name]
   (let [api-key (create-api-key username)
-        hashed-key (hash-api-key api-key)]
+        hashed-key (hash-api-key api-key)
+        preview (create-api-key-preview api-key)]
     
-    ;; Insert into database
+    ;; Insert into database - ensure preview is included
     (db/exec! (-> (h/insert-into :api_keys)
                   (h/values [{:user_name username
                               :name key-name
                               :hashed_key hashed-key
+                              :preview preview
                               :created_at [:now]
                               :active true}])))
     
@@ -150,21 +161,28 @@
               :message "API key revoked successfully"}})))
 
 (defn list-api-keys
-  "List all active API keys for a user (names only)"
+  "List all active API keys for a user with previews"
   [req]
   (let [username (-> req :session :user_name)]
     
     (when-not username
       (throw (ex-info "Must be logged in to list API keys" {:status 401})))
     
-    (let [keys (db/exec! (-> (h/select :name :created_at)
+    (let [keys (db/exec! (-> (h/select :name :created_at :preview :last_used_at)
                             (h/from :api_keys)
                             (h/where [:and
                                       [:= :user_name username]
                                       [:= :active true]])))]
       
-      {:status 200
-       :body {:api_keys keys}})))
+      ;; Transform the keys to match the expected schema format
+      (let [formatted-keys (mapv (fn [key]
+                                  {:name (get key :api_keys/name)
+                                   :created_at (str (get key :api_keys/created_at))
+                                   :last_used_at (str (get key :api_keys/last_used_at))
+                                   :preview (or (get key :api_keys/preview) "sort_...")})
+                                keys)]
+        {:status 200
+         :body {:api_keys formatted-keys}}))))
 
 (defn validate-api-key
   "Validate an API key and return the associated username if valid"
@@ -192,18 +210,22 @@
     {:get {:no-doc false
            :summary "List all active API keys for a user"
            :tags ["API Keys"] 
-           :responses {200 {:description "List of active API keys"}
+           :responses {200 {:description "List of active API keys"
+                            :body [:map [:api_keys [:vector [:map 
+                                                             [:name {:json-schema/example "my-key"} string?]
+                                                             [:created_at {:json-schema/example "2024-01-01 12:00:00"} string?]
+                                                             [:last_used_at {:json-schema/example "2024-01-01 12:00:00"} string?]
+                                                             [:preview {:json-schema/example "sort_..."} string?]]]]]}
                        401 {:description "Unauthorized - User not logged in"}}
            :handler list-api-keys}
      :post {:no-doc false
             :summary "Generate a new API key"
             :tags ["API Keys"]
             :parameters {:body [:map 
-                                [:name {:json-schema/example "my-key"} string?]
-                                [:api_key {:json-schema/example "sort_1234567890_1234567890"} string?]]}
+                                [:name {:json-schema/example "my-key"} string?]]}
             :responses {201 {:description "API key generated successfully"
-                             :body [:map [:api_key {:json-schema/example "sort_1234567890_1234567890"} string?
-                                          :name {:json-schema/example "my-key"} string?]]}
+                             :body [:map [:api_key {:json-schema/example "sort_1234567890_1234567890"} string?]
+                                         [:name {:json-schema/example "my-key"} string?]]}
                         400 {:description "Bad request - Missing key name or key with name already exists"
                              :body [:map [:error {:json-schema/example "API key name is required"} string?]]} 
                         401 {:description "Unauthorized - User not logged in"

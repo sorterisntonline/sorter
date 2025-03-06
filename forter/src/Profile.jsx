@@ -44,7 +44,7 @@ const GroupRow = ({ group, users, mutate1 }) => {
             method: "POST",
             credentials: "include",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ group_name: group.user_name, users: selected_users.value.map(u => u.value) }),
+            body: JSON.stringify({ group_name: group.user_name, users: Array.isArray(selected_users.value) ? selected_users.value.map(u => u.value) : [] }),
         });
         if (!r.ok) {
             alert(await r.text())
@@ -89,7 +89,7 @@ const ProfileComponent = () => {
                 method: "POST",
                 credentials: "include",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ group_name: newGroupName, users: selected_users.value.map(u => u.value) }),
+                body: JSON.stringify({ group_name: newGroupName, users: Array.isArray(selected_users.value) ? selected_users.value.map(u => u.value) : [] }),
             });
             if (!r.ok) {
                 const msg = await r.text();

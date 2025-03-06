@@ -14,6 +14,7 @@ import { FrontpageFeed } from "./FrontpageFeed.jsx";
 import { Graph } from "./Graph.jsx";
 import { Leaderboard } from "./Leaderboard.jsx";
 import { Profile } from "./Profile.jsx";
+import APIKeys from "./APIKeys.jsx";
 import { signal } from "@preact/signals-react";
 import { current_session, fetchSession } from "./session";
 import AnnouncementBar, { showAnnouncement } from './components/AnnouncementBar';
@@ -121,6 +122,9 @@ const Root = () => {
               </Route>
               <Route path="/profile">
                 <Profile />
+              </Route>
+              <Route path="/keys">
+                <APIKeys />
               </Route>
               <Route path="/logout">
                 <LogoutRoute />

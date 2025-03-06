@@ -6,7 +6,9 @@ import { handleApiError } from './ErrorHandler';
 
 const buildQueryParams = ({ tagid }) => {
   const tag_id = tagid || (tag.value && tag.value.tag["id"]);
-  const users = selected_users.value.map((user) => user.value).join(".");
+  const users = Array.isArray(selected_users.value) 
+    ? selected_users.value.map((user) => user.value).join(".")
+    : "all";
   const attribute = tag.value && tag.value.selected_attribute;
 
   const url = new URLSearchParams("");

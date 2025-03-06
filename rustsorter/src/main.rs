@@ -35,7 +35,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let app_state = Arc::new(AppState { db: pool.clone() });
 
     // Graceful shutdown handling
-    let (tx, rx) = oneshot::channel();
+    let (tx, rx) = oneshot::channel::<()>();
     let state_clone = Arc::clone(&app_state);
 
     // Start the HTTP server
