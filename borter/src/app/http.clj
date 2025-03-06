@@ -776,49 +776,64 @@
                                                           :examples {:ok {:value {:message "user not found"}}}}}}}
                      :handler get-user}}]
     ["/tag" {:get {:no-doc false 
-                   :summary "List accessible tags" 
-                   :tags ["Tags"] 
-                   :description "Lists tags the user has access to, separated into public, private, and unlisted categories" 
-                   :responses {200 {:description "Available tags"
-                                    :content {:default {:schema [:map
-                                                                  [:public [:vector TagSchema]]
-                                                                  [:private [:vector TagSchema]]
-                                                                  [:unlisted [:vector TagSchema]]]
-                                                        :examples {:ok {:value {:public [{:id 1 :title "Public Tag" :slug "public-tag" :vote_count 10 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
-                                                                                :private [{:id 2 :title "Private Tag" :slug "private-tag" :vote_count 5 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
-                                                                                :unlisted [{:id 3 :title "Unlisted Tag" :slug "unlisted-tag" :vote_count 2 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]}}}}}}} 
-                   :handler query-tags} 
-             :post {:no-doc false
-                    :openapi {:security [{"apiKeyAuth" []
-                                          "cookieAuth" []}]}
-                    :middleware [[wrap-rate-limit one-per-minute]]
-                    :summary "Create or update tag"
-                    :tags ["Tags"]
-                    :description "Creates a new tag or updates an existing one. For updates, include tag_id. For new tags, omit tag_id."
-                    :parameters {:body [:map
-                                        [:id {:description "ID of tag to update (omit for new tags)" :optional true} :int]
-                                        [:title {:description "Title of the tag"} :string]
-                                        [:description {:description "Description of the tag" :optional true} :string]
-                                        [:ns {:description "Namespace for the tag" :optional true} :string]
-                                        [:unlisted {:description "Whether the tag is unlisted" :optional true} :boolean]
-                                        [:domain_pk_namespace {:description "Domain namespace (e.g., 'spotify.playlist')" :optional true} :string]
-                                        [:domain_pk {:description "Domain primary key" :optional true} :string]]}
-                    :responses {200 {:description "Tag created/updated successfully"
-                                     :content {:default {:schema TagSchema
-                                                         :examples {:ok {:value {:id 1
-                                                                                 :title "New Tag"
-                                                                                 :description "A new tag for sorting items"
-                                                                                 :slug "new-tag"
-                                                                                 :ns "example"
-                                                                                 :owner "user1"
-                                                                                 :created_at "2023-01-01T12:00:00Z"}}}}}}
-                                401 {:description "Authentication required"
-                                     :content {:default {:schema ErrorSchema
-                                                         :examples {:ok {:value {:message "need to be logged in to make tag"}}}}}}
-                                403 {:description "Not authorized to edit this tag"
-                                     :content {:default {:schema ErrorSchema
-                                                         :examples {:ok {:value {:message "you can not edit tags you do not own"}}}}}}}
-                    :handler post-tag}
+               :summary "List accessible tags" 
+               :tags ["Tags"] 
+               :description "Lists tags the user has access to, separated into public, private, and unlisted categories" 
+               :responses {200 {:description "Available tags"
+                      :content {:default {:schema [:map
+                                      [:public [:vector TagSchema]]
+                                      [:private [:vector TagSchema]]
+                                      [:unlisted [:vector TagSchema]]]
+                                :examples {:ok {:value {:public [{:id 1 :title "Public Tag" :slug "public-tag" :vote_count 10 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
+                                            :private [{:id 2 :title "Private Tag" :slug "private-tag" :vote_count 5 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
+                                            :unlisted [{:id 3 :title "Unlisted Tag" :slug "unlisted-tag" :vote_count 2 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]}}}}}}} 
+               :handler query-tags} 
+           :post {:no-doc false
+              :openapi {:security [{"apiKeyAuth" []
+                          "cookieAuth" []}]}
+              :middleware [[wrap-rate-limit one-per-minute]]
+              :summary "Create or update tag"
+              :tags ["Tags"]
+              :description "Creates a new tag or updates an existing one. For updates, include tag_id. For new tags, omit tag_id."
+              :parameters {:body [:map
+                        [:id {:description "ID of tag to update (omit for new tags)" :optional true} :int]
+                        [:title {:description "Title of the tag"} :string]
+                        [:description {:description "Description of the tag" :optional true} :string]
+                        [:ns {:description "Namespace for the tag" :optional true} :string]
+                        [:unlisted {:description "Whether the tag is unlisted" :optional true} :boolean]
+                        [:domain_pk_namespace {:description "Domain namespace (e.g., 'spotify.playlist')" :optional true} :string]
+                        [:domain_pk {:description "Domain primary key" :optional true} :string]]}
+              :responses {200 {:description "Tag created/updated successfully"
+                       :content {:default {:schema [:map
+                                     [:id :int]
+                                     [:title :string]
+                                     [:slug :string]
+                                     [:description {:optional true} :string]
+                                     [:owner :string]
+                                     [:created_at :string]
+                                     [:edited_at :string]
+                                     [:unlisted :boolean]
+                                     [:ns {:optional true} [:maybe :string]]
+                                     [:domain_pk_namespace {:optional true} [:maybe :string]]
+                                     [:domain_pk {:optional true} [:maybe :string]]]
+                                 :examples {:ok {:value {:id 356
+                                             :title "r and b"
+                                             :slug "r-and-b"
+                                             :description "thje wekend"
+                                             :owner "admin"
+                                             :created_at "2025-03-06T02:05:44.483Z"
+                                             :edited_at "2025-03-06T02:05:44.483Z"
+                                             :unlisted false
+                                             :ns nil
+                                             :domain_pk_namespace "meta.genre"
+                                             :domain_pk ""}}}}}}
+                    401 {:description "Authentication required"
+                       :content {:default {:schema ErrorSchema
+                                 :examples {:ok {:value {:message "need to be logged in to make tag"}}}}}}
+                    403 {:description "Not authorized to edit this tag"
+                       :content {:default {:schema ErrorSchema
+                                 :examples {:ok {:value {:message "you can not edit tags you do not own"}}}}}}}
+              :handler post-tag}
              :delete {:no-doc false
                       :openapi {:security [{"apiKeyAuth" []
                                             "cookieAuth" []}]}
