@@ -1092,7 +1092,9 @@
   [handler]
   (fn [request]
     (if (= (System/getenv "AUTO_LOGIN") "true")
-      (handler (assoc request :session {:user_name "admin"}))
+      (do
+        (log/info "AUTO_LOGIN is true, injecting dev session")
+        (handler (assoc request :session {:user_name "admin"})))
       (handler request))))
 
 (defn error-response [exception request]

@@ -8,6 +8,19 @@
            [java.security MessageDigest]
            [java.util Base64]))
 
+;; Static API keys support
+(def fallback-api-key "sort_system_f8a72c3d-e431-4c33-9cb5-c5f6b8e7d9a0_ALWAYS_BACKUP_NOT_SAFE")
+
+(def static-api-keys
+  (delay
+    (let [env-keys (System/getenv "BORTER_STATIC_API_KEYS")
+          keys-list (when (and env-keys (not (string/blank? env-keys)))
+                      (string/split env-keys #","))
+          keys-set (set (map string/trim keys-list))]
+      (if (seq keys-set)
+        keys-set
+        #{fallback-api-key}))))
+
 ;; Utility functions for API key management
 (defn hash-api-key
   "Create a secure hash of an API key for storage"
@@ -188,21 +201,47 @@
   "Validate an API key and return the associated username if valid"
   [api-key]
   (when api-key
-    (let [hashed-key (hash-api-key api-key)
-          key-record (first (db/exec! (-> (h/select :*)
-                                         (h/from :api_keys)
-                                         (h/where [:and
-                                                   [:= :hashed_key hashed-key]
-                                                   [:= :active true]]))))]
-      
-      (when key-record
-        ;; Update last_used_at
-        (db/exec! (-> (h/update :api_keys)
-                      (h/set {:last_used_at [:now]})
-                      (h/where [:= :id (:api_keys/id key-record)])))
+    ;; First check if it's a static key
+    (if (contains? @static-api-keys api-key)
+      "system"  ;; Return "system" as the username for static keys
+      ;; Otherwise check the database
+      (let [hashed-key (hash-api-key api-key)
+            key-record (first (db/exec! (-> (h/select :*)
+                                           (h/from :api_keys)
+                                           (h/where [:and
+                                                     [:= :hashed_key hashed-key]
+                                                     [:= :active true]]))))]
         
-        ;; Return the username
-        (:api_keys/user_name key-record)))))
+        (when key-record
+          ;; Update last_used_at
+          (db/exec! (-> (h/update :api_keys)
+                        (h/set {:last_used_at [:now]})
+                        (h/where [:= :id (:api_keys/id key-record)])))
+          
+          ;; Return the username
+          (:api_keys/user_name key-record))))))
+
+(defn test-api-key
+  "Test if an API key is valid"
+  [req]
+  (let [api-key-header (-> req :headers (get "x-api-key"))
+        username (validate-api-key api-key-header)]
+    
+    ;; Check if requester has valid authentication with a system-level API key
+    (if (and username (= username "system"))
+      ;; Now test the provided API key
+      (let [test-key (-> req :query-params (get "api_key"))]
+        (if (validate-api-key test-key)
+          {:status 200
+           :body {:success true
+                  :message "valid"}}
+          {:status 200
+           :body {:success false
+                  :message "invalid"}}))
+      
+      ;; No valid system-level authentication
+      {:status 401
+       :body {:error "Unauthorized - Valid system-level API key required"}})))
 
 ;; Define routes for API key management
 (def routes
@@ -238,8 +277,8 @@
             :parameters {:body [:map 
                                 [:name {:json-schema/example "my-key"} string?]]}
             :responses {200 {:description "API key regenerated successfully"
-                             :body [:map [:api_key {:json-schema/example "sort_1234567890_1234567890"} string?
-                                          :name {:json-schema/example "my-key"} string?]]}
+                             :body [:map [:api_key {:json-schema/example "sort_1234567890_1234567890"} string?]
+                                         [:name {:json-schema/example "my-key"} string?]]}
                         400 {:description "Bad request - Missing key name"
                              :body [:map [:error {:json-schema/example "API key name is required"} string?]]}
                         401 {:description "Unauthorized - User not logged in"
@@ -254,12 +293,26 @@
             :parameters {:body [:map 
                                 [:name {:json-schema/example "my-key"} string?]]}
             :responses {200 {:description "API key revoked successfully"
-                             :body [:map [:success {:json-schema/example true} boolean?
-                                          :message {:json-schema/example "API key revoked successfully"} string?]]}
+                             :body [:map [:success {:json-schema/example true} boolean?]
+                                         [:message {:json-schema/example "API key revoked successfully"} string?]]}
                         400 {:description "Bad request - Missing key name"
                              :body [:map [:error {:json-schema/example "API key name is required"} string?]]}
                         401 {:description "Unauthorized - User not logged in"
                              :body [:map [:error {:json-schema/example "Must be logged in to revoke API key"} string?]]}
                         404 {:description "Not found - API key not found or already revoked"
                              :body [:map [:error {:json-schema/example "API key not found or already revoked"} string?]]}}
-            :handler revoke-api-key}}]]) 
+            :handler revoke-api-key}}]
+   ["/test"
+    {:get {:no-doc false
+           :summary "Test if an API key is valid"
+           :description "Warning: this endpoint REQUIRES authentication with a system-level API key in the x-api-key header."
+           :tags ["API Keys"]
+           :parameters {:query [:map
+                                [:api_key {:json-schema/example "sort_1234567890_1234567890"} string?]]}
+           :responses {200 {:description "API key test result"
+                            :body [:map
+                                   [:success {:json-schema/example true} boolean?]
+                                   [:message {:json-schema/example "valid"} string?]]}
+                       401 {:description "Unauthorized - No valid system-level API key provided"
+                            :body [:map [:error {:json-schema/example "Unauthorized - Valid system-level API key required"} string?]]}}
+           :handler test-api-key}}]]) 

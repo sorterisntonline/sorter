@@ -86,6 +86,8 @@ export const Login = () => {
       
       const responseText = await response.text();
       
+      console.log("login response: ", responseText);
+
       if (!response.ok) {
         if (responseText === "please verify your email before logging in") {
           setNeedsVerification(true);

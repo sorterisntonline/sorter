@@ -29,38 +29,73 @@ export const Register = () => {
       return;
     }
 
-    const response = await fetch("/api/register", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        user_name: username_r, 
-        email: email_r,
-        password: password_r 
-      }),
-    });
-    
-    if (!response.ok) {
-      const msg = await response.text();
-      alert(msg);
-    } else {
-      setShowVerification(true);
+    try {
+      const response = await fetch("/api/register", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          user_name: username_r, 
+          email: email_r,
+          password: password_r 
+        }),
+      });
+      
+      let responseData;
+      try {
+        responseData = await response.json();
+      } catch (e) {
+        const text = await response.text();
+        try {
+          responseData = JSON.parse(text);
+        } catch {
+          responseData = { message: text };
+        }
+      }
+      
+      if (!response.ok) {
+        setError(responseData.message || "Registration failed");
+      } else {
+        setShowVerification(true);
+      }
+    } catch (error) {
+      console.error("Registration error:", error);
+      setError("An unexpected error occurred");
     }
   };
 
   const handleResendVerification = async () => {
-    const response = await fetch("/api/send-confirmation", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: email_r }),
-    });
-    
-    if (!response.ok) {
-      const msg = await response.text();
-      alert(msg);
-    } else {
-      alert("Verification email sent!");
+    try {
+      const response = await fetch("/api/send-confirmation", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          email: email_r,
+          password: password_r 
+        }),
+      });
+      
+      let responseData;
+      try {
+        responseData = await response.json();
+      } catch (e) {
+        const text = await response.text();
+        try {
+          responseData = JSON.parse(text);
+        } catch {
+          responseData = { message: text };
+        }
+      }
+      
+      if (!response.ok) {
+        setError(responseData.message || "Failed to send verification email");
+      } else {
+        setError("Verification email sent!");
+      }
+    } catch (error) {
+      console.error("Verification email error:", error);
+      setError("An unexpected error occurred");
     }
   };
 
@@ -94,6 +129,9 @@ export const Register = () => {
           <p className="text-gray-700 dark:text-gray-300 mb-4">
             We've sent a verification link to {email_r}. Please check your email and click the link to verify your account.
           </p>
+          {error && (
+            <div className="mb-4 text-red-500 text-sm text-center">{error}</div>
+          )}
           <button
             onClick={handleResendVerification}
             className="w-full bg-blue-500 dark:bg-blue-700 text-white p-2 hover:bg-blue-600 dark:hover:bg-blue-800 mt-4"
@@ -112,6 +150,9 @@ export const Register = () => {
         className="bg-gray-100 dark:bg-gray-800 p-6 shadow-md w-80"
       >
         <h2 className="text-2xl mb-4 text-center text-black dark:text-white">register</h2>
+        {error && (
+          <div className="mb-4 text-red-500 text-sm text-center">{error}</div>
+        )}
         <div className="mb-4">
           <input
             className="mt-1 p-2 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-black dark:text-white"

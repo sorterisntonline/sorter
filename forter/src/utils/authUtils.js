@@ -7,11 +7,7 @@ const getBaseUrl = () => {
       return 'https://staging.sorter.social';
     case 'development':
     default:
-      // In development, use the current hostname
-      const protocol = window.location.protocol;
-      const hostname = window.location.hostname;
-      const port = window.location.port;
-      return `${protocol}//${hostname}${port ? ':' + port : ''}`;
+      return 'http://localhost:3000';
   }
 };
 
@@ -48,14 +44,34 @@ export const handleLogout = async () => {
     const response = await fetch("/api/logout", {
       method: "POST",
       credentials: "include",
+      headers: {
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache"
+      }
     });
-    if (!response.ok) {
-      const msg = await response.text();
-      alert(msg);
+    
+    let responseData;
+    try {
+      responseData = await response.json();
+    } catch (e) {
+      const text = await response.text();
+      try {
+        responseData = JSON.parse(text);
+      } catch {
+        responseData = { message: text };
+      }
     }
+    
+    if (!response.ok) {
+      console.error("Logout failed:", responseData.message || "Unknown error");
+    }
+    
+    // Always redirect to home page after logout attempt
     window.location.href = '/';
+    return true;
   } catch (error) {
     console.error("Logout failed:", error);
     window.location.href = '/';
+    return false;
   }
 };

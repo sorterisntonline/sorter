@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
 import "./index.css";
@@ -30,16 +30,29 @@ export const namespace = signal(false);
 
 const LogoutRoute = () => {
   useEffect(() => {
-    handleLogout();
+    const performLogout = async () => {
+      await handleLogout();
+      // Clear the session state after logout
+      current_session.value = false;
+    };
+    
+    performLogout();
   }, []);
 
   return null;
 };
 
 const Root = () => {
+  const [sessionInitialized, setSessionInitialized] = useState(false);
+
   useEffect(() => {
-    fetchSession();
-    initializeTheme();
+    const initializeApp = async () => {
+      await fetchSession();
+      initializeTheme();
+      setSessionInitialized(true);
+    };
+    
+    initializeApp();
   }, []);
 
   const [location] = useLocation();
@@ -47,6 +60,11 @@ const Root = () => {
   
   // Only handle tag chooser here
   const showTagChooser = location == "/" && current_session.value?.user_name;
+
+  // Don't render the app until session is initialized
+  if (!sessionInitialized) {
+    return <div className="loading-container">Loading...</div>;
+  }
 
   return (
     <React.StrictMode>
