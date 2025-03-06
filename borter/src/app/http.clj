@@ -1090,6 +1090,11 @@
                                     "cookieAuth" []}]}
               :middleware [[wrap-rate-limit five-per-minute]]} 
      api-keys/routes]
+    ["/docs"
+     {:get {:no-doc true
+            :handler (fn [_] {:status 302
+                              :headers {"Location" "/api/docs/"}
+                              :body ""})}}]
     ["/docs/*"
      {:get {:no-doc true
             :handler (swagger-ui/create-swagger-ui-handler
@@ -1130,7 +1135,7 @@
   (def exception exception)
   (cond
     (and (= (type exception) clojure.lang.ExceptionInfo)
-         (= :reitit.coercion/response-coercion (:type (ex-data exception))))
+    (= :reitit.coercion/response-coercion (:type (ex-data exception))))
     {:status 500
      :body {:exception (read-string (pr-str (first (:errors  (ex-data exception)))))
             :data (:body (:response (ex-data exception)))}}
