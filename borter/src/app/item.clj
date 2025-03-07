@@ -135,9 +135,9 @@
                           (h/values [item])
                           (h/returning :*)
                           (h/on-conflict :domain_pk :domain_pk_namespace)
-                          (h/do-update-set {:domain_pk (:domain_pk item)} )))
+                          (h/do-update-set {:domain_pk (:domain_pk item)})))
         
-        itemid (-> ret first :items/id )
+        itemid (-> ret first :items/id)
         tagids [(-> r :body-params :tag_id)]]
 
     "add item to items_in_tags"
@@ -161,4 +161,4 @@
                            (extract-tiktok-code)
                            (extract-spotify-code)
                            (extract-twitter-code)))
-                (h/where [:= :items/id (-> r :body-params :id) ]))))
+                (h/where [:= :items/id (-> r :body-params :id)]))))

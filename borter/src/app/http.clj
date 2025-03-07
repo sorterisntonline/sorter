@@ -619,9 +619,12 @@
   [:map
    [:id :int]
    [:title :string]
-   [:description {:optional true} :string]
+   [:slug :string]
+   [:body {:optional true} :string]
+   [:url {:optional true} :string]
    [:owner :string]
    [:created_at :string]
+   [:edited_at {:optional true} :string]
    [:domain_pk_namespace {:optional true} :string]
    [:domain_pk {:optional true} :string]])
 
@@ -823,7 +826,7 @@
                                                                   :examples {:ok {:value {:namespaces ["music" "movies" "books"]}}}}}}} 
                              :handler get-namespaces}}]
     ["/tag/exists" {:get {:no-doc false
-                          :summary "Check if tag exists by title"
+                          :summary "Check if tag exists by title and optionally namespace"
                           :tags ["Tags"]
                           :description "Checks if a tag with given title exists"
                           :parameters {:query [:map
@@ -859,16 +862,24 @@
                            :handler tag-exists-check}}]
     ["/tag/page" {:get {:no-doc false
                         :tags ["Tags"]
+                        :summary "Get tag info"
+                        :description "Get the info for a tag"
                         :handler tag-info-request}}]
     ["/tag/page2" {:get {:no-doc false
                          :tags ["Tags"]
+                         :summary "Get tag info"
+                         :description "Get the info for a tag"
                          :handler tag-info-request2}}]
     ["/tag/permissions" {:get {:no-doc false
                                :tags ["Tags"]
+                               :summary "Get tag permissions"
+                               :description "Get the permissions for a tag"
                                :handler perms/get-perms}
                          :post {:no-doc false
                                 :tags ["Tags"]
                                 :middleware [[wrap-rate-limit one-per-minute]]
+                                :summary "Update tag permissions"
+                                :description "Update the permissions for a tag"
                                 :handler perms/post-perms}}]
     ["/vote" {:post {:no-doc false
                      :openapi {:security [{"apiKeyAuth" []
@@ -918,16 +929,19 @@
                      :tags ["Items"]
                      :description "Creates a new item or updates an existing one"
                      :parameters {:body [:map
-                                         [:id {:description "ID of item to update (omit for new items)" :optional true} :int]
-                                         [:title {:description "Title of the item"} :string]
-                                         [:description {:description "Description of the item" :optional true} :string]
-                                         [:tag_id {:description "ID of the tag to add this item to"} :int]
-                                         [:domain_pk_namespace {:description "Domain namespace" :optional true} :string]
-                                         [:domain_pk {:description "Domain primary key" :optional true} :string]]}
+                                         [:id {:description "ID of item to update (omit for new items)" :optional true :jsonschema/example 123} :int]
+                                         [:title {:description "Title of the item" :jsonschema/example "My Awesome Item"} :string]
+                                         [:slug {:description "Slug of the item" :optional true :jsonschema/example "my-awesome-item"} :string]
+                                         [:body {:description "Body of the item, can be markdown, will render images & code blocks" :optional true :jsonschema/example "This is the content of my item with **markdown** support."} :string]
+                                         [:url {:description "URL of the item" :optional true :jsonschema/example "https://example.com/resource"} :string]
+                                         [:tag_id {:description "ID of the tag to add this item to" :jsonschema/example 42} :int]
+                                         [:domain_pk_namespace {:description "Domain namespace. If set to IMG, manual forced image rendering will be used for the URL." :optional true :jsonschema/example "IMG"} :string]
+                                         [:domain_pk {:description "Domain primary key -- ie for spotify, the playlist id" :optional true :jsonschema/example "item-unique-id-123"} :string]]}
                      :responses {200 {:description "Item created/updated"
                                       :content {:default {:schema ItemSchema
                                                           :examples {:ok {:value {:id 1
                                                                                   :title "New Item"
+                                                                                  :body ""
                                                                                   :description "An item description"
                                                                                   :owner "user1"
                                                                                   :created_at "2023-01-01T12:00:00Z"}}}}}}
@@ -971,7 +985,7 @@
                                                               :examples {:ok {:value {:message "Username already taken"}}}}}}}}
                   :handler login/handle-register}]
     ["/login" {:post {:no-doc false
-                      :summary "Login"
+                      :summary "Login user"
                       :tags ["Authentication"]
                       :description "Authenticates user by username/email and password"
                       :parameters {:body [:map
@@ -998,9 +1012,9 @@
 
     ["/logout" {:post {:no-doc false
                        :openapi {:security [{"cookieAuth" []}]}
-                       :summary "Logout"
+                       :summary "Logout user"
                        :tags ["Authentication"]
-                       :description "Ends the current session"
+                       :description "Ends the current session for user"
                        :responses {200 {:description "Logged out successfully"
                                         :content {:default {:schema [:map [:success :boolean]]
                                                             :examples {:ok {:value {:success true}}}}}}}
@@ -1008,27 +1022,37 @@
 
     ["/send-confirmation" {:post {:no-doc false
                                   :openapi {:security [{"cookieAuth" []}]}
+                                  :summary "send/resend verification email" 
                                   :tags ["Authentication"]
+                                  :description "Sends a verification email to the user's email address to confirm their email address / finish registration"
                                   :middleware [[wrap-rate-limit three-per-five-minutes]]
                                   :handler login/handle-resend-verification}}]
     ["/verify" {:get {:no-doc false
                       :openapi {:security [{"cookieAuth" []}]}
                       :tags ["Authentication"]
+                      :summary "Verify email"
+                      :description "Verifies the user's email address"
                       :middleware [[wrap-rate-limit five-per-minute]]
                       :handler login/handle-verify-email}}]
     ["/update-email" {:post {:no-doc false
                              :openapi {:security [{"cookieAuth" []}]}
                              :tags ["Authentication"]
+                             :summary "Update email"
+                             :description "Updates the user's email address"
                              :middleware [[wrap-rate-limit three-per-five-minutes]]
                              :handler login/handle-update-email}}]
     ["/forgot-password" {:post {:no-doc false
                                 :openapi {:security [{"cookieAuth" []}]}
                                 :tags ["Authentication"]
+                                :summary "Forgot password"
+                                :description "Sends a password reset email to the user's email address"
                                 :middleware [[wrap-rate-limit three-per-five-minutes]]
                                 :handler login/handle-forgot-password}}]
     ["/reset-password" {:post {:no-doc false
                                :openapi {:security [{"cookieAuth" []}]}
                                :tags ["Authentication"]
+                               :summary "Reset password"
+                               :description "Resets the user's password"
                                :middleware [[wrap-rate-limit three-per-five-minutes]]
                                :handler login/handle-reset-password}}]
 
