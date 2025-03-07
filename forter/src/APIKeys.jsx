@@ -215,7 +215,16 @@ const APIKeys = () => {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
-      <h1 className="text-2xl font-bold mb-6 dark:text-white">API Keys</h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold dark:text-white">API Keys</h1>
+        <button
+          onClick={() => setShowModal(true)}
+          className="bg-blue-500 hover:bg-blue-600 text-white w-8 h-8 rounded-full flex items-center justify-center"
+          title="Create New API Key"
+        >
+          <span className="text-xl">+</span>
+        </button>
+      </div>
       
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
@@ -245,13 +254,6 @@ const APIKeys = () => {
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
           <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
             <h2 className="text-lg font-medium dark:text-white">Your API Keys</h2>
-            <button
-              onClick={() => setShowModal(true)}
-              className="bg-blue-500 hover:bg-blue-600 text-white w-8 h-8 rounded-full flex items-center justify-center"
-              title="Create New API Key"
-            >
-              <span className="text-xl">+</span>
-            </button>
           </div>
           
           <ul className="divide-y divide-gray-200 dark:divide-gray-700">
