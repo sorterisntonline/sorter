@@ -3,7 +3,8 @@
   (:require [app.database :as db]
             [honey.sql.helpers :as h]
             [app.permissions :as perms]
-            [sluj.core :refer [sluj]]))
+            [sluj.core :refer [sluj]]
+            [app.http :as http]))
 
 (defn find-existing-vote [userid fst snd attr]
   (db/exec! (-> (h/select :*)
@@ -69,9 +70,15 @@
         tag-param (-> r :query-params (get "tag"))
         attribute-param (-> r :query-params (get "attribute"))
         until-param (-> r :query-params (get "until"))
+        user-param (-> r :query-params (get "user"))
+        users-param (-> r :query-params (get "users"))
+        
+        ;; Ensure only one of 'user' or 'users' is used
+        _ (when (and user-param users-param)
+            (throw (ex-info "Cannot use 'user' and 'users' parameters simultaneously" {:status 400})))
         
         ;; Handle both tag_id and tag_slug cases
-        tag-info (if (re-matches #"^\d+$" tag-param)
+        tag-info (if (re-matches #"^\\d+$" tag-param)
                    ;; It's a numeric ID
                    (first (db/exec! (-> (h/select :*)
                                         (h/from :tags)
@@ -94,7 +101,7 @@
     ;; Handle attribute parameter
     (let [attribute-condition 
           (when attribute-param
-            (if (re-matches #"^\d+$" attribute-param)
+            (if (re-matches #"^\\d+$" attribute-param)
               ;; It's a numeric ID
               [:= :votes/attribute (Integer/parseInt attribute-param)]
               ;; It's a title
@@ -109,6 +116,16 @@
           (when until-param
             [:< :votes/created_at until-param])
           
+          ;; Handle user parameter
+          user-condition
+          (when user-param
+            [:= :votes/owner user-param])
+          
+          ;; Handle users parameter
+          users-condition
+          (when users-param
+            [:in :votes/owner (clojure.string/split users-param #",")])
+          
           ;; Build the items subquery to get items in the tag
           items-in-tag-subquery
           (-> (h/select :items_in_tags/item_id)
@@ -122,7 +139,9 @@
              [:in :votes/left_item_id items-in-tag-subquery]
              [:in :votes/right_item_id items-in-tag-subquery]]]
            (when attribute-condition [attribute-condition])
-           (when until-condition [until-condition]))
+           (when until-condition [until-condition])
+           (when user-condition [user-condition])
+           (when users-condition [users-condition]))
           
           ;; Get the votes
           votes (db/exec! (-> (h/select :*)
@@ -133,6 +152,22 @@
       
       {:status 200
        :body {:votes votes}})))
+
+(defn vote-delete [r]
+  (let [admin-users (http/get-admin-users)
+        username (-> r :session :user_name)
+        vote-owner (-> (db/exec! (-> (h/select :owner) 
+                                     (h/from :votes)
+                                     (h/where [:= :votes/id (-> r :body-params :vote_id)])))
+                       first 
+                       :votes/owner)]
+    (when-not (or (and admin-users (contains? admin-users username))
+                  (= username vote-owner))
+      (throw (ex-info "must own vote" {:status 401}))))
+
+  (db/exec! (-> (h/delete-from :votes)
+                (h/where [:= :votes/id (-> r :body-params :vote_id)])))
+  {:status 200 :body {:ok true}})
 
 (defn attribute-post [r]
   (let [userid (-> r :session :user_name)]

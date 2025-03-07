@@ -295,103 +295,6 @@
                (assoc existing-tag :exists true)
                {:exists false})})))
 
-(defn vote-delete [r]
-  (let [admin-users (get-admin-users)
-        username (-> r :session :user_name)
-        vote-owner (-> (db/exec! (-> (h/select :owner) 
-                                     (h/from :votes)
-                                     (h/where [:= :votes/id (-> r :body-params :vote_id)])))
-                       first 
-                       :votes/owner)]
-    (when-not (or (and admin-users (contains? admin-users username))
-                  (= username vote-owner))
-      (throw (ex-info "must own vote" {:status 401}))))
-
-  (db/exec! (-> (h/delete-from :votes)
-                (h/where [:= :votes/id (-> r :body-params :vote_id)])))
-  {:status 200 :body {:ok true}})
-
-
-(defn item-owner [id] (-> {:select [:owner] :from :items :where [:= :items/id id]}
-                          db/exec! first :items/owner))
-(defn item-post [req]
-  (let [username (-> req :session :user_name)
-        tagids [(-> req :body-params :tag_id)]
-        admin-users (get-admin-users)
-        is-admin (and admin-users (contains? admin-users username))]
-
-    {:status 200 :body (if (-> req :body-params :id)
-                         (do
-                           (when-not (or is-admin
-                                         (= (item-owner (-> req :body-params :id)) username))
-                             (throw (ex-info "must own item to update it" {:status 403})))
-
-                           (item/update-item req))
-                         (item/create-item req))}))
-
-(defn item-m-get [r]
-  (let [itemid (-> r :query-params (get "item_id"))]
-    (if (= -1 itemid)
-      {:status 200 :body {:membership [] :skips []}}
-      {:status 200 :body (let [itemid (Integer/parseInt itemid)]
-                           {:membership
-                            (db/exec! (-> (h/select :*)
-                                          (h/from :items_in_tags)
-                                          (h/where [:= :item_id itemid]) (h/join :tags [:= :items_in_tags.tag_id :tags.id])))
-                            :skips
-                            (db/exec! (-> (h/select :*)
-                                          (h/from :skipped)
-                                          (h/where [:and
-                                                    [:= :item_id itemid]
-                                                    [:= :owner (-> r :session :user_name)]])))})})))
-
-(defn item-m-delete [r]
-  (let [admin-users (get-admin-users)
-        username (-> r :session :user_name)
-        item-owner (-> (db/exec! (-> (h/select :owner) 
-                                     (h/from :items)
-                                     (h/where [:= :items/id (-> r :body-params :item_id)])))
-                       first 
-                       :items/owner)]
-    (when-not (or (and admin-users (contains? admin-users username))
-                  (= username item-owner))
-      (throw (ex-info "must own item to remove it from tag" {:status 401}))))
-
-  (db/exec! (-> (h/delete-from :items_in_Tags)
-                (h/where [:and
-                          [:= :item_id (-> r :body-params :item_id)]
-                          [:= :tag_id (-> r :body-params :tag_id)]])))
-  {:status 200 :body {:ok true}})
-
-(defn item-m-post [req]
-  ;; TODO change so that you just need add permission on that tag?
-  (when-not (perms/can-tag (-> req :body-params :tag_id) "add" (-> req :session :user_name))
-    (throw (ex-info "must have add permission on target tag" {:status 401})))
-
-  (db/exec! (-> (h/insert-into :items_in_tags)
-                (h/values [(-> req :body-params)])))
-  {:status 200 :body {:ok true}})
-
-(defn item-skip [req]
-  (when-not (-> req :session :user_name)
-    (throw (ex-info "must be logged in to skip" {:status 401})))
-
-  (db/exec! {:insert-into :skipped
-             :values [{:owner (-> req :session :user_name)
-                       :item_id (-> req :body-params :item_id)}]})
-
-  {:status 200 :body {:ok true}})
-
-(defn item-skip-delete [req]
-  (when-not (-> req :session :user_name)
-    (throw (ex-info "must be logged in to skip" {:status 401})))
-
-  (db/exec! (-> (h/delete-from :skipped)
-                (h/where [:and
-                          [:= :item_id (-> req :body-params :item_id)]
-                          [:= :owner (-> req :session :user_name)]])))
-  {:status 200 :body {:ok true}})
-
 (defn wrap-request-logging [handler]
   (fn [request]
     (log/info "Request:" (:request-method request) (:uri request))
@@ -928,8 +831,8 @@
                                                             :examples {:ok {:value {:ok true}}}}}}
                                    401 {:description "Not authorized to delete this vote"
                                         :content {:default {:schema ErrorSchema
-                                                            :examples {:ok {:value {:message "must own vote"}}}}}}} 
-                       :handler vote-delete}
+                                                            :examples {:ok {:value {:message "must own vote"}}}}}}}
+                       :handler vote/vote-delete}
               :get {:no-doc false
                     :openapi {:security [{"apiKeyAuth" []
                                           "cookieAuth" []}]}
@@ -939,6 +842,8 @@
                     :parameters {:query [:map
                                          [:tag {:description "Tag ID or slug to get votes for"} :string]
                                          [:attribute {:description "Optional attribute ID or title to filter by" :optional true} :string]
+                                         [:user {:description "Optional username to filter votes by" :optional true} :string]
+                                         [:users {:description "Optional list of usernames to filter votes by, comma separated" :optional true} :string]
                                          [:until {:description "Optional timestamp to filter votes up until (ISO format)" :optional true} :string]]}
                     :responses {200 {:description "Votes retrieved"
                                      :content {:default {:schema [:map
@@ -1034,7 +939,7 @@
                                  403 {:description "Not authorized to update this item"
                                       :content {:default {:schema ErrorSchema
                                                           :examples {:ok {:value {:message "must own item to update it"}}}}}}}}
-              :handler item-post}]
+              :handler item/item-post}]
     ["/item/exists" {:get {:no-doc false
                            :summary "Check if item exists by title and optionally tag_id"
                            :tags ["Items"]
@@ -1080,19 +985,19 @@
                             :handler item/item-exists-check}}]
     ["/item/membership" {:get {:no-doc false
                                :tags ["Items"]
-                               :handler item-m-get}
+                               :handler item/item-m-get}
                          :delete {:no-doc false
                                   :tags ["Items"]
-                                  :handler item-m-delete}
+                                  :handler item/item-m-delete}
                          :post {:no-doc false
                                 :tags ["Items"]
-                                :handler item-m-post}}]
+                                :handler item/item-m-post}}]
     ["/item/skip" {:post {:no-doc false
                           :tags ["Items"]
-                          :handler item-skip}
+                          :handler item/item-skip}
                    :delete {:no-doc false
                             :tags ["Items"]
-                            :handler item-skip-delete}}]
+                            :handler item/item-skip-delete}}]
     ["/register" {:post {:no-doc false
                          :summary "Register user"
                          :tags ["Authentication"]
