@@ -253,7 +253,10 @@
 
 (defn tag-slug-check [r]
   (let [title (-> r :query-params (get "title"))
-        ns (sluj (or (-> r :query-params (get "ns")) ""))
+        ;; Prefer 'namespace' over 'ns' if both are provided
+        ns (sluj (or (-> r :query-params (get "namespace"))
+                     (-> r :query-params (get "ns"))
+                     ""))
         slug (sluj title)
         existing-tag (first (db/exec! {:select :*
                                        :from :tags
@@ -269,7 +272,10 @@
 (defn tag-exists-check [r]
   (let [body (:body-params r)
         title (:title body)
-        ns (sluj (or (:ns body) ""))
+        ;; Prefer 'namespace' over 'ns' if both are provided
+        ns (sluj (or (:namespace body)
+                     (:ns body)
+                     ""))
         domain-pk-ns (:domain_pk_namespace body)
         domain-pk (:domain_pk body)
         
@@ -682,7 +688,8 @@
                                         [:id {:description "ID of tag to update (omit for new tags)" :optional true} :int]
                                         [:title {:description "Title of the tag"} :string]
                                         [:description {:description "Description of the tag" :optional true} :string]
-                                        [:ns {:description "Namespace for the tag" :optional true} :string]
+                                        [:ns {:description "(Deprecated - use namespace instead) Namespace for the tag" :optional true} :string]
+                                        [:namespace {:description "Namespace for the tag" :optional true} :string]
                                         [:unlisted {:description "Whether the tag is unlisted" :optional true} :boolean]
                                         [:domain_pk_namespace {:description "Domain namespace (e.g., 'spotify.playlist')" :optional true} :string]
                                         [:domain_pk {:description "Domain primary key" :optional true} :string]]}
@@ -747,7 +754,8 @@
                           :description "Checks if a tag with given title exists"
                           :parameters {:query [:map
                                                [:title {:description "Title to check"} :string]
-                                               [:ns {:description "Namespace to check in" :optional true} :string]]}
+                                               [:ns {:description "Namespace to check in (deprecated, use namespace instead)" :optional true} :string]
+                                               [:namespace {:description "Namespace to check in" :optional true} :string]]}
                           :responses {200 {:description "Existence check results"
                                            :content {:default {:schema [:map
                                                                         [:slug :string]
@@ -763,7 +771,8 @@
                            :description "Checks if a tag exists by various identifiers"
                            :parameters {:body [:map
                                                [:title {:description "Title to check" :optional true} :string]
-                                               [:ns {:description "Namespace to check in" :optional true} :string]
+                                               [:ns {:description "Namespace to check in (deprecated, use namespace instead)" :optional true} :string]
+                                               [:namespace {:description "Namespace to check in" :optional true} :string]
                                                [:domain_pk_namespace {:description "Domain namespace" :optional true} :string]
                                                [:domain_pk {:description "Domain primary key" :optional true} :string]]}
                            :responses {200 {:description "Existence check results"
@@ -778,10 +787,11 @@
                            :handler tag-exists-check}}]
     ["/tag/page" {:get {:no-doc false
                         :tags ["Tags"]
-                        :summary "Get tag info"
-                        :description "Get the info for a tag"
+                        :summary "Request rankings from rustsorter"
+                        :description "Passes your request on to rustsorter, which does... something"
                         :handler tag-info-request}}]
     ["/tag/page2" {:get {:no-doc false
+                         :openapi {:deprecated true}
                          :tags ["Tags"]
                          :summary "Get tag info"
                          :description "Get the info for a tag"

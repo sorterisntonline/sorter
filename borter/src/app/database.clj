@@ -129,7 +129,8 @@
   ;; (exec! {:delete-from :perms :where [:= :tag_id 9]})
   (migratus/create (migratus-config) "add-token-expiration")
   (migratus/create (migratus-config) "add-discord-id-to-users")
-  (migratus/create (migratus-config) "add-api-key-table"))
+  (migratus/create (migratus-config) "add-api-key-table")
+  (migratus/create (migratus-config) "ns-to-namespace-in-tag-table"))
   ;; (exec! {:delete-from :tags :where [:= :id 9]})
   
 
