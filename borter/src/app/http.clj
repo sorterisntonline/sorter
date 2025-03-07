@@ -929,7 +929,34 @@
                                    401 {:description "Not authorized to delete this vote"
                                         :content {:default {:schema ErrorSchema
                                                             :examples {:ok {:value {:message "must own vote"}}}}}}} 
-                       :handler vote-delete}}]
+                       :handler vote-delete}
+              :get {:no-doc false
+                    :openapi {:security [{"apiKeyAuth" []
+                                          "cookieAuth" []}]}
+                    :summary "Get votes for a tag"
+                    :tags ["Votes"]
+                    :description "Retrieves votes for items in a specific tag. User must have view permission for the tag."
+                    :parameters {:query [:map
+                                         [:tag {:description "Tag ID or slug to get votes for"} :string]
+                                         [:attribute {:description "Optional attribute ID or title to filter by" :optional true} :string]
+                                         [:until {:description "Optional timestamp to filter votes up until (ISO format)" :optional true} :string]]}
+                    :responses {200 {:description "Votes retrieved"
+                                     :content {:default {:schema [:map
+                                                                  [:votes [:vector VoteSchema]]]
+                                                         :examples {:ok {:value {:votes [{:id 1
+                                                                                          :left_item_id 1
+                                                                                          :right_item_id 2
+                                                                                          :magnitude 3
+                                                                                          :owner "user1"
+                                                                                          :created_at "2023-01-01T12:00:00Z"
+                                                                                          :attribute 1}]}}}}}}
+                                404 {:description "Tag not found"
+                                     :content {:default {:schema ErrorSchema
+                                                         :examples {:ok {:value {:message "tag not found"}}}}}}
+                                403 {:description "Not authorized to view this tag"
+                                     :content {:default {:schema ErrorSchema
+                                                         :examples {:ok {:value {:message "not authorized to view this tag"}}}}}}}
+                    :handler vote/vote-get}}]
     ["/attribute" {:post {:no-doc false
                           :openapi {:security [{"apiKeyAuth" []
                                                 "cookieAuth" []}]}

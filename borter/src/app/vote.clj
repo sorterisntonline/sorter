@@ -64,6 +64,76 @@
 
     {:status 200 :body {:ok true}}))
 
+(defn vote-get [r]
+  (let [userid (-> r :session :user_name)
+        tag-param (-> r :query-params (get "tag"))
+        attribute-param (-> r :query-params (get "attribute"))
+        until-param (-> r :query-params (get "until"))
+        
+        ;; Handle both tag_id and tag_slug cases
+        tag-info (if (re-matches #"^\d+$" tag-param)
+                   ;; It's a numeric ID
+                   (first (db/exec! (-> (h/select :*)
+                                        (h/from :tags)
+                                        (h/where [:= :tags/id (Integer/parseInt tag-param)]))))
+                   ;; It's a slug
+                   (first (db/exec! (-> (h/select :*)
+                                        (h/from :tags)
+                                        (h/where [:= :tags/slug tag-param])))))
+        
+        tag-id (:tags/id tag-info)]
+    
+    ;; Check if tag exists
+    (when (nil? tag-id)
+      (throw (ex-info "tag not found" {:status 404})))
+    
+    ;; Check permissions
+    (when-not (perms/can-tag tag-id "view" userid)
+      (throw (ex-info "not authorized to view this tag" {:status 403})))
+    
+    ;; Handle attribute parameter
+    (let [attribute-condition 
+          (when attribute-param
+            (if (re-matches #"^\d+$" attribute-param)
+              ;; It's a numeric ID
+              [:= :votes/attribute (Integer/parseInt attribute-param)]
+              ;; It's a title
+              (let [attr (first (db/exec! (-> (h/select :id)
+                                              (h/from :attributes)
+                                              (h/where [:= :attributes/title attribute-param]))))]
+                (when attr
+                  [:= :votes/attribute (:attributes/id attr)]))))
+          
+          ;; Handle until timestamp
+          until-condition
+          (when until-param
+            [:< :votes/created_at until-param])
+          
+          ;; Build the items subquery to get items in the tag
+          items-in-tag-subquery
+          (-> (h/select :items_in_tags/item_id)
+              (h/from :items_in_tags)
+              (h/where [:= :items_in_tags/tag_id tag-id]))
+          
+          ;; Build the WHERE conditions
+          where-conditions
+          (concat 
+           [[:or
+             [:in :votes/left_item_id items-in-tag-subquery]
+             [:in :votes/right_item_id items-in-tag-subquery]]]
+           (when attribute-condition [attribute-condition])
+           (when until-condition [until-condition]))
+          
+          ;; Get the votes
+          votes (db/exec! (-> (h/select :*)
+                              (h/from :votes)
+                              (h/where (if (= 1 (count where-conditions))
+                                         (first where-conditions)
+                                         (into [:and] where-conditions)))))]
+      
+      {:status 200
+       :body {:votes votes}})))
+
 (defn attribute-post [r]
   (let [userid (-> r :session :user_name)]
     
