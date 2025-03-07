@@ -84,18 +84,19 @@ export const Login = () => {
         body: JSON.stringify({ user_name: username, password: password }),
       });
       
-      const responseText = await response.text();
+      const responseData = await response.json();
+      const errorMessage = responseData.message || "Unknown error";
       
-      console.log("login response: ", responseText);
+      console.log("login response: ", responseData);
 
       if (!response.ok) {
-        if (responseText === "please verify your email before logging in") {
+        if (errorMessage === "please verify your email before logging in") {
           setNeedsVerification(true);
           setUserEmail(username);
-        } else if (responseText === "please set your email address") {
+        } else if (errorMessage === "please set your email address") {
           setNeedsEmail(true);
         } else {
-          setError(responseText);
+          setError(errorMessage);
           setShake(true);
           setTimeout(() => setShake(false), 500);
         }
@@ -103,6 +104,11 @@ export const Login = () => {
         await fetchSession();
         handleAuthReturn();
       }
+    } catch (error) {
+      console.error("Login error:", error);
+      setError("Failed to process login request");
+      setShake(true);
+      setTimeout(() => setShake(false), 500);
     } finally {
       setIsLoading(false);
     }
