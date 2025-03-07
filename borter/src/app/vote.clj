@@ -63,3 +63,32 @@
                                      (dissoc :tag_id))])))))
 
     {:status 200 :body {:ok true}}))
+
+(defn attribute-post [r]
+  (let [userid (-> r :session :user_name)]
+    
+    (when (nil? userid)
+      (throw (ex-info "need to be logged in to create attribute" {:status 401})))
+    
+    (let [title (-> r :body-params :title)
+          description (or (-> r :body-params :description) "")]
+      
+      ;; Check if attribute with same title already exists
+      (when (not-empty (db/exec! (-> {:select :id
+                                      :where [:= :title (sluj title)]
+                                      :from :attributes})))
+        (throw (ex-info "attribute with this title already exists" {:status 400})))
+      
+      ;; Create the new attribute
+      (let [result (first (db/exec! (-> (h/insert-into :attributes)
+                                        (h/values [{:owner userid
+                                                    :title (sluj title)
+                                                    :description description}])
+                                        (h/returning :*))))]
+        
+        {:status 200 :body result}))))
+(defn attribute-get [r]
+  (let [query (-> (h/select :*)
+                  (h/from :attributes))]
+    {:status 200
+     :body {:attributes (db/exec! query)}}))

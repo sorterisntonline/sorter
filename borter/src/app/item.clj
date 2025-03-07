@@ -162,3 +162,104 @@
                            (extract-spotify-code)
                            (extract-twitter-code)))
                 (h/where [:= :items/id (-> r :body-params :id)]))))
+
+(defn item-slug-check [r]
+  (let [title (-> r :query-params (get "title"))
+        tag-id (some-> (-> r :query-params (get "tag_id")) Integer/parseInt)
+        slug (sluj title)
+        
+        ;; Check if item exists by title/slug
+        existing-item (first (db/exec! {:select :*
+                                        :from :items
+                                        :where [:= :items/slug slug]}))]
+    
+    ;; If we have a tag_id, also check if the item is in that tag
+    (let [item-in-tag (when (and existing-item tag-id)
+                        (not-empty (db/exec! {:select :*
+                                              :from :items_in_tags
+                                              :where [:and
+                                                      [:= :item_id (:items/id existing-item)]
+                                                      [:= :tag_id tag-id]]})))]
+      
+      {:status 200 
+       :body (cond
+               ;; Item exists and is in the specified tag
+               (and existing-item tag-id item-in-tag)
+               (assoc existing-item 
+                      :exists true
+                      :in_tag true)
+               
+               ;; Item exists but is not in the specified tag
+               (and existing-item tag-id)
+               (assoc existing-item
+                      :exists true
+                      :in_tag false)
+               
+               ;; Item exists (no tag check requested)
+               existing-item
+               (assoc existing-item
+                      :exists true)
+               
+               ;; Item doesn't exist
+               :else
+               {:slug slug
+                :exists false})})))
+
+(defn item-exists-check [r]
+  (let [body (:body-params r)
+        title (:title body)
+        tag-id (:tag_id body)
+        domain-pk-ns (:domain_pk_namespace body)
+        domain-pk (:domain_pk body)
+        
+        ;; Build query based on parameters
+        query (cond
+                ;; Use title if available
+                title
+                {:select :*
+                 :from :items
+                 :where [:= :items/slug (sluj title)]}
+                
+                ;; Use domain identifiers if no title
+                (and domain-pk-ns domain-pk)
+                {:select :*
+                 :from :items
+                 :where [:and
+                         [:= :items/domain_pk_namespace domain-pk-ns]
+                         [:= :items/domain_pk domain-pk]]}
+                
+                :else
+                (throw (ex-info "Either title or domain_pk_namespace+domain_pk are required" {:status 400})))]
+        
+    (let [existing-item (first (db/exec! query))
+          
+          ;; If we have a tag_id, also check if the item is in that tag
+          item-in-tag (when (and existing-item tag-id)
+                        (not-empty (db/exec! {:select :*
+                                              :from :items_in_tags
+                                              :where [:and
+                                                      [:= :item_id (:items/id existing-item)]
+                                                      [:= :tag_id tag-id]]})))]
+      
+      {:status 200 
+       :body (cond
+               ;; Item exists and is in the specified tag
+               (and existing-item tag-id item-in-tag)
+               (assoc existing-item 
+                      :exists true
+                      :in_tag true)
+               
+               ;; Item exists but is not in the specified tag
+               (and existing-item tag-id)
+               (assoc existing-item
+                      :exists true
+                      :in_tag false)
+               
+               ;; Item exists (no tag check requested)
+               existing-item
+               (assoc existing-item
+                      :exists true)
+               
+               ;; Item doesn't exist
+               :else
+               {:exists false})})))

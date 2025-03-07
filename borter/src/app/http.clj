@@ -644,6 +644,15 @@
    [:email {:optional true} :string]
    [:temporary {:optional true} :boolean]])
 
+(def AttributeSchema
+  [:map
+   [:id :int]
+   [:title :string]
+   [:description {:optional true} :string]
+   [:owner :string]
+   [:created_at inst?]
+   [:edited_at inst?]])
+
 (def routes
   [["/openapi.json"
     {:get {:no-doc true
@@ -655,7 +664,7 @@
                             {:name "API Keys" :description "API key management endpoints"}
                             {:name "Tags" :description "Tag management endpoints"}
                             {:name "Items" :description "Item management endpoints"}
-                            {:name "Votes" :description "Voting endpoints"}
+                            {:name "Votes" :description "Voting and attribute management endpoints"}
                             {:name "Users" :description "User management endpoints"}
                             {:name "Comments" :description "Comment management endpoints"}
                             {:name "Groups" :description "Group management endpoints"}
@@ -921,6 +930,53 @@
                                         :content {:default {:schema ErrorSchema
                                                             :examples {:ok {:value {:message "must own vote"}}}}}}} 
                        :handler vote-delete}}]
+    ["/attribute" {:post {:no-doc false
+                          :openapi {:security [{"apiKeyAuth" []
+                                                "cookieAuth" []}]}
+                          :middleware [[wrap-rate-limit one-per-second]]
+                          :summary "Create attribute"
+                          :tags ["Votes"]
+                          :description "Creates a new attribute used for votes"
+                          :parameters {:body [:map
+                                              [:title {:description "Title of the attribute"} :string]
+                                              [:description {:description "Description of the attribute" :optional true} :string]]}
+                          :responses {200 {:description "Attribute created"
+                                           :content {:default {:schema AttributeSchema
+                                                               :examples {:ok {:value {:id 1
+                                                                                       :title "quality"
+                                                                                       :description "How good is this item"
+                                                                                       :owner "user1"
+                                                                                       :created_at "2023-01-01T12:00:00Z"
+                                                                                       :edited_at "2023-01-01T12:00:00Z"}}}}}}
+                                      400 {:description "Attribute already exists"
+                                           :content {:default {:schema ErrorSchema
+                                                               :examples {:ok {:value {:message "attribute with this title already exists"}}}}}}
+                                      401 {:description "Authentication required"
+                                           :content {:default {:schema ErrorSchema
+                                                               :examples {:ok {:value {:message "need to be logged in to create attribute"}}}}}}}
+                          :handler vote/attribute-post}
+                    :get {:no-doc false
+                          :summary "List attributes"
+                          :tags ["Votes"]
+                          :description "Retrieves all available attributes"
+                          :responses {200 {:description "List of attributes"
+                                           :content {:default {:schema [:map
+                                                                        [:attributes [:vector AttributeSchema]]]
+                                                               :examples {:ok {:value {:attributes [
+                                                                                                    {:id 0
+                                                                                                     :title "default"
+                                                                                                     :description "default attribute, means what upvoting means on other sites"
+                                                                                                     :owner "all"
+                                                                                                     :created_at "2023-01-01T12:00:00Z"
+                                                                                                     :edited_at "2023-01-01T12:00:00Z"},
+                                                                                                    {:id 1
+                                                                                                     :title "quality"
+                                                                                                     :description "How good is this item"
+                                                                                                     :owner "user1"
+                                                                                                     :created_at "2023-01-01T12:00:00Z"
+                                                                                                     :edited_at "2023-01-01T12:00:00Z"}]}}}}}}} 
+                                      
+                          :handler vote/attribute-get}}]
     ["/item" {:middleware [[wrap-rate-limit one-per-second]]
               :post {:no-doc false
                      :openapi {:security [{"apiKeyAuth" []
@@ -952,6 +1008,49 @@
                                       :content {:default {:schema ErrorSchema
                                                           :examples {:ok {:value {:message "must own item to update it"}}}}}}}}
               :handler item-post}]
+    ["/item/exists" {:get {:no-doc false
+                           :summary "Check if item exists by title and optionally tag_id"
+                           :tags ["Items"]
+                           :description "Checks if an item with given title exists and optionally if it belongs to the specified tag"
+                           :parameters {:query [:map
+                                                [:title {:description "Title to check"} :string]
+                                                [:tag_id {:description "Tag ID to check if item belongs to" :optional true} :string]]}
+                           :responses {200 {:description "Existence check results"
+                                            :content {:default {:schema [:map
+                                                                         [:slug :string]
+                                                                         [:exists :boolean]
+                                                                         [:in_tag {:optional true} :boolean]
+                                                                         [:id {:optional true} :int]
+                                                                         [:title {:optional true} :string]]
+                                                                :examples {:ok {:value {:slug "example-item" 
+                                                                                        :exists true
+                                                                                        :in_tag true
+                                                                                        :id 123
+                                                                                        :title "Example Item"}}}}}}}}
+                     :handler item/item-slug-check
+                     :post {:no-doc false
+                            :summary "Check if item exists by various parameters"
+                            :tags ["Items"]
+                            :description "Checks if an item exists by title, domain identifiers, and optionally checks if it belongs to a tag"
+                            :parameters {:body [:map
+                                                [:title {:description "Title to check" :optional true} :string]
+                                                [:tag_id {:description "Tag ID to check if item belongs to" :optional true} :int]
+                                                [:domain_pk_namespace {:description "Domain namespace" :optional true} :string]
+                                                [:domain_pk {:description "Domain primary key" :optional true} :string]]}
+                            :responses {200 {:description "Existence check results"
+                                             :content {:default {:schema [:map
+                                                                          [:exists :boolean]
+                                                                          [:in_tag {:optional true} :boolean]
+                                                                          [:id {:optional true} :int]
+                                                                          [:title {:optional true} :string]]
+                                                                 :examples {:ok {:value {:exists true
+                                                                                         :in_tag false
+                                                                                         :id 123
+                                                                                         :title "Example Item"}}}}}}
+                                        400 {:description "Invalid request parameters"
+                                             :content {:default {:schema ErrorSchema
+                                                                 :examples {:ok {:value {:message "Either title or domain_pk_namespace+domain_pk are required"}}}}}}}
+                            :handler item/item-exists-check}}]
     ["/item/membership" {:get {:no-doc false
                                :tags ["Items"]
                                :handler item-m-get}
