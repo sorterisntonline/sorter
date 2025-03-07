@@ -241,6 +241,7 @@
                                          :method :get}))
    :headers {"Content-Type" "application/json"}})
 
+;; @deprecated: Use tag-info-request instead
 (defn tag-info-request2 [r]
   {:status 200 :body (:body (hc/request {:as :json
                                          :url (str "http://localhost:8081/api/tag/page2?"
