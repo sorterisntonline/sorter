@@ -131,6 +131,7 @@
 (defn get-admin-users []
   (when-let [admins (System/getenv "BORTER_STATIC_ADMINS")]
     (set (clojure.string/split admins #","))))
+
 (defn post-tag [r]
   (log/debug "post-tag called with body-params:" (:body-params r))
   (when (nil? (-> r :session :user_name))
@@ -197,10 +198,13 @@
           ;; Case 3: Create new tag
       :else
       (let [body-params (-> r :body-params)
-            ns (-> body-params :ns)
+            ;; Prefer 'namespace' over 'ns' if both are provided
+            namespace-value (or (-> body-params :namespace)
+                                (-> body-params :ns))
             tag-values (merge
-                        (dissoc body-params :ns :tag_id :id)
-                        (when (and ns (not= ns "")) {:tags/ns ns})
+                        (dissoc body-params :ns :namespace :tag_id :id)
+                        (when (and namespace-value (not= namespace-value "")) 
+                          {:tags/ns namespace-value})
                         {:tags/slug (sluj (-> body-params :title))
                          :tags/owner (-> r :session :user_name)})
             ret (db/exec! (-> (h/insert-into :tags)
@@ -844,7 +848,8 @@
                                          [:attribute {:description "Optional attribute ID or title to filter by" :optional true} :string]
                                          [:user {:description "Optional username to filter votes by" :optional true} :string]
                                          [:users {:description "Optional list of usernames to filter votes by, comma separated" :optional true} :string]
-                                         [:until {:description "Optional timestamp to filter votes up until (ISO format)" :optional true} :string]]}
+                                         [:until {:description "Optional timestamp to filter votes up until (ISO format)" :optional true} :string]
+                                         [:since {:description "Optional timestamp to filter votes since (ISO format)" :optional true} :string]]}
                     :responses {200 {:description "Votes retrieved"
                                      :content {:default {:schema [:map
                                                                   [:votes [:vector VoteSchema]]]

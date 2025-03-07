@@ -4,7 +4,8 @@
             [honey.sql.helpers :as h]
             [app.permissions :as perms]
             [sluj.core :refer [sluj]]
-            [app.http :as http]))
+            [app.http :as http]
+            [clojure.string :as str]))
 
 (defn find-existing-vote [userid fst snd attr]
   (db/exec! (-> (h/select :*)
@@ -70,6 +71,7 @@
         tag-param (-> r :query-params (get "tag"))
         attribute-param (-> r :query-params (get "attribute"))
         until-param (-> r :query-params (get "until"))
+        since-param (-> r :query-params (get "since"))
         user-param (-> r :query-params (get "user"))
         users-param (-> r :query-params (get "users"))
         
@@ -116,6 +118,11 @@
           (when until-param
             [:< :votes/created_at until-param])
           
+          ;; Handle since timestamp
+          since-condition
+          (when since-param
+            [:> :votes/created_at since-param])
+          
           ;; Handle user parameter
           user-condition
           (when user-param
@@ -124,7 +131,7 @@
           ;; Handle users parameter
           users-condition
           (when users-param
-            [:in :votes/owner (clojure.string/split users-param #",")])
+            [:in :votes/owner (str/split users-param #",")])
           
           ;; Build the items subquery to get items in the tag
           items-in-tag-subquery
@@ -140,6 +147,7 @@
              [:in :votes/right_item_id items-in-tag-subquery]]]
            (when attribute-condition [attribute-condition])
            (when until-condition [until-condition])
+           (when since-condition [since-condition])
            (when user-condition [user-condition])
            (when users-condition [users-condition]))
           
