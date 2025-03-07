@@ -1071,7 +1071,7 @@
   "Middleware that authenticates requests via API key if present"
   [handler]
   (fn [request]
-    (let [api-key (get-in request [:headers "x-api-key"])]
+    (let [api-key (get-in request [:headers "x-api-key"])] 
       (if api-key
         (if-let [username (api-keys/validate-api-key api-key)]
           ;; API key is valid, add user to session
