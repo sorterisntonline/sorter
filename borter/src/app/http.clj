@@ -435,6 +435,16 @@
                           "Body: [binary or stream]")})
       response)))
 
+(defn current-session
+  "Handler for retrieving the current session information"
+  [r]
+  (let [username (-> r :session :user_name)]
+    {:status 200
+     :body (if username
+             {:authenticated true
+              :user_name username}
+             {:authenticated false})}))
+
 (comment) 
   ;; deprecated! this is not secure and so there is no longer an endpoint for it
   
@@ -546,16 +556,16 @@
                            [:= :perms/capability "view"]
                            [:= :perms/user_id "all"]]
                            ;; User owned namespaces
-                           (when username
-                             [:= :tags/owner username])
+                          (when username
+                            [:= :tags/owner username])
                            ;; Namespaces with explicit permission for user
-                           (when username
-                             [:like :perms/user_id (str "%" username "%")])
+                          (when username
+                            [:like :perms/user_id (str "%" username "%")])
                            ;; Namespaces with permission for user's groups
-                           (when (seq groups)
-                             (into [:or] 
-                                   (map #(vector :like :perms/user_id (str "%" % "%")) 
-                                        groups)))])))
+                          (when (seq groups)
+                            (into [:or] 
+                                  (map #(vector :like :perms/user_id (str "%" % "%")) 
+                                       groups)))])))
            (map :tags/ns)
            (filter identity) ;; Remove nil namespaces
            (sort))}}))
@@ -837,13 +847,16 @@
                     :parameters {:body [:map
                                         [:id {:description "ID of tag to update (omit for new tags)" :optional true} [:maybe :int]]
                                         [:title {:description "Title of the tag" :jsonschema/example "Techno Bangers"} :string]
-                                        [:slug {:description "Optional slug override (must match sluj of title if provided)" :optional true} :string]
+                                        [:slug {:description "Optional slug override (must match sluj of title if provided)" :optional true} [:maybe :string]]
                                         [:description {:description "Description of the tag" :optional true :jsonschema/example "a collection of techno bangers"} :string]
                                         [:ns {:description "Namespace for the tag (deprecated, use namespace instead)" :optional true :jsonschema/example "_deprecated_use_namespace_instead"} [:maybe :string]]
                                         [:namespace {:description "Namespace for the tag" :optional true :jsonschema/example "music"} [:maybe :string]]
                                         [:unlisted {:description "Whether the tag is unlisted" :optional true :jsonschema/example false} :boolean]
+                                        [:nsfw {:description "Whether the tag is NSFW" :optional true :jsonschema/example false} :boolean]
                                         [:domain_pk_namespace {:description "Domain namespace" :optional true :jsonschema/example "spotify.playlist"} :string]
-                                        [:domain_pk {:description "Domain primary key" :optional true :jsonschema/example "1234567890"} :string]]}
+                                        [:domain_pk {:description "Domain primary key" :optional true :jsonschema/example "1234567890"} :string]
+                                        [:domain_url {:description "Domain URL" :optional true :jsonschema/example "https://open.spotify.com/playlist/1234567890"} :string]
+                                        [:hide_item_authors {:description "Whether to hide the author of items in the tag" :optional true :jsonschema/example false} :boolean]]}
                     :responses {200 {:description "Tag created/updated successfully"
                                      :content {:default {:schema [:map
                                                                   [:id :int]
@@ -1375,7 +1388,13 @@
                      :summary "Get current session"
                      :tags ["Authentication"]
                      :description "Returns information about the current session"
-                     :handler login/current-session}}]
+                     :responses {200 {:description "Current session information"
+                                      :content {:default {:schema [:map
+                                                                   [:authenticated :boolean]
+                                                                   [:user_name {:optional true} :string]]
+                                                          :examples {:authenticated {:value {:authenticated true :user_name "example_user"}}
+                                                                     :not-authenticated {:value {:authenticated false}}}}}}}
+                     :handler current-session}}]
 
     ["/logout" {:post {:no-doc false
                        :openapi {:security [{"cookieAuth" []}]}
@@ -1490,30 +1509,33 @@
 
 (defn error-response [exception request]
   (def exception exception)
-  (cond
-    (and (= (type exception) clojure.lang.ExceptionInfo)
-     (= :reitit.coercion/response-coercion (:type (ex-data exception))))
-    {:status 500
-     :body {:exception (read-string (pr-str (first (:errors  (ex-data exception)))))
-            :data (:body (:response (ex-data exception)))}}
-
-    :else
+  (log/error "ex-data" (ex-data exception))
+  (log/debug "exception" exception)
+  (log/debug "exception type" (type exception))
+  (log/debug "can we coerce?" (= :reitit.coercion/response-coercion (:type (ex-data exception))))
+  (cond 
+    (= (type exception) clojure.lang.ExceptionInfo)
+   {:status (:status (ex-data exception))
+    :body {:message (.getMessage exception)
+           :error (ex-data exception)}} 
+    
+   :else
     {:status 500
      :body {:exception (->> exception Throwable->map)}}))
 
 (def exception-middleware
   (exception/create-exception-middleware
-   (merge exception/default-handlers
+   (merge exception/default-handlers 
           {::exception/wrap
            (fn [handler e request]
-             (log/error "error" (:uri request) e)
+             ;;(log/error "error" (:uri request) e)
              (error-response e request))})))
 
 (def m-instance (m/create
                  (-> m/default-options
                      (assoc-in [:formats "application/json" :encoder-opts]
                                {:encode-key-fn name}))))
-
+  
 ;; Create a single shared session store instance
 (def session-store (memory/memory-store))
 

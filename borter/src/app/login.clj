@@ -214,7 +214,6 @@
                 (h/where [:= :user_name username]))))
 
 (defn handle-logout [r] {:status 200 :body {:success true} :session {}})
-(defn current-session [r] {:status 200 :body {:user_name (-> r :session :user_name)}})
 
 (defn handle-update-email [r]
   (let [username (-> r :body-params :user_name)
