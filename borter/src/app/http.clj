@@ -13,6 +13,7 @@
             [ring.middleware.params :as params]
             
             [ring.middleware.session :as session]
+            [ring.middleware.session.memory :as memory]
             [ring.middleware.resource :refer [wrap-resource]]
             [ring.middleware.content-type :refer [wrap-content-type]]
             [ring.middleware.reload :refer [wrap-reload]]
@@ -23,7 +24,10 @@
             [reitit.ring.middleware.muuntaja :as muuntaja]
             [reitit.ring.middleware.exception :as exception]
             [reitit.ring.middleware.multipart :as multipart]
-            [reitit.ring.middleware.parameters :as parameters]
+            [reitit.ring.middleware.parameters :as parameters] 
+            
+            
+            
             [muuntaja.core :as m]
             [malli.util :as mu]
 
@@ -638,7 +642,7 @@
     ["/feed" {:get {:no-doc false
                     :summary "Get feed for a tag"
                     :tags ["Feed"]
-                    :description "Retrieves feed items for a specific tag, including recent votes and activity"
+                    :description "Retrieves feed items for a specific tag, including recent votes and activity. WARNING: if the tag is new, or has no items, this will return an empty list, which is sort of strange. account for that until we fix it."
                     :parameters {:query [:map
                                          [:tag_id {:description "ID of the tag to get feed for"} :int]]}
                     :responses {200 {:description "Feed items"
@@ -648,6 +652,7 @@
                                                                          :value {:items [{:id 1 :title "Example Item" :description "Description" :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
                                                                                  :votes [{:id 1 :left_item_id 1 :right_item_id 2 :magnitude 1 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
                                                                                  :users ["user1" "user2"]}}}}}}
+                                
                                 400 {:description "Invalid tag ID"
                                      :content {:default {:schema ErrorSchema
                                                          :examples {:ok {:value {:message "Invalid tag ID"}}}}}}}
@@ -1276,16 +1281,21 @@
                  (-> m/default-options
                      (assoc-in [:formats "application/json" :encoder-opts]
                                {:encode-key-fn name}))))
+
+;; Create a single shared session store instance
+(def session-store (memory/memory-store))
+
 (def app
   (-> (ring/ring-handler
        (ring/router routes
                     {:validate spec/validate
                      :exception pretty/exception
                      :conflicts nil
-                     :data {:coercion nil
+                     :data {:coercion nil ;;(reitit.coercion.malli/create)
                             :muuntaja m-instance
                             :middleware
-                            [session/wrap-session
+                            [(fn [handler]
+                               (session/wrap-session handler {:store session-store}))
                              wrap-api-key-auth
                              wrap-dev-session 
                              swagger/swagger-feature
@@ -1295,6 +1305,9 @@
                              muuntaja/format-response-middleware
                              muuntaja/format-request-middleware
                              exception-middleware]}})
+                            ;;  coercion/coerce-request-middleware
+                            ;;  coercion/coerce-response-middleware
+                              
                              
        (-> #'default-handler
            (wrap-resource "public")

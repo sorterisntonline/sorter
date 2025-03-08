@@ -22,9 +22,12 @@ import { MobileNav } from './MobileNav';
 import { MobileNewTagChooser } from './components/MobileNewTagChooser.jsx';
 import { TopNav } from './TopNav';  // Import the new TopNav
 import { handleLogout } from './utils/authUtils.js';
-import { initializeTheme } from './utils/themeUtils';
+import { initializeTheme, dark_mode } from './utils/themeUtils';
 import { EmailVerification } from './EmailVerification';
 import { ForgotPassword, ResetPassword } from './ForgotPassword';
+
+// Initialize theme immediately before any rendering
+initializeTheme();
 
 export const namespace = signal(false);
 
@@ -48,7 +51,7 @@ const Root = () => {
   useEffect(() => {
     const initializeApp = async () => {
       await fetchSession();
-      initializeTheme();
+      // Theme is already initialized at the top level
       setSessionInitialized(true);
     };
     
@@ -63,7 +66,7 @@ const Root = () => {
 
   // Don't render the app until session is initialized
   if (!sessionInitialized) {
-    return <div className="loading-container">Loading...</div>;
+    return <div className="loading-container dark:text-white">Loading...</div>;
   }
 
   return (
@@ -73,7 +76,7 @@ const Root = () => {
         <div className="fixed top-0 left-0 right-0 h-[56px] min-h-[56px] flex-none bg-white dark:bg-black z-[9996] lg:hidden" />
       )}
       <MobileNav />
-      <div className={`min-h-screen flex flex-col lg:pt-0 ${!isVoting ? 'pt-[56px]' : ''}`}>
+      <div className={`min-h-screen flex flex-col lg:pt-0 ${!isVoting ? 'pt-[56px]' : ''} bg-white dark:bg-black text-black dark:text-white`}>
         <AnnouncementBar />
         <TopNav />
         <div 
@@ -179,5 +182,12 @@ const Root = () => {
     </React.StrictMode>
   );
 };
+
+// Add dark mode class to html element based on initial state
+if (dark_mode.value) {
+  document.documentElement.classList.add('dark');
+} else {
+  document.documentElement.classList.remove('dark');
+}
 
 ReactDOM.createRoot(document.getElementById("root")).render(<Root />);

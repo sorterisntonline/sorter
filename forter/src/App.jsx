@@ -118,34 +118,74 @@ function App({ tagid, isVoting }) {
 
   useEffect(() => {
     console.log("Loading tag with ID:", tagid);
-    if (!tag.value || tag.value.tag.id !== tagid) {
-      loadTag(tagid);
+    if (tagid) {
+      loadTag(tagid, handleError);
     }
   }, [tagid]);
 
+  // Reset selected users when tag changes
+  useEffect(() => {
+    resetSelectedUsers();
+    selected_attribute.value = null;
+  }, [tag.value]);
+
+  if (isVoting) {
+    return <Voting tagid={tagid} />;
+  }
+
   return (
-    <>
-      <div className={`min-h-screen flex flex-col ${isVoting ? 'h-screen' : ''}`}>
-        <AnnouncementBar isVoting={isVoting} />
-        <div className={`flex-1 ${!isVoting ? 'page-padding-top' : ''}`}>
-          {tag.value && (
-            <Tag 
-              isVoting={isVoting} 
-              handleError={handleError}
+    <div className="flex flex-col h-full bg-white dark:bg-black text-black dark:text-white">
+      {errorState.value && (
+        <ErrorPanel
+          error={errorState.value}
+          onClose={clearError}
+        />
+      )}
+      
+      <div className="flex flex-col lg:flex-row h-full">
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto">
+            <ItemsLists
               onSelectItem={handleSelectItem}
-              onCloseItem={handleCloseItem}
+              namespace={namespace.value}
             />
+          </div>
+        </div>
+
+        {/* Right panel - only shown when an item is selected or on desktop */}
+        <div 
+          className={`fixed inset-0 z-50 lg:static lg:z-auto lg:w-1/2 xl:w-2/5 transition-transform duration-300 ease-in-out transform ${
+            drawer_open.value ? 'translate-y-0' : 'translate-y-full'
+          } lg:transform-none bg-white dark:bg-black border-l border-gray-200 dark:border-gray-800 h-full overflow-hidden`}
+        >
+          {selected_item.value && (
+            <ItemPanel onClose={handleCloseItem} />
           )}
         </div>
       </div>
-      <ErrorPanel />
-      <WarningPopup isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
-        <div className="p-4">
-          <h2 className="text-lg font-bold">login required</h2>
-          <p>{errorMessage}</p>
-        </div>
-      </WarningPopup>
-    </>
+
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title="Session Expired"
+      >
+        <p>{errorMessage || "Your session has expired. Please log in again."}</p>
+        <button
+          onClick={() => {
+            setIsModalOpen(false);
+            window.location.href = "/login";
+          }}
+          className="mt-4 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+        >
+          Log In
+        </button>
+      </Modal>
+
+      {/* Mobile new item button */}
+      <div className="fixed bottom-6 right-6 z-[99999] pointer-events-auto lg:hidden">
+        {tag.value && !selected_item.value && <MobileNewItemChooser />}
+      </div>
+    </div>
   );
 }
 
