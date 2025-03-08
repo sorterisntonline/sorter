@@ -212,7 +212,9 @@
                            :error "duplicate_tag" 
                            :existing_tag_id (:tags/id existing-slug-tag)})))))
         
-    (cond
+    ;; Return a proper HTTP response with the tag data
+    {:status 200
+     :body (cond)
       ;; Case 1: Explicit tag id in request (standard update)
       tag-id
       (do (when-not (perms/owns tag-id (-> r :session :user_name))
@@ -226,7 +228,7 @@
                                   (h/where [:= :tags/id tag-id])))]
             (log/info "Tag updated:" tag-id)
             (log/debug "Updated tag result:" ret)
-            {:status 200 :body (first ret)}))
+            (first ret)))
           
       ;; Case 2: Discord channel tag exists (update)
       (and is-discord-channel existing-tag)
@@ -242,7 +244,7 @@
                                   (h/where [:= :tags/id (:tags/id existing-tag)])))]
             (log/info "Discord channel tag updated:" (:tags/id existing-tag))
             (log/debug "Updated Discord channel tag result:" ret)
-            {:status 200 :body (first ret)}))
+            (first ret)))
           
       ;; Case 3: Create new tag
       :else
@@ -263,7 +265,7 @@
         (db/exec! (-> (h/insert-into :perms)
                       (h/values (perms/public-permissions tagid))))
         (log/info "New tag created:" tagid "by user:" (-> r :session :user_name))
-        {:status 200 :body (first ret)}))))
+        (first ret))}))
 
 
 (defn delete-tag [req]
@@ -344,7 +346,13 @@
       (let [existing-tag (first (db/exec! query))]
         {:status 200 
          :body (if existing-tag
-                 (assoc existing-tag :exists true)
+                 ;; Return only the specific fields defined in the OpenAPI schema
+                 {:exists true
+                  :id (:tags/id existing-tag)
+                  :slug (:tags/slug existing-tag)
+                  :title (:tags/title existing-tag)
+                  :owner (:tags/owner existing-tag)
+                  :namespace (:tags/ns existing-tag)}
                  {:slug slug
                   :exists false})})
       ;; Return error if neither title nor slug provided
@@ -378,17 +386,17 @@
                 slug
                 (let [base-query {:select :* :from :tags :where [:= :tags/slug slug]}]
                   (cond
-                    ;; If namespace explicitly provided but empty, search for empty ns
-                    (and ns-value (empty? ns-value))
-                    (update base-query :where (fn [where] [:and where [:= :tags/ns ""]]))
+                    ;; If namespace is explicitly provided as empty string, search for empty ns only
+                    (and (some? ns-value) (empty? ns-value))
+                    (update base-query :where (fn [where] [:and where [:= :tags/ns nil]]))
                     
-                    ;; If namespace provided with value, search for that ns
-                    ns-value
+                    ;; If namespace provided with non-empty value, search for that ns
+                    (some? ns-value)
                     (update base-query :where (fn [where] [:and where [:= :tags/ns (sluj ns-value)]]))
                     
                     ;; If no namespace specified, search for null/empty ns
                     :else
-                    (update base-query :where (fn [where] [:and where [:or [:= :tags/ns nil] [:= :tags/ns ""]]]))))
+                    (update base-query :where (fn [where] [:and where [:or [:= :tags/ns nil] [:= :tags/ns nil]]]))))
                 
                 ;; Error case - neither domain identifiers nor title/slug provided
                 :else
@@ -396,7 +404,13 @@
     (let [existing-tag (first (db/exec! query))]
       {:status 200 
        :body (if existing-tag
-               (assoc existing-tag :exists true)
+               ;; Return only the specific fields defined in the OpenAPI schema
+               {:exists true
+                :id (:tags/id existing-tag)
+                :slug (:tags/slug existing-tag)
+                :title (:tags/title existing-tag)
+                :owner (:tags/owner existing-tag)
+                :namespace (:tags/ns existing-tag)}
                {:exists false
                 :slug slug})})))
 
@@ -821,12 +835,12 @@
                     :tags ["Tags"]
                     :description "Creates a new tag or updates an existing one. For updates, include tag_id. For new tags, omit tag_id. The system prevents creation of duplicate tags in the same namespace and validates that provided slugs match the title."
                     :parameters {:body [:map
-                                        [:id {:description "ID of tag to update (omit for new tags)" :optional true} :int]
+                                        [:id {:description "ID of tag to update (omit for new tags)" :optional true} [:maybe :int]]
                                         [:title {:description "Title of the tag" :jsonschema/example "Techno Bangers"} :string]
                                         [:slug {:description "Optional slug override (must match sluj of title if provided)" :optional true} :string]
                                         [:description {:description "Description of the tag" :optional true :jsonschema/example "a collection of techno bangers"} :string]
-                                        [:ns {:description "Namespace for the tag (deprecated, use namespace instead)" :optional true :jsonschema/example "_deprecated_use_namespace_instead"} :string]
-                                        [:namespace {:description "Namespace for the tag" :optional true :jsonschema/example "music"} :string]
+                                        [:ns {:description "Namespace for the tag (deprecated, use namespace instead)" :optional true :jsonschema/example "_deprecated_use_namespace_instead"} [:maybe :string]]
+                                        [:namespace {:description "Namespace for the tag" :optional true :jsonschema/example "music"} [:maybe :string]]
                                         [:unlisted {:description "Whether the tag is unlisted" :optional true :jsonschema/example false} :boolean]
                                         [:domain_pk_namespace {:description "Domain namespace" :optional true :jsonschema/example "spotify.playlist"} :string]
                                         [:domain_pk {:description "Domain primary key" :optional true :jsonschema/example "1234567890"} :string]]}
@@ -841,8 +855,11 @@
                                                                   [:edited_at :string]
                                                                   [:unlisted :boolean]
                                                                   [:ns {:optional true} [:maybe :string]]
+                                                                  [:nsfw {:optional true} [:maybe :boolean]]
                                                                   [:domain_pk_namespace {:optional true} [:maybe :string]]
-                                                                  [:domain_pk {:optional true} [:maybe :string]]]
+                                                                  [:domain_pk {:optional true} [:maybe :string]]
+                                                                  [:domain_url {:optional true} [:maybe :string]]
+                                                                  [:hide_item_authors {:optional true} [:maybe :boolean]]] 
                                                          :examples {:ok {:value {:id 356
                                                                                  :title "r and b"
                                                                                  :slug "r-and-b"
@@ -851,8 +868,7 @@
                                                                                  :created_at "2025-03-06T02:05:44.483Z"
                                                                                  :edited_at "2025-03-06T02:05:44.483Z"
                                                                                  :unlisted false
-                                                                                 :ns nil
-                                                                                 :namespace "spotify"
+                                                                                 :ns "spotify" 
                                                                                  :domain_pk_namespace "spotify.playlist"
                                                                                  :domain_pk "1234567890"}}}}}}
                                 401 {:description "Authentication required"
@@ -863,15 +879,15 @@
                                                          :examples {:ok {:value {:message "you can not edit tags you do not own"}}}}}}
                                 409 {:description "Tag already exists"
                                      :content {:default {:schema ErrorSchema
-                                                         :examples {:ok {:value {:message "A tag with this name already exists in this namespace"
+                                                         :examples {:ok {:value {:message "A tag with this name already exists in this namespace"}
                                                                                 :error "duplicate_tag"
-                                                                                :existing_tag_id 123}}}}}}
+                                                                                :existing_tag_id 123}}}}}
                                 422 {:description "Validation failed"
                                      :content {:default {:schema ErrorSchema
-                                                         :examples {:ok {:value {:message "Title does not match provided slug"
+                                                         :examples {:ok {:value {:message "Title does not match provided slug"}
                                                                                 :error "validation_failed"
                                                                                 :provided-slug "wrong-slug"
-                                                                                :generated-slug "correct-slug"}}}}}}}
+                                                                                :generated-slug "correct-slug"}}}}}}
                     :handler post-tag}
              :delete {:no-doc false
                       :openapi {:security [{"apiKeyAuth" []
@@ -904,19 +920,26 @@
                           :parameters {:query [:map
                                                [:title {:description "Title to check" :optional true} :string]
                                                [:slug {:description "Slug to check directly (overrides title if provided)" :optional true} :string]
-                                               [:ns {:description "Namespace to check in (deprecated, use namespace instead)" :optional true} :string]
-                                               [:namespace {:description "Namespace to check in" :optional true} :string]]}
+                                               [:ns {:description "Namespace to check in (deprecated, use namespace instead)" :optional true} [:maybe :string]]
+                                               [:namespace {:description "Namespace to check in" :optional true} [:maybe :string]]]}
                           :responses {200 {:description "Existence check results"
                                            :content {:default {:schema [:map
                                                                         [:slug :string]
                                                                         [:exists :boolean]
                                                                         [:id {:optional true} :int]
-                                                                        [:title {:optional true} :string]]
-                                                               :examples {:ok {:value {:slug "example-tag" :exists false}}}}}}
+                                                                        [:title {:optional true} :string]
+                                                                        [:namespace {:optional true} [:maybe :string]]
+                                                                        [:owner {:optional true} :string]]
+                                                               :examples {:ok {:value {:slug "example-tag" 
+                                                                                       :exists false
+                                                                                       :id 123
+                                                                                       :title "example-tag"
+                                                                                       :namespace "music"
+                                                                                       :owner "admin"}}}}}}
                                       400 {:description "Missing required parameters"
                                            :content {:default {:schema ErrorSchema
                                                                :examples {:ok {:value {:message "Either title or slug parameter is required"}}}}}}}
-                    :handler tag-slug-check}
+                          :handler tag-slug-check}
 
                     :post {:no-doc false
                            :summary "Check if tag exists"
@@ -926,17 +949,25 @@
                                                [:title {:description "Title to check" :optional true} :string]
                                                [:slug {:description "Slug to check directly (overrides title if provided)" :optional true} :string]
                                                [:ns {:description "Namespace to check in (deprecated, use namespace instead)" :optional true} :string]
-                                               [:namespace {:description "Namespace to check in" :optional true} :string]
+                                               [:namespace {:description "Namespace to check in" :optional true} [:maybe :string]]
                                                [:domain_pk_namespace {:description "Domain namespace" :optional true} :string]
                                                [:domain_pk {:description "Domain primary key" :optional true} :string]]}
                            :responses {200 {:description "Existence check results"
                                             :content {:default {:schema [:map
                                                                          [:exists :boolean]
-                                                                         [:slug {:optional true} :string]
+                                                                         [:slug :string]
                                                                          [:id {:optional true} :int]
-                                                                         [:title {:optional true} :string]]
-                                                                :examples {:ok {:value {:exists false
-                                                                                        :slug "example-tag"}}}}}}
+                                                                         [:title {:optional true} :string]
+                                                                         [:namespace {:optional true} [:maybe :string]]
+                                                                         [:owner {:optional true} :string]]
+                                                                :examples {:non_existent {:value {:exists false
+                                                                                                  :slug "example-tag"}}
+                                                                           :exists {:value {:exists true
+                                                                                            :slug "example-tag"
+                                                                                            :id 123
+                                                                                            :title "Example Tag"
+                                                                                            :namespace "examples"
+                                                                                            :owner "admin"}}}}}}
                                        400 {:description "Invalid request parameters"
                                             :content {:default {:schema ErrorSchema
                                                                 :examples {:ok {:value {:message "Either title/slug or domain_pk_namespace+domain_pk are required"}}}}}}}
@@ -1302,7 +1333,7 @@
                                         401 {:description "Authentication required"
                                              :content {:default {:schema ErrorSchema
                                                                  :examples {:ok {:value {:message "must be logged in to skip"}}}}}}}
-                                           :handler item/item-skip-delete}}]
+                            :handler item/item-skip-delete}}]
     ["/register" {:post {:no-doc false
                          :summary "Register user"
                          :tags ["Authentication"]
@@ -1318,8 +1349,8 @@
                                                               :examples {:ok {:value {:success true :message "Verification email sent"}}}}}}
                                      400 {:description "Invalid registration data"
                                           :content {:default {:schema ErrorSchema
-                                                              :examples {:ok {:value {:message "Username already taken"}}}}}}}}
-                  :handler login/handle-register}]
+                                                              :examples {:ok {:value {:message "Username already taken"}}}}}}}
+                         :handler login/handle-register}}]
     ["/login" {:post {:no-doc false
                       :summary "Login user"
                       :tags ["Authentication"]
