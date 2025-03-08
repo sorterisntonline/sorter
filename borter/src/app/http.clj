@@ -128,10 +128,6 @@
                 (h/from :tags)
                 (h/where [:= :tags/domain_pk_namespace "spotify.playlist"]))))
 
-(defn get-admin-users []
-  (when-let [admins (System/getenv "BORTER_STATIC_ADMINS")]
-    (set (clojure.string/split admins #","))))
-
 (defn post-tag [r]
   (log/debug "post-tag called with body-params:" (:body-params r))
   (when (nil? (-> r :session :user_name))
@@ -1286,7 +1282,7 @@
                     {:validate spec/validate
                      :exception pretty/exception
                      :conflicts nil
-                     :data {:coercion (reitit.coercion.malli/create)
+                     :data {:coercion nil
                             :muuntaja m-instance
                             :middleware
                             [session/wrap-session
@@ -1298,9 +1294,7 @@
                              muuntaja/format-negotiate-middleware
                              muuntaja/format-response-middleware
                              muuntaja/format-request-middleware
-                             exception-middleware
-                             coercion/coerce-response-middleware
-                             coercion/coerce-request-middleware]}})
+                             exception-middleware]}})
                              
        (-> #'default-handler
            (wrap-resource "public")
