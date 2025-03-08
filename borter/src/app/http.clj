@@ -567,6 +567,41 @@
    [:created_at inst?]
    [:edited_at inst?]])
 
+(def SortedItemSchema
+  [:map
+   [:id :int]
+   [:owner :string]
+   [:title :string]
+   [:slug :string]
+   [:body {:optional true} [:maybe :string]]
+   [:domain_pk {:optional true} [:maybe :string]]
+   [:domain_pk_namespace {:optional true} [:maybe :string]]
+   [:url {:optional true} [:maybe :string]]
+   [:created_at inst?]
+   [:edited_at inst?]
+   [:elo :double]
+   [:vote_count :int]
+   [:num_comments {:optional true} [:maybe :int]]])
+
+(def PermsSchema
+  [:map
+   [:can_vote :boolean]
+   [:can_add :boolean]
+   [:can_view :boolean]])
+
+(def TagPageResponseSchema
+  [:map
+   [:tag TagSchema]
+   [:sorted [:vector SortedItemSchema]]
+   [:unsorted [:vector ItemSchema]]
+   [:skipped [:vector ItemSchema]]
+   [:perms PermsSchema]
+   [:users_who_voted [:vector UserSchema]]
+   [:pair [:vector ItemSchema]]
+   [:votes [:vector VoteSchema]]
+   [:attributes [:vector AttributeSchema]]
+   [:selected_attribute AttributeSchema]])
+
 (def routes
   [["/openapi.json"
     {:get {:no-doc true
@@ -788,8 +823,60 @@
                            :handler tag-exists-check}}]
     ["/tag/page" {:get {:no-doc false
                         :tags ["Tags"]
-                        :summary "Request rankings from rustsorter"
-                        :description "Passes your request on to rustsorter, which does... something"
+                        :summary "Get tag page with sorted items and voting pairs"
+                        :description "Retrieves a tag page with sorted items, voting pairs, and permissions. This endpoint provides all the data needed to display a tag's ranking page."
+                        :parameters {:query [:map
+                                             [:id {:description "ID of the tag to get page for" :optional true} :int]
+                                             [:users {:description "Filter votes by specific users (dot-separated list of usernames or group IDs)" :optional true} :string]
+                                             [:pinned_left {:description "ID of item to pin on the left side of the voting pair" :optional true} :int]
+                                             [:pinned_right {:description "ID of item to pin on the right side of the voting pair" :optional true} :int] 
+                                             [:elo {:description "Whether to use ELO ranking algorithm" :optional true} :boolean]
+                                             [:attribute {:description "Title of attribute to filter votes by" :optional true} :string]
+                                             [:namespace {:description "Namespace to filter items by instead of using tag ID" :optional true} :string]]}
+                        :responses {200 {:description "Tag page data retrieved successfully"
+                                         :content {:default {:schema TagPageResponseSchema
+                                                             :examples {:ok {:value {:tag {:tags/id 1
+                                                                                           :tags/title "Example Tag"
+                                                                                           :tags/slug "example-tag"
+                                                                                           :tags/owner "user1"
+                                                                                           :tags/created_at "2023-01-01T12:00:00Z"}
+                                                                                     :sorted [{:id 1
+                                                                                               :title "Top Item"
+                                                                                               :elo 1500.0
+                                                                                               :vote_count 10
+                                                                                               :owner "user1"
+                                                                                               :created_at "2023-01-01T12:00:00Z"}]
+                                                                                     :unsorted [{:id 2
+                                                                                                 :title "New Item"
+                                                                                                 :owner "user2"
+                                                                                                 :created_at "2023-01-01T12:00:00Z"}]
+                                                                                     :skipped []
+                                                                                     :perms {:can_vote true
+                                                                                             :can_add true
+                                                                                             :can_view true}
+                                                                                     :users_who_voted [{:user_name "user1"}]
+                                                                                     :pair [{:id 3
+                                                                                             :title "Left Item"
+                                                                                             :owner "user1"
+                                                                                             :created_at "2023-01-01T12:00:00Z"}
+                                                                                            {:id 4
+                                                                                             :title "Right Item"
+                                                                                             :owner "user2"
+                                                                                             :created_at "2023-01-01T12:00:00Z"}]
+                                                                                     :votes [{:id 1
+                                                                                              :left_item_id 3
+                                                                                              :right_item_id 4
+                                                                                              :magnitude 3
+                                                                                              :owner "user1"
+                                                                                              :created_at "2023-01-01T12:00:00Z"}]
+                                                                                     :attributes [{:id 0
+                                                                                                   :title "default"
+                                                                                                   :owner "all"
+                                                                                                   :created_at "2023-01-01T12:00:00Z"}]
+                                                                                     :selected_attribute {:id 0
+                                                                                                          :title "default"
+                                                                                                          :owner "all"
+                                                                                                          :created_at "2023-01-01T12:00:00Z"}}}}}}}}
                         :handler tag-info-request}}]
     ["/tag/page2" {:get {:no-doc false
                          :openapi {:deprecated true}
