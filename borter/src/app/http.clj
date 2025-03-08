@@ -137,19 +137,41 @@
   (when (nil? (-> r :session :user_name))
     (log/warn "Unauthorized attempt to create tag")
     (throw (ex-info "need to be logged in to make tag" {:status 401})))
+    
+  ;; Validate title and slug match
+  (let [title (-> r :body-params :title)
+        provided-slug (-> r :body-params :slug)
+        generated-slug (sluj title)]
+    
+    ;; If a slug was explicitly provided, ensure it matches the generated one
+    (when (and provided-slug (not= provided-slug generated-slug))
+      (log/warn "Mismatched title and slug in tag creation request")
+      (throw (ex-info "Title does not match provided slug" 
+                      {:status 422 
+                       :error "validation_failed"
+                       :provided-slug provided-slug
+                       :generated-slug generated-slug}))))
 
-      ;; Check for Discord context
+  ;; Check for Discord context
   (let [has-discord-context (boolean (:discord r))
         domain-pk-ns (-> r :body-params :domain_pk_namespace)
         domain-pk (-> r :body-params :domain_pk)
         is-discord-channel (and domain-pk-ns domain-pk 
                                 (= domain-pk-ns "discord.channel"))
             
-            ;; Get tag ID (preferring 'id' over 'tag_id')
+        ;; Get tag ID (preferring 'id' over 'tag_id')
         tag-id (or (-> r :body-params :id)
                    (-> r :body-params :tag_id))
+        
+        ;; Get namespace using updated handling
+        namespace-value (or (-> r :body-params :namespace)
+                            (-> r :body-params :ns))
+        slug (sluj (-> r :body-params :title))
+        
+        ;; Check if this is an update or a new tag creation
+        is-update (boolean tag-id)
             
-            ;; Check if tag already exists for this Discord channel
+        ;; Check if tag already exists for this Discord channel
         existing-tag (when (and is-discord-channel 
                                 (or has-discord-context 
                                     (db/exec! {:select 1 
@@ -162,9 +184,36 @@
                                          :where [:and
                                                  [:= :tags/domain_pk_namespace domain-pk-ns]
                                                  [:= :tags/domain_pk domain-pk]]})))]
+    
+    ;; For non-update operations, check if slug already exists in the namespace
+    (when (and (not is-update) 
+               (not existing-tag))
+      (let [ns-query-condition (cond
+                                 ;; If namespace explicitly provided but empty
+                                 (and namespace-value (empty? namespace-value))
+                                 [:= :tags/ns ""]
+                                 
+                                 ;; If namespace provided with value
+                                 namespace-value
+                                 [:= :tags/ns (sluj namespace-value)]
+                                 
+                                 ;; If no namespace specified
+                                 :else
+                                 [:or [:= :tags/ns nil] [:= :tags/ns ""]])
+            existing-slug-tag (first (db/exec! {:select :*
+                                                :from :tags
+                                                :where [:and
+                                                        [:= :tags/slug slug]
+                                                        ns-query-condition]}))]
+        (when existing-slug-tag
+          (log/warn "Attempted to create tag with duplicate slug:" slug)
+          (throw (ex-info "A tag with this name already exists in this namespace" 
+                          {:status 409 
+                           :error "duplicate_tag" 
+                           :existing_tag_id (:tags/id existing-slug-tag)})))))
         
     (cond
-          ;; Case 1: Explicit tag id in request (standard update)
+      ;; Case 1: Explicit tag id in request (standard update)
       tag-id
       (do (when-not (perms/owns tag-id (-> r :session :user_name))
             (log/warn "User" (-> r :session :user_name) "attempted to edit tag they don't own:" tag-id)
@@ -179,7 +228,7 @@
             (log/debug "Updated tag result:" ret)
             {:status 200 :body (first ret)}))
           
-          ;; Case 2: Discord channel tag exists (update)
+      ;; Case 2: Discord channel tag exists (update)
       (and is-discord-channel existing-tag)
       (do (when-not (perms/owns (:tags/id existing-tag)
                               (-> r :session :user_name))
@@ -195,7 +244,7 @@
             (log/debug "Updated Discord channel tag result:" ret)
             {:status 200 :body (first ret)}))
           
-          ;; Case 3: Create new tag
+      ;; Case 3: Create new tag
       :else
       (let [body-params (-> r :body-params)
             ;; Prefer 'namespace' over 'ns' if both are provided
@@ -204,7 +253,7 @@
             tag-values (merge
                         (dissoc body-params :ns :namespace :tag_id :id)
                         (when (and namespace-value (not= namespace-value "")) 
-                          {:tags/ns namespace-value})
+                          {:tags/ns (sluj namespace-value)})
                         {:tags/slug (sluj (-> body-params :title))
                          :tags/owner (-> r :session :user_name)})
             ret (db/exec! (-> (h/insert-into :tags)
@@ -254,42 +303,70 @@
 
 (defn tag-slug-check [r]
   (let [title (-> r :query-params (get "title"))
+        ;; Allow direct slug parameter to override generated slug
+        direct-slug (-> r :query-params (get "slug"))
         ;; Prefer 'namespace' over 'ns' if both are provided
-        ns (sluj (or (-> r :query-params (get "namespace"))
-                     (-> r :query-params (get "ns"))
-                     ""))
-        slug (sluj title)
-        existing-tag (first (db/exec! {:select :*
-                                       :from :tags
-                                       :where [:and
-                                               [:= :tags/slug slug]
-                                               [:= :tags/ns ns]]}))]
-    {:status 200 :body (if existing-tag
-                         (assoc existing-tag 
-                                :exists true)
-                         {:slug slug
-                          :exists false})}))
+        ns-value (or (-> r :query-params (get "namespace"))
+                     (-> r :query-params (get "ns")))
+        ;; Generate slug from title if no direct slug provided
+        slug (if direct-slug direct-slug (when title (sluj title)))
+        ;; Build query based on params
+        query (if slug
+                (cond
+                  ;; If namespace explicitly provided but empty, search for empty ns
+                  (and ns-value (empty? ns-value))
+                  {:select :* 
+                   :from :tags
+                   :where [:and
+                           [:= :tags/slug slug]
+                           [:= :tags/ns ""]]}
+                  
+                  ;; If namespace provided with value, search for that ns
+                  ns-value
+                  {:select :* 
+                   :from :tags
+                   :where [:and
+                           [:= :tags/slug slug]
+                           [:= :tags/ns (sluj ns-value)]]}
+                  
+                  ;; If no namespace specified, search for null/empty ns
+                  :else
+                  {:select :* 
+                   :from :tags
+                   :where [:and
+                           [:= :tags/slug slug]
+                           [:or
+                            [:= :tags/ns nil]
+                            [:= :tags/ns ""]]]})
+                nil)]
+    
+    (if slug
+      (let [existing-tag (first (db/exec! query))]
+        {:status 200 
+         :body (if existing-tag
+                 (assoc existing-tag :exists true)
+                 {:slug slug
+                  :exists false})})
+      ;; Return error if neither title nor slug provided
+      {:status 400 
+       :body {:message "Either title or slug parameter is required"}})))
 
 (defn tag-exists-check [r]
   (let [body (:body-params r)
         title (:title body)
+        ;; Allow direct slug parameter to override generated slug
+        direct-slug (:slug body)
         ;; Prefer 'namespace' over 'ns' if both are provided
-        ns (sluj (or (:namespace body)
-                     (:ns body)
-                     ""))
+        ns-value (or (:namespace body)
+                    (:ns body))
         domain-pk-ns (:domain_pk_namespace body)
         domain-pk (:domain_pk body)
         
+        ;; Generate slug from title if no direct slug provided
+        slug (if direct-slug direct-slug (when title (sluj title)))
+        
         query (cond
-                ;; Use title + ns if available
-                title
-                {:select :*
-                 :from :tags
-                 :where [:and
-                         [:= :tags/slug (sluj title)]
-                         [:= :tags/ns ns]]}
-                
-                ;; Use domain identifiers if no title
+                ;; Use domain identifiers if provided
                 (and domain-pk-ns domain-pk)
                 {:select :*
                  :from :tags
@@ -297,14 +374,31 @@
                          [:= :tags/domain_pk_namespace domain-pk-ns]
                          [:= :tags/domain_pk domain-pk]]}
                 
+                ;; Use title/slug + namespace if available
+                slug
+                (let [base-query {:select :* :from :tags :where [:= :tags/slug slug]}]
+                  (cond
+                    ;; If namespace explicitly provided but empty, search for empty ns
+                    (and ns-value (empty? ns-value))
+                    (update base-query :where (fn [where] [:and where [:= :tags/ns ""]]))
+                    
+                    ;; If namespace provided with value, search for that ns
+                    ns-value
+                    (update base-query :where (fn [where] [:and where [:= :tags/ns (sluj ns-value)]]))
+                    
+                    ;; If no namespace specified, search for null/empty ns
+                    :else
+                    (update base-query :where (fn [where] [:and where [:or [:= :tags/ns nil] [:= :tags/ns ""]]]))))
+                
+                ;; Error case - neither domain identifiers nor title/slug provided
                 :else
-                (throw (ex-info "Either title or domain_pk_namespace+domain_pk are required" {:status 400})))]
-        
+                (throw (ex-info "Either title/slug or domain_pk_namespace+domain_pk are required" {:status 400})))]
     (let [existing-tag (first (db/exec! query))]
       {:status 200 
        :body (if existing-tag
                (assoc existing-tag :exists true)
-               {:exists false})})))
+               {:exists false
+                :slug slug})})))
 
 (defn wrap-request-logging [handler]
   (fn [request]
@@ -437,17 +531,17 @@
                           [:and 
                            [:= :perms/capability "view"]
                            [:= :perms/user_id "all"]]
-                          ;; User owned namespaces
-                          (when username
-                            [:= :tags/owner username])
-                          ;; Namespaces with explicit permission for user
-                          (when username
-                            [:like :perms/user_id (str "%" username "%")])
-                          ;; Namespaces with permission for user's groups
-                          (when (seq groups)
-                            (into [:or] 
-                                  (map #(vector :like :perms/user_id (str "%" % "%")) 
-                                       groups)))])))
+                           ;; User owned namespaces
+                           (when username
+                             [:= :tags/owner username])
+                           ;; Namespaces with explicit permission for user
+                           (when username
+                             [:like :perms/user_id (str "%" username "%")])
+                           ;; Namespaces with permission for user's groups
+                           (when (seq groups)
+                             (into [:or] 
+                                   (map #(vector :like :perms/user_id (str "%" % "%")) 
+                                        groups)))])))
            (map :tags/ns)
            (filter identity) ;; Remove nil namespaces
            (sort))}}))
@@ -725,12 +819,13 @@
                     :middleware [[wrap-rate-limit one-per-minute]]
                     :summary "Create or update tag"
                     :tags ["Tags"]
-                    :description "Creates a new tag or updates an existing one. For updates, include tag_id. For new tags, omit tag_id."
+                    :description "Creates a new tag or updates an existing one. For updates, include tag_id. For new tags, omit tag_id. The system prevents creation of duplicate tags in the same namespace and validates that provided slugs match the title."
                     :parameters {:body [:map
                                         [:id {:description "ID of tag to update (omit for new tags)" :optional true} :int]
                                         [:title {:description "Title of the tag" :jsonschema/example "Techno Bangers"} :string]
+                                        [:slug {:description "Optional slug override (must match sluj of title if provided)" :optional true} :string]
                                         [:description {:description "Description of the tag" :optional true :jsonschema/example "a collection of techno bangers"} :string]
-                                        [:ns {:description " Namespace for the tag" :optional true :jsonschema/example "_deprecated_use_namespace_instead"} :string]
+                                        [:ns {:description "Namespace for the tag (deprecated, use namespace instead)" :optional true :jsonschema/example "_deprecated_use_namespace_instead"} :string]
                                         [:namespace {:description "Namespace for the tag" :optional true :jsonschema/example "music"} :string]
                                         [:unlisted {:description "Whether the tag is unlisted" :optional true :jsonschema/example false} :boolean]
                                         [:domain_pk_namespace {:description "Domain namespace" :optional true :jsonschema/example "spotify.playlist"} :string]
@@ -765,7 +860,18 @@
                                                          :examples {:ok {:value {:message "need to be logged in to make tag"}}}}}}
                                 403 {:description "Not authorized to edit this tag"
                                      :content {:default {:schema ErrorSchema
-                                                         :examples {:ok {:value {:message "you can not edit tags you do not own"}}}}}}}
+                                                         :examples {:ok {:value {:message "you can not edit tags you do not own"}}}}}}
+                                409 {:description "Tag already exists"
+                                     :content {:default {:schema ErrorSchema
+                                                         :examples {:ok {:value {:message "A tag with this name already exists in this namespace"
+                                                                                :error "duplicate_tag"
+                                                                                :existing_tag_id 123}}}}}}
+                                422 {:description "Validation failed"
+                                     :content {:default {:schema ErrorSchema
+                                                         :examples {:ok {:value {:message "Title does not match provided slug"
+                                                                                :error "validation_failed"
+                                                                                :provided-slug "wrong-slug"
+                                                                                :generated-slug "correct-slug"}}}}}}}
                     :handler post-tag}
              :delete {:no-doc false
                       :openapi {:security [{"apiKeyAuth" []
@@ -792,11 +898,12 @@
                                                                   :examples {:ok {:value {:namespaces ["music" "movies" "books"]}}}}}}} 
                              :handler get-namespaces}}]
     ["/tag/exists" {:get {:no-doc false
-                          :summary "Check if tag exists by title and optionally namespace"
+                          :summary "Check if tag exists by title, slug and namespace"
                           :tags ["Tags"]
-                          :description "Checks if a tag with given title exists"
+                          :description "Checks if a tag with given title or slug exists in the specified namespace"
                           :parameters {:query [:map
-                                               [:title {:description "Title to check"} :string]
+                                               [:title {:description "Title to check" :optional true} :string]
+                                               [:slug {:description "Slug to check directly (overrides title if provided)" :optional true} :string]
                                                [:ns {:description "Namespace to check in (deprecated, use namespace instead)" :optional true} :string]
                                                [:namespace {:description "Namespace to check in" :optional true} :string]]}
                           :responses {200 {:description "Existence check results"
@@ -805,15 +912,19 @@
                                                                         [:exists :boolean]
                                                                         [:id {:optional true} :int]
                                                                         [:title {:optional true} :string]]
-                                                               :examples {:ok {:value {:slug "example-tag" :exists false}}}}}}}}
-                    :handler tag-slug-check
+                                                               :examples {:ok {:value {:slug "example-tag" :exists false}}}}}}
+                                      400 {:description "Missing required parameters"
+                                           :content {:default {:schema ErrorSchema
+                                                               :examples {:ok {:value {:message "Either title or slug parameter is required"}}}}}}}
+                    :handler tag-slug-check}
 
                     :post {:no-doc false
                            :summary "Check if tag exists"
                            :tags ["Tags"]
-                           :description "Checks if a tag exists by various identifiers"
+                           :description "Checks if a tag exists by various identifiers: title/slug with namespace, or domain identifiers"
                            :parameters {:body [:map
                                                [:title {:description "Title to check" :optional true} :string]
+                                               [:slug {:description "Slug to check directly (overrides title if provided)" :optional true} :string]
                                                [:ns {:description "Namespace to check in (deprecated, use namespace instead)" :optional true} :string]
                                                [:namespace {:description "Namespace to check in" :optional true} :string]
                                                [:domain_pk_namespace {:description "Domain namespace" :optional true} :string]
@@ -821,12 +932,14 @@
                            :responses {200 {:description "Existence check results"
                                             :content {:default {:schema [:map
                                                                          [:exists :boolean]
+                                                                         [:slug {:optional true} :string]
                                                                          [:id {:optional true} :int]
                                                                          [:title {:optional true} :string]]
-                                                                :examples {:ok {:value {:exists false}}}}}}
+                                                                :examples {:ok {:value {:exists false
+                                                                                        :slug "example-tag"}}}}}}
                                        400 {:description "Invalid request parameters"
                                             :content {:default {:schema ErrorSchema
-                                                                :examples {:ok {:value {:message "Either title or domain_pk_namespace+domain_pk are required"}}}}}}}
+                                                                :examples {:ok {:value {:message "Either title/slug or domain_pk_namespace+domain_pk are required"}}}}}}}
                            :handler tag-exists-check}}]
     ["/tag/page" {:get {:no-doc false
                         :tags ["Tags"]
@@ -1189,7 +1302,7 @@
                                         401 {:description "Authentication required"
                                              :content {:default {:schema ErrorSchema
                                                                  :examples {:ok {:value {:message "must be logged in to skip"}}}}}}}
-                                       :handler item/item-skip-delete}}]
+                                           :handler item/item-skip-delete}}]
     ["/register" {:post {:no-doc false
                          :summary "Register user"
                          :tags ["Authentication"]
