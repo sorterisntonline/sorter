@@ -514,6 +514,11 @@
   [:map 
    [:message :string]])
 
+(def InfoSchema
+  [:map
+   [:success :boolean]
+   [:message :string]])
+
 (def TagSchema
   [:map
    [:tags/id :int]
@@ -550,7 +555,7 @@
    [:magnitude :int]
    [:owner :string]
    [:created_at :string]
-   [:attribute {:optional true} :int]])
+   [:attribute :int]])
 
 (def UserSchema
   [:map
@@ -723,13 +728,13 @@
                     :description "Creates a new tag or updates an existing one. For updates, include tag_id. For new tags, omit tag_id."
                     :parameters {:body [:map
                                         [:id {:description "ID of tag to update (omit for new tags)" :optional true} :int]
-                                        [:title {:description "Title of the tag"} :string]
-                                        [:description {:description "Description of the tag" :optional true} :string]
-                                        [:ns {:description "(Deprecated - use namespace instead) Namespace for the tag" :optional true} :string]
-                                        [:namespace {:description "Namespace for the tag" :optional true} :string]
-                                        [:unlisted {:description "Whether the tag is unlisted" :optional true} :boolean]
-                                        [:domain_pk_namespace {:description "Domain namespace (e.g., 'spotify.playlist')" :optional true} :string]
-                                        [:domain_pk {:description "Domain primary key" :optional true} :string]]}
+                                        [:title {:description "Title of the tag" :jsonschema/example "Techno Bangers"} :string]
+                                        [:description {:description "Description of the tag" :optional true :jsonschema/example "a collection of techno bangers"} :string]
+                                        [:ns {:description " Namespace for the tag" :optional true :jsonschema/example "_deprecated_use_namespace_instead"} :string]
+                                        [:namespace {:description "Namespace for the tag" :optional true :jsonschema/example "music"} :string]
+                                        [:unlisted {:description "Whether the tag is unlisted" :optional true :jsonschema/example false} :boolean]
+                                        [:domain_pk_namespace {:description "Domain namespace" :optional true :jsonschema/example "spotify.playlist"} :string]
+                                        [:domain_pk {:description "Domain primary key" :optional true :jsonschema/example "1234567890"} :string]]}
                     :responses {200 {:description "Tag created/updated successfully"
                                      :content {:default {:schema [:map
                                                                   [:id :int]
@@ -752,8 +757,9 @@
                                                                                  :edited_at "2025-03-06T02:05:44.483Z"
                                                                                  :unlisted false
                                                                                  :ns nil
-                                                                                 :domain_pk_namespace "meta.genre"
-                                                                                 :domain_pk ""}}}}}}
+                                                                                 :namespace "spotify"
+                                                                                 :domain_pk_namespace "spotify.playlist"
+                                                                                 :domain_pk "1234567890"}}}}}}
                                 401 {:description "Authentication required"
                                      :content {:default {:schema ErrorSchema
                                                          :examples {:ok {:value {:message "need to be logged in to make tag"}}}}}}
@@ -902,13 +908,13 @@
                      :middleware [[wrap-rate-limit one-per-second]]
                      :summary "Record a vote"
                      :tags ["Votes"]
-                     :description "Records a user's vote comparing two items. The magnitude indicates the strength of preference."
+                     :description "Records a user's vote comparing two items. The magnitude indicates the strength of preference. \nThe attribute parameter can be specified in multiple ways: as a direct numeric ID, as an object with ID field, or as an object with a title field to create a new attribute."
                      :parameters {:body [:map
                                          [:left_item_id {:description "ID of the left item in comparison"} :int]
                                          [:right_item_id {:description "ID of the right item in comparison"} :int]
                                          [:magnitude {:description "Strength of preference (1-5)"} :int]
-                                         [:tag_id {:description "ID of the tag context for this vote"} :int]
-                                         [:attribute {:description "Optional attribute ID for this vote" :optional true} :int]]}
+                                         [:tag_id {:description "ID of the tag context for this vote"} :int] 
+                                         [:attribute {:description "attribute id"} :int]]}
                      :responses {200 {:description "Vote recorded"
                                       :content {:default {:schema VoteSchema
                                                           :examples {:ok {:value {:id 1
@@ -916,6 +922,7 @@
                                                                                   :right_item_id 2
                                                                                   :magnitude 3
                                                                                   :owner "user1"
+                                                                                  :attribute 1
                                                                                   :created_at "2023-01-01T12:00:00Z"}}}}}}
                                  401 {:description "Authentication required"
                                       :content {:default {:schema ErrorSchema
@@ -1019,24 +1026,28 @@
                                            "cookieAuth" []}]}
                      :summary "Create or update item"
                      :tags ["Items"]
-                     :description "Creates a new item or updates an existing one"
+                     :description "Creates a new item or updates an existing one. For updates, include the item ID. For new items, omit the ID. When creating an item, it will automatically be added to the specified tag. URLs for YouTube, TikTok, Spotify, and Twitter will be automatically processed to extract domain-specific identifiers.\nWARNING: returns a LIST of items, not a single item. This is because the item may be added to multiple tags, and the list is the only way to return all of them."
                      :parameters {:body [:map
                                          [:id {:description "ID of item to update (omit for new items)" :optional true :jsonschema/example 123} :int]
                                          [:title {:description "Title of the item" :jsonschema/example "My Awesome Item"} :string]
-                                         [:slug {:description "Slug of the item" :optional true :jsonschema/example "my-awesome-item"} :string]
                                          [:body {:description "Body of the item, can be markdown, will render images & code blocks" :optional true :jsonschema/example "This is the content of my item with **markdown** support."} :string]
-                                         [:url {:description "URL of the item" :optional true :jsonschema/example "https://example.com/resource"} :string]
+                                         [:url {:description "URL of the item. URLs from YouTube, TikTok, Spotify, and Twitter will be automatically processed." :optional true :jsonschema/example "https://example.com/resource"} :string]
                                          [:tag_id {:description "ID of the tag to add this item to" :jsonschema/example 42} :int]
                                          [:domain_pk_namespace {:description "Domain namespace. If set to IMG, manual forced image rendering will be used for the URL." :optional true :jsonschema/example "IMG"} :string]
-                                         [:domain_pk {:description "Domain primary key -- ie for spotify, the playlist id" :optional true :jsonschema/example "item-unique-id-123"} :string]]}
+                                         [:domain_pk {:description "Domain primary key -- ie for spotify, the playlist id" :optional true :jsonschema/example "item-unique-id-123"} :string]
+                                         [:discord_channel_id {:description "Discord channel ID when creating an item from Discord" :optional true} :string]
+                                         [:discord_server_id {:description "Discord server ID when creating an item from Discord" :optional true} :string]]}
                      :responses {200 {:description "Item created/updated"
                                       :content {:default {:schema ItemSchema
                                                           :examples {:ok {:value {:id 1
                                                                                   :title "New Item"
-                                                                                  :body ""
-                                                                                  :description "An item description"
+                                                                                  :slug "new-item"
+                                                                                  :body "Item content"
+                                                                                  :url "https://example.com/resource"
                                                                                   :owner "user1"
-                                                                                  :created_at "2023-01-01T12:00:00Z"}}}}}}
+                                                                                  :created_at "2023-01-01T12:00:00Z"
+                                                                                  :domain_pk_namespace "youtube.video"
+                                                                                  :domain_pk "dQw4w9WgXcQ"}}}}}}
                                  401 {:description "Authentication required"
                                       :content {:default {:schema ErrorSchema
                                                           :examples {:ok {:value {:message "must be logged in to create items"}}}}}}
@@ -1089,19 +1100,96 @@
                             :handler item/item-exists-check}}]
     ["/item/membership" {:get {:no-doc false
                                :tags ["Items"]
+                               :summary "Get item membership information"
+                               :description "Retrieves information about which tags an item belongs to and which items the user has skipped"
+                               :parameters {:query [:map
+                                                    [:item_id {:description "ID of the item to get membership information for"} :string]]}
+                               :responses {200 {:description "Item membership information"
+                                                :content {:default {:schema [:map
+                                                                             [:membership [:vector [:map
+                                                                                                    [:item_id :int]
+                                                                                                    [:tag_id :int]
+                                                                                                    [:discord_channel_id {:optional true} [:maybe :string]]
+                                                                                                    [:discord_server_id {:optional true} [:maybe :string]]
+                                                                                                    [:tags/id :int]
+                                                                                                    [:tags/title :string]
+                                                                                                    [:tags/slug :string]
+                                                                                                    [:tags/owner :string]]]]
+                                                                             [:skips [:vector [:map
+                                                                                               [:item_id :int]
+                                                                                               [:owner :string]]]]]
+                                                                    :examples {:ok {:value {:membership [{:item_id 123
+                                                                                                          :tag_id 42
+                                                                                                          :tags/id 42
+                                                                                                          :tags/title "Example Tag"
+                                                                                                          :tags/slug "example-tag"
+                                                                                                          :tags/owner "user1"}]
+                                                                                            :skips []}}}}}}}
                                :handler item/item-m-get}
                          :delete {:no-doc false
                                   :tags ["Items"]
+                                  :openapi {:security [{"apiKeyAuth" []
+                                                        "cookieAuth" []}]}
+                                  :summary "Remove item from tag"
+                                  :description "Removes an item from a tag. User must be the owner of the item or an admin."
+                                  :parameters {:body [:map
+                                                      [:item_id {:description "ID of the item to remove from tag"} :int]
+                                                      [:tag_id {:description "ID of the tag to remove item from"} :int]]}
+                                  :responses {200 {:description "Item removed from tag"
+                                                   :content {:default {:schema [:map [:ok :boolean]]
+                                                                       :examples {:ok {:value {:ok true}}}}}}
+                                              401 {:description "Not authorized to remove this item"
+                                                   :content {:default {:schema ErrorSchema
+                                                                       :examples {:ok {:value {:message "must own item to remove it from tag"}}}}}}}
                                   :handler item/item-m-delete}
                          :post {:no-doc false
                                 :tags ["Items"]
+                                :openapi {:security [{"apiKeyAuth" []
+                                                      "cookieAuth" []}]}
+                                :summary "Add item to tag"
+                                :description "Adds an existing item to a tag. User must have add permission on the target tag."
+                                :parameters {:body [:map
+                                                    [:item_id {:description "ID of the item to add to tag"} :int]
+                                                    [:tag_id {:description "ID of the tag to add item to"} :int]
+                                                    [:discord_channel_id {:description "Discord channel ID when adding from Discord" :optional true} :string]
+                                                    [:discord_server_id {:description "Discord server ID when adding from Discord" :optional true} :string]]}
+                                :responses {200 {:description "Item added to tag"
+                                                 :content {:default {:schema [:map [:ok :boolean]]
+                                                                     :examples {:ok {:value {:ok true}}}}}}
+                                            401 {:description "Not authorized to add to this tag"
+                                                 :content {:default {:schema ErrorSchema
+                                                                     :examples {:ok {:value {:message "must have add permission on target tag"}}}}}}}
                                 :handler item/item-m-post}}]
     ["/item/skip" {:post {:no-doc false
                           :tags ["Items"]
+                          :openapi {:security [{"apiKeyAuth" []
+                                                "cookieAuth" []}]}
+                          :summary "Skip item"
+                          :description "Marks an item as skipped for the current user, so it won't appear in voting pairs for them"
+                          :parameters {:body [:map
+                                              [:item_id {:description "ID of the item to skip"} :int]]}
+                          :responses {200 {:description "Item skipped"
+                                           :content {:default {:schema [:map [:ok :boolean]]
+                                                               :examples {:ok {:value {:ok true}}}}}}
+                                      401 {:description "Authentication required"
+                                           :content {:default {:schema ErrorSchema
+                                                               :examples {:ok {:value {:message "must be logged in to skip"}}}}}}}
                           :handler item/item-skip}
                    :delete {:no-doc false
                             :tags ["Items"]
-                            :handler item/item-skip-delete}}]
+                            :openapi {:security [{"apiKeyAuth" []
+                                                  "cookieAuth" []}]}
+                            :summary "Unskip item"
+                            :description "Removes an item from the user's skipped items list, so it can appear in voting pairs again"
+                            :parameters {:body [:map
+                                                [:item_id {:description "ID of the item to unskip"} :int]]}
+                            :responses {200 {:description "Item unskipped"
+                                             :content {:default {:schema [:map [:ok :boolean]]
+                                                                 :examples {:ok {:value {:ok true}}}}}}
+                                        401 {:description "Authentication required"
+                                             :content {:default {:schema ErrorSchema
+                                                                 :examples {:ok {:value {:message "must be logged in to skip"}}}}}}}
+                                       :handler item/item-skip-delete}}]
     ["/register" {:post {:no-doc false
                          :summary "Register user"
                          :tags ["Authentication"]
@@ -1291,7 +1379,7 @@
                     {:validate spec/validate
                      :exception pretty/exception
                      :conflicts nil
-                     :data {:coercion nil ;;(reitit.coercion.malli/create)
+                     :data {:coercion (reitit.coercion.malli/create)
                             :muuntaja m-instance
                             :middleware
                             [(fn [handler]
@@ -1304,7 +1392,9 @@
                              muuntaja/format-negotiate-middleware
                              muuntaja/format-response-middleware
                              muuntaja/format-request-middleware
-                             exception-middleware]}})
+                             exception-middleware
+                             coercion/coerce-request-middleware
+                             coercion/coerce-response-middleware]}})
                             ;;  coercion/coerce-request-middleware
                             ;;  coercion/coerce-response-middleware
                               

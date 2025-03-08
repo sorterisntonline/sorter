@@ -166,7 +166,8 @@
                            (extract-tiktok-code)
                            (extract-spotify-code)
                            (extract-twitter-code)))
-                (h/where [:= :items/id (-> r :body-params :id)]))))
+                (h/where [:= :items/id (-> r :body-params :id)])
+                (h/returning :*))))
 
 (defn item-slug-check [r]
   (let [title (-> r :query-params (get "title"))
@@ -284,8 +285,15 @@
                                          (= (item-owner (-> req :body-params :id)) username))
                              (throw (ex-info "must own item to update it" {:status 403})))
 
-                           (update-item req))
-                         (create-item req))}))
+                           ;; TODO: i don't think this works to unwrap our output -- and it might be best that it is wrapped, honestly...
+                           (let [result (update-item req)]
+                             (if (and (sequential? result) (= 1 (count result)))
+                               (first result)
+                               result)))
+                         (let [result (create-item req)]
+                           (if (and (sequential? result) (= 1 (count result)))
+                             (first result)
+                             result)))}))
 
 (defn item-m-get [r]
   (let [itemid (-> r :query-params (get "item_id"))]

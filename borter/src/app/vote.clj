@@ -36,38 +36,79 @@
                   (= -1 tagid))
       (throw (ex-info "need vote permission" {:status 401})))
 
-    (let [attributeid (if (= -1 (-> r :body-params :attribute :id))
-                        (do (when (not-empty (db/exec! (-> {:select :id
-                                                            :where [:= :title (sluj (-> r :body-params :attribute :title))]
-                                                            :from :attributes})))
-                              (throw (ex-info "already existing attribute title cant be created" {:status 400})))
-                            (:attributes/id (first (db/exec! (-> (h/insert-into :attributes)
-                                                                 (h/values [{:owner (-> r :session :user_name)
-                                                                             :title (sluj (-> r :body-params :attribute :title))
-                                                                             :description ""}])
-                                                                 (h/returning :*))))))
-                        (-> r :body-params :attribute :id))]
-      
-      (if-let [duplicate (first (find-existing-vote (-> r :session :user_name)
-                                                    {:items/id (-> r :body-params :left_item_id)}
-                                                    {:items/id (-> r :body-params :right_item_id)}
-                                                    attributeid))]
-        (db/exec! (-> (h/update :votes)
-                      (h/set (-> (-> r :body-params)
-                                 (assoc :owner (-> r :session :user_name)
-                                        :attribute attributeid
-                                        :edited_at [:now])
-                                 (dissoc :tag_id)))
-                      (h/where [:= :votes/id (:votes/id duplicate)])))
-        
-        (db/exec! (-> (h/insert-into :votes)
-                      (h/values [(-> r
-                                     :body-params
-                                     (assoc :owner (-> r :session :user_name)
-                                            :attribute attributeid)
-                                     (dissoc :tag_id))])))))
+    ;; TODO: remove this and use /api/attribute instead 
+    ;;       keeping it for now for compatibility with frontend
+    (let [attr-param (-> r :body-params :attribute)
+          attributeid (cond
+                        ;; Case 1: Direct attribute ID in the request
+                        (number? attr-param)
+                        (do
+                          ;; Verify the attribute exists
+                          (when-not (seq (db/exec! (-> (h/select :id)
+                                                       (h/from :attributes)
+                                                       (h/where [:= :attributes/id attr-param]))))
+                            (throw (ex-info "attribute not found" {:status 404})))
+                          attr-param)
+                          
+                        ;; Case 2: Attribute object with ID = -1 or no ID but with title (create new)
+                        (or (= -1 (-> attr-param :id))
+                            (and (map? attr-param) 
+                                 (nil? (-> attr-param :id))
+                                 (not-empty (-> attr-param :title))))
+                        (do 
+                          (when (not-empty (db/exec! (-> {:select :id
+                                                          :where [:= :title (sluj (-> attr-param :title))]
+                                                          :from :attributes})))
+                            (throw (ex-info "already existing attribute title cant be created" {:status 400})))
+                          (:attributes/id (first (db/exec! (-> (h/insert-into :attributes)
+                                                               (h/values [{:owner (-> r :session :user_name)
+                                                                           :title (sluj (-> attr-param :title))
+                                                                           :description ""}])
+                                                               (h/returning :*))))))
+                          
+                        ;; Case 3: Attribute object with valid ID
+                        (map? attr-param)
+                        (-> attr-param :id)
+                          
+                        ;; Case 4: Invalid attribute parameter
+                        :else
+                        (throw (ex-info "invalid attribute parameter" {:status 400})))
+          
+          ;; TODO: remove this and use /api/attribute instead 
+          ;; ;; Get the attribute record for inclusion in response
+          ;; attribute (first (db/exec! (-> (h/select :*)
+          ;;                                (h/from :attributes)
+          ;;                                (h/where [:= :attributes/id attributeid]))))
+          
+          vote-data (if-let [duplicate (first (find-existing-vote (-> r :session :user_name)
+                                                          {:items/id (-> r :body-params :left_item_id)}
+                                                          {:items/id (-> r :body-params :right_item_id)}
+                                                          attributeid))]
+                      ;; Update existing vote
+                      (do
+                        (db/exec! (-> (h/update :votes)
+                                      (h/set (-> (-> r :body-params)
+                                                 (assoc :owner (-> r :session :user_name)
+                                                        :attribute attributeid
+                                                        :edited_at [:now])
+                                                 (dissoc :tag_id)))
+                                      (h/where [:= :votes/id (:votes/id duplicate)])))
+                        ;; Get updated vote data
+                        (first (db/exec! (-> (h/select :*)
+                                             (h/from :votes)
+                                             (h/where [:= :votes/id (:votes/id duplicate)])))))
+                      
+                      ;; Insert new vote
+                      (first (db/exec! (-> (h/insert-into :votes)
+                                           (h/values [(-> r
+                                                          :body-params
+                                                          (assoc :owner (-> r :session :user_name)
+                                                                 :attribute attributeid)
+                                                          (dissoc :tag_id))])
+                                           (h/returning :*)))))]
 
-    {:status 200 :body {:ok true}}))
+      {:status 200 
+       :body (vote-data)})))
 
 (defn vote-get [r]
   (let [userid (-> r :session :user_name)
