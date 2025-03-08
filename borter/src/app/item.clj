@@ -4,8 +4,11 @@
             [honey.sql.helpers :as h]
             [lambdaisland.regal :as r]
             [ring.util.codec :as codec]
-            [app.http :as http]
             [app.permissions :as perms]))
+
+(defn get-admin-users []
+  (when-let [admins (System/getenv "BORTER_STATIC_ADMINS")]
+    (set (clojure.string/split admins #","))))
 
 (def yt (r/regex [:cat
                   [:? [:capture "http" [:? "s"] "://"]]
@@ -272,7 +275,7 @@
 (defn item-post [req]
   (let [username (-> req :session :user_name)
         tagids [(-> req :body-params :tag_id)]
-        admin-users (http/get-admin-users)
+        admin-users (get-admin-users)
         is-admin (and admin-users (contains? admin-users username))]
 
     {:status 200 :body (if (-> req :body-params :id)
@@ -301,7 +304,7 @@
                                                     [:= :owner (-> r :session :user_name)]])))})})))
 
 (defn item-m-delete [r]
-  (let [admin-users (http/get-admin-users)
+  (let [admin-users (get-admin-users)
         username (-> r :session :user_name)
         item-owner (-> (db/exec! (-> (h/select :owner) 
                                      (h/from :items)

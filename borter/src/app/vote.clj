@@ -4,8 +4,11 @@
             [honey.sql.helpers :as h]
             [app.permissions :as perms]
             [sluj.core :refer [sluj]]
-            [app.http :as http]
             [clojure.string :as str]))
+
+(defn get-admin-users []
+  (when-let [admins (System/getenv "BORTER_STATIC_ADMINS")]
+    (set (clojure.string/split admins #","))))
 
 (defn find-existing-vote [userid fst snd attr]
   (db/exec! (-> (h/select :*)
@@ -162,7 +165,7 @@
        :body {:votes votes}})))
 
 (defn vote-delete [r]
-  (let [admin-users (http/get-admin-users)
+  (let [admin-users (get-admin-users)
         username (-> r :session :user_name)
         vote-owner (-> (db/exec! (-> (h/select :owner) 
                                      (h/from :votes)
