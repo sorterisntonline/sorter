@@ -8,14 +8,19 @@
             [borkdude.deflet :refer [deflet]])
   (:import [java.util Date]))
 
-(defn get-feed [req]
-  (-> (hc/request {:as :json
-                   :url (str "http://localhost:8081/api/feed?tag_id=" (-> req :params (get "tag_id")))
-                   :method :get})
-      :data
-      :response))
+(defn get-feed [{:keys [params]}]
+  (let [feed (get-in (hc/request {:as :json
+                                   :url (str "http://localhost:8081/api/feed?tag_id=" (get params "tag_id"))
+                                   :method :get})
+                     [:body :data :response])
+        items (filter #(= (get % "type") "Item") feed)
+        votes (filter #(= (get % "type") "Vote") feed)]
+    {:status 200
+     :headers {"Content-Type" "application/json"}
+     :body {:items items
+            :votes votes}}))
 
-(defn get-heirarchy [req]
+(defn get-hierarchy [req]
   (:response (hc/request {:as :json
                           :url "http://localhost:8081/api/hierarchy"
                           :method :get})))

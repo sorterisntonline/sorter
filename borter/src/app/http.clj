@@ -33,18 +33,9 @@
             [malli.util :as mu]
 
             
-            [io.staticweb.rate-limit.storage :as storage]
+
             [io.staticweb.rate-limit.middleware :refer [ip-rate-limit wrap-rate-limit]]
-            [io.staticweb.rate-limit.limits :refer [RateLimit]]
-            [io.staticweb.rate-limit.responses :refer [too-many-requests-response]]
-            [cheshire.core :as json]
 
-
-            [app.database :as db]
-            [muuntaja.middleware :as mw]
-            [honey.sql.helpers :as h]
-            [sluj.core :refer [sluj]]
-            [hato.client :as hc]
             
             
             [app.login :as login]
@@ -66,377 +57,17 @@
             [app.discord :as discord]
             [app.discord-oauth :as discord-oauth]
             [com.rpl.specter :refer :all]
-            [app.api-keys :as api-keys])
+            [app.api-keys :as api-keys]
+
+            [app.schemas :refer [ItemSchema VoteSchema UserSchema TagSchema ErrorSchema InfoSchema AttributeSchema TagPageResponseSchema SortedItemSchema PermsSchema]]
+            [app.ratelimits :refer :all]
+            [app.tag :refer :all]
+            [app.misc :refer :all]
+            [app.users :refer :all])
   (:import
    [java.net URLEncoder]))
 
 
-
-;; Replace the existing test functions with a single handler
-(defn count-votes [tag]
-  (let [subquery (-> (h/select :items_in_tags/item_id)
-                     (h/from :items_in_tags)
-                     (h/where [:= :items_in_tags/tag_id (:tags/id tag)]))
-        votes (-> (h/select [[:count :votes/id]])
-                  (h/from :votes)
-                  (h/where [:or
-                            [:in :votes/left_item_id subquery]
-                            [:in :votes/right_item_id subquery]])
-                  db/exec! first :count)]
-    (assoc tag :vote_count votes)))
-
-(defn query-tags [r]
-  {:status 200 :body
-   {:public (->> (db/exec! (-> (h/select :tags/*
-                                         [[:count :items_in_tags/item_id] :item_count])
-                               (h/join :perms [:= :perms/tag_id :tags/id])
-                               (h/where [:and
-                                         [:= :perms/capability "view"]
-                                         [:= :perms/user_id "all"]
-                                         [:= :tags/unlisted false]])
-                               (h/from :tags)
-
-                               (h/left-join :items_in_tags [:= :items_in_tags/tag_id :tags/id])
-                               (h/group-by :tags/id)))
-                 (map count-votes))
-    :private
-    (let [groups (map :users_in_usergroups/usergroup_id
-                      (db/exec! (-> {:select :* :from :users_in_usergroups
-                                     :where [:= :user_id (-> r :session :user_name)]})))]
-      (->> (db/exec! (-> (h/select :tags/*)
-                         (h/from :tags)
-                         (h/join :perms [:= :perms/tag_id :tags/id])
-                         (h/where [:or
-                                   [:and
-                                    [:= :perms/capability "view"]
-                                    (if (-> r :session :user_name)
-                                      [:or
-                                       [:like :perms/user_id (str "%" (-> r :session :user_name) "%")]
-                                       (into [:or] (map #(vector :like :perms/user_id (str "%" % "%")) groups))]
-                                      false)]
-                                   [:and
-                                    [:and
-                                     [:= :perms/capability "view"]
-                                     [:not [:= :perms/user_id "all"]]]
-                                    (if (-> r :session :user_name)
-                                      [:= :tags/owner (-> r :session :user_name)]
-                                      false)]])))
-           (map count-votes)))
-    :unlisted
-    (->> (db/exec! (-> (h/select :tags/*)
-                       (h/from :tags)
-                       (h/where [:and
-                                 [:= :tags/unlisted true]
-                                 (if (-> r :session :user_name)
-                                   [:= :tags/owner (-> r :session :user_name)]
-                                   false)])))
-         (map count-votes))
-    #_:namespaces #_(db/exec! "select domain_pk_namespace count(*) from items group_by domain_pk_namespace")}})
-
-(comment
-  (db/exec! (-> (h/select :*)
-                (h/from :tags)
-                (h/where [:= :tags/domain_pk_namespace "spotify.playlist"]))))
-
-(defn post-tag [r]
-  (log/debug "post-tag called with body-params:" (:body-params r))
-  (when (nil? (-> r :session :user_name))
-    (log/warn "Unauthorized attempt to create tag")
-    (throw (ex-info "need to be logged in to make tag" {:status 401})))
-    
-  ;; Validate title and slug match
-  (let [title (-> r :body-params :title)
-        provided-slug (-> r :body-params :slug)
-        generated-slug (sluj title)]
-    
-    ;; If a slug was explicitly provided, ensure it matches the generated one
-    (when (and provided-slug (not= provided-slug generated-slug))
-      (log/warn "Mismatched title and slug in tag creation request")
-      (throw (ex-info "Title does not match provided slug" 
-                      {:status 422 
-                       :error "validation_failed"
-                       :provided-slug provided-slug
-                       :generated-slug generated-slug}))))
-
-  ;; Check for Discord context
-  (let [has-discord-context (boolean (:discord r))
-        domain-pk-ns (-> r :body-params :domain_pk_namespace)
-        domain-pk (-> r :body-params :domain_pk)
-        is-discord-channel (and domain-pk-ns domain-pk 
-                                (= domain-pk-ns "discord.channel"))
-            
-        ;; Get tag ID (preferring 'id' over 'tag_id')
-        tag-id (or (-> r :body-params :id)
-                   (-> r :body-params :tag_id))
-        
-        ;; Get namespace using updated handling
-        namespace-value (or (-> r :body-params :namespace)
-                            (-> r :body-params :ns))
-        slug (sluj (-> r :body-params :title))
-        
-        ;; Check if this is an update or a new tag creation
-        is-update (boolean tag-id)
-            
-        ;; Check if tag already exists for this Discord channel
-        existing-tag (when (and is-discord-channel 
-                                (or has-discord-context 
-                                    (db/exec! {:select 1 
-                                               :from :users 
-                                               :where [:and 
-                                                       [:= :user_name (-> r :session :user_name)]
-                                                       [:not= :discord_id nil]]})))
-                       (first (db/exec! {:select :*
-                                         :from :tags
-                                         :where [:and
-                                                 [:= :tags/domain_pk_namespace domain-pk-ns]
-                                                 [:= :tags/domain_pk domain-pk]]})))]
-    
-    ;; For non-update operations, check if slug already exists in the namespace
-    (when (and (not is-update) 
-               (not existing-tag))
-      (let [ns-query-condition (cond
-                                 ;; If namespace explicitly provided but empty
-                                 (and namespace-value (empty? namespace-value))
-                                 [:= :tags/ns ""]
-                                 
-                                 ;; If namespace provided with value
-                                 namespace-value
-                                 [:= :tags/ns (sluj namespace-value)]
-                                 
-                                 ;; If no namespace specified
-                                 :else
-                                 [:or [:= :tags/ns nil] [:= :tags/ns ""]])
-            existing-slug-tag (first (db/exec! {:select :*
-                                                :from :tags
-                                                :where [:and
-                                                        [:= :tags/slug slug]
-                                                        ns-query-condition]}))]
-        (when existing-slug-tag
-          (log/warn "Attempted to create tag with duplicate slug:" slug)
-          (throw (ex-info "A tag with this name already exists in this namespace" 
-                          {:status 409 
-                           :error "duplicate_tag" 
-                           :existing_tag_id (:tags/id existing-slug-tag)})))))
-        
-    ;; Return a proper HTTP response with the tag data
-    {:status 200
-     :body (cond
-      ;; Case 1: Explicit tag id in request (standard update)
-            tag-id
-            (do (when-not (perms/owns tag-id (-> r :session :user_name))
-                  (log/warn "User" (-> r :session :user_name) "attempted to edit tag they don't own:" tag-id)
-                  (throw (ex-info "you can not edit tags you do not own" {:status 403})))
-
-                (let [body-params (-> r :body-params)
-                ;; Ensure description is always a string, never nil
-                      description (if (contains? body-params :description)
-                                    (or (:description body-params) "")
-                                    "")
-                      update-values (-> body-params
-                                       (assoc :edited_at [:now] :description description)
-                                       (dissoc :tag_id :id))
-                      ret (db/exec! (-> (h/update :tags)
-                                        (h/set update-values)
-                                        (h/where [:= :tags/id tag-id])))]
-                  (log/info "Tag updated:" tag-id)
-                  (log/debug "Updated tag result:" ret)
-                  (first ret)))
-          
-      ;; Case 2: Discord channel tag exists (update)
-            (and is-discord-channel existing-tag)
-            (do (when-not (perms/owns (:tags/id existing-tag)
-                                    (-> r :session :user_name))
-                  (log/warn "User" (-> r :session :user_name) "attempted to edit Discord channel tag they don't own:" (:tags/id existing-tag))
-                  (throw (ex-info "you can not edit tags you do not own" {:status 403})))
-
-                (let [body-params (-> r :body-params)
-                ;; Ensure description is always a string, never nil
-                      description (if (contains? body-params :description)
-                                    (or (:description body-params) "")
-                                    "")
-                      update-values (-> body-params
-                                       (assoc :edited_at [:now] :description description)
-                                       (dissoc :tag_id :id))
-                      ret (db/exec! (-> (h/update :tags)
-                                        (h/set update-values)
-                                        (h/where [:= :tags/id (:tags/id existing-tag)])))]
-                  (log/info "Discord channel tag updated:" (:tags/id existing-tag))
-                  (log/debug "Updated Discord channel tag result:" ret)
-                  (first ret)))
-          
-      ;; Case 3: Create new tag
-            :else
-            (let [body-params (-> r :body-params)
-            ;; Prefer 'namespace' over 'ns' if both are provided
-                  namespace-value (or (-> body-params :namespace)
-                                      (-> body-params :ns))
-            ;; Ensure description is always a string, never nil
-                  description (if (contains? body-params :description)
-                                (or (:description body-params) "")
-                                "")
-                  tag-values (merge
-                              (-> body-params
-                                  (dissoc :ns :namespace :tag_id :id)
-                                  (assoc :description description)) ;; Explicitly set description
-                              (when (and namespace-value (not= namespace-value "")) 
-                                {:tags/ns (sluj namespace-value)})
-                              {:tags/slug (sluj (-> body-params :title))
-                               :tags/owner (-> r :session :user_name)})
-                  ret (db/exec! (-> (h/insert-into :tags)
-                                    (h/values [tag-values])
-                                    (h/returning :*)))
-                  tagid (-> ret first :tags/id)]
-              (db/exec! (-> (h/insert-into :perms)
-                            (h/values (perms/public-permissions tagid))))
-              (log/info "New tag created:" tagid "by user:" (-> r :session :user_name))
-              (first ret)))}))
-
-
-(defn delete-tag [req]
-  (let [tagid (-> req :params (get "id") Integer/parseInt)]
-    (when-not (perms/owns tagid (-> req :session :user_name))
-      (throw (ex-info "must own tag" {:status 401})))
-
-    (db/exec! {:delete-from :perms :where [:= :tag_id tagid]})
-    (db/exec! {:delete-from :items_in_tags :where [:= :tag_id tagid]})
-    (db/exec! {:delete-from :tags :where [:= :id tagid]})
-    {:status 200 :body {:deleted true}}))
-
-(defn urlencode-params [params]
-  (clojure.string/join "&" (map (fn [[k v]] (str k "=" (URLEncoder/encode (str v) "UTF-8"))) params)))
-
-(comment
-  (urlencode-params {:a 3 :b 4}))
-
-(defn tag-info-request [r]
-  {:status 200 :body (:body (hc/request {:as :json
-                                         :url (str "http://localhost:8081/api/tag/page?"
-                                                   (urlencode-params (cond-> (-> r :params)
-                                                                       (-> r :session :user_name) (assoc "user_name" (-> r :session :user_name)))))
-                                         :method :get}))
-   :headers {"Content-Type" "application/json"}})
-
-;; @deprecated: Use tag-info-request instead
-(defn tag-info-request2 [r]
-  {:status 200 :body (:body (hc/request {:as :json
-                                         :url (str "http://localhost:8081/api/tag/page2?"
-                                                   (urlencode-params (cond-> (-> r :params)
-                                                                       (-> r :session :user_name)
-                                                                       (assoc "user_name" (-> r :session :user_name)))))
-                                         :method :get}))
-   :headers {"Content-Type" "application/json"}})
-
-
-(defn tag-slug-check [r]
-  (let [title (-> r :query-params (get "title"))
-        ;; Allow direct slug parameter to override generated slug
-        direct-slug (-> r :query-params (get "slug"))
-        ;; Prefer 'namespace' over 'ns' if both are provided
-        ns-value (or (-> r :query-params (get "namespace"))
-                     (-> r :query-params (get "ns")))
-        ;; Generate slug from title if no direct slug provided
-        slug (if direct-slug direct-slug (when title (sluj title)))
-        ;; Build query based on params
-        query (if slug
-                (cond
-                  ;; If namespace explicitly provided but empty, search for empty ns
-                  (and ns-value (empty? ns-value))
-                  {:select :* 
-                   :from :tags
-                   :where [:and
-                           [:= :tags/slug slug]
-                           [:= :tags/ns ""]]}
-                  
-                  ;; If namespace provided with value, search for that ns
-                  ns-value
-                  {:select :* 
-                   :from :tags
-                   :where [:and
-                           [:= :tags/slug slug]
-                           [:= :tags/ns (sluj ns-value)]]}
-                  
-                  ;; If no namespace specified, search for null/empty ns
-                  :else
-                  {:select :* 
-                   :from :tags
-                   :where [:and
-                           [:= :tags/slug slug]
-                           [:or
-                            [:= :tags/ns nil]
-                            [:= :tags/ns ""]]]})
-                nil)]
-    
-    (if slug
-      (let [existing-tag (first (db/exec! query))]
-        {:status 200 
-         :body (if existing-tag
-                 ;; Return only the specific fields defined in the OpenAPI schema
-                 {:exists true
-                  :id (:tags/id existing-tag)
-                  :slug (:tags/slug existing-tag)
-                  :title (:tags/title existing-tag)
-                  :owner (:tags/owner existing-tag)
-                  :namespace (:tags/ns existing-tag)}
-                 {:slug slug
-                  :exists false})})
-      ;; Return error if neither title nor slug provided
-      {:status 400 
-       :body {:message "Either title or slug parameter is required"}})))
-
-(defn tag-exists-check [r]
-  (let [body (:body-params r)
-        title (:title body)
-        ;; Allow direct slug parameter to override generated slug
-        direct-slug (:slug body)
-        ;; Prefer 'namespace' over 'ns' if both are provided
-        ns-value (or (:namespace body)
-                    (:ns body))
-        domain-pk-ns (:domain_pk_namespace body)
-        domain-pk (:domain_pk body)
-        
-        ;; Generate slug from title if no direct slug provided
-        slug (if direct-slug direct-slug (when title (sluj title)))
-        
-        query (cond
-                ;; Use domain identifiers if provided
-                (and domain-pk-ns domain-pk)
-                {:select :*
-                 :from :tags
-                 :where [:and
-                         [:= :tags/domain_pk_namespace domain-pk-ns]
-                         [:= :tags/domain_pk domain-pk]]}
-                
-                ;; Use title/slug + namespace if available
-                slug
-                (let [base-query {:select :* :from :tags :where [:= :tags/slug slug]}]
-                  (cond
-                    ;; If namespace is explicitly provided as empty string, search for empty ns only
-                    (and (some? ns-value) (empty? ns-value))
-                    (update base-query :where (fn [where] [:and where [:= :tags/ns nil]]))
-                    
-                    ;; If namespace provided with non-empty value, search for that ns
-                    (some? ns-value)
-                    (update base-query :where (fn [where] [:and where [:= :tags/ns (sluj ns-value)]]))
-                    
-                    ;; If no namespace specified, search for null/empty ns
-                    :else
-                    (update base-query :where (fn [where] [:and where [:or [:= :tags/ns nil] [:= :tags/ns nil]]]))))
-                
-                ;; Error case - neither domain identifiers nor title/slug provided
-                :else
-                (throw (ex-info "Either title/slug or domain_pk_namespace+domain_pk are required" {:status 400})))]
-    (let [existing-tag (first (db/exec! query))]
-      {:status 200 
-       :body (if existing-tag
-               ;; Return only the specific fields defined in the OpenAPI schema
-               {:exists true
-                :id (:tags/id existing-tag)
-                :slug (:tags/slug existing-tag)
-                :title (:tags/title existing-tag)
-                :owner (:tags/owner existing-tag)
-                :namespace (:tags/ns existing-tag)}
-               {:exists false
-                :slug slug})})))
 
 (defn wrap-request-logging [handler]
   (fn [request]
@@ -469,69 +100,9 @@
               :user_name username}
              {:authenticated false})}))
 
-(comment) 
-  ;; deprecated! this is not secure and so there is no longer an endpoint for it
-  
-(defn get-users [req]
-  {:status 200 :body (db/exec! (-> {:select [:users/user_name :owner] :from :users :where true}
-                                   (h/left-join :usergroups [:= :users/user_name
-                                                             :usergroups/user_name])))})
 
-(defn get-leaderboard [req]
-  {:status 200 :body (db/exec! (-> {:select [:users/user_name [[:count :votes/*]]] :from :users}
-                                   (h/group-by :users/user_name)
-                                   (h/join :votes [:= :votes/owner :users/user_name])))})
 
-(def storage (storage/local-storage))
-(comment
-  (storage/clear-counters storage))
 
-(defrecord UserRateLimit [id quota ttl]
-  RateLimit
-  (get-key [self req]
-    (str (.getName (type self)) id
-         "-"
-         (:template (:reitit.core/match req))
-         "-"
-         (:user_name (:session req))))
-
-  (get-quota [self req]
-    (let [username (get-in req [:session :user_name])
-          static-admins (System/getenv "BORTER_STATIC_ADMINS")
-          always-unlimited (if static-admins
-                             (-> static-admins
-                                 (clojure.string/split #",")
-                                 (into []))
-                             ["tommy" "jason" "zod" "zodsuper" "admin"])]
-      (cond
-        ;; All users are unlimited when NO_RATE_LIMITS is true
-        (= "true" (System/getenv "NO_RATE_LIMITS")) Integer/MAX_VALUE
-        ;; Check if the username is in the always unlimited set
-        (contains? always-unlimited username) Integer/MAX_VALUE
-        ;; default case - use the specified quota
-        :else quota)))
-
-  (get-ttl [self req]
-    ttl))
-
-(defn ratelimit-response-builder
-  [quota retry-after]
-  (let [error-data {:quota quota
-                    :retry-after-seconds (.getSeconds retry-after)}]
-    (too-many-requests-response
-     {:headers {"Content-Type" "application/json"}
-      :body (json/generate-string
-             {:message (str "Rate limit exceeded. Maximum " quota " requests allowed. Try again in " 
-                           (.getSeconds retry-after) " seconds.")
-              :error error-data})}
-     retry-after)))
-  
-  
-
-(def one-per-second {:storage storage :limit (UserRateLimit. 1 1 (java.time.Duration/ofSeconds 1)) :response-builder ratelimit-response-builder})
-(def one-per-minute {:storage storage :limit (UserRateLimit. 2 1 (java.time.Duration/ofMinutes 1)) :response-builder ratelimit-response-builder})
-(def five-per-minute {:storage storage :limit (UserRateLimit. 3 5 (java.time.Duration/ofMinutes 1)) :response-builder ratelimit-response-builder})
-(def three-per-five-minutes {:storage storage :limit (UserRateLimit. 4 3 (java.time.Duration/ofMinutes 5)) :response-builder ratelimit-response-builder})
 
 (defn wrap-discord-user-auth
   "Middleware that adds user context for Discord requests"
@@ -573,196 +144,11 @@
             (log/debug "Discord authentication failed or incomplete"))
           (handler request))))))
 
-(defn get-namespaces [r]
-  (let [username (-> r :session :user_name)
-        groups (when username
-                 (map :users_in_usergroups/usergroup_id
-                      (db/exec! {:select :* 
-                                 :from :users_in_usergroups
-                                 :where [:= :user_id username]})))]
-    
-    {:status 200 
-     :body 
-     {:namespaces 
-      (->> (db/exec! 
-            (-> (h/select-distinct :tags/ns)
-                (h/from :tags)
-                (h/join :perms [:= :perms/tag_id :tags/id])
-                (h/where [:or
-                          ;; Public namespaces
-                          [:and 
-                           [:= :perms/capability "view"]
-                           [:= :perms/user_id "all"]]
-                           ;; User owned namespaces
-                          (when username
-                            [:= :tags/owner username])
-                           ;; Namespaces with explicit permission for user
-                          (when username
-                            [:like :perms/user_id (str "%" username "%")])
-                           ;; Namespaces with permission for user's groups
-                          (when (seq groups)
-                            (into [:or] 
-                                  (map #(vector :like :perms/user_id (str "%" % "%")) 
-                                       groups)))])))
-           (map :tags/ns)
-           (filter identity) ;; Remove nil namespaces
-           (sort))}}))
-
-(defn get-user [req]
-  (let [user-name (get-in req [:query-params "user_name"])
-        email (get-in req [:query-params "email"])
-        loginid (get-in req [:query-params "login_id"])
-        discord-id (get-in req [:query-params "discord_id"])
-        
-        user (cond
-               ;; Direct lookup by user_name
-               user-name
-               (first (db/exec! (-> (h/select :*)
-                                    (h/from :users)
-                                    (h/where [:= :user_name user-name]))))
-               
-               ;; Direct lookup by email
-               email
-               (first (db/exec! (-> (h/select :*)
-                                    (h/from :users)
-                                    (h/where [:= :email email]))))
-               
-               ;; Lookup by loginid (could be username or email)
-               loginid
-               (first (db/exec! (-> (h/select :*)
-                                    (h/from :users)
-                                    (h/where [:or
-                                              [:= :user_name loginid]
-                                              [:= :email loginid]]))))
-               
-               ;; Lookup by discord_id
-               discord-id
-               (first (db/exec! (-> (h/select :*)
-                                    (h/from :users)
-                                    (h/where [:= :discord_id discord-id]))))
-               
-               :else nil)]
-    
-    (if user
-      ;; Check if this is a temporary Discord user
-      (let [is-temp-discord-user (string/starts-with? (:users/user_name user) "@discord_")
-            ;; Return only user_name and temporary flag for security
-            sanitized-user {:user_name (:users/user_name user)}
-            user-with-temp-flag (cond
-                                  is-temp-discord-user
-                                  (assoc sanitized-user :temporary true)
-                                  
-                                  (and discord-id (not is-temp-discord-user))
-                                  (assoc sanitized-user :temporary false)
-                                  
-                                  :else
-                                  sanitized-user)]
-        {:status 200 :body user-with-temp-flag})
-      
-      ;; User not found
-      {:status 404 :body {:message "user not found"}})))
 
 (def default-handler
   (fn [_] (resp/content-type (resp/resource-response "public/index.html") "text/html")))
 
-;; Define schemas using malli syntax
-(def ErrorSchema
-  [:map 
-   [:message :string]
-   [:error {:optional true} :map]])
 
-(def InfoSchema
-  [:map
-   [:success :boolean]
-   [:message :string]])
-
-(def TagSchema
-  [:map
-   [:tags/id :int]
-   [:tags/title :string]
-   [:tags/description [:maybe :string]]
-   [:tags/slug :string]
-   [:tags/ns [:maybe :string]]
-   [:tags/owner :string]
-   [:tags/created_at inst?]
-   [:tags/edited_at inst?]
-   [:tags/unlisted :boolean]
-   [:tags/domain_pk_namespace [:maybe :string]]
-   [:tags/domain_pk [:maybe :string]]
-   [:vote_count {:optional true} :int]])
-
-(def ItemSchema
-  [:map
-   [:id :int]
-   [:title :string]
-   [:slug :string]
-   [:body {:optional true} :string]
-   [:url {:optional true} :string]
-   [:owner :string]
-   [:created_at :string]
-   [:edited_at {:optional true} :string]
-   [:domain_pk_namespace {:optional true} :string]
-   [:domain_pk {:optional true} :string]])
-
-(def VoteSchema
-  [:map
-   [:id :int]
-   [:left_item_id :int]
-   [:right_item_id :int]
-   [:magnitude :int]
-   [:owner :string]
-   [:created_at :string]
-   [:attribute :int]])
-
-(def UserSchema
-  [:map
-   [:user_name :string]
-   [:email {:optional true} :string]
-   [:temporary {:optional true} :boolean]])
-
-(def AttributeSchema
-  [:map
-   [:id :int]
-   [:title :string]
-   [:description {:optional true} :string]
-   [:owner :string]
-   [:created_at inst?]
-   [:edited_at inst?]])
-
-(def SortedItemSchema
-  [:map
-   [:id :int]
-   [:owner :string]
-   [:title :string]
-   [:slug :string]
-   [:body {:optional true} [:maybe :string]]
-   [:domain_pk {:optional true} [:maybe :string]]
-   [:domain_pk_namespace {:optional true} [:maybe :string]]
-   [:url {:optional true} [:maybe :string]]
-   [:created_at inst?]
-   [:edited_at inst?]
-   [:elo :double]
-   [:vote_count :int]
-   [:num_comments {:optional true} [:maybe :int]]])
-
-(def PermsSchema
-  [:map
-   [:can_vote :boolean]
-   [:can_add :boolean]
-   [:can_view :boolean]])
-
-(def TagPageResponseSchema 
-  [:map
-   [:tag TagSchema]
-   [:sorted [:vector SortedItemSchema]]
-   [:unsorted [:vector ItemSchema]]
-   [:skipped [:vector ItemSchema]]
-   [:perms PermsSchema]
-   [:users_who_voted [:vector UserSchema]]
-   [:pair [:vector ItemSchema]]
-   [:votes [:vector VoteSchema]]
-   [:attributes [:vector AttributeSchema]]
-   [:selected_attribute AttributeSchema]])
 
 (def routes
   [["/openapi.json"
@@ -780,7 +166,7 @@
                             {:name "Users" :description "User management endpoints"}
                             {:name "Comments" :description "Comment management endpoints"}
                             {:name "Groups" :description "Group management endpoints"} 
-                            {:name "Integrations" :description "External service integration endpoints"}] 
+                            {:name "Integrations" :description "External service integration endpoints"}]  
                      :components {:securitySchemes {"apiKeyAuth" {:type :apiKey
                                                                   :in :header
                                                                   :name "x-api-key"}
@@ -801,21 +187,19 @@
                                                                     [:version :string] 
                                                                     [:database :string]]}}}}
                       :handler health/check-health}}] 
-    ["/feed" {:get {:no-doc false 
+    ["/feed" {:get {:no-doc false
                     :summary "Get feed for a tag"
-                    :tags ["Feed"]
+                    :tags ["Feed"] 
                     :description "Retrieves feed items for a specific tag, including recent votes and activity. WARNING: if the tag is new, or has no items, this will return an empty list, which is sort of strange. account for that until we fix it."
                     :parameters {:query [:map
                                          [:tag_id {:description "ID of the tag to get feed for"} :int]]}
                     :responses {200 {:description "Feed items"
-                                     :content {:default {:schema [:map {:closed false}
-                                                                  [:items {:optional true} [:vector ItemSchema]]
-                                                                  [:votes {:optional true} [:vector VoteSchema]]
-                                                                  [:users {:optional true} [:vector :string]]]
+                                     :content {:default {:schema [:map {:closed false} 
+                                                                  [:items {:optional true} [:vector {:min 0} ItemSchema]] 
+                                                                  [:votes {:optional true} [:vector {:min 0} VoteSchema]]]
                                                          :examples {:ok {:description "Feed items retrieved"
                                                                          :value {:items [{:id 1 :title "Example Item" :description "Description" :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
-                                                                                 :votes [{:id 1 :left_item_id 1 :right_item_id 2 :magnitude 1 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
-                                                                                 :users ["user1" "user2"]}}}}}} 
+                                                                                 :votes [{:id 1 :left_item_id 1 :right_item_id 2 :magnitude 35 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]}}}}}} 
                                 400 {:description "Invalid tag ID"
                                      :content {:default {:schema ErrorSchema
                                                          :examples {:invalid-tag-id {:value {:message "Invalid tag ID"}}}}}}
@@ -905,7 +289,7 @@
                                                                   [:id :int]
                                                                   [:title :string]
                                                                   [:slug :string]
-                                                                  [:description {:optional true} :string]
+                                                                  [:description {:optional true} :string] 
                                                                   [:owner :string]
                                                                   [:created_at :string]
                                                                   [:edited_at :string]
@@ -1027,7 +411,7 @@
                                        400 {:description "Invalid request parameters"
                                             :content {:default {:schema ErrorSchema
                                                                 :examples {:ok {:value {:message "Either title/slug or domain_pk_namespace+domain_pk are required"}}}}}}}
-                           :handler tag-exists-check}}]
+                           :handler tag-exists-check}}] 
     ["/tag/page" {:get {:no-doc false
                         :tags ["Tags"]
                         :summary "Get tag page with sorted items and voting pairs"
@@ -1042,21 +426,23 @@
                                              [:namespace {:description "Namespace to filter items by instead of using tag ID" :optional true} :string]]}
                         :responses {200 {:description "Tag page data retrieved successfully"
                                          :content {:default {:schema TagPageResponseSchema
-                                                             :examples {:ok {:value {:tag {:tags/id 1
-                                                                                           :tags/title "Example Tag"
-                                                                                           :tags/slug "example-tag"
-                                                                                           :tags/owner "user1"
-                                                                                           :tags/created_at "2023-01-01T12:00:00Z"}
+                                                             :examples {:ok {:value {:tag {:id 1
+                                                                                           :title "Example Tag"
+                                                                                           :slug "example-tag"
+                                                                                           :owner "user1"
+                                                                                           :created_at "2023-01-01T12:00:00Z"}
                                                                                      :sorted [{:id 1
                                                                                                :title "Top Item"
                                                                                                :elo 1500.0
                                                                                                :vote_count 10
+                                                                                               :num_comments 0
                                                                                                :owner "user1"
                                                                                                :created_at "2023-01-01T12:00:00Z"}]
                                                                                      :unsorted [{:id 2
                                                                                                  :title "New Item"
                                                                                                  :owner "user2"
-                                                                                                 :created_at "2023-01-01T12:00:00Z"}]
+                                                                                                 :created_at "2023-01-01T12:00:00Z"
+                                                                                                 :num_comments 0}]
                                                                                      :skipped []
                                                                                      :perms {:can_vote true
                                                                                              :can_add true
@@ -1065,16 +451,19 @@
                                                                                      :pair [{:id 3
                                                                                              :title "Left Item"
                                                                                              :owner "user1"
+                                                                                             :num_comments 0
                                                                                              :created_at "2023-01-01T12:00:00Z"}
                                                                                             {:id 4
                                                                                              :title "Right Item"
                                                                                              :owner "user2"
+                                                                                             :num_comments 0
                                                                                              :created_at "2023-01-01T12:00:00Z"}]
                                                                                      :votes [{:id 1
                                                                                               :left_item_id 3
                                                                                               :right_item_id 4
-                                                                                              :magnitude 3
+                                                                                              :magnitude 36
                                                                                               :owner "user1"
+                                                                                              :attribute 0
                                                                                               :created_at "2023-01-01T12:00:00Z"}]
                                                                                      :attributes [{:id 0
                                                                                                    :title "default"
@@ -1084,9 +473,9 @@
                                                                                                           :title "default"
                                                                                                           :owner "all"
                                                                                                           :created_at "2023-01-01T12:00:00Z"}}}}}}}}
-                        :handler tag-info-request}}]
+                        :handler tag-info-request}}] 
     ["/tag/page2" {:get {:no-doc false
-    
+
                          :openapi {:deprecated true}
                          :tags ["Tags"]
                          :summary "Get tag info"
@@ -1267,7 +656,7 @@
                                             :content {:default {:schema [:map
                                                                          [:slug :string]
                                                                          [:exists :boolean]
-                                                                         [:in_tag {:optional true} :boolean]
+                                                                         [:in_tag {:optional true} :boolean] 
                                                                          [:id {:optional true} :int]
                                                                          [:title {:optional true} :string]]
                                                                 :examples {:ok {:value {:slug "example-item" 
@@ -1566,6 +955,7 @@
    :else
     {:status 500
      :body {:message (.getMessage exception)
+            :data (ex-data exception)
             :error (->> exception Throwable->map)}}))
 
 (def exception-middleware
