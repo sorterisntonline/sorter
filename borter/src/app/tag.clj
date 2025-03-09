@@ -247,24 +247,26 @@
   (urlencode-params {:a 3 :b 4}))
 
 (defn tag-info-request [r]
-  (let [response (hc/request {:as :json
-                              :url (str "http://localhost:8081/api/tag/page?"
-                                        (urlencode-params (cond-> (-> r :params)
-                                                            (-> r :session :user_name) (assoc "user_name" (-> r :session :user_name)))))
-                              :method :get})]
+  (let [response @(hc/request {:as :json
+                               :url (str "http://localhost:8081/api/tag/page?"
+                                         (urlencode-params (cond-> (-> r :params)
+                                                             (-> r :session :user_name) (assoc "user_name" (-> r :session :user_name)))))
+                               :method :get})]
     {:status 200
      :headers {"Content-Type" "application/json"}
      :body (:body response)}))
 
 ;; @deprecated: Use tag-info-request instead
 (defn tag-info-request2 [r]
-  {:status 200 :body (:body (hc/request {:as :json
-                                         :url (str "http://localhost:8081/api/tag/page2?"
-                                                   (urlencode-params (cond-> (-> r :params)
-                                                                       (-> r :session :user_name)
-                                                                       (assoc "user_name" (-> r :session :user_name)))))
-                                         :method :get}))
-   :headers {"Content-Type" "application/json"}})
+  (let [response @(hc/request {:as :json
+                               :url (str "http://localhost:8081/api/tag/page2?"
+                                         (urlencode-params (cond-> (-> r :params)
+                                                             (-> r :session :user_name)
+                                                             (assoc "user_name" (-> r :session :user_name)))))
+                               :method :get})]
+    {:status 200
+     :headers {"Content-Type" "application/json"}
+     :body (:body response)}))
 
 
 (defn tag-slug-check [r]

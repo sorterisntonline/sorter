@@ -59,7 +59,7 @@
             [com.rpl.specter :refer :all]
             [app.api-keys :as api-keys]
 
-            [app.schemas :refer [ItemSchema VoteSchema UserSchema TagSchema ErrorSchema InfoSchema AttributeSchema TagPageResponseSchema SortedItemSchema PermsSchema]]
+            [app.schemas :refer [ItemSchema VoteSchema UserSchema TagSchema ErrorSchema InfoSchema AttributeSchema TagPageResponseSchema PermsSchema]]
             [app.ratelimits :refer :all]
             [app.tag :refer :all]
             [app.misc :refer :all]
@@ -980,7 +980,17 @@
                     {:validate spec/validate
                      :exception pretty/exception
                      :conflicts nil
-                     :data {:coercion (reitit.coercion.malli/create)
+                     :data {:coercion (reitit.coercion.malli/create
+                                       {
+                                        :error-keys #{#_:type :coercion :in :schema :value :errors :humanized #_:transformed}
+                                                                   ;; schema identity function (default: close all map schemas) 
+                                        :compile mu/closed-schema
+                                                                   ;; strip-extra-keys (affects only predefined transformers) 
+                                        :strip-extra-keys true
+                                                                   ;; add/set default values 
+                                        :default-values true
+                                                                   ;; malli options 
+                                        :options nil})
                             :muuntaja m-instance
                             :middleware
                             [(fn [handler]

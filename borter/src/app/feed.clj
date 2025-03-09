@@ -9,21 +9,49 @@
   (:import [java.util Date]))
 
 (defn get-feed [{:keys [params]}]
-  (let [feed (get-in (hc/request {:as :json
-                                   :url (str "http://localhost:8081/api/feed?tag_id=" (get params "tag_id"))
-                                   :method :get})
-                     [:body :data :response])
-        items (filter #(= (get % "type") "Item") feed)
-        votes (filter #(= (get % "type") "Vote") feed)]
-    {:status 200
-     :headers {"Content-Type" "application/json"}
-     :body {:items items
-            :votes votes}}))
+  (try
+    ;; Extract tag_id - try both keyword and string access
+    (let [tag-id (or (get params :tag_id)
+                     (get params "tag_id"))
+          _ (when (nil? tag-id)
+              (throw (ex-info "Missing required parameter: tag_id" {:status 400})))
+          
+          ;; Ensure tag-id is a string
+          tag-id-str (str tag-id)
+          
+          response @(hc/request {:as :json
+                                 :url (str "http://localhost:8081/api/feed?tag_id=" tag-id-str)
+                                 :method :get
+                                 :connect-timeout 5000
+                                 :socket-timeout 10000})
+          feed (get-in response [:body :data :response])
+          feed (or feed [])
+          items (filter #(= (get % "type") "Item") feed)
+          votes (filter #(= (get % "type") "Vote") feed)]
+      {:status 200
+       :headers {"Content-Type" "application/json"}
+       :body {:items (vec items)
+              :votes (vec votes)}})
+    (catch clojure.lang.ExceptionInfo e
+      (let [data (ex-data e)]
+        {:status (or (:status data) 500)
+         :headers {"Content-Type" "application/json"}
+         :body {:error "Error processing request"
+                :message (.getMessage e)}}))
+    (catch Exception e
+      (println "Error in get-feed:" (.getMessage e))
+      {:status 503
+       :headers {"Content-Type" "application/json"}
+       :body {:error "Internal server error"
+              :message (.getMessage e)}})))
 
 (defn get-hierarchy [req]
-  (:response (hc/request {:as :json
-                          :url "http://localhost:8081/api/hierarchy"
-                          :method :get})))
+  (let [response @(hc/request {:as :json
+                               :url "http://localhost:8081/api/hierarchy"
+                               :method :get})]
+    {:status 200
+     :headers {"Content-Type" "application/json"}
+     :body (:response response)}))
 
 (defn days-ago [days]
   {:start (typ/as-timestamp (Date. (- (.getTime (Date.)) (* 1000 60 60 24 days))))
