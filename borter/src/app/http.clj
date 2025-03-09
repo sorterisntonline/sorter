@@ -966,17 +966,7 @@
 (def m-instance (m/create
                  (-> m/default-options
                      (assoc-in [:formats "application/json" :encoder-opts]
-                               {:encode-key-fn name})
-                     (assoc-in [:formats "application/json" :decoder-opts]
-                               {})
-                     (assoc-in [:formats "application/json" :extensions]
-                               {;; Add jackson extensions to handle empty beans and malli schemas
-                                :mapper-opts
-                                {:mapper-builder-fn
-                                 (fn [builder]
-                                   (.configure builder
-                                              com.fasterxml.jackson.databind.SerializationFeature/FAIL_ON_EMPTY_BEANS false)
-                                   builder)}}))))
+                               {:encode-key-fn name}))))
   
 ;; Create a single shared session store instance
 (def session-store (memory/memory-store))

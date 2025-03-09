@@ -12,28 +12,23 @@
 (defn get-feed [r]
   (log/debug "get-feed called with params:" (-> r :params))
   (log/debug "get-feed called with session:" (-> r :session))
-  (try
-    (let [response @(hc/request {:as :json
-                                :url (str "http://localhost:8081/api/feed?tag_id=" (get (-> r :params) "tag_id"))
-                                :async? true
-                                :method :get})
-          feed (get response :body [])
-          items (->> feed
-                     (filter #(= (get % "type") "Item"))
-                     (map #(into {} (for [[k v] %] [(keyword k) v]))))
-          votes (->> feed
-                     (filter #(= (get % "type") "Vote")) 
-                     (map #(into {} (for [[k v] %] [(keyword k) v]))))]
-      (log/debug "get-feed response items count:" (count items))
-      (log/debug "get-feed response votes count:" (count votes))
-      {:status 200
-       :headers {"Content-Type" "application/json"}
-       :body {:items items
-              :votes votes}})
-    (catch Exception e
-      (log/error "Error in get-feed:" e)
-      {:status 500
-       :body {:message (.getMessage e)}})))
+  (let [response @(hc/request {:as :json}
+                              :url (str "http://localhost:8081/api/feed?tag_id=" (get (-> r :params) "tag_id"))
+                              :async? true
+                              :method :get
+                              (fn [resp] (log/debug "async callback: " resp)))
+        feed (get-in response [:body])
+        items (->> feed
+                   (filter #(= (get % "type") "Item"))
+                   (map #(into {} (for [[k v] %] [(keyword k) v])))) ; Convert string keys to keywords
+        votes (->> feed
+                   (filter #(= (get % "type") "Vote")) 
+                   (map #(into {} (for [[k v] %] [(keyword k) v]))))] ; Convert string keys to keywords
+    (log/debug "get-feed response:" feed)
+    {:status 200
+     :headers {"Content-Type" "application/json"}
+     :body {:items items
+            :votes votes}}))
 
 (defn days-ago [days]
   {:start (typ/as-timestamp (Date. (- (.getTime (Date.)) (* 1000 60 60 24 days))))
