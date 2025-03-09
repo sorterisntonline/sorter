@@ -5,8 +5,8 @@
             [hato.client :as hc]
             [clojure.tools.logging :as log]
             [app.permissions :as perms]
-            [clojure.string :as string])
-  (:import [java.net URLEncoder]))
+            [clojure.string :as string]
+            [app.util :refer [urlencode-params]]))
 
 ;; Replace the existing test functions with a single handler
 (defn count-votes [tag]
@@ -240,18 +240,16 @@
     (db/exec! {:delete-from :tags :where [:= :id tagid]})
     {:status 200 :body {:deleted true}}))
 
-(defn urlencode-params [params]
-  (clojure.string/join "&" (map (fn [[k v]] (str k "=" (URLEncoder/encode (str v) "UTF-8"))) params)))
-
-(comment
-  (urlencode-params {:a 3 :b 4}))
 
 (defn tag-info-request [r]
+  (log/debug "tag-info-request called with params:" (-> r :params))
+  (log/debug "tag-info-request called with session:" (-> r :session))
   (let [response @(hc/request {:as :json
                                :url (str "http://localhost:8081/api/tag/page?"
                                          (urlencode-params (cond-> (-> r :params)
                                                              (-> r :session :user_name) (assoc "user_name" (-> r :session :user_name)))))
                                :method :get})]
+    (log/debug "tag-info-request response:" response)
     {:status 200
      :headers {"Content-Type" "application/json"}
      :body (:body response)}))

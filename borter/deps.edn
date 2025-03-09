@@ -6,9 +6,9 @@
         ch.qos.logback/logback-classic {:mvn/version "1.4.11"}
         ch.qos.logback/logback-core {:mvn/version "1.4.11"}
         cider/cider-nrepl {:mvn/version "0.52.0"}
-        metosin/reitit {:mvn/version "0.7.0-alpha7"}
-        ring/ring {:mvn/version "1.8.0"}
-        ring/ring-jetty-adapter {:mvn/version "1.11.0-RC1"}
+        metosin/reitit {:mvn/version "0.7.2"}
+        ring/ring {:mvn/version "1.13.0"}
+        ring/ring-jetty-adapter {:mvn/version "1.13.0"}
         io.staticweb/rate-limit {:mvn/version "1.1.0"}
         metosin/jsonista {:mvn/version "0.3.7"}
         hato/hato {:mvn/version "0.9.0"}
@@ -32,7 +32,8 @@
         nrepl/nrepl {:mvn/version "1.1.1"}
         metosin/ring-swagger-ui {:mvn/version "5.9.0"}
         com.rpl/specter {:mvn/version "1.1.4"}
-        cheshire/cheshire {:mvn/version "5.13.0"}}
+        cheshire/cheshire {:mvn/version "5.13.0"}
+        metosin/malli {:mvn/version "0.17.0"}}
  :aliases {:dev
            {:extra-deps
             {binaryage/devtools {:mvn/version "1.0.6"}

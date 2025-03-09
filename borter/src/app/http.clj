@@ -30,7 +30,9 @@
             
             
             [muuntaja.core :as m]
+            [malli.core :as malli]
             [malli.util :as mu]
+            [malli.error :as me]
 
             
 
@@ -67,29 +69,6 @@
   (:import
    [java.net URLEncoder]))
 
-
-
-(defn wrap-request-logging [handler]
-  (fn [request]
-    (log/info "Request:" (:request-method request) (:uri request))
-    (log/debug "Full request details:" 
-               {:uri (:uri request)
-                :request-method (:request-method request)
-                :params (:params request)
-                :query-params (:query-params request)
-                :body-params (:body-params request)
-                :session (:session request)})
-    (let [response (handler request)]
-      (log/info "Response:" (:status response))
-      (log/debug "Full response details:" 
-                 {:status (:status response)
-                  :headers (:headers response)
-                  :body (if (and (map? (:body response))
-                                 (not (instance? java.io.InputStream (:body response))))
-                          (str "Body: " (:body response))
-                          "Body: [binary or stream]")})
-      response)))
-
 (defn current-session
   "Handler for retrieving the current session information"
   [r]
@@ -99,55 +78,6 @@
              {:authenticated true
               :user_name username}
              {:authenticated false})}))
-
-
-
-
-
-(defn wrap-discord-user-auth
-  "Middleware that adds user context for Discord requests"
-  [handler]
-  (fn [request]
-    (try
-      ;;(log/info "DISCORD USER AUTH START" (:discord request))
-      (if-let [discord-context (:discord request)]
-        (let [user-id (:user-id discord-context)
-              username (:username discord-context)
-              user (discord/get-or-create-discord-user user-id username)
-              request-with-user (assoc-in request [:session :user_name] (:users/user_name user))]
-          (handler request-with-user))
-        (do
-          (handler request)))
-      (catch Exception e
-        (log/error e "CRITICAL: Unhandled exception in wrap-discord-user-auth")
-        (handler request)))))
-
-(defn wrap-discord-auth
-  "Middleware that authenticates requests from the Discord bot"
-  [handler]
-  (fn [request]
-    (let [auth-header (get-in request [:headers "authorization"])
-          discord-user-id (get-in request [:headers "x-discord-user-id"])
-          discord-username (get-in request [:headers "x-discord-username"])]
-      (log/debug "Discord auth attempt with user-id:" discord-user-id "username:" discord-username)
-      (if (and (discord/validate-discord-request auth-header)
-               discord-user-id
-               discord-username)
-        (do
-          (log/info "Discord authentication successful for discord user:" discord-username)
-          ;; Add Discord context to the request
-          (handler (assoc request :discord {:user-id discord-user-id
-                                            :username discord-username})))
-        ;; Continue without Discord context
-        (do
-          (when auth-header
-            (log/debug "Discord authentication failed or incomplete"))
-          (handler request))))))
-
-
-(def default-handler
-  (fn [_] (resp/content-type (resp/resource-response "public/index.html") "text/html")))
-
 
 
 (def routes
@@ -417,7 +347,7 @@
                         :summary "Get tag page with sorted items and voting pairs"
                         :description "Retrieves a tag page with sorted items, voting pairs, and permissions. This endpoint provides all the data needed to display a tag's ranking page."
                         :parameters {:query [:map
-                                             [:id {:description "ID of the tag to get page for" :optional true} :int]
+                                             [:id {:description "ID of the tag to get page for"} :int]
                                              [:users {:description "Filter votes by specific users (dot-separated list of usernames or group IDs)" :optional true} :string]
                                              [:pinned_left {:description "ID of item to pin on the left side of the voting pair" :optional true} :int]
                                              [:pinned_right {:description "ID of item to pin on the right side of the voting pair" :optional true} :int] 
@@ -910,6 +840,71 @@
                                 :operationsSorter "alpha"}})}}]]])
    
 
+(defn wrap-request-logging [handler]
+  (fn [request]
+    (log/info "Request:" (:request-method request) (:uri request))
+    (log/debug "Full request details:"
+               {:uri (:uri request)
+                :request-method (:request-method request)
+                :params (:params request)
+                :query-params (:query-params request)
+                :body-params (:body-params request)
+                :session (:session request)})
+    (let [response (handler request)]
+      (log/info "Response:" (:status response))
+      (log/debug "Full response details:"
+                 {:status (:status response)
+                  :headers (:headers response)
+                  :body (if (and (map? (:body response))
+                                 (not (instance? java.io.InputStream (:body response))))
+                          (str "Body: " (:body response))
+                          "Body: [binary or stream]")})
+      response)))
+
+(defn wrap-discord-user-auth
+  "Middleware that adds user context for Discord requests"
+  [handler]
+  (fn [request]
+    (try
+      ;;(log/info "DISCORD USER AUTH START" (:discord request))
+      (if-let [discord-context (:discord request)]
+        (let [user-id (:user-id discord-context)
+              username (:username discord-context)
+              user (discord/get-or-create-discord-user user-id username)
+              request-with-user (assoc-in request [:session :user_name] (:users/user_name user))]
+          (handler request-with-user))
+        (do
+          (handler request)))
+      (catch Exception e
+        (log/error e "CRITICAL: Unhandled exception in wrap-discord-user-auth")
+        (handler request)))))
+
+(defn wrap-discord-auth
+  "Middleware that authenticates requests from the Discord bot"
+  [handler]
+  (fn [request]
+    (let [auth-header (get-in request [:headers "authorization"])
+          discord-user-id (get-in request [:headers "x-discord-user-id"])
+          discord-username (get-in request [:headers "x-discord-username"])]
+      (log/debug "Discord auth attempt with user-id:" discord-user-id "username:" discord-username)
+      (if (and (discord/validate-discord-request auth-header)
+               discord-user-id
+               discord-username)
+        (do
+          (log/info "Discord authentication successful for discord user:" discord-username)
+          ;; Add Discord context to the request
+          (handler (assoc request :discord {:user-id discord-user-id
+                                            :username discord-username})))
+        ;; Continue without Discord context
+        (do
+          (when auth-header
+            (log/debug "Discord authentication failed or incomplete"))
+          (handler request))))))
+
+
+(def default-handler
+  (fn [_] (resp/content-type (resp/resource-response "public/index.html") "text/html")))
+
 (defn wrap-api-key-auth
   "Middleware that authenticates requests via API key if present"
   [handler]
@@ -942,17 +937,19 @@
 
 (defn error-response [exception request]
   (def exception exception)
-  ;;(log/error "ex-data" (ex-data exception))
+  ;;(log/error "ex-data" ((ex-data exception)))
   (log/debug "exception" exception)
   (log/debug "exception type" (type exception))
-  (log/debug "can we coerce?" (= :reitit.coercion/response-coercion (:type (ex-data exception))))
+  (log/debug "exception data" (ex-data exception))
+  ;;(log/debug "can we coerce?" (= :reitit.coercion/response-coercion (:type (ex-data exception))))
+  ;;(log/debug "malli explanation" (me/humanize (:data (ex-data exception))))
   (cond 
     (= (type exception) clojure.lang.ExceptionInfo)
-   {:status (:status (ex-data exception))
-    :body {:message (.getMessage exception)
-           :error (ex-data exception)}} 
+    {:status (:status (ex-data exception))
+     :body {:message (.getMessage exception)
+            :error (ex-data exception)}} 
     
-   :else
+    :else
     {:status 500
      :body {:message (.getMessage exception)
             :data (ex-data exception)
@@ -969,7 +966,17 @@
 (def m-instance (m/create
                  (-> m/default-options
                      (assoc-in [:formats "application/json" :encoder-opts]
-                               {:encode-key-fn name}))))
+                               {:encode-key-fn name})
+                     (assoc-in [:formats "application/json" :decoder-opts]
+                               {})
+                     (assoc-in [:formats "application/json" :extensions]
+                               {;; Add jackson extensions to handle empty beans and malli schemas
+                                :mapper-opts
+                                {:mapper-builder-fn
+                                 (fn [builder]
+                                   (.configure builder
+                                              com.fasterxml.jackson.databind.SerializationFeature/FAIL_ON_EMPTY_BEANS false)
+                                   builder)}}))))
   
 ;; Create a single shared session store instance
 (def session-store (memory/memory-store))
@@ -980,17 +987,7 @@
                     {:validate spec/validate
                      :exception pretty/exception
                      :conflicts nil
-                     :data {:coercion (reitit.coercion.malli/create
-                                       {
-                                        :error-keys #{#_:type :coercion :in :schema :value :errors :humanized #_:transformed}
-                                                                   ;; schema identity function (default: close all map schemas) 
-                                        :compile mu/closed-schema
-                                                                   ;; strip-extra-keys (affects only predefined transformers) 
-                                        :strip-extra-keys true
-                                                                   ;; add/set default values 
-                                        :default-values true
-                                                                   ;; malli options 
-                                        :options nil})
+                     :data {:coercion (reitit.coercion.malli/create)
                             :muuntaja m-instance
                             :middleware
                             [(fn [handler]

@@ -13,38 +13,38 @@
 
 (def TagSchema
   [:map
-   [:id :int]
-   [:title :string]
-   [:description {:optional true} [:maybe :string]]
-   [:slug :string]
-   [:ns {:optional true} [:maybe :string]]
-   [:namespace {:optional true} [:maybe :string]]
-   [:owner :string]
-   [:created_at :string]
-   [:edited_at {:optional true} :string]
-   [:unlisted {:optional true} :boolean]
-   [:domain_pk_namespace {:optional true} [:maybe :string]]
-   [:domain_pk {:optional true} [:maybe :string]]
-   [:domain_url {:optional true} [:maybe :string]]
-   [:nsfw {:optional true} :boolean]
-   [:hide_item_authors {:optional true} :boolean]]) 
+   [:tags/id :int]
+   [:tags/title :string]
+   [:tags/description {:optional true} [:maybe :string]]
+   [:tags/slug :string]
+   [:tags/ns {:optional true} [:maybe :string]]
+   [:tags/namespace {:optional true} [:maybe :string]]
+   [:tags/owner :string]
+   [:tags/created_at :string]
+   [:tags/edited_at {:optional true} :string]
+   [:tags/unlisted {:optional true} :boolean]
+   [:tags/domain_pk_namespace {:optional true} [:maybe :string]]
+   [:tags/domain_pk {:optional true} [:maybe :string]]
+   [:tags/domain_url {:optional true} [:maybe :string]]
+   [:tags/nsfw {:optional true} :boolean]
+   [:tags/hide_item_authors {:optional true} :boolean]]) 
 
 (def ItemSchema
   [:map {:closed false}
    [:id :int]
    [:title :string]
    [:slug :string]
-   [:body {:optional true} :string]
-   [:url {:optional true} :string]
+   [:body {:optional true} [:maybe :string]]
+   [:url {:optional true} [:maybe :string]]
    [:owner :string]
    [:created_at :string]
    [:edited_at {:optional true} :string]
    [:domain_pk_namespace {:optional true} [:maybe :string]]
    [:domain_pk {:optional true} [:maybe :string]]
    [:num_comments {:optional true} [:maybe :int]]
-   [:type {:optional true} :string]
-   [:elo {:optional true} :double]
-   [:vote_count {:optional true} :int]])
+   [:type {:optional true} [:maybe :string]]
+   [:elo {:optional true} [:maybe :double]]
+   [:vote_count {:optional true} [:maybe :int]]])
 
 (def VoteSchema
   [:map {:closed false}
