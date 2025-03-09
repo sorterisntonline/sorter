@@ -5,12 +5,13 @@
             [reitit.ring.coercion :as coercion]
             [reitit.ring.spec :as spec]
             [reitit.swagger :as swagger]
-            [reitit.swagger-ui :as swagger-ui]
+            [reitit.swagger-ui :as swagger-ui] 
             [reitit.openapi :as openapi]
             [reitit.dev.pretty :as pretty] 
             [clojure.tools.logging :as log]
             [ring.adapter.jetty :as jetty]
             [ring.middleware.params :as params]
+            ;; [ring.swagger.middleware :as swagger-m]
             
             [ring.middleware.session :as session]
             [ring.middleware.session.memory :as memory]
@@ -31,9 +32,12 @@
             [muuntaja.core :as m]
             [malli.util :as mu]
 
+            
             [io.staticweb.rate-limit.storage :as storage]
             [io.staticweb.rate-limit.middleware :refer [ip-rate-limit wrap-rate-limit]]
             [io.staticweb.rate-limit.limits :refer [RateLimit]]
+            [io.staticweb.rate-limit.responses :refer [too-many-requests-response]]
+            [cheshire.core :as json]
 
 
             [app.database :as db]
@@ -65,6 +69,8 @@
             [app.api-keys :as api-keys])
   (:import
    [java.net URLEncoder]))
+
+
 
 ;; Replace the existing test functions with a single handler
 (defn count-votes [tag]
@@ -214,58 +220,76 @@
         
     ;; Return a proper HTTP response with the tag data
     {:status 200
-     :body (cond)
+     :body (cond
       ;; Case 1: Explicit tag id in request (standard update)
-      tag-id
-      (do (when-not (perms/owns tag-id (-> r :session :user_name))
-            (log/warn "User" (-> r :session :user_name) "attempted to edit tag they don't own:" tag-id)
-            (throw (ex-info "you can not edit tags you do not own" {:status 403})))
+            tag-id
+            (do (when-not (perms/owns tag-id (-> r :session :user_name))
+                  (log/warn "User" (-> r :session :user_name) "attempted to edit tag they don't own:" tag-id)
+                  (throw (ex-info "you can not edit tags you do not own" {:status 403})))
 
-          (let [ret (db/exec! (-> (h/update :tags)
-                                  (h/set (-> (-> r :body-params)
-                                             (assoc :edited_at [:now])
-                                             (dissoc :tag_id :id)))
-                                  (h/where [:= :tags/id tag-id])))]
-            (log/info "Tag updated:" tag-id)
-            (log/debug "Updated tag result:" ret)
-            (first ret)))
+                (let [body-params (-> r :body-params)
+                ;; Ensure description is always a string, never nil
+                      description (if (contains? body-params :description)
+                                    (or (:description body-params) "")
+                                    "")
+                      update-values (-> body-params
+                                       (assoc :edited_at [:now] :description description)
+                                       (dissoc :tag_id :id))
+                      ret (db/exec! (-> (h/update :tags)
+                                        (h/set update-values)
+                                        (h/where [:= :tags/id tag-id])))]
+                  (log/info "Tag updated:" tag-id)
+                  (log/debug "Updated tag result:" ret)
+                  (first ret)))
           
       ;; Case 2: Discord channel tag exists (update)
-      (and is-discord-channel existing-tag)
-      (do (when-not (perms/owns (:tags/id existing-tag)
-                              (-> r :session :user_name))
-            (log/warn "User" (-> r :session :user_name) "attempted to edit Discord channel tag they don't own:" (:tags/id existing-tag))
-            (throw (ex-info "you can not edit tags you do not own" {:status 403})))
+            (and is-discord-channel existing-tag)
+            (do (when-not (perms/owns (:tags/id existing-tag)
+                                    (-> r :session :user_name))
+                  (log/warn "User" (-> r :session :user_name) "attempted to edit Discord channel tag they don't own:" (:tags/id existing-tag))
+                  (throw (ex-info "you can not edit tags you do not own" {:status 403})))
 
-          (let [ret (db/exec! (-> (h/update :tags)
-                                  (h/set (-> (-> r :body-params)
-                                             (assoc :edited_at [:now])
-                                             (dissoc :tag_id :id)))
-                                  (h/where [:= :tags/id (:tags/id existing-tag)])))]
-            (log/info "Discord channel tag updated:" (:tags/id existing-tag))
-            (log/debug "Updated Discord channel tag result:" ret)
-            (first ret)))
+                (let [body-params (-> r :body-params)
+                ;; Ensure description is always a string, never nil
+                      description (if (contains? body-params :description)
+                                    (or (:description body-params) "")
+                                    "")
+                      update-values (-> body-params
+                                       (assoc :edited_at [:now] :description description)
+                                       (dissoc :tag_id :id))
+                      ret (db/exec! (-> (h/update :tags)
+                                        (h/set update-values)
+                                        (h/where [:= :tags/id (:tags/id existing-tag)])))]
+                  (log/info "Discord channel tag updated:" (:tags/id existing-tag))
+                  (log/debug "Updated Discord channel tag result:" ret)
+                  (first ret)))
           
       ;; Case 3: Create new tag
-      :else
-      (let [body-params (-> r :body-params)
+            :else
+            (let [body-params (-> r :body-params)
             ;; Prefer 'namespace' over 'ns' if both are provided
-            namespace-value (or (-> body-params :namespace)
-                                (-> body-params :ns))
-            tag-values (merge
-                        (dissoc body-params :ns :namespace :tag_id :id)
-                        (when (and namespace-value (not= namespace-value "")) 
-                          {:tags/ns (sluj namespace-value)})
-                        {:tags/slug (sluj (-> body-params :title))
-                         :tags/owner (-> r :session :user_name)})
-            ret (db/exec! (-> (h/insert-into :tags)
-                              (h/values [tag-values])
-                              (h/returning :*)))
-            tagid (-> ret first :tags/id)]
-        (db/exec! (-> (h/insert-into :perms)
-                      (h/values (perms/public-permissions tagid))))
-        (log/info "New tag created:" tagid "by user:" (-> r :session :user_name))
-        (first ret))}))
+                  namespace-value (or (-> body-params :namespace)
+                                      (-> body-params :ns))
+            ;; Ensure description is always a string, never nil
+                  description (if (contains? body-params :description)
+                                (or (:description body-params) "")
+                                "")
+                  tag-values (merge
+                              (-> body-params
+                                  (dissoc :ns :namespace :tag_id :id)
+                                  (assoc :description description)) ;; Explicitly set description
+                              (when (and namespace-value (not= namespace-value "")) 
+                                {:tags/ns (sluj namespace-value)})
+                              {:tags/slug (sluj (-> body-params :title))
+                               :tags/owner (-> r :session :user_name)})
+                  ret (db/exec! (-> (h/insert-into :tags)
+                                    (h/values [tag-values])
+                                    (h/returning :*)))
+                  tagid (-> ret first :tags/id)]
+              (db/exec! (-> (h/insert-into :perms)
+                            (h/values (perms/public-permissions tagid))))
+              (log/info "New tag created:" tagid "by user:" (-> r :session :user_name))
+              (first ret)))}))
 
 
 (defn delete-tag [req]
@@ -490,10 +514,24 @@
   (get-ttl [self req]
     ttl))
 
-(def one-per-second {:storage storage :limit (UserRateLimit. 1 1 (java.time.Duration/ofSeconds 1))})
-(def one-per-minute {:storage storage :limit (UserRateLimit. 2 1 (java.time.Duration/ofMinutes 1))})
-(def five-per-minute {:storage storage :limit (UserRateLimit. 3 5 (java.time.Duration/ofMinutes 1))})
-(def three-per-five-minutes {:storage storage :limit (UserRateLimit. 4 3 (java.time.Duration/ofMinutes 5))})
+(defn ratelimit-response-builder
+  [quota retry-after]
+  (let [error-data {:quota quota
+                    :retry-after-seconds (.getSeconds retry-after)}]
+    (too-many-requests-response
+     {:headers {"Content-Type" "application/json"}
+      :body (json/generate-string
+             {:message (str "Rate limit exceeded. Maximum " quota " requests allowed. Try again in " 
+                           (.getSeconds retry-after) " seconds.")
+              :error error-data})}
+     retry-after)))
+  
+  
+
+(def one-per-second {:storage storage :limit (UserRateLimit. 1 1 (java.time.Duration/ofSeconds 1)) :response-builder ratelimit-response-builder})
+(def one-per-minute {:storage storage :limit (UserRateLimit. 2 1 (java.time.Duration/ofMinutes 1)) :response-builder ratelimit-response-builder})
+(def five-per-minute {:storage storage :limit (UserRateLimit. 3 5 (java.time.Duration/ofMinutes 1)) :response-builder ratelimit-response-builder})
+(def three-per-five-minutes {:storage storage :limit (UserRateLimit. 4 3 (java.time.Duration/ofMinutes 5)) :response-builder ratelimit-response-builder})
 
 (defn wrap-discord-user-auth
   "Middleware that adds user context for Discord requests"
@@ -630,7 +668,8 @@
 ;; Define schemas using malli syntax
 (def ErrorSchema
   [:map 
-   [:message :string]])
+   [:message :string]
+   [:error {:optional true} :map]])
 
 (def InfoSchema
   [:map
@@ -712,7 +751,7 @@
    [:can_add :boolean]
    [:can_view :boolean]])
 
-(def TagPageResponseSchema
+(def TagPageResponseSchema 
   [:map
    [:tag TagSchema]
    [:sorted [:vector SortedItemSchema]]
@@ -734,13 +773,13 @@
                      :tags [{:name "System" :description "System and health endpoints"}
                             {:name "Authentication" :description "User authentication endpoints"}
                             {:name "API Keys" :description "API key management endpoints"}
+                            {:name "Feed" :description "Feed and frontpage endpoints"}
                             {:name "Tags" :description "Tag management endpoints"}
                             {:name "Items" :description "Item management endpoints"}
                             {:name "Votes" :description "Voting and attribute management endpoints"}
                             {:name "Users" :description "User management endpoints"}
                             {:name "Comments" :description "Comment management endpoints"}
-                            {:name "Groups" :description "Group management endpoints"}
-                            {:name "Feed" :description "Feed and frontpage endpoints"}
+                            {:name "Groups" :description "Group management endpoints"} 
                             {:name "Integrations" :description "External service integration endpoints"}] 
                      :components {:securitySchemes {"apiKeyAuth" {:type :apiKey
                                                                   :in :header
@@ -761,31 +800,35 @@
                                                                     [:status :string]
                                                                     [:version :string] 
                                                                     [:database :string]]}}}}
-                      :handler health/check-health}}]
-    ["/feed" {:get {:no-doc false
+                      :handler health/check-health}}] 
+    ["/feed" {:get {:no-doc false 
                     :summary "Get feed for a tag"
                     :tags ["Feed"]
                     :description "Retrieves feed items for a specific tag, including recent votes and activity. WARNING: if the tag is new, or has no items, this will return an empty list, which is sort of strange. account for that until we fix it."
                     :parameters {:query [:map
                                          [:tag_id {:description "ID of the tag to get feed for"} :int]]}
                     :responses {200 {:description "Feed items"
-                                     :content {:default {:schema [:map
-                                                                  [:items [:vector ItemSchema]]]
+                                     :content {:default {:schema [:map {:closed false}
+                                                                  [:items {:optional true} [:vector ItemSchema]]
+                                                                  [:votes {:optional true} [:vector VoteSchema]]
+                                                                  [:users {:optional true} [:vector :string]]]
                                                          :examples {:ok {:description "Feed items retrieved"
                                                                          :value {:items [{:id 1 :title "Example Item" :description "Description" :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
                                                                                  :votes [{:id 1 :left_item_id 1 :right_item_id 2 :magnitude 1 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
-                                                                                 :users ["user1" "user2"]}}}}}}
-                                
+                                                                                 :users ["user1" "user2"]}}}}}} 
                                 400 {:description "Invalid tag ID"
                                      :content {:default {:schema ErrorSchema
-                                                         :examples {:ok {:value {:message "Invalid tag ID"}}}}}}}
+                                                         :examples {:invalid-tag-id {:value {:message "Invalid tag ID"}}}}}}
+                                429 {:description "Rate limit exceeded"
+                                     :content {:default {:schema ErrorSchema
+                                                         :examples {:rate-limit-exceeded {:value {:message "Rate limit exceeded"}}}}}}}
                     :handler feed/get-feed}}]
     ["/frontpage" {:get {:no-doc false
                          :summary "Get frontpage feed"
                          :tags ["Feed"]
                          :description "Retrieves a 'frontpage' feed showing recent activity across all accessible tags"
                          :responses {200 {:description "Frontpage feed items"
-                                          :content {:default {:schema [:map
+                                          :content {:default {:schema [:map  
                                                                        [:items [:vector ItemSchema]]
                                                                        [:votes [:vector VoteSchema]]
                                                                        [:tags [:vector TagSchema]]]
@@ -1043,6 +1086,7 @@
                                                                                                           :created_at "2023-01-01T12:00:00Z"}}}}}}}}
                         :handler tag-info-request}}]
     ["/tag/page2" {:get {:no-doc false
+    
                          :openapi {:deprecated true}
                          :tags ["Tags"]
                          :summary "Get tag info"
@@ -1083,7 +1127,7 @@
                                                                                   :created_at "2023-01-01T12:00:00Z"}}}}}}
                                  401 {:description "Authentication required"
                                       :content {:default {:schema ErrorSchema
-                                                          :examples {:ok {:value {:message "must be logged in to vote"}}}}}}}
+                                                          :examples {:unauthenticated {:value {:message "must be logged in to vote"}}}}}}}
                      :handler vote/vote-post}
               :delete {:no-doc false
                        :openapi {:security [{"apiKeyAuth" []
@@ -1509,7 +1553,7 @@
 
 (defn error-response [exception request]
   (def exception exception)
-  (log/error "ex-data" (ex-data exception))
+  ;;(log/error "ex-data" (ex-data exception))
   (log/debug "exception" exception)
   (log/debug "exception type" (type exception))
   (log/debug "can we coerce?" (= :reitit.coercion/response-coercion (:type (ex-data exception))))
@@ -1521,7 +1565,8 @@
     
    :else
     {:status 500
-     :body {:exception (->> exception Throwable->map)}}))
+     :body {:message (.getMessage exception)
+            :error (->> exception Throwable->map)}}))
 
 (def exception-middleware
   (exception/create-exception-middleware

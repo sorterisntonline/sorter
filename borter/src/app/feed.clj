@@ -9,17 +9,16 @@
   (:import [java.util Date]))
 
 (defn get-feed [req]
-  {:status 200 :body (:body (hc/request {:as :json
-                                         :url (str "http://localhost:8081/api/feed?tag_id="
-                                                   (-> req :params (get "tag_id")))
-                                         :method :get}))
-   :headers {"Content-Type" "application/json"}})
+  (-> (hc/request {:as :json
+                   :url (str "http://localhost:8081/api/feed?tag_id=" (-> req :params (get "tag_id")))
+                   :method :get})
+      :data
+      :response))
 
 (defn get-heirarchy [req]
-  {:status 200 :body (:body (hc/request {:as :json
-                                         :url "http://localhost:8081/api/hierarchy"
-                                         :method :get}))
-   :headers {"Content-Type" "application/json"}})
+  (:response (hc/request {:as :json
+                          :url "http://localhost:8081/api/hierarchy"
+                          :method :get})))
 
 (defn days-ago [days]
   {:start (typ/as-timestamp (Date. (- (.getTime (Date.)) (* 1000 60 60 24 days))))
