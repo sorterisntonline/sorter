@@ -62,10 +62,10 @@
             [app.api-keys :as api-keys]
 
             [app.schemas :refer [ItemSchema VoteSchema UserSchema TagSchema ErrorSchema InfoSchema AttributeSchema TagPageResponseSchema PermsSchema]]
-            [app.ratelimits :refer :all]
-            [app.tag :refer :all]
-            [app.misc :refer :all]
-            [app.users :refer :all])
+            [app.ratelimits :refer [one-per-minute one-per-second five-per-minute three-per-five-minutes]]
+            [app.tag :refer [query-tags post-tag delete-tag tag-slug-check tag-exists-check tag-info-request tag-info-request2]]
+            [app.misc :refer [get-leaderboard get-namespaces]]
+            [app.users :refer [get-user]])
   (:import
    [java.net URLEncoder]))
 
