@@ -1,27 +1,33 @@
 import React from "react";
 import { useLocation } from "wouter";
 import { current_session } from "../session";
+import { useAuth0 } from "@auth0/auth0-react";
+import { handleLogout, logoutWithAuth0 } from "../utils/authUtils";
 
 export const ProfileHoverPane = ({ onClose }) => {
   const [location, setLocation] = useLocation();
+  const { logout, user, isAuthenticated } = useAuth0();
 
-  const handleLogout = async () => {
-    const response = await fetch("/api/logout", {
-      method: "POST",
-      credentials: "include",
-    });
-    if (response.ok) {
-      current_session.value = false;
-      setLocation("/");
+  const handleProfileLogout = async () => {
+    if (isAuthenticated) {
+      logoutWithAuth0(logout);
     } else {
-      console.error("Logout failed:", await response.text());
+      await handleLogout();
     }
+    current_session.value = false;
+    setLocation("/");
+    onClose();
   };
 
   const handleNavigation = (path) => {
     setLocation(path);
     onClose();
   };
+
+  // Use Auth0 user picture if available, otherwise fall back to session data
+  const profilePicture = isAuthenticated && user?.picture 
+    ? user.picture 
+    : (current_session.value?.profile_picture || "/tommyy_hla.jpeg");
 
   return (
     <div className="absolute right-0 top-6 w-48 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded shadow-lg p-4 z-20">
@@ -30,10 +36,10 @@ export const ProfileHoverPane = ({ onClose }) => {
         <div 
           className="w-16 h-16 rounded-full mb-4 bg-gray-200 dark:bg-gray-700 overflow-hidden cursor-pointer"
           onClick={() => handleNavigation("/profile")}
-          title="change profile picture (not implemented yet)"
+          title="view profile"
         >
           <img
-            src={current_session.value.profile_picture || "/tommyy_hla.jpeg"}
+            src={profilePicture}
             alt="Profile"
             className="w-full h-full object-cover"
           />
@@ -61,7 +67,7 @@ export const ProfileHoverPane = ({ onClose }) => {
         </button>
         <button
           className="w-full text-left py-2 px-4 rounded text-red-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors mt-2"
-          onClick={handleLogout}
+          onClick={handleProfileLogout}
         >
           logout
         </button>

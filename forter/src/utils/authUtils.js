@@ -1,3 +1,6 @@
+import { useAuth0 } from '@auth0/auth0-react';
+import { current_session } from "../session";
+
 // Get base URL based on Vite's mode
 const getBaseUrl = () => {
   switch (import.meta.env.MODE) {
@@ -24,6 +27,22 @@ export const redirectToRegister = () => {
   window.location.href = `${getBaseUrl()}/register`;
 };
 
+// Auth0 login (to be used with the useAuth0 hook)
+export const loginWithAuth0 = (loginWithRedirect) => {
+  const currentPath = window.location.pathname;
+  localStorage.setItem('authReturnPath', currentPath);
+  loginWithRedirect();
+};
+
+// Auth0 logout (to be used with the useAuth0 hook)
+export const logoutWithAuth0 = (logout) => {
+  logout({ 
+    logoutParams: {
+      returnTo: window.location.origin
+    }
+  });
+};
+
 // Function to handle return after successful auth
 export const handleAuthReturn = () => {
   const returnPath = localStorage.getItem('authReturnPath');
@@ -38,9 +57,16 @@ export const handleAuthReturn = () => {
   }
 };
 
-// Handle user logout
-export const handleLogout = async () => {
+// Handle user logout - updated to work with both Auth0 and legacy system
+export const handleLogout = async (auth0Logout = null) => {
   try {
+    // If Auth0 logout function is provided, use it
+    if (auth0Logout) {
+      logoutWithAuth0(auth0Logout);
+      return true;
+    }
+    
+    // Otherwise fall back to the existing API logout
     const response = await fetch("/api/logout", {
       method: "POST",
       credentials: "include",
@@ -73,5 +99,18 @@ export const handleLogout = async () => {
     console.error("Logout failed:", error);
     window.location.href = '/';
     return false;
+  }
+};
+
+// Sync Auth0 user with current session
+export const syncAuth0UserWithSession = (user) => {
+  if (user) {
+    current_session.value = {
+      ...current_session.value,
+      user_name: user.username || user.name,
+      email: user.email,
+      profile_picture: user.picture,
+      // Add any other fields you want to sync
+    };
   }
 };

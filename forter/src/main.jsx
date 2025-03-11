@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
+import { Auth0Provider } from '@auth0/auth0-react';
 import App from "./App.jsx";
 import "./index.css";
 import { Router, Route, Switch, useLocation } from "wouter";
@@ -190,4 +191,14 @@ if (dark_mode.value) {
   document.documentElement.classList.remove('dark');
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<Root />);
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <Auth0Provider
+    domain="auth.sorter.social"
+    clientId="GiBSx3V86zKjB4d0PRwso4mZBXTlRQci"
+    authorizationParams={{
+      redirect_uri: window.location.origin
+    }}
+  >
+    <Root />
+  </Auth0Provider>
+);

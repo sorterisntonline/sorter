@@ -186,10 +186,10 @@
                    :tags ["Tags"] 
                    :description "Lists tags the user has access to, separated into public, private, and unlisted categories" 
                    :responses {200 {:description "Available tags"
-                                    :content {:default {:schema [:map
-                                                                 [:public [:vector TagSchema]]
-                                                                 [:private [:vector TagSchema]]
-                                                                 [:unlisted [:vector TagSchema]]]
+                                    :content {:default {:schema [:map {:closed false}
+                                                                 [:public [:vector {:min 0} TagSchema]]
+                                                                 [:private {:optional true} [:vector {:min 0} TagSchema]]
+                                                                 [:unlisted {:optional true} [:vector {:min 0} TagSchema]]]
                                                         :examples {:ok {:value {:public [{:id 1 :title "Public Tag" :slug "public-tag" :vote_count 10 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
                                                                                 :private [{:id 2 :title "Private Tag" :slug "private-tag" :vote_count 5 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
                                                                                 :unlisted [{:id 3 :title "Unlisted Tag" :slug "unlisted-tag" :vote_count 2 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]}}}}}}} 

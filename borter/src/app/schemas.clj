@@ -12,7 +12,7 @@
    [:message :string]])
 
 (def TagSchema
-  [:map
+  [:map {:closed false}
    [:tags/id :int]
    [:tags/title :string]
    [:tags/description {:optional true} [:maybe :string]]
@@ -20,14 +20,16 @@
    [:tags/ns {:optional true} [:maybe :string]]
    [:tags/namespace {:optional true} [:maybe :string]]
    [:tags/owner :string]
-   [:tags/created_at :string]
-   [:tags/edited_at {:optional true} :string]
+   [:tags/created_at inst?]
+   [:tags/edited_at {:optional true} inst?]
    [:tags/unlisted {:optional true} :boolean]
    [:tags/domain_pk_namespace {:optional true} [:maybe :string]]
    [:tags/domain_pk {:optional true} [:maybe :string]]
    [:tags/domain_url {:optional true} [:maybe :string]]
    [:tags/nsfw {:optional true} :boolean]
-   [:tags/hide_item_authors {:optional true} :boolean]]) 
+   [:tags/hide_item_authors {:optional true} :boolean]
+   [:vote_count {:optional true} [:maybe :int]]
+   [:item_count {:optional true} [:maybe :int]]]) 
 
 (def ItemSchema
   [:map {:closed false}
@@ -37,8 +39,8 @@
    [:body {:optional true} [:maybe :string]]
    [:url {:optional true} [:maybe :string]]
    [:owner :string]
-   [:created_at :string]
-   [:edited_at {:optional true} :string]
+   [:created_at inst?]
+   [:edited_at {:optional true} inst?]
    [:domain_pk_namespace {:optional true} [:maybe :string]]
    [:domain_pk {:optional true} [:maybe :string]]
    [:num_comments {:optional true} [:maybe :int]]
@@ -54,8 +56,8 @@
    [:right_item_id :int]
    [:magnitude :int] 
    [:attribute :int]
-   [:created_at :string]
-   [:edited_at {:optional true} :string] 
+   [:created_at inst?]
+   [:edited_at {:optional true} inst?] 
    [:type {:optional true} :string]])
 
 (def UserSchema
@@ -71,8 +73,8 @@
    [:owner :string]
    [:title :string]
    [:description {:optional true} :string] 
-   [:created_at :string]
-   [:edited_at {:optional true} :string] 
+   [:created_at inst?]
+   [:edited_at {:optional true} inst?] 
    [:votes {:optional true} :int]])
 
 (def PermsSchema
