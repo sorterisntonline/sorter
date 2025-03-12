@@ -67,7 +67,11 @@ const Root = () => {
 
   // Don't render the app until session is initialized
   if (!sessionInitialized) {
-    return <div className="loading-container dark:text-white">Loading...</div>;
+    return (
+      <div className="flex items-center justify-center h-screen bg-white dark:bg-black">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500"></div>
+      </div>
+    );
   }
 
   return (

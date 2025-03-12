@@ -87,9 +87,9 @@
     (can action perms owner userid)))
 
 (comment
-  (db/exec! {:select :* :from :users})
+  (db/exec! {:select :* :from :users}))
   
-  )
+  
 
 
 

@@ -79,8 +79,23 @@ export const TagList = () => {
   const { data, error, isLoading, mutate } = useSWR("/api/tag", fetcher);
   const [search, setSearch] = useState("");
 
-  if (isLoading) return <h1 className="pt-4"> loading... </h1>;
-  if (error) return <h1 className="pt-4"> error </h1>;
+  if (isLoading) return (
+    <div className="flex items-center justify-center h-screen bg-white dark:bg-black">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500"></div>
+    </div>
+  );
+  if (error) return (
+    <div className="flex flex-col items-center justify-center h-screen bg-white dark:bg-black text-black dark:text-white p-6">
+      <div className="text-red-500 text-2xl mb-4">Error loading tags</div>
+      <div className="mb-4">We apologize for the inconvenience. An error occurred while loading the tags.</div>
+      <button 
+        className="px-4 py-2 bg-purple-500 text-white rounded"
+        onClick={() => window.location.reload()}
+      >
+        Reload page
+      </button>
+    </div>
+  );
 
   console.log(data);
 

@@ -213,12 +213,11 @@ function App({ tagid, isVoting }) {
       )}
       
       {/* Test banner to ensure rendering works */}
-      <div className="p-4 bg-purple-500 text-white text-center font-bold">
+      <div className="bg-purple-500 text-white text-center font-bold hidden">
         Tag ID: {tag.value?.tag?.id} - {tag.value?.tag?.slug}
       </div>
-      
       {/* Try rendering the voting view or main content */}
-      <div className="flex-grow overflow-auto">
+      <div className="page-padding-top flex-grow overflow-auto">
         {isVoting ? (
           <Voting tagid={tagid} handleError={handleError} />
         ) : (

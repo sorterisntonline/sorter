@@ -62,7 +62,6 @@
                                       false)]])))
            (map (fn [tag]
                   (-> tag
-                      (update-keys #(keyword (name %)))
                       count-votes)))))
     :unlisted
     (->> (db/exec! (-> (h/select :tags/*)
@@ -174,7 +173,7 @@
                    (throw (ex-info "you can not edit tags you do not own" {:status 403})))
 
                  (let [body-params (-> r :body-params)
-                ;; Ensure description is always a string, never nil
+                       ;; Ensure description is always a string, never nil
                        description (if (contains? body-params :description)
                                      (or (:description body-params) "")
                                      "")
@@ -183,10 +182,15 @@
                                          (dissoc :tag_id :id))
                        ret (db/exec! (-> (h/update :tags)
                                          (h/set update-values)
-                                         (h/where [:= :tags/id tag-id])))]
+                                         (h/where [:= :tags/id tag-id])
+                                         (h/returning :*)))]
                    (log/info "Tag updated:" tag-id)
                    (log/debug "Updated tag result:" ret)
-                   (first ret)))
+                   (let [result (first ret)]
+                     ;; Ensure ID is correctly included in response
+                     (if (contains? result :id)
+                       result
+                       (assoc result :id tag-id)))))
 
       ;; Case 2: Discord channel tag exists (update)
              (and is-discord-channel existing-tag)
@@ -196,27 +200,33 @@
                    (throw (ex-info "you can not edit tags you do not own" {:status 403})))
 
                  (let [body-params (-> r :body-params)
-                ;; Ensure description is always a string, never nil
+                       ;; Ensure description is always a string, never nil
                        description (if (contains? body-params :description)
                                      (or (:description body-params) "")
                                      "")
+                       existing-id (:id existing-tag)
                        update-values (-> body-params
                                          (assoc :edited_at [:now] :description description)
                                          (dissoc :tag_id :id))
                        ret (db/exec! (-> (h/update :tags)
                                          (h/set update-values)
-                                         (h/where [:= :tags/id (:id existing-tag)])))]
-                   (log/info "Discord channel tag updated:" (:id existing-tag))
+                                         (h/where [:= :tags/id existing-id])
+                                         (h/returning :*)))]
+                   (log/info "Discord channel tag updated:" existing-id)
                    (log/debug "Updated Discord channel tag result:" ret)
-                   (first ret)))
+                   (let [result (first ret)]
+                     ;; Ensure ID is correctly included in response
+                     (if (contains? result :id)
+                       result
+                       (assoc result :id existing-id)))))
 
       ;; Case 3: Create new tag
              :else
              (let [body-params (-> r :body-params)
-            ;; Prefer 'namespace' over 'ns' if both are provided
+                   ;; Prefer 'namespace' over 'ns' if both are provided
                    namespace-value (or (-> body-params :namespace)
                                        (-> body-params :ns))
-            ;; Ensure description is always a string, never nil
+                   ;; Ensure description is always a string, never nil
                    description (if (contains? body-params :description)
                                  (or (:description body-params) "")
                                  "")
@@ -231,11 +241,15 @@
                    ret (db/exec! (-> (h/insert-into :tags)
                                      (h/values [tag-values])
                                      (h/returning :*)))
-                   tagid (-> ret first :id)]
+                   tag-result (first ret)
+                   tagid (or (:id tag-result) (:tags/id tag-result))]
                (db/exec! (-> (h/insert-into :perms)
                              (h/values (perms/public-permissions tagid))))
                (log/info "New tag created:" tagid "by user:" (-> r :session :user_name))
-               (first ret)))}))
+               ;; Ensure ID is correctly included in the response
+               (if (contains? tag-result :id)
+                 tag-result
+                 (assoc tag-result :id tagid))))}))
 
 
 (defn delete-tag [req]
@@ -256,9 +270,9 @@
                                         (urlencode-params (cond-> (-> r :params)
                                                             (-> r :session :user_name) (assoc "user_name" (-> r :session :user_name)))))
                               :method :get})]
-    (log/debug "response" (update response :body #(if (sequential? %) 
-                                                    (concat (take 5 %) ["..."] (take-last 5 %))
-                                                    %)))
+    ;; (log/debug "response" (update response :body #(if (sequential? %) 
+    ;;                                                 (concat (take 5 %) ["..."] (take-last 5 %))
+    ;;                                                 %)))
     {:status 200
      :body (:body response)}))
 
@@ -270,9 +284,9 @@
                                                             (-> r :session :user_name)
                                                             (assoc "user_name" (-> r :session :user_name)))))
                               :method :get})]
-    (log/debug "response" (update response :body #(if (sequential? %) 
-                                                    (concat (take 5 %) ["..."] (take-last 5 %))
-                                                    %)))
+    ;; (log/debug "response" (update response :body #(if (sequential? %) 
+    ;;                                                 (concat (take 5 %) ["..."] (take-last 5 %))
+    ;;                                                 %)))
     {:status 200
      :body (:body response)}))
 
@@ -380,7 +394,7 @@
        :body (if existing-tag
                ;; Return only the specific fields defined in the OpenAPI schema
                {:exists true
-                :id (:id existing-tag)
+                :id (or (:id existing-tag) (:tags/id existing-tag))  ;; Try both unqualified and qualified IDs
                 :slug (:slug existing-tag)
                 :title (:title existing-tag)
                 :owner (:owner existing-tag)
