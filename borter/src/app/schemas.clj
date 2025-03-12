@@ -20,8 +20,8 @@
    [:tags/ns {:optional true} [:maybe :string]]
    [:tags/namespace {:optional true} [:maybe :string]]
    [:tags/owner :string]
-   [:tags/created_at inst?]
-   [:tags/edited_at {:optional true} inst?]
+   [:tags/created_at [:maybe :string]]
+   [:tags/edited_at {:optional true} [:maybe :string]]
    [:tags/unlisted {:optional true} :boolean]
    [:tags/domain_pk_namespace {:optional true} [:maybe :string]]
    [:tags/domain_pk {:optional true} [:maybe :string]]
@@ -39,8 +39,8 @@
    [:body {:optional true} [:maybe :string]]
    [:url {:optional true} [:maybe :string]]
    [:owner :string]
-   [:created_at inst?]
-   [:edited_at {:optional true} inst?]
+   [:created_at [:maybe :string]]
+   [:edited_at {:optional true} [:maybe :string]]
    [:domain_pk_namespace {:optional true} [:maybe :string]]
    [:domain_pk {:optional true} [:maybe :string]]
    [:num_comments {:optional true} [:maybe :int]]
@@ -56,9 +56,9 @@
    [:right_item_id :int]
    [:magnitude :int] 
    [:attribute :int]
-   [:created_at inst?]
-   [:edited_at {:optional true} inst?] 
-   [:type {:optional true} :string]])
+   [:created_at [:maybe :string]]
+   [:edited_at {:optional true} [:maybe :string]] 
+   [:type {:optional true} [:maybe :string]]])
 
 (def UserSchema
   [:map {:closed false}
@@ -73,8 +73,8 @@
    [:owner :string]
    [:title :string]
    [:description {:optional true} :string] 
-   [:created_at inst?]
-   [:edited_at {:optional true} inst?] 
+   [:created_at [:maybe :string]]
+   [:edited_at {:optional true} [:maybe :string]] 
    [:votes {:optional true} :int]])
 
 (def PermsSchema
@@ -82,6 +82,14 @@
    [:can_vote :boolean]
    [:can_add :boolean]
    [:can_view :boolean]])
+
+(def CommentSchema
+  [:map {:closed false}
+   [:id :int]
+   [:body :string]
+   [:created_at [:maybe :string]]
+   [:edited_at {:optional true} [:maybe :string]]
+   [:owner :string]])
 
 (def TagPageResponseSchema 
   [:map

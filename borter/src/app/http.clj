@@ -963,10 +963,10 @@
              ;;(log/error "error" (:uri request) e)
              (error-response e request))})))
 
-(def m-instance (m/create
-                 (-> m/default-options
-                     (assoc-in [:formats "application/json" :encoder-opts]
-                               {:encode-key-fn name}))))
+;; (def m-instance (m/create
+;;                  (-> m/default-options
+;;                      (assoc-in [:formats "application/json" :encoder-opts]
+;;                                {:encode-key-fn name}))))
   
 ;; Create a single shared session store instance
 (def session-store (memory/memory-store))
@@ -978,7 +978,7 @@
                      :exception pretty/exception
                      :conflicts nil
                      :data {:coercion (reitit.coercion.malli/create)
-                            :muuntaja m-instance
+                            :muuntaja m/instance
                             :middleware
                             [(fn [handler]
                                (session/wrap-session handler {:store session-store}))

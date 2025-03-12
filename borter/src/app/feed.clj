@@ -6,29 +6,16 @@
             [hato.client :as hc]
             [next.jdbc.types :as typ]
             [clojure.tools.logging :as log]
+            [app.schemas :refer [ItemSchema VoteSchema CommentSchema]]
             [borkdude.deflet :refer [deflet]])
   (:import [java.util Date]))
 
-(defn get-feed [r]
-  (log/debug "get-feed called with params:" (-> r :params))
-  (log/debug "get-feed called with session:" (-> r :session))
-  (let [response @(hc/request {:as :json}
-                              :url (str "http://localhost:8081/api/feed?tag_id=" (get (-> r :params) "tag_id"))
-                              :async? true
-                              :method :get
-                              (fn [resp] (log/debug "async callback: " resp)))
-        feed (get-in response [:body])
-        items (->> feed
-                   (filter #(= (get % "type") "Item"))
-                   (map #(into {} (for [[k v] %] [(keyword k) v])))) ; Convert string keys to keywords
-        votes (->> feed
-                   (filter #(= (get % "type") "Vote")) 
-                   (map #(into {} (for [[k v] %] [(keyword k) v]))))] ; Convert string keys to keywords
-    (log/debug "get-feed response:" feed)
-    {:status 200
-     :headers {"Content-Type" "application/json"}
-     :body {:items items
-            :votes votes}}))
+(defn get-feed [req]
+  {:status 200 :body (:body (hc/request {:as :json
+                                         :url (str "http://localhost:8081/api/feed?tag_id="
+                                                   (-> req :params (get "tag_id")))
+                                         :method :get}))
+   :headers {"Content-Type" "application/json"}})
 
 (defn days-ago [days]
   {:start (typ/as-timestamp (Date. (- (.getTime (Date.)) (* 1000 60 60 24 days))))
