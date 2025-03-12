@@ -10,12 +10,36 @@
             [borkdude.deflet :refer [deflet]])
   (:import [java.util Date]))
 
+(defn transform-vote [vote]
+  (-> vote
+      (select-keys [:id :owner :left_item_id :right_item_id 
+                    :magnitude :attribute :created_at :edited_at])
+      (assoc :type "Vote")))
+
+(defn transform-item [item]
+  (-> item
+      (select-keys [:id :title :slug :body :url :owner 
+                    :created_at :edited_at :domain_pk_namespace 
+                    :domain_pk :num_comments :elo :vote_count])
+      (assoc :type "Item")))
+
 (defn get-feed [req]
-  {:status 200 :body (:body (hc/request {:as :json
-                                         :url (str "http://localhost:8081/api/feed?tag_id="
-                                                   (-> req :params (get "tag_id")))
-                                         :method :get}))
-   :headers {"Content-Type" "application/json"}})
+  (let [response (hc/request {:as :json
+                              :url (str "http://localhost:8081/api/feed?tag_id="
+                                        (-> req :params (get "tag_id")))
+                              :method :get})
+        body (:body response)
+        raw-votes (filter #(= (:type %) "Vote") body)
+        raw-items (filter #(= (:type %) "Item") body)
+        votes (map transform-vote raw-votes)
+        items (map transform-item raw-items)]
+    (log/debug "response" (update response :body #(if (sequential? %) (take 10 %) %)))
+    (log/debug "First 10 body items:" (take 10 body))
+    (log/debug "First 10 votes:" (take 10 votes))
+    (log/debug "First 10 items:" (take 10 items))
+    {:status 200 
+     :body {:votes votes
+            :items items}}))
 
 (defn days-ago [days]
   {:start (typ/as-timestamp (Date. (- (.getTime (Date.)) (* 1000 60 60 24 days))))

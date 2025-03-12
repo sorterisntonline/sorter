@@ -1,5 +1,5 @@
 import { makeRequest, loadTag } from "./Network";
-import { tag, magnitude, selected_item, drawer_open } from "./App";
+import { tag, magnitude, selected_item, drawer_open, current_attribute } from "./App";
 import { ItemFull } from "./ItemPanel";
 import { current_session } from "./session";
 import { useEffect, useState, useRef } from "react";
@@ -239,7 +239,7 @@ const MobileVotePanel = ({ left, right, onSubmitVote, voteCount }) => {
 
     return () => {
       if (animationFrame) {
-        cancelAnimationFrame(animationFrame);
+        window.cancelAnimationFrame(animationFrame);
       }
     };
   }, [voteCount]);
@@ -451,25 +451,28 @@ const VotePanelComponent = ({ handleError, isMobile = false }) => {
   const [justVoted, setJustVoted] = useState(false);
   const [isRateLimited, setIsRateLimited] = useState(false);
   
-  if (tag.value.pair === undefined || !tag.value.pair[0] || !tag.value.pair[1]) {
-    return <div className="text-xl">no pair</div>;
-  }
-
-  const left = tag.value.pair[0];
-  const right = tag.value.pair[1];
+  const hasPair = tag.value.pair !== undefined && tag.value.pair[0] && tag.value.pair[1];
+  const left = hasPair ? tag.value.pair[0] : null;
+  const right = hasPair ? tag.value.pair[1] : null;
 
   useEffect(() => {
-    const existingVote = tag.value.votes.find(vote => 
-      (vote.right_item_id === left.id && vote.left_item_id === right.id) ||
-      (vote.right_item_id === right.id && vote.left_item_id === left.id)
-    );
+    if (hasPair && tag.value.votes) {
+      const existingVote = tag.value.votes.find(vote => 
+        (vote.right_item_id === left.id && vote.left_item_id === right.id) ||
+        (vote.right_item_id === right.id && vote.left_item_id === left.id)
+      );
 
-    if (existingVote && current_session.value !== null && 
-        existingVote.owner === current_session.value.user_name) {
-      magnitude.value = existingVote.left_item_id === left.id ? 
-        existingVote.magnitude : 100 - existingVote.magnitude;
+      if (existingVote && current_session.value !== null && 
+          existingVote.owner === current_session.value.user_name) {
+        magnitude.value = existingVote.left_item_id === left.id ? 
+          existingVote.magnitude : 100 - existingVote.magnitude;
+      }
     }
-  }, [tag.value.votes]);
+  }, [tag.value.votes, hasPair, left, right]);
+
+  if (!hasPair) {
+    return <div className="text-xl">no pair</div>;
+  }
 
   const submitVote = async () => {
     try {
@@ -477,7 +480,7 @@ const VotePanelComponent = ({ handleError, isMobile = false }) => {
         "left_item_id": left["id"],
         "right_item_id": right["id"],
         "magnitude": magnitude.value,
-        "attribute": tag.value.selected_attribute,
+        "attribute": current_attribute.value,
         "tag_id": tag.value.tag["id"],
       });
 

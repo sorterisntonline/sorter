@@ -12,7 +12,7 @@
 (defn count-votes [tag]
   (let [subquery (-> (h/select :items_in_tags/item_id)
                      (h/from :items_in_tags)
-                     (h/where [:= :items_in_tags/tag_id (:tags/id tag)]))
+                     (h/where [:= :items_in_tags/tag_id (:id tag)]))
         votes (-> (h/select [[:count :votes/id]])
                   (h/from :votes)
                   (h/where [:or
@@ -20,7 +20,6 @@
                             [:in :votes/right_item_id subquery]])
                   db/exec! first :count)]
     (assoc tag :vote_count votes)))
-
 
 
 (defn query-tags [r]
@@ -33,10 +32,12 @@
                                          [:= :perms/user_id "all"]
                                          [:= :tags/unlisted false]])
                                (h/from :tags)
-
                                (h/left-join :items_in_tags [:= :items_in_tags/tag_id :tags/id])
                                (h/group-by :tags/id)))
-                 (map count-votes))
+                 (map (fn [tag]
+                        (-> tag
+                            (update-keys #(keyword (name %)))
+                            count-votes))))
     :private
     (let [groups (map :users_in_usergroups/usergroup_id
                       (db/exec! (-> {:select :* :from :users_in_usergroups
@@ -59,7 +60,10 @@
                                     (if (-> r :session :user_name)
                                       [:= :tags/owner (-> r :session :user_name)]
                                       false)]])))
-           (map count-votes)))
+           (map (fn [tag]
+                  (-> tag
+                      (update-keys #(keyword (name %)))
+                      count-votes)))))
     :unlisted
     (->> (db/exec! (-> (h/select :tags/*)
                        (h/from :tags)
@@ -68,7 +72,11 @@
                                  (if (-> r :session :user_name)
                                    [:= :tags/owner (-> r :session :user_name)]
                                    false)])))
-         (map count-votes))
+         (map (fn [tag]
+                (-> tag
+                    (update-keys #(keyword (name %)))
+                    count-votes))))
+    
     #_:namespaces #_(db/exec! "select domain_pk_namespace count(*) from items group_by domain_pk_namespace")}})
 
 (comment
@@ -154,7 +162,7 @@
           (throw (ex-info "A tag with this name already exists in this namespace"
                           {:status 409
                            :error "duplicate_tag"
-                           :existing_tag_id (:tags/id existing-slug-tag)})))))
+                           :existing_tag_id (:id existing-slug-tag)})))))
 
     ;; Return a proper HTTP response with the tag data
     {:status 200
@@ -182,9 +190,9 @@
 
       ;; Case 2: Discord channel tag exists (update)
              (and is-discord-channel existing-tag)
-             (do (when-not (perms/owns (:tags/id existing-tag)
+             (do (when-not (perms/owns (:id existing-tag)
                                        (-> r :session :user_name))
-                   (log/warn "User" (-> r :session :user_name) "attempted to edit Discord channel tag they don't own:" (:tags/id existing-tag))
+                   (log/warn "User" (-> r :session :user_name) "attempted to edit Discord channel tag they don't own:" (:id existing-tag))
                    (throw (ex-info "you can not edit tags you do not own" {:status 403})))
 
                  (let [body-params (-> r :body-params)
@@ -197,8 +205,8 @@
                                          (dissoc :tag_id :id))
                        ret (db/exec! (-> (h/update :tags)
                                          (h/set update-values)
-                                         (h/where [:= :tags/id (:tags/id existing-tag)])))]
-                   (log/info "Discord channel tag updated:" (:tags/id existing-tag))
+                                         (h/where [:= :tags/id (:id existing-tag)])))]
+                   (log/info "Discord channel tag updated:" (:id existing-tag))
                    (log/debug "Updated Discord channel tag result:" ret)
                    (first ret)))
 
@@ -217,13 +225,13 @@
                                    (dissoc :ns :namespace :tag_id :id)
                                    (assoc :description description)) ;; Explicitly set description
                                (when (and namespace-value (not= namespace-value ""))
-                                 {:tags/ns (sluj namespace-value)})
-                               {:tags/slug (sluj (-> body-params :title))
-                                :tags/owner (-> r :session :user_name)})
+                                 {:ns (sluj namespace-value)})
+                               {:slug (sluj (-> body-params :title))
+                                :owner (-> r :session :user_name)})
                    ret (db/exec! (-> (h/insert-into :tags)
                                      (h/values [tag-values])
                                      (h/returning :*)))
-                   tagid (-> ret first :tags/id)]
+                   tagid (-> ret first :id)]
                (db/exec! (-> (h/insert-into :perms)
                              (h/values (perms/public-permissions tagid))))
                (log/info "New tag created:" tagid "by user:" (-> r :session :user_name))
@@ -240,30 +248,32 @@
     (db/exec! {:delete-from :tags :where [:= :id tagid]})
     {:status 200 :body {:deleted true}}))
 
-
 (defn tag-info-request [r]
   (log/debug "tag-info-request called with params:" (-> r :params))
   (log/debug "tag-info-request called with session:" (-> r :session))
-  (let [response @(hc/request {:as :json
-                               :url (str "http://localhost:8081/api/tag/page?"
-                                         (urlencode-params (cond-> (-> r :params)
-                                                             (-> r :session :user_name) (assoc "user_name" (-> r :session :user_name)))))
-                               :method :get})]
-    (log/debug "tag-info-request response:" response)
+  (let [response (hc/request {:as :json
+                              :url (str "http://localhost:8081/api/tag/page?"
+                                        (urlencode-params (cond-> (-> r :params)
+                                                            (-> r :session :user_name) (assoc "user_name" (-> r :session :user_name)))))
+                              :method :get})]
+    (log/debug "response" (update response :body #(if (sequential? %) 
+                                                    (concat (take 5 %) ["..."] (take-last 5 %))
+                                                    %)))
     {:status 200
-     :headers {"Content-Type" "application/json"}
      :body (:body response)}))
 
 ;; @deprecated: Use tag-info-request instead
 (defn tag-info-request2 [r]
-  (let [response @(hc/request {:as :json
-                               :url (str "http://localhost:8081/api/tag/page2?"
-                                         (urlencode-params (cond-> (-> r :params)
-                                                             (-> r :session :user_name)
-                                                             (assoc "user_name" (-> r :session :user_name)))))
-                               :method :get})]
+  (let [response (hc/request {:as :json
+                              :url (str "http://localhost:8081/api/tag/page2?"
+                                        (urlencode-params (cond-> (-> r :params)
+                                                            (-> r :session :user_name)
+                                                            (assoc "user_name" (-> r :session :user_name)))))
+                              :method :get})]
+    (log/debug "response" (update response :body #(if (sequential? %) 
+                                                    (concat (take 5 %) ["..."] (take-last 5 %))
+                                                    %)))
     {:status 200
-     :headers {"Content-Type" "application/json"}
      :body (:body response)}))
 
 
@@ -312,11 +322,11 @@
          :body (if existing-tag
                  ;; Return only the specific fields defined in the OpenAPI schema
                  {:exists true
-                  :id (:tags/id existing-tag)
-                  :slug (:tags/slug existing-tag)
-                  :title (:tags/title existing-tag)
-                  :owner (:tags/owner existing-tag)
-                  :namespace (:tags/ns existing-tag)}
+                  :id (:id existing-tag)
+                  :slug (:slug existing-tag)
+                  :title (:title existing-tag)
+                  :owner (:owner existing-tag)
+                  :namespace (:ns existing-tag)}
                  {:slug slug
                   :exists false})})
       ;; Return error if neither title nor slug provided
@@ -370,10 +380,10 @@
        :body (if existing-tag
                ;; Return only the specific fields defined in the OpenAPI schema
                {:exists true
-                :id (:tags/id existing-tag)
-                :slug (:tags/slug existing-tag)
-                :title (:tags/title existing-tag)
-                :owner (:tags/owner existing-tag)
-                :namespace (:tags/ns existing-tag)}
+                :id (:id existing-tag)
+                :slug (:slug existing-tag)
+                :title (:title existing-tag)
+                :owner (:owner existing-tag)
+                :namespace (:ns existing-tag)}
                {:exists false
                 :slug slug})})))

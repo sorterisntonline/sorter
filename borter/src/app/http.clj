@@ -125,11 +125,11 @@
                                          [:tag_id {:description "ID of the tag to get feed for"} :int]]}
                     :responses {200 {:description "Feed items"
                                      :content {:default {:schema [:map {:closed false} 
-                                                                  [:items {:optional true} [:vector {:min 0} ItemSchema]] 
-                                                                  [:votes {:optional true} [:vector {:min 0} VoteSchema]]]
+                                                                  [:items [:vector {:min 0} ItemSchema]] 
+                                                                  [:votes [:vector {:min 0} VoteSchema]]]
                                                          :examples {:ok {:description "Feed items retrieved"
-                                                                         :value {:items [{:id 1 :title "Example Item" :description "Description" :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
-                                                                                 :votes [{:id 1 :left_item_id 1 :right_item_id 2 :magnitude 35 :owner "user1" :created_at "2023-01-01T12:00:00Z"}]}}}}}} 
+                                                                         :value {:items [{:id 1 :title "Example Item" :slug "example-item" :body "Description" :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
+                                                                                 :votes [{:id 1 :left_item_id 1 :right_item_id 2 :magnitude 35 :owner "user1" :attribute 0 :created_at "2023-01-01T12:00:00Z"}]}}}}}} 
                                 400 {:description "Invalid tag ID"
                                      :content {:default {:schema ErrorSchema
                                                          :examples {:invalid-tag-id {:value {:message "Invalid tag ID"}}}}}}
@@ -935,33 +935,33 @@
         (handler (assoc request :session {:user_name "admin"})))
       (handler request))))
 
-(defn error-response [exception request]
-  (def exception exception)
-  ;;(log/error "ex-data" ((ex-data exception)))
-  (log/debug "exception" exception)
-  (log/debug "exception type" (type exception))
-  (log/debug "exception data" (ex-data exception))
-  ;;(log/debug "can we coerce?" (= :reitit.coercion/response-coercion (:type (ex-data exception))))
-  ;;(log/debug "malli explanation" (me/humanize (:data (ex-data exception))))
-  (cond 
-    (= (type exception) clojure.lang.ExceptionInfo)
-    {:status (:status (ex-data exception))
-     :body {:message (.getMessage exception)
-            :error (ex-data exception)}} 
+;; (defn error-response [exception request]
+;;   (def exception exception)
+;;   ;;(log/error "ex-data" ((ex-data exception)))
+;;   (log/debug "exception" exception)
+;;   (log/debug "exception type" (type exception))
+;;   (log/debug "exception data" (ex-data exception))
+;;   ;;(log/debug "can we coerce?" (= :reitit.coercion/response-coercion (:type (ex-data exception))))
+;;   ;;(log/debug "malli explanation" (me/humanize (:data (ex-data exception))))
+;;   (cond 
+;;     (= (type exception) clojure.lang.ExceptionInfo)
+;;     {:status (:status (ex-data exception))
+;;      :body {:message (.getMessage exception)
+;;             :error (ex-data exception)}} 
     
-    :else
-    {:status 500
-     :body {:message (.getMessage exception)
-            :data (ex-data exception)
-            :error (->> exception Throwable->map)}}))
+;;     :else
+;;     {:status 500
+;;      :body {:message (.getMessage exception)
+;;             :data (ex-data exception)
+;;             :error (->> exception Throwable->map)}}))
 
-(def exception-middleware
-  (exception/create-exception-middleware
-   (merge exception/default-handlers 
-          {::exception/wrap
-           (fn [handler e request]
-             ;;(log/error "error" (:uri request) e)
-             (error-response e request))})))
+;; (def exception-middleware
+;;   (exception/create-exception-middleware
+;;    (merge exception/default-handlers 
+;;           {::exception/wrap
+;;            (fn [handler e request]
+;;              ;;(log/error "error" (:uri request) e)
+;;              (error-response e request))})))
 
 ;; (def m-instance (m/create
 ;;                  (-> m/default-options
@@ -977,7 +977,7 @@
                     {:validate spec/validate
                      :exception pretty/exception
                      :conflicts nil
-                     :data {:coercion (reitit.coercion.malli/create)
+                     :data {:coercion nil
                             :muuntaja m/instance
                             :middleware
                             [(fn [handler]
@@ -990,9 +990,7 @@
                              muuntaja/format-negotiate-middleware
                              muuntaja/format-response-middleware
                              muuntaja/format-request-middleware
-                             exception-middleware
-                             coercion/coerce-request-middleware
-                             coercion/coerce-response-middleware]}})
+                             exception/exception-middleware]}})
                             ;;  coercion/coerce-request-middleware
                             ;;  coercion/coerce-response-middleware
                               
@@ -1000,6 +998,36 @@
        (-> #'default-handler
            (wrap-resource "public")
            (wrap-content-type)))))
+
+;; (def app
+;;   (-> (ring/ring-handler
+;;        (ring/router routes
+;;                     {:validate spec/validate
+;;                      :exception pretty/exception
+;;                      :conflicts nil
+;;                      :data {:coercion (reitit.coercion.malli/create)
+;;                             :muuntaja m/instance
+;;                             :middleware
+;;                             [(fn [handler]
+;;                                (session/wrap-session handler {:store session-store}))
+;;                              wrap-api-key-auth
+;;                              wrap-dev-session
+;;                              swagger/swagger-feature
+;;                              openapi/openapi-feature
+;;                              parameters/parameters-middleware
+;;                              muuntaja/format-negotiate-middleware
+;;                              muuntaja/format-response-middleware
+;;                              muuntaja/format-request-middleware
+;;                              exception/exception-middleware
+;;                              coercion/coerce-request-middleware
+;;                              coercion/coerce-response-middleware]}})
+;;                             ;;  coercion/coerce-request-middleware
+;;                             ;;  coercion/coerce-response-middleware
+
+;;        (-> #'default-handler
+;;            (wrap-resource "public")
+;;            (wrap-content-type)))))
+
 
 (defn start [{:keys [port]}]
   (log/info "Starting HTTP server on port" port)

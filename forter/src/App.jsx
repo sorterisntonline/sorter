@@ -28,6 +28,7 @@ import { TextSummary } from './components/TextSummary';
 export const tag = signal(false);
 export const selected_item = signal(false);
 export const drawer_open = signal(false);
+export const current_attribute = signal(null);
 
 export const items_by_id = computed(() => {
   if (!tag.value) return {};
@@ -90,6 +91,8 @@ export const showAllUnsorted = signal(true);
 function App({ tagid, isVoting }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [location] = useLocation();
   const isMobileDevice = () => window.innerWidth < 1024;
 
@@ -109,7 +112,8 @@ function App({ tagid, isVoting }) {
   };
 
   const handleError = (error) => {
-    console.log("handler called");
+    console.log("handler called", error);
+    setLoadError(error);
     if (error.status === 401) {  // unauthorized
       setErrorMessage(error.message);
       setIsModalOpen(true);
@@ -119,22 +123,88 @@ function App({ tagid, isVoting }) {
   useEffect(() => {
     console.log("Loading tag with ID:", tagid);
     if (tagid) {
-      loadTag(tagid, handleError);
+      setIsLoading(true);
+      setLoadError(null);
+      
+      // Reset tag value to prevent stale data during loading
+      tag.value = false;
+      
+      loadTag(tagid, handleError)
+        .then(data => {
+          console.log("Load successful, tag data:", data);
+          // Validate data structure
+          if (!data || !data.tag || !data.sorted || !data.unsorted) {
+            console.error("Data missing required properties:", data);
+            setLoadError(new Error("Invalid data structure received from server"));
+          }
+        })
+        .catch(err => {
+          console.error("Load failed:", err);
+          setLoadError(err);
+        })
+        .finally(() => {
+          setIsLoading(false);
+          console.log("Final tag.value state:", tag.value);
+        });
     }
   }, [tagid]);
 
   // Reset selected users when tag changes
   useEffect(() => {
     resetSelectedUsers();
-    selected_attribute.value = null;
   }, [tag.value]);
 
-  if (isVoting) {
-    return <Voting tagid={tagid} />;
+  // Track the current tag ID
+  const [currentTagId, setCurrentTagId] = useState(null);
+  
+  // Update current tag ID when tag changes
+  useEffect(() => {
+    if (tag.value?.tag?.id !== currentTagId) {
+      setCurrentTagId(tag.value?.tag?.id);
+    }
+  }, [tag.value]);
+
+  // Set default attribute when tag ID changes
+  useEffect(() => {
+    if (currentTagId && tag.value) {
+      // Only set default attribute if none is currently selected
+      if (!current_attribute.value && tag.value.attributes?.length > 0) {
+        current_attribute.value = tag.value.attributes[0];
+      }
+    }
+  }, [currentTagId]);
+
+  // Show loading spinner while data is being fetched
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-white dark:bg-black">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500"></div>
+      </div>
+    );
   }
 
+  // Show error state
+  if (loadError || !tag.value) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-white dark:bg-black text-black dark:text-white p-6">
+        <div className="text-red-500 text-2xl mb-4">Error loading content</div>
+        <div className="mb-4">{loadError?.message || "Failed to load data"}</div>
+        <button 
+          className="px-4 py-2 bg-purple-500 text-white rounded"
+          onClick={() => window.location.reload()}
+        >
+          Reload page
+        </button>
+      </div>
+    );
+  }
+
+  console.log("Ready to render with tag:", tag.value);
+
+  // Basic structure with fallback
   return (
     <div className="flex flex-col h-full bg-white dark:bg-black text-black dark:text-white">
+      {/* Error panel */}
       {errorState.value && (
         <ErrorPanel
           error={errorState.value}
@@ -142,48 +212,23 @@ function App({ tagid, isVoting }) {
         />
       )}
       
-      <div className="flex flex-col lg:flex-row h-full">
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto">
-            <ItemsLists
-              onSelectItem={handleSelectItem}
-              namespace={namespace.value}
-            />
-          </div>
-        </div>
-
-        {/* Right panel - only shown when an item is selected or on desktop */}
-        <div 
-          className={`fixed inset-0 z-50 lg:static lg:z-auto lg:w-1/2 xl:w-2/5 transition-transform duration-300 ease-in-out transform ${
-            drawer_open.value ? 'translate-y-0' : 'translate-y-full'
-          } lg:transform-none bg-white dark:bg-black border-l border-gray-200 dark:border-gray-800 h-full overflow-hidden`}
-        >
-          {selected_item.value && (
-            <ItemPanel onClose={handleCloseItem} />
-          )}
-        </div>
+      {/* Test banner to ensure rendering works */}
+      <div className="p-4 bg-purple-500 text-white text-center font-bold">
+        Tag ID: {tag.value?.tag?.id} - {tag.value?.tag?.slug}
       </div>
-
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title="Session Expired"
-      >
-        <p>{errorMessage || "Your session has expired. Please log in again."}</p>
-        <button
-          onClick={() => {
-            setIsModalOpen(false);
-            window.location.href = "/login";
-          }}
-          className="mt-4 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
-        >
-          Log In
-        </button>
-      </Modal>
-
-      {/* Mobile new item button */}
-      <div className="fixed bottom-6 right-6 z-[99999] pointer-events-auto lg:hidden">
-        {tag.value && !selected_item.value && <MobileNewItemChooser />}
+      
+      {/* Try rendering the voting view or main content */}
+      <div className="flex-grow overflow-auto">
+        {isVoting ? (
+          <Voting tagid={tagid} handleError={handleError} />
+        ) : (
+          <Tag
+            isVoting={isVoting}
+            handleError={handleError}
+            onSelectItem={handleSelectItem}
+            onCloseItem={handleCloseItem}
+          />
+        )}
       </div>
     </div>
   );
