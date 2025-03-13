@@ -331,16 +331,20 @@
                 nil)]
 
     (if slug
-      (let [existing-tag (first (db/exec! query))]
+      (let [_ (log/debug "tag-slug-check query:" query)
+            existing-tag (first (db/exec! query))
+            _ (log/debug "tag-slug-check result:" existing-tag)]
         {:status 200
          :body (if existing-tag
                  ;; Return only the specific fields defined in the OpenAPI schema
-                 {:exists true
-                  :id (:id existing-tag)
-                  :slug (:slug existing-tag)
-                  :title (:title existing-tag)
-                  :owner (:owner existing-tag)
-                  :namespace (:ns existing-tag)}
+                 (cond-> {:exists true
+                          :id (or (:id existing-tag) (:tags/id existing-tag))
+                          :slug (or (:slug existing-tag) (:tags/slug existing-tag))
+                          :title (or (:title existing-tag) (:tags/title existing-tag))
+                          :owner (or (:owner existing-tag) (:tags/owner existing-tag))}
+                   ;; Only include namespace if it's not nil
+                   (or (:ns existing-tag) (:tags/ns existing-tag))
+                   (assoc :namespace (or (:ns existing-tag) (:tags/ns existing-tag))))
                  {:slug slug
                   :exists false})})
       ;; Return error if neither title nor slug provided
@@ -384,21 +388,25 @@
 
                     ;; If no namespace specified, search for null/empty ns
                     :else
-                    (update base-query :where (fn [where] [:and where [:or [:= :tags/ns nil] [:= :tags/ns nil]]]))))
+                    (update base-query :where (fn [where] [:and where [:or [:= :tags/ns nil] [:= :tags/ns ""]]]))))
 
                 ;; Error case - neither domain identifiers nor title/slug provided
                 :else
                 (throw (ex-info "Either title/slug or domain_pk_namespace+domain_pk are required" {:status 400})))]
-    (let [existing-tag (first (db/exec! query))]
+    (let [_ (log/debug "tag-exists-check query:" query)
+          existing-tag (first (db/exec! query))
+          _ (log/debug "tag-exists-check result:" existing-tag)]
       {:status 200
        :body (if existing-tag
                ;; Return only the specific fields defined in the OpenAPI schema
-               {:exists true
-                :id (or (:id existing-tag) (:tags/id existing-tag))  ;; Try both unqualified and qualified IDs
-                :slug (:slug existing-tag)
-                :title (:title existing-tag)
-                :owner (:owner existing-tag)
-                :namespace (:ns existing-tag)}
+               (cond-> {:exists true
+                        :id (or (:id existing-tag) (:tags/id existing-tag)) 
+                        :slug (or (:slug existing-tag) (:tags/slug existing-tag))
+                        :title (or (:title existing-tag) (:tags/title existing-tag))
+                        :owner (or (:owner existing-tag) (:tags/owner existing-tag))}
+                 ;; Only include namespace if it's not nil
+                 (or (:ns existing-tag) (:tags/ns existing-tag))
+                 (assoc :namespace (or (:ns existing-tag) (:tags/ns existing-tag))))
                {:exists false
                 :slug slug})})))
 
@@ -409,15 +417,15 @@
    ["" {:get {:handler query-tags}
         :post {:handler post-tag
                :parameters {:body {:title string?
-                                  :description string?
-                                  :slug string?
-                                  :ns string?
-                                  :namespace string?
-                                  :id int?
-                                  :tag_id int?
-                                  :unlisted boolean?
-                                  :domain_pk_namespace string?
-                                  :domain_pk string?}}}}]
+                                   :description string?
+                                   :slug string?
+                                   :ns string?
+                                   :namespace string?
+                                   :id int?
+                                   :tag_id int?
+                                   :unlisted boolean?
+                                   :domain_pk_namespace string?
+                                   :domain_pk string?}}}}]
    
    ["/:id" {:delete {:handler delete-tag
                      :parameters {:path {:id string?}}}}]
@@ -428,14 +436,14 @@
    
    ["/slug-check" {:get {:handler tag-slug-check
                          :parameters {:query {:title string?
-                                             :slug string?
-                                             :ns string?
-                                             :namespace string?}}}}]
+                                              :slug string?
+                                              :ns string?
+                                              :namespace string?}}}}]
    
    ["/exists" {:post {:handler tag-exists-check
                       :parameters {:body {:title string?
-                                         :slug string?
-                                         :ns string?
-                                         :namespace string?
-                                         :domain_pk_namespace string?
-                                         :domain_pk string?}}}}]])
+                                          :slug string?
+                                          :ns string?
+                                          :namespace string?
+                                          :domain_pk_namespace string?
+                                          :domain_pk string?}}}}]])
