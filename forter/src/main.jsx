@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
-import { Auth0Provider } from '@auth0/auth0-react';
+import { Auth0Provider, useAuth0 } from '@auth0/auth0-react';
 import App from "./App.jsx";
 import "./index.css";
 import { Router, Route, Switch, useLocation } from "wouter";
@@ -26,6 +26,8 @@ import { handleLogout } from './utils/authUtils.js';
 import { initializeTheme, dark_mode } from './utils/themeUtils';
 import { EmailVerification } from './EmailVerification';
 import { ForgotPassword, ResetPassword } from './ForgotPassword';
+import { Authorized } from './Authorized.jsx';
+import { NoAuth } from './NoAuth.jsx';
 
 // Initialize theme immediately before any rendering
 initializeTheme();
@@ -33,17 +35,30 @@ initializeTheme();
 export const namespace = signal(false);
 
 const LogoutRoute = () => {
+  const { logout } = useAuth0();
+  const [_, setLocation] = useLocation();
+  
   useEffect(() => {
     const performLogout = async () => {
-      await handleLogout();
-      // Clear the session state after logout
-      current_session.value = false;
+      const result = await handleLogout(logout);
+      
+      // If we're not using Auth0 logout (which handles redirect itself),
+      // we need to manually redirect to /noauth
+      if (result && !logout) {
+        // Clear the session state after logout
+        current_session.value = false;
+        setLocation('/noauth');
+      }
     };
     
     performLogout();
-  }, []);
+  }, [logout, setLocation]);
 
-  return null;
+  return (
+    <div className="flex items-center justify-center h-screen bg-white dark:bg-black">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500"></div>
+    </div>
+  );
 };
 
 const Root = () => {
@@ -92,6 +107,8 @@ const Root = () => {
             <Switch>
               <Route path="/login"><Login /></Route>
               <Route path="/register"><Register /></Route>
+              <Route path="/authorized"><Authorized /></Route>
+              <Route path="/noauth"><NoAuth /></Route>
               <Route path="/feed">
                 {(params) => {
                   tag.value = null;
@@ -200,8 +217,12 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     domain="auth.sorter.social"
     clientId="GiBSx3V86zKjB4d0PRwso4mZBXTlRQci"
     authorizationParams={{
-      redirect_uri: window.location.origin
+      redirect_uri: `${window.location.origin}/authorized`,
+      response_type: 'code',
+      scope: 'openid profile email'
     }}
+    useRefreshTokens={true}
+    cacheLocation="localstorage"
   >
     <Root />
   </Auth0Provider>

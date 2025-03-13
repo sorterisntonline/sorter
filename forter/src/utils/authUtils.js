@@ -30,28 +30,41 @@ export const redirectToRegister = () => {
 // Auth0 login (to be used with the useAuth0 hook)
 export const loginWithAuth0 = (loginWithRedirect) => {
   const currentPath = window.location.pathname;
-  localStorage.setItem('authReturnPath', currentPath);
-  loginWithRedirect();
+  
+  // Use appState to securely store the return path
+  loginWithRedirect({
+    appState: { returnTo: currentPath }
+  });
 };
 
 // Auth0 logout (to be used with the useAuth0 hook)
 export const logoutWithAuth0 = (logout) => {
+  // Store current path for potential return after logout
+  const currentPath = window.location.pathname;
+  
   logout({ 
     logoutParams: {
-      returnTo: window.location.origin
-    }
+      returnTo: `${window.location.origin}/noauth`
+    },
+    appState: { logoutFrom: currentPath }
   });
 };
 
 // Function to handle return after successful auth
 export const handleAuthReturn = () => {
-  const returnPath = localStorage.getItem('authReturnPath');
-  localStorage.removeItem('authReturnPath'); // Clean up
+  // Check for the new key first, then fall back to the old one for backward compatibility
+  const returnPath = localStorage.getItem('returnTo') || localStorage.getItem('authReturnPath') || '/';
+  
+  // Clean up both keys
+  localStorage.removeItem('returnTo');
+  localStorage.removeItem('authReturnPath');
   
   const baseUrl = getBaseUrl();
   
   if (returnPath) {
-    window.location.href = `${baseUrl}${returnPath}`;
+    window.location.href = returnPath.startsWith('/') 
+      ? `${baseUrl}${returnPath}`
+      : returnPath;
   } else {
     window.location.href = baseUrl;
   }
@@ -60,6 +73,9 @@ export const handleAuthReturn = () => {
 // Handle user logout - updated to work with both Auth0 and legacy system
 export const handleLogout = async (auth0Logout = null) => {
   try {
+    // Store current path for potential return after logout
+    localStorage.setItem('logoutFrom', window.location.pathname);
+    
     // If Auth0 logout function is provided, use it
     if (auth0Logout) {
       logoutWithAuth0(auth0Logout);
@@ -92,12 +108,10 @@ export const handleLogout = async (auth0Logout = null) => {
       console.error("Logout failed:", responseData.message || "Unknown error");
     }
     
-    // Always redirect to home page after logout attempt
-    window.location.href = '/';
+    // Return success instead of redirecting
     return true;
   } catch (error) {
     console.error("Logout failed:", error);
-    window.location.href = '/';
     return false;
   }
 };

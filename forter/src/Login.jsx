@@ -27,6 +27,9 @@ export const Login = () => {
   }, [isAuthenticated, user]);
 
   const handleAuth0Login = () => {
+    // Store current path for redirection after login
+    const currentPath = window.location.pathname;
+    localStorage.setItem('returnTo', currentPath !== '/login' ? currentPath : '/');
     loginWithAuth0(loginWithRedirect);
   };
 
