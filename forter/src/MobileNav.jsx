@@ -2,10 +2,13 @@ import { useState } from 'react';
 import { useLocation } from 'wouter';
 import { current_session } from './session';
 import { NAV_ITEMS } from './constants/navigation';
+import { redirectToLogin, redirectToRegister, handleLogout } from './utils/authUtils';
+import { useAuth0 } from '@auth0/auth0-react';
 
 export const MobileNav = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [location, setLocation] = useLocation();
+  const { logout, isAuthenticated } = useAuth0();
 
   // Hide nav if we're in voting mode
   if (location.includes('/voting')) {
@@ -21,6 +24,20 @@ export const MobileNav = () => {
     handleNavClick(item.path);
   };
 
+  const handleLogoutClick = async () => {
+    // Use the shared logout handler with Auth0 support
+    const success = await handleLogout(isAuthenticated ? logout : null);
+    
+    if (success) {
+      // Force refresh the current session
+      current_session.value = false;
+      
+      // Close the menu and go to home page
+      setIsOpen(false);
+      setLocation('/');
+    }
+  };
+
   const renderNavItem = (item) => (
     <div key={item.name}>
       <div
@@ -30,6 +47,18 @@ export const MobileNav = () => {
         <span>{item.name}</span>
       </div>
     </div>
+  );
+
+  // Logout icon with correct alignment
+  const LogoutIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" 
+         className="w-5 h-5 mr-2" 
+         viewBox="0 0 20 20" 
+         fill="currentColor">
+      <path fillRule="evenodd" 
+            d="M3 3a1 1 0 00-1 1v12a1 1 0 001 1h12a1 1 0 001-1V4a1 1 0 00-1-1H3zm11.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L15.586 9H8a1 1 0 100 2h7.586l-1.293 1.293z" 
+            clipRule="evenodd" />
+    </svg>
   );
 
   return (
@@ -67,9 +96,9 @@ export const MobileNav = () => {
           <div className="flex flex-col justify-center">
             {current_session.value?.user_name ? (
               // Show profile image or default profile icon if logged in
-              current_session.value.profile_image ? (
+              current_session.value.pfp_url ? (
                 <img
-                  src={current_session.value.profile_image}
+                  src={current_session.value.pfp_url}
                   alt="Profile"
                   className="w-6 h-6 rounded-full"
                 />
@@ -140,9 +169,9 @@ export const MobileNav = () => {
                   className="flex items-center space-x-3 p-4 cursor-pointer dark:text-white"
                   onClick={() => handleNavClick('/profile')}
                 >
-                  {current_session.value.profile_image && (
+                  {current_session.value.pfp_url && (
                     <img
-                      src={current_session.value.profile_image}
+                      src={current_session.value.pfp_url}
                       alt="Profile"
                       className="w-10 h-10 rounded-full"
                     />
@@ -150,22 +179,23 @@ export const MobileNav = () => {
                   <span className="text-lg">@{current_session.value.user_name}</span>
                 </div>
                 <div 
-                  className="px-4 text-red-500 italic cursor-pointer"
-                  onClick={() => handleNavClick('/logout')}
+                  className="px-4 py-2 text-red-500 cursor-pointer hover:bg-red-50 dark:hover:bg-red-900/30 rounded-md transition-colors flex items-center"
+                  onClick={handleLogoutClick}
                 >
-                  logout
+                  <LogoutIcon />
+                  <span>Logout</span>
                 </div>
               </div>
             ) : (
               <div className="space-y-2">
                 <button
-                  onClick={() => handleNavClick('/login')}
+                  onClick={() => redirectToLogin()}
                   className="w-full p-2 bg-blue-500 dark:bg-blue-700 hover:bg-blue-600 dark:hover:bg-blue-800 text-white rounded text-center"
                 >
                   login
                 </button>
                 <button
-                  onClick={() => handleNavClick('/register')}
+                  onClick={() => redirectToRegister()}
                   className="w-full p-2 border border-blue-500 text-blue-500 dark:text-blue-400 dark:border-blue-400 hover:bg-blue-50 dark:hover:bg-gray-800 rounded text-center"
                 >
                   register

@@ -28,6 +28,8 @@ import { EmailVerification } from './EmailVerification';
 import { ForgotPassword, ResetPassword } from './ForgotPassword';
 import { Authorized } from './Authorized.jsx';
 import { NoAuth } from './NoAuth.jsx';
+import { LinkAuth0 } from './LinkAuth0.jsx';
+import { SetupUsername } from './SetupUsername.jsx';
 
 // Initialize theme immediately before any rendering
 initializeTheme();
@@ -109,6 +111,8 @@ const Root = () => {
               <Route path="/register"><Register /></Route>
               <Route path="/authorized"><Authorized /></Route>
               <Route path="/noauth"><NoAuth /></Route>
+              <Route path="/link-auth0"><LinkAuth0 /></Route>
+              <Route path="/setup-username"><SetupUsername /></Route>
               <Route path="/feed">
                 {(params) => {
                   tag.value = null;

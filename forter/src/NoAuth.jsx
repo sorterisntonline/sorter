@@ -1,67 +1,39 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { useLocation } from 'wouter';
-import { useAuth0 } from '@auth0/auth0-react';
-
-// Pages that require authentication
-const AUTH_REQUIRED_PATHS = [
-  '/profile',
-  '/keys',
-  '/integrations'
-  // Add other paths that require authentication
-];
-
-// Check if a path requires authentication
-const requiresAuth = (path) => {
-  // Check exact matches
-  if (AUTH_REQUIRED_PATHS.includes(path)) {
-    return true;
-  }
-  
-  // Check path patterns (like namespaces or specific tag pages)
-  if (path.startsWith('/namespace/')) {
-    return true;
-  }
-  
-  // Add other pattern checks as needed
-  
-  return false;
-};
+import { current_session } from './session';
 
 export const NoAuth = () => {
   const [_, setLocation] = useLocation();
-  const [isLoading, setIsLoading] = useState(true);
-  const { appState } = useAuth0();
 
   useEffect(() => {
-    // Get the previous path from appState or localStorage (for backward compatibility)
-    const previousPath = appState?.logoutFrom || localStorage.getItem('logoutFrom') || '/';
+    // Clear session state
+    current_session.value = false;
     
-    // Clear auth-related localStorage items
-    localStorage.removeItem('returnTo');
-    localStorage.removeItem('authReturnPath');
-    localStorage.removeItem('logoutFrom');
-    
-    // Check if the previous path requires authentication
-    if (requiresAuth(previousPath)) {
-      // If auth is required, redirect to home
+    // Redirect to home after a short delay
+    const timer = setTimeout(() => {
       setLocation('/');
-    } else {
-      // If auth is not required, redirect to the previous path
-      setLocation(previousPath);
-    }
+    }, 2000);
     
-    // Set loading to false after a short delay to ensure the redirect happens
-    const timer = setTimeout(() => setIsLoading(false), 500);
     return () => clearTimeout(timer);
-  }, [setLocation, appState]);
+  }, [setLocation]);
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-white dark:bg-black">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500"></div>
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-white dark:bg-black">
+      <div className="bg-gray-100 dark:bg-gray-800 p-6 shadow-md w-96 rounded-lg text-center">
+        <h2 className="text-2xl mb-4 text-black dark:text-white">Logged Out</h2>
+        <p className="text-gray-700 dark:text-gray-300 mb-6">
+          You have been successfully logged out.
+        </p>
+        <p className="text-gray-600 dark:text-gray-400 text-sm">
+          Redirecting to homepage...
+        </p>
+        <button
+          onClick={() => setLocation('/')}
+          className="mt-4 bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded"
+        >
+          Go to Home
+        </button>
       </div>
-    );
-  }
-
-  return null;
+    </div>
+  );
 }; 

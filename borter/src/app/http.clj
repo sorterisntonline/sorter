@@ -65,18 +65,25 @@
             [app.ratelimits :refer [one-per-minute one-per-second five-per-minute three-per-five-minutes]]
             [app.tag :refer [query-tags post-tag delete-tag tag-slug-check tag-exists-check tag-info-request tag-info-request2]]
             [app.misc :refer [get-leaderboard get-namespaces]]
-            [app.users :refer [get-user]])
+            [app.users :refer [get-user get-profile]]
+            [app.database :as db]
+            [honey.sql.helpers :as h])
   (:import
    [java.net URLEncoder]))
 
 (defn current-session
   "Handler for retrieving the current session information"
   [r]
-  (let [username (-> r :session :user_name)]
+  (let [username (-> r :session :user_name)
+        user (when username
+               (first (db/exec! (-> (h/select :*)
+                                    (h/from :users)
+                                    (h/where [:= :user_name username])))))]
     {:status 200
-     :body (if username
+     :body (if user
              {:authenticated true
-              :user_name username}
+              :user_name username
+              :pfp_url (:users/pfp_url user)}
              {:authenticated false})}))
 
 
@@ -169,11 +176,13 @@
     ["/users" {:get {:no-doc false
                      :summary "Lookup users"
                      :tags ["Users"]
-                     :description "Lookup users by various identifiers (username, email, login ID, or Discord ID)"
-                     :parameters {:query [:map                                         [:user_name {:description "Username to lookup" :optional true} :string]
+                     :description "Lookup users by various identifiers (username, email, login ID, Discord ID, or Auth0 ID)"
+                     :parameters {:query [:map                                         
+                                          [:user_name {:description "Username to lookup" :optional true} :string]
                                           [:email {:description "Email to lookup" :optional true} :string]
                                           [:login_id {:description "Login ID (username or email) to lookup" :optional true} :string]
-                                          [:discord_id {:description "Discord ID to lookup" :optional true} :string]]}
+                                          [:discord_id {:description "Discord ID to lookup" :optional true} :string]
+                                          [:auth0_id {:description "Auth0 ID to lookup" :optional true} :string]]}
                      :responses {200 {:description "User found"
                                       :content {:default {:schema UserSchema
                                                           :examples {:ok {:value {:user_name "example_user" :temporary false}}}}}}
@@ -181,6 +190,33 @@
                                       :content {:default {:schema ErrorSchema
                                                           :examples {:ok {:value {:message "user not found"}}}}}}}
                      :handler get-user}}]
+    ["/profile" {:get {:no-doc false
+                       :summary "Get current user profile"
+                       :tags ["Users"]
+                       :description "Retrieves profile information for the currently authenticated user. Use the optional 'info' parameter with period-delimited field names to request specific fields."
+                       :openapi {:security [{"cookieAuth" []}]}
+                       :parameters {:query [:map
+                                            [:info {:description "Period-delimited list of fields to return (e.g., 'user_name.email.pfp_url')" :optional true} :string]]}
+                       :responses {200 {:description "User profile information"
+                                        :content {:default {:schema [:map {:closed false}
+                                                                     [:user_name {:optional true} :string]
+                                                                     [:email {:optional true} :string]
+                                                                     [:email_verified {:optional true} :boolean]
+                                                                     [:pfp_url {:optional true} :string]
+                                                                     [:auth0_id {:optional true} :string]
+                                                                     [:discord_id {:optional true} :string]
+                                                                     [:created_at {:optional true} :string]]
+                                                            :examples {:full {:value {:user_name "example_user" 
+                                                                                      :email "user@example.com"
+                                                                                      :email_verified true
+                                                                                      :pfp_url "https://example.com/profile.jpg"
+                                                                                      :created_at "2023-01-01T12:00:00Z"}}
+                                                                       :partial {:value {:user_name "example_user"
+                                                                                         :pfp_url "https://example.com/profile.jpg"}}}}}}
+                                   401 {:description "Authentication required"
+                                        :content {:default {:schema ErrorSchema
+                                                            :examples {:ok {:value {:message "must be logged in to access profile"}}}}}}}
+                       :handler get-profile}}]
     ["/tag" {:get {:no-doc false 
                    :summary "List accessible tags" 
                    :tags ["Tags"] 
@@ -804,6 +840,66 @@
                                :description "Resets the user's password"
                                :middleware [[wrap-rate-limit three-per-five-minutes]]
                                :handler login/handle-reset-password}}]
+    ["/auth0" 
+     ["/login" {:post {:no-doc false
+                       :summary "Login with Auth0"
+                       :tags ["Authentication"]
+                       :description "Handles authentication from Auth0. Checks if user exists or needs to create a new account."
+                       :parameters {:body [:map
+                                           [:auth0_id {:description "Auth0 user ID"} :string]
+                                           [:email {:description "User email from Auth0"} :string]
+                                           [:username {:description "Username from Auth0"} :string]
+                                           [:picture {:description "Profile picture URL from Auth0" :optional true} :string]]}
+                       :responses {200 {:description "Auth0 login response"
+                                        :content {:default {:schema [:map
+                                                                     [:success :boolean]
+                                                                     [:user_name {:optional true} :string]
+                                                                     [:needs_account_linking {:optional true} :boolean]
+                                                                     [:needs_username_setup {:optional true} :boolean]
+                                                                     [:email {:optional true} :string]]
+                                                            :examples {:existing_user {:value {:success true :user_name "example_user" :needs_username_setup false}}
+                                                                       :new_user {:value {:success true :user_name "new_user" :needs_username_setup true}}
+                                                                       :needs_linking {:value {:success true :needs_account_linking true :email "user@example.com"}}}}}}}}
+                 :handler login/handle-auth0-login}]
+     
+     ["/link" {:post {:no-doc false
+                      :summary "Link existing account with Auth0"
+                      :tags ["Authentication"]
+                      :description "Links an existing sorter account with Auth0 credentials"
+                      :parameters {:body [:map
+                                          [:user_name {:description "Username or email of existing account"} :string]
+                                          [:password {:description "Password of existing account"} :string] 
+                                          [:auth0_id {:description "Auth0 user ID to link"} :string]
+                                          [:picture {:description "Profile picture URL from Auth0" :optional true} :string]]}
+                      :responses {200 {:description "Account linked successfully"
+                                       :content {:default {:schema [:map
+                                                                    [:success :boolean]
+                                                                    [:user_name :string]]
+                                                           :examples {:ok {:value {:success true :user_name "example_user"}}}}}}
+                                  401 {:description "Invalid credentials"
+                                       :content {:default {:schema ErrorSchema
+                                                           :examples {:ok {:value {:message "invalid username/email or password"}}}}}}}}
+                :handler login/handle-account-linking}]
+     
+     ["/username" {:post {:no-doc false
+                          :openapi {:security [{"cookieAuth" []}]}
+                          :summary "Set username for Auth0 user"
+                          :tags ["Authentication"]
+                          :description "Sets a username for a new user created via Auth0"
+                          :parameters {:body [:map
+                                              [:user_name {:description "Desired username"} :string]]}
+                          :responses {200 {:description "Username set successfully"
+                                           :content {:default {:schema [:map
+                                                                        [:success :boolean]
+                                                                        [:user_name :string]]
+                                                               :examples {:ok {:value {:success true :user_name "chosen_username"}}}}}}
+                                      400 {:description "Username already taken"
+                                           :content {:default {:schema ErrorSchema
+                                                               :examples {:ok {:value {:message "username already taken"}}}}}}
+                                      401 {:description "Not authenticated"
+                                           :content {:default {:schema ErrorSchema
+                                                               :examples {:ok {:value {:message "must be logged in"}}}}}}}}
+                      :handler login/handle-username-setup}]]
 
     ["/spotify" {:tags ["Integrations"]} spotify/routes]
     ["/youtube" {:tags ["Integrations"]} youtube/routes]
@@ -856,7 +952,7 @@
                  {:status (:status response)
                   :headers (:headers response)
                   :body (if (and (map? (:body response))
-                                 (not (instance? java.io.InputStream (:body response))))
+                             (not (instance? java.io.InputStream (:body response))))
                           (str "Body: " (:body response))
                           "Body: [binary or stream]")})
       response)))

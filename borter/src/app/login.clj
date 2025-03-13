@@ -320,3 +320,128 @@
                 :message "password has been reset successfully"}})
       {:status 400 
        :body {:message "invalid or expired reset token"}})))
+
+(defn check-existing-user-by-email [email]
+  (first (db/exec! (-> (h/select :*)
+                       (h/from :users)
+                       (h/where [:and
+                                 [:= :email email]
+                                 [:not= :email (str email "@placeholder.com")]])))))
+
+(defn check-existing-user-by-username [username]
+  (first (db/exec! (-> (h/select :*)
+                       (h/from :users)
+                       (h/where [:= :user_name username])))))
+
+(defn generate-unique-username [base-username]
+  (if (nil? (check-existing-user-by-username base-username))
+    base-username
+    (loop [counter 1]
+      (let [username (str base-username counter)]
+        (if (nil? (check-existing-user-by-username username))
+          username
+          (recur (inc counter)))))))
+
+(defn create-user-from-auth0 [auth0-id email username picture]
+  (let [unique-username (generate-unique-username username)
+        temp-password (generate-verification-token)]
+    (db/exec! (-> (h/insert-into :users)
+                 (h/values [{:user_name unique-username
+                             :email email
+                             :password_hash (password/encrypt temp-password)
+                             :email_verified true
+                             :auth0_id auth0-id
+                             :pfp_url picture}])))
+    (let [user (first (db/exec! (-> (h/select :*)
+                                    (h/from :users)
+                                    (h/where [:= :user_name unique-username]))))]
+      (when-not (= unique-username username)
+        ;; The username needed to be modified, so we need to flag this somehow
+        ;; This is a placeholder until we implement a proper username setting mechanism
+        (log/info "Generated unique username" unique-username "from base" username))
+      user)))
+
+(defn update-user-auth0-info [user-id auth0-id picture]
+  (db/exec! (-> (h/update :users)
+               (h/set {:auth0_id auth0-id
+                       :pfp_url picture})
+               (h/where [:= :user_name user-id]))))
+
+(defn link-existing-account [username auth0-id picture]
+  (let [user (first (db/exec! (-> (h/select :*)
+                                  (h/from :users)
+                                  (h/where [:= :user_name username]))))]
+    (when user
+      (update-user-auth0-info username auth0-id picture)
+      user)))
+
+(defn handle-auth0-login [r]
+  (let [auth0-id (-> r :body-params :auth0_id)
+        email (-> r :body-params :email)
+        username (-> r :body-params :username)
+        picture (-> r :body-params :picture) ;; This might be nil, but that's ok
+        existing-user-by-auth0 (first (db/exec! (-> (h/select :*)
+                                                    (h/from :users)
+                                                    (h/where [:= :auth0_id auth0-id]))))]
+    (cond
+      ;; User already exists with this auth0_id
+      existing-user-by-auth0
+      {:status 200
+       :body {:success true
+              :user_name (:users/user_name existing-user-by-auth0)
+              :needs_username_setup false}
+       :session {:user_name (:users/user_name existing-user-by-auth0)}}
+
+      ;; User exists with this email but not linked to auth0 yet
+      (and email (check-existing-user-by-email email))
+      {:status 200
+       :body {:success true
+              :needs_account_linking true
+              :email email}}
+
+      ;; New user from auth0
+      :else
+      (let [new-user (create-user-from-auth0 auth0-id email username picture)
+            generated-username (:users/user_name new-user)
+            needs-username-setup (not= generated-username username)]
+        {:status 200
+         :body {:success true
+                :user_name generated-username
+                :needs_username_setup needs-username-setup}
+         :session {:user_name generated-username}}))))
+
+(defn handle-account-linking [r]
+  (let [username (-> r :body-params :user_name)
+        password (-> r :body-params :password)
+        auth0-id (-> r :body-params :auth0_id)
+        picture (-> r :body-params :picture)
+        user (first (db/exec! (-> (h/select :*)
+                                  (h/from :users)
+                                  (h/where [:= :user_name username]))))]
+    (if (and user (password/check password (:users/password_hash user)))
+      (do 
+        (update-user-auth0-info username auth0-id picture)
+        {:status 200
+         :body {:success true
+                :user_name username}
+         :session {:user_name username}})
+      {:status 401
+       :body {:message "invalid username/email or password"}})))
+
+(defn handle-username-setup [r]
+  (let [current-username (-> r :session :user_name)
+        new-username (-> r :body-params :user_name)]
+    (if (nil? current-username)
+      {:status 401
+       :body {:message "must be logged in"}}
+      (if (check-existing-user-by-username new-username)
+        {:status 400
+         :body {:message "username already taken"}}
+        (do
+          (db/exec! (-> (h/update :users)
+                        (h/set {:user_name new-username})
+                        (h/where [:= :user_name current-username])))
+          {:status 200
+           :body {:success true
+                  :user_name new-username}
+           :session {:user_name new-username}})))))

@@ -90,7 +90,10 @@
    [:user_name :string]
    [:owner {:optional true} [:maybe :string]] ;; maybe because it can be null, again, dumbshit from rust
    [:email {:optional true} :string]
-   [:temporary {:optional true} :boolean]])
+   [:temporary {:optional true} :boolean]
+   [:auth0_id {:optional true} [:maybe :string]]
+   [:pfp_url {:optional true} [:maybe :string]]
+   [:email_verified {:optional true} [:maybe :boolean]]])
 
 (def AttributeSchema
   [:map

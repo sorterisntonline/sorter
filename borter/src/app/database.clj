@@ -131,7 +131,8 @@
   (migratus/create (migratus-config) "add-discord-id-to-users")
   (migratus/create (migratus-config) "add-api-key-table")
   (migratus/create (migratus-config) "ns-to-namespace-in-tag-table") ;; do this one later! 
-  (migratus/create (migratus-config) "remove-item-title-check-gt-1"))
+  (migratus/create (migratus-config) "remove-item-title-check-gt-1")
+  (migratus/create (migratus-config) "update-users-for-auth0"))
   ;; (exec! {:delete-from :tags :where [:= :id 9]})
   
 
