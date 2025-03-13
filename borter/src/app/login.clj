@@ -367,6 +367,19 @@
                        :pfp_url picture})
                (h/where [:= :user_name user-id]))))
 
+(defn link-account-to-platform [username platform platform-user-id access-token refresh-token]
+  (db/exec! (-> (h/insert-into :linked_accounts)
+               (h/values [{:user_name username
+                           :platform platform
+                           :platform_user_id platform-user-id
+                           :access_token access-token
+                           :refresh_token refresh-token}])
+               (h/on-conflict :user_name :platform)
+               (h/do-update-set {:platform_user_id platform-user-id
+                                 :access_token access-token
+                                 :refresh_token refresh-token
+                                 :updated_at [:cast (str (java.time.Instant/now)) :timestamp]}))))
+
 (defn link-existing-account [username auth0-id picture]
   (let [user (first (db/exec! (-> (h/select :*)
                                   (h/from :users)
@@ -380,30 +393,81 @@
         email (-> r :body-params :email)
         username (-> r :body-params :username)
         picture (-> r :body-params :picture) ;; This might be nil, but that's ok
+        platform (-> r :body-params :platform) ;; The platform/provider (e.g., "discord", "github", "google")
+        platform-user-id (-> r :body-params :platform_user_id) ;; The user ID from the platform
+        
+        ;; Look for existing user by auth0_id (for backward compatibility)
         existing-user-by-auth0 (first (db/exec! (-> (h/select :*)
                                                     (h/from :users)
-                                                    (h/where [:= :auth0_id auth0-id]))))]
+                                                    (h/where [:= :auth0_id auth0-id]))))
+        
+        ;; Look for existing linked account
+        existing-linked-account (when (and platform platform-user-id)
+                                  (first (db/exec! (-> (h/select :*)
+                                                       (h/from :linked_accounts)
+                                                       (h/where [:and
+                                                                 [:= :platform platform]
+                                                                 [:= :platform_user_id platform-user-id]])))))
+        
+        ;; Get the user from the linked account
+        existing-user-by-platform (when existing-linked-account
+                                    (first (db/exec! (-> (h/select :*)
+                                                         (h/from :users)
+                                                         (h/where [:= :user_name (:linked_accounts/user_name existing-linked-account)])))))]
+    
     (cond
-      ;; User already exists with this auth0_id
-      existing-user-by-auth0
+      ;; User already exists with this linked platform account - just login
+      existing-user-by-platform
       {:status 200
        :body {:success true
-              :user_name (:users/user_name existing-user-by-auth0)
+              :user_name (:users/user_name existing-user-by-platform)
               :needs_username_setup false}
-       :session {:user_name (:users/user_name existing-user-by-auth0)}}
+       :session {:user_name (:users/user_name existing-user-by-platform)}}
+      
+      ;; For backward compatibility - user exists with auth0_id
+      existing-user-by-auth0
+      (do
+        ;; Create a linked account entry if it doesn't exist yet
+        (when (and platform platform-user-id (not existing-linked-account))
+          (link-account-to-platform (:users/user_name existing-user-by-auth0) platform platform-user-id nil nil)
+          
+          ;; For Discord backward compatibility
+          (when (= platform "discord")
+            (db/exec! (-> (h/update :users)
+                          (h/set {:discord_id platform-user-id})
+                          (h/where [:= :user_name (:users/user_name existing-user-by-auth0)])))))
+        
+        {:status 200
+         :body {:success true
+                :user_name (:users/user_name existing-user-by-auth0)
+                :needs_username_setup false}
+         :session {:user_name (:users/user_name existing-user-by-auth0)}})
 
-      ;; User exists with this email but not linked to auth0 yet
+      ;; User exists with this email but not linked to any platform yet
       (and email (check-existing-user-by-email email))
       {:status 200
        :body {:success true
               :needs_account_linking true
-              :email email}}
+              :email email
+              :platform platform
+              :platform_user_id platform-user-id}}
 
-      ;; New user from auth0
+      ;; New user 
       :else
       (let [new-user (create-user-from-auth0 auth0-id email username picture)
             generated-username (:users/user_name new-user)
             needs-username-setup (not= generated-username username)]
+        
+        ;; Create the linked account entry
+        (when (and platform platform-user-id)
+          (link-account-to-platform generated-username platform platform-user-id nil nil)
+          
+          ;; For Discord backward compatibility
+          (when (= platform "discord")
+            (db/exec! (-> (h/update :users)
+                          (h/set {:discord_id platform-user-id})
+                          (h/where [:= :user_name generated-username])))))
+        
         {:status 200
          :body {:success true
                 :user_name generated-username
@@ -415,16 +479,33 @@
         password (-> r :body-params :password)
         auth0-id (-> r :body-params :auth0_id)
         picture (-> r :body-params :picture)
+        platform (-> r :body-params :platform)
+        platform-user-id (-> r :body-params :platform_user_id)
+        
         user (first (db/exec! (-> (h/select :*)
                                   (h/from :users)
                                   (h/where [:= :user_name username]))))]
+    
     (if (and user (password/check password (:users/password_hash user)))
       (do 
+        ;; Update auth0_id and picture for backward compatibility
         (update-user-auth0-info username auth0-id picture)
+        
+        ;; Create the linked account entry
+        (when (and platform platform-user-id)
+          (link-account-to-platform username platform platform-user-id nil nil)
+          
+          ;; For Discord backward compatibility
+          (when (= platform "discord")
+            (db/exec! (-> (h/update :users)
+                          (h/set {:discord_id platform-user-id})
+                          (h/where [:= :user_name username])))))
+        
         {:status 200
          :body {:success true
                 :user_name username}
          :session {:user_name username}})
+      
       {:status 401
        :body {:message "invalid username/email or password"}})))
 
@@ -445,3 +526,123 @@
            :body {:success true
                   :user_name new-username}
            :session {:user_name new-username}})))))
+
+(defn get-linked-accounts [r]
+  (let [username (-> r :session :user_name)]
+    (if (nil? username)
+      {:status 401
+       :body {:message "must be logged in to view linked accounts"}}
+      (let [linked-accounts (db/exec! (-> (h/select :*)
+                                         (h/from :linked_accounts)
+                                         (h/where [:= :user_name username])))]
+        {:status 200
+         :body {:linked_accounts (map (fn [account]
+                                       {:platform (:linked_accounts/platform account)
+                                        :platform_user_id (:linked_accounts/platform_user_id account)
+                                        :created_at (:linked_accounts/created_at account)
+                                        :updated_at (:linked_accounts/updated_at account)})
+                                     linked-accounts)}}))))
+
+(defn unlink-account [r]
+  (let [username (-> r :session :user_name)
+        platform (-> r :body-params :platform)]
+    (if (nil? username)
+      {:status 401
+       :body {:message "must be logged in to unlink accounts"}}
+      (if (nil? platform)
+        {:status 400
+         :body {:message "platform parameter is required"}}
+        (let [linked-accounts (db/exec! (-> (h/select :*)
+                                           (h/from :linked_accounts)
+                                           (h/where [:and
+                                                     [:= :user_name username]
+                                                     [:= :platform platform]])))
+              count-linked (count (db/exec! (-> (h/select :*)
+                                               (h/from :linked_accounts)
+                                               (h/where [:= :user_name username]))))]
+          ;; Don't allow unlinking the last account unless they have password auth
+          (if (and (= count-linked 1) 
+                  (not (first (db/exec! (-> (h/select :password_hash)
+                                           (h/from :users)
+                                           (h/where [:and
+                                                     [:= :user_name username]
+                                                     [:<> :password_hash ""]])))))) 
+            {:status 400
+             :body {:message "cannot unlink last authentication method"}}
+            (do
+              ;; Remove the linked account
+              (db/exec! (-> (h/delete-from :linked_accounts)
+                           (h/where [:and
+                                     [:= :user_name username]
+                                     [:= :platform platform]])))
+              
+              ;; For Discord backward compatibility - clear discord_id if unlinking Discord
+              (when (= platform "discord")
+                (db/exec! (-> (h/update :users)
+                             (h/set {:discord_id nil})
+                             (h/where [:= :user_name username]))))
+              
+              {:status 200
+               :body {:success true
+                      :message (str platform " account unlinked successfully")}})))))))
+
+;; Define routes
+(def routes
+  ["/auth" {:swagger {:tags ["auth"]}}
+   
+   ["/login" {:post {:handler handle-login
+                     :parameters {:body {:user_name string?
+                                         :password string?}}
+                     :responses {200 {:body {:success boolean?
+                                             :user_name string?}}
+                                 401 {:body {:message string?}}
+                                 403 {:body {:message string?}}}}}]
+   
+   ["/logout" {:post {:handler handle-logout}}]
+   
+   ["/register" {:post {:handler handle-register
+                        :parameters {:body {:user_name string?
+                                            :email string?
+                                            :password string?}}}}]
+   
+   ["/verify" {:get {:handler handle-verify-email
+                     :parameters {:query {:token string?}}}}]
+   
+   ["/resend-verification" {:post {:handler handle-resend-verification
+                                   :parameters {:body {:email string?
+                                                       :password string?}}}}]
+   
+   ["/forgot-password" {:post {:handler handle-forgot-password
+                               :parameters {:body {:email string?}}}}]
+   
+   ["/reset-password" {:post {:handler handle-reset-password
+                              :parameters {:body {:token string?
+                                                  :password string?}}}}]
+   
+   ["/update-email" {:post {:handler handle-update-email
+                            :parameters {:body {:user_name string?
+                                                :email string?}}}}]
+   
+   ["/auth0" {:post {:handler handle-auth0-login
+                     :parameters {:body {:auth0_id string?
+                                         :email string?
+                                         :username string?
+                                         :picture string?
+                                         :platform string?
+                                         :platform_user_id string?}}}}]
+   
+   ["/link-account" {:post {:handler handle-account-linking
+                            :parameters {:body {:user_name string?
+                                                :password string?
+                                                :auth0_id string?
+                                                :picture string?
+                                                :platform string?
+                                                :platform_user_id string?}}}}]
+   
+   ["/username-setup" {:post {:handler handle-username-setup
+                              :parameters {:body {:user_name string?}}}}]
+   
+   ["/linked-accounts" {:get {:handler get-linked-accounts}}]
+   
+   ["/unlink-account" {:post {:handler unlink-account
+                              :parameters {:body {:platform string?}}}}]])

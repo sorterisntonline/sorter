@@ -101,3 +101,19 @@
                              fields-to-return)]
         {:status 200 :body response})
       {:status 401 :body {:message "must be logged in to access profile"}})))
+
+;; Define routes
+(def routes
+  ["/user" {:swagger {:tags ["user"]}}
+   
+   ["" {:get {:handler get-users}}]
+   
+   ["/lookup" {:get {:handler get-user
+                     :parameters {:query {:user_name string?
+                                          :email string?
+                                          :login_id string?
+                                          :discord_id string?
+                                          :auth0_id string?}}}}]
+   
+   ["/profile" {:get {:handler get-profile
+                      :parameters {:query {:info string?}}}}]])

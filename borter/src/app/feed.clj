@@ -122,3 +122,13 @@
                         :items items
                         :comments comments
                         :date (str ((:end yesterday)))}}))
+
+;; Define routes
+(def routes
+  ["/feed" {:swagger {:tags ["feed"]}}
+   
+   ["" {:get {:handler get-feed
+              :parameters {:query {:tag_id string?}}}}]
+   
+   ["/frontpage" {:get {:handler get-frontpage-feed
+                        :parameters {:query {:day string?}}}}]])

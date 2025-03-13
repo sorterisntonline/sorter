@@ -401,3 +401,41 @@
                 :namespace (:ns existing-tag)}
                {:exists false
                 :slug slug})})))
+
+;; Define routes
+(def routes
+  ["/tag" {:swagger {:tags ["tag"]}}
+   
+   ["" {:get {:handler query-tags}
+        :post {:handler post-tag
+               :parameters {:body {:title string?
+                                  :description string?
+                                  :slug string?
+                                  :ns string?
+                                  :namespace string?
+                                  :id int?
+                                  :tag_id int?
+                                  :unlisted boolean?
+                                  :domain_pk_namespace string?
+                                  :domain_pk string?}}}}]
+   
+   ["/:id" {:delete {:handler delete-tag
+                     :parameters {:path {:id string?}}}}]
+   
+   ["/page" {:get {:handler tag-info-request}}]
+   
+   ["/page2" {:get {:handler tag-info-request2}}]
+   
+   ["/slug-check" {:get {:handler tag-slug-check
+                         :parameters {:query {:title string?
+                                             :slug string?
+                                             :ns string?
+                                             :namespace string?}}}}]
+   
+   ["/exists" {:post {:handler tag-exists-check
+                      :parameters {:body {:title string?
+                                         :slug string?
+                                         :ns string?
+                                         :namespace string?
+                                         :domain_pk_namespace string?
+                                         :domain_pk string?}}}}]])

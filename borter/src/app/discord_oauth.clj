@@ -38,10 +38,10 @@
   (exchange-code [_ code redirect-uri]
     (let [response (hc/post "https://discord.com/api/oauth2/token"
                             {:form-params {"client_id" client-id
-                                          "client_secret" client-secret
-                                          "grant_type" "authorization_code"
-                                          "code" code
-                                          "redirect_uri" redirect-uri}
+                                           "client_secret" client-secret
+                                           "grant_type" "authorization_code"
+                                           "code" code
+                                           "redirect_uri" redirect-uri}
                              :as :json})]
       (:body response)))
   
@@ -59,9 +59,9 @@
   (refresh-token [_ refresh-token]
     (let [response (hc/post "https://discord.com/api/oauth2/token"
                             {:form-params {"client_id" client-id
-                                          "client_secret" client-secret
-                                          "grant_type" "refresh_token"
-                                          "refresh_token" refresh-token}
+                                           "client_secret" client-secret
+                                           "grant_type" "refresh_token"
+                                           "refresh_token" refresh-token}
                              :as :json})]
       (:body response))))
 
@@ -76,15 +76,24 @@
                                       (h/where [:= :user_name temp-username]))))]
     
     ;; If temp account exists, merge its data
-    (when temp-user
+    (when temp-user)
       ;; TODO: Implement merging logic for votes, items, tags, etc.
       ;; Update all references to temp-username to sorter-username
-      )
+      
     
-    ;; Update the user's Discord ID
+    ;; Update the user's Discord ID (for backward compatibility)
     (db/exec! (-> (h/update :users)
                   (h/set {:discord_id discord-user-id})
                   (h/where [:= :user_name sorter-username])))
+    
+    ;; Add to linked_accounts table
+    (db/exec! (-> (h/insert-into :linked_accounts)
+                  (h/values [{:user_name sorter-username
+                              :platform "discord"
+                              :platform_user_id discord-user-id}])
+                  (h/on-conflict :user_name :platform)
+                  (h/do-update-set {:platform_user_id discord-user-id
+                                    :updated_at [:cast (str (java.time.Instant/now)) :timestamp]})))
     
     {:message "discord account linked successfully"}))
 

@@ -357,3 +357,43 @@
                           [:= :item_id (-> req :body-params :item_id)]
                           [:= :owner (-> req :session :user_name)]])))
   {:status 200 :body {:ok true}})
+
+;; Define routes
+(def routes
+  ["/item" {:swagger {:tags ["item"]}}
+   
+   ["" {:post {:handler item-post
+               :parameters {:body {:title string?
+                                   :body string?
+                                   :url string?
+                                   :id int?
+                                   :tag_id int?
+                                   :discord_channel_id string?
+                                   :discord_server_id string?}}}}]
+   
+   ["/slug-check" {:get {:handler item-slug-check
+                         :parameters {:query {:title string?
+                                             :tag_id string?}}}}]
+   
+   ["/exists" {:post {:handler item-exists-check
+                      :parameters {:body {:title string?
+                                         :tag_id int?
+                                         :domain_pk_namespace string?
+                                         :domain_pk string?}}}}]
+   
+   ["/membership" {:get {:handler item-m-get
+                         :parameters {:query {:item_id string?}}}
+                   
+                   :post {:handler item-m-post
+                          :parameters {:body {:tag_id int?
+                                             :item_id int?}}}
+                   
+                   :delete {:handler item-m-delete
+                            :parameters {:body {:tag_id int?
+                                               :item_id int?}}}}]
+   
+   ["/skip" {:post {:handler item-skip
+                    :parameters {:body {:item_id int?}}}
+             
+             :delete {:handler item-skip-delete
+                      :parameters {:body {:item_id int?}}}}]])
