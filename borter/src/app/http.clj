@@ -998,6 +998,27 @@
           (handler request))))))
 
 
+(defn error-response [exception request]
+  (def exception exception)
+  (cond
+    (and (= (type exception) clojure.lang.ExceptionInfo)
+     (= :reitit.coercion/response-coercion (:type (ex-data exception))))
+    {:status 500
+     :body {:exception (read-string (pr-str (first (:errors  (ex-data exception)))))
+            :data (:body (:response (ex-data exception)))}}
+
+    :else
+    {:status 500
+     :body {:exception (->> exception Throwable->map)}}))
+
+(def exception-middleware
+  (exception/create-exception-middleware
+   (merge exception/default-handlers
+          {::exception/wrap
+           (fn [handler e request]
+             (log/error "error" (:uri request) e)
+             (error-response e request))})))
+
 (def default-handler
   (fn [_] (resp/content-type (resp/resource-response "public/index.html") "text/html")))
 
@@ -1031,39 +1052,29 @@
         (handler (assoc request :session {:user_name "admin"})))
       (handler request))))
 
-;; (defn error-response [exception request]
-;;   (def exception exception)
-;;   ;;(log/error "ex-data" ((ex-data exception)))
-;;   (log/debug "exception" exception)
-;;   (log/debug "exception type" (type exception))
-;;   (log/debug "exception data" (ex-data exception))
-;;   ;;(log/debug "can we coerce?" (= :reitit.coercion/response-coercion (:type (ex-data exception))))
-;;   ;;(log/debug "malli explanation" (me/humanize (:data (ex-data exception))))
-;;   (cond 
-;;     (= (type exception) clojure.lang.ExceptionInfo)
-;;     {:status (:status (ex-data exception))
-;;      :body {:message (.getMessage exception)
-;;             :error (ex-data exception)}} 
-    
-;;     :else
-;;     {:status 500
-;;      :body {:message (.getMessage exception)
-;;             :data (ex-data exception)
-;;             :error (->> exception Throwable->map)}}))
+(defn wrap-database-error [handler]
+  (fn [request]
+    (try
+      (handler request)
+      (catch clojure.lang.ExceptionInfo e
+        (if (= :database-error (:type (ex-data e)))
+          (let [error-data (ex-data e)]
+            {:status (:status error-data)
+             :headers {"Content-Type" "application/json"}
+             :body {:error (:message error-data)
+                    :details (:details error-data)}})
+          (throw e))))))
 
-;; (def exception-middleware
-;;   (exception/create-exception-middleware
-;;    (merge exception/default-handlers 
-;;           {::exception/wrap
-;;            (fn [handler e request]
-;;              ;;(log/error "error" (:uri request) e)
-;;              (error-response e request))})))
+(defn wrap-db-health-check [handler]
+  (fn [request]
+    (if (db/check-db-health)
+      (handler request)
+      {:status 503
+       :headers {"Content-Type" "application/json"}
+       :body {:error "Database is currently unavailable"
+              :details "Failed to establish database connection"}})))
 
-;; (def m-instance (m/create
-;;                  (-> m/default-options
-;;                      (assoc-in [:formats "application/json" :encoder-opts]
-;;                                {:encode-key-fn name}))))
-  
+
 ;; Create a single shared session store instance
 (def session-store (memory/memory-store))
 
@@ -1080,13 +1091,15 @@
                                (session/wrap-session handler {:store session-store}))
                              wrap-api-key-auth
                              wrap-dev-session 
+                             wrap-database-error
+                             wrap-db-health-check
                              swagger/swagger-feature
-                             openapi/openapi-feature
+                             openapi/openapi-feature 
                              parameters/parameters-middleware
                              muuntaja/format-negotiate-middleware
                              muuntaja/format-response-middleware
                              muuntaja/format-request-middleware
-                             exception/exception-middleware]}})
+                             exception-middleware]}})
                             ;;  coercion/coerce-request-middleware
                             ;;  coercion/coerce-response-middleware
                               
@@ -1094,7 +1107,7 @@
        (-> #'default-handler
            (wrap-resource "public")
            (wrap-content-type)))))
-
+;; This includes coercion middleware, breaks everything rn but I WANT IT BACK
 ;; (def app
 ;;   (-> (ring/ring-handler
 ;;        (ring/router routes
@@ -1130,3 +1143,4 @@
   (jetty/run-jetty #'app {:port port :join? false :host "0.0.0.0"})
   (log/info "HTTP server running on port" port)
   (println (str "http server running on port " port)))
+
