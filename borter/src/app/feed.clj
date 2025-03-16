@@ -10,19 +10,6 @@
             [borkdude.deflet :refer [deflet]])
   (:import [java.util Date]))
 
-(defn transform-vote [vote]
-  (-> vote
-      (select-keys [:id :owner :left_item_id :right_item_id 
-                    :magnitude :attribute :created_at :edited_at])
-      (assoc :type "Vote")))
-
-(defn transform-item [item]
-  (-> item
-      (select-keys [:id :title :slug :body :url :owner 
-                    :created_at :edited_at :domain_pk_namespace 
-                    :domain_pk :num_comments :elo :vote_count])
-      (assoc :type "Item")))
-
 (defn get-feed [req]
   {:status 200 
    :body (:body (hc/request {:as :json
@@ -37,15 +24,12 @@
 
 (defn get-frontpage-feed [req]
   "get one days worth of all three (items, votes, comments, tags)"
-  (def req req)
-
   (deflet
     
     (def req req)
     
     (def yesterday (days-ago (-> req :params (get "day") Integer/parseInt)))
     
-    "TODO check if tags are public"
     (def items (->> (db/exec! (-> {:select [:items/*
                                             [:tags/title :tag_title]
                                             [:tags/id :tag_id]
