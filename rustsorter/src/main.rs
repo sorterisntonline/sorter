@@ -1,5 +1,4 @@
 pub mod feed;
-pub mod frontpage;
 pub mod pagerank;
 pub mod pair;
 pub mod perms;
@@ -44,7 +43,6 @@ async fn main() -> Result<(), anyhow::Error> {
             .app_data(web::Data::new(AppState { db: pool.clone() }))
             .service(tag::hello)
             .service(feed::feed)
-            .service(frontpage::hierarchy)
             .wrap(Logger::default())
     })
     .bind(("127.0.0.1", 8081)).expect("unable to bind on port 8081")

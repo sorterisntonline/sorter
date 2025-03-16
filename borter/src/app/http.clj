@@ -440,13 +440,6 @@
                                                                                                           :owner "all"
                                                                                                           :created_at "2023-01-01T12:00:00Z"}}}}}}}}
                         :handler tag-info-request}}] 
-    ["/tag/page2" {:get {:no-doc false
-
-                         :openapi {:deprecated true}
-                         :tags ["Tags"]
-                         :summary "Get tag info"
-                         :description "Get the info for a tag"
-                         :handler tag-info-request2}}]
     ["/tag/permissions" {:get {:no-doc false
                                :tags ["Tags"]
                                :summary "Get tag permissions"
