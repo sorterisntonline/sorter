@@ -1084,7 +1084,7 @@
                     {:validate spec/validate
                      :exception pretty/exception
                      :conflicts nil
-                     :data {:coercion nil
+                     :data {:coercion (reitit.coercion.malli/create)
                             :muuntaja m/instance
                             :middleware
                             [(fn [handler]
@@ -1099,9 +1099,10 @@
                              muuntaja/format-negotiate-middleware
                              muuntaja/format-response-middleware
                              muuntaja/format-request-middleware
-                             exception-middleware]}})
-                            ;;  coercion/coerce-request-middleware
-                            ;;  coercion/coerce-response-middleware
+                             exception-middleware
+                             coercion/coerce-request-middleware
+                             coercion/coerce-response-middleware
+                             ]}})
                               
                              
        (-> #'default-handler
