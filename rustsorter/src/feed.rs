@@ -6,10 +6,9 @@ struct FeedParams {
 }
 
 #[derive(serde::Serialize)]
-#[serde(tag = "type")]
-enum FeedItem {
-    Item(crate::tag::Item),
-    Vote(crate::tag::Vote),
+struct Feed {
+    items: Vec<crate::tag::Item>,
+    votes: Vec<crate::tag::Vote>,
 }
 
 #[get("/api/feed")]
@@ -38,22 +37,14 @@ pub async fn feed(
         .await
         .expect("Unable to fetch data from database");
 
-    let mut feed: Vec<FeedItem> = vec![];
-    for item in items {
-        feed.push(FeedItem::Item(item));
-    }
-    for vote in votes {
-        feed.push(FeedItem::Vote(vote));
-    }
-    feed.sort_by(|b, a| match a {
-        FeedItem::Item(a) => match b {
-            FeedItem::Item(b) => a.created_at.cmp(&b.created_at),
-            FeedItem::Vote(b) => a.created_at.cmp(&b.created_at),
-        },
-        FeedItem::Vote(a) => match b {
-            FeedItem::Item(b) => a.created_at.cmp(&b.created_at),
-            FeedItem::Vote(b) => a.created_at.cmp(&b.created_at),
-        },
+    // Sort items by created_at in descending order
+    let mut sorted_items = items;
+    sorted_items.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+
+    // Votes are already sorted by created_at DESC from the SQL query
+
+    return HttpResponse::Ok().json(Feed {
+        items: sorted_items,
+        votes,
     });
-    return HttpResponse::Ok().json(feed);
 }

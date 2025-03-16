@@ -59,7 +59,7 @@
    [:domain_pk_namespace {:optional true} [:maybe :string]]
    [:domain_pk {:optional true} [:maybe :string]]
    [:num_comments {:optional true} [:maybe :int]]
-   [:type {:optional true} [:maybe :string]] ;; shouldn't have 'type', its dumbass shit from rust
+   [:type {:optional true} [:maybe :string]]
    [:elo {:optional true} [:maybe :double]]
    [:vote_count {:optional true} [:maybe :int]]]) 
 
@@ -83,12 +83,12 @@
    [:attribute :int]
    [:created_at :string]
    [:edited_at {:optional true} [:maybe :string]] 
-   [:type {:optional true} [:maybe :string]]]) ;; shouldn't have 'type', its dumbass shit from rust
+   [:type {:optional true} [:maybe :string]]])
 
 (def UserSchema
   [:map {:closed false}
    [:user_name :string]
-   [:owner {:optional true} [:maybe :string]] ;; maybe because it can be null, again, dumbshit from rust
+   [:owner {:optional true} [:maybe :string]] ;; maybe because it can be null
    [:email {:optional true} :string]
    [:temporary {:optional true} :boolean]
    [:auth0_id {:optional true} [:maybe :string]]
