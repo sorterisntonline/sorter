@@ -93,7 +93,9 @@
    [:temporary {:optional true} :boolean]
    [:auth0_id {:optional true} [:maybe :string]]
    [:pfp_url {:optional true} [:maybe :string]]
-   [:email_verified {:optional true} [:maybe :boolean]]])
+   [:email_verified {:optional true} [:maybe :boolean]]
+   [:discord_id {:optional true} [:maybe :string]]
+   [:created_at [:or :string inst?]]])
 
 (def AttributeSchema
   [:map

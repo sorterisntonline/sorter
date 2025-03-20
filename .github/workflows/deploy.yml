@@ -369,6 +369,23 @@ jobs:
               mkdir -p "${BORTER_BACKUP_DIR}"
 
               BORTER_BACKUP_NAME="borter-$(date +%Y%m%d_%H%M%S).jar"
+              
+              # Check available disk space before copying
+              AVAILABLE_SPACE=$(df -k "${BORTER_BACKUP_DIR}" | awk 'NR==2 {print $4}')
+              REQUIRED_SPACE=$(du -sk borter/target/sorter-*-standalone.jar | awk '{print $1}')
+              echo "Available space: ${AVAILABLE_SPACE}KB, Required space: ${REQUIRED_SPACE}KB"
+              
+              # If we don't have enough space, remove older backups until we do
+              while [ ${AVAILABLE_SPACE} -lt ${REQUIRED_SPACE} ] && [ $(ls -1 "${BORTER_BACKUP_DIR}" | wc -l) -gt 1 ]; do
+                OLDEST_BACKUP=$(ls -t "${BORTER_BACKUP_DIR}" | tail -n1)
+                echo "Removing oldest backup ${OLDEST_BACKUP} to free up space"
+                rm -f "${BORTER_BACKUP_DIR}/${OLDEST_BACKUP}"
+                
+                # Recalculate available space
+                AVAILABLE_SPACE=$(df -k "${BORTER_BACKUP_DIR}" | awk 'NR==2 {print $4}')
+                echo "Available space after cleanup: ${AVAILABLE_SPACE}KB"
+              done
+              
               cp borter/target/sorter-*-standalone.jar "${BORTER_BACKUP_DIR}/${BORTER_BACKUP_NAME}"
               
               # Keep only the 40 most recent borter backups (approximately 2GB worth)
@@ -385,6 +402,22 @@ jobs:
               
               # Create a new backup directory for this release
               mkdir -p "${RUST_BACKUP_DIR}/${RUST_BACKUP_NAME}"
+              
+              # Check available disk space before copying
+              AVAILABLE_SPACE=$(df -k "${RUST_BACKUP_DIR}" | awk 'NR==2 {print $4}')
+              REQUIRED_SPACE=$(du -sk rustsorter/target/${{ env.BUILD_MODE == 'prod' && 'release' || 'staging' }} | awk '{print $1}')
+              echo "Available space: ${AVAILABLE_SPACE}KB, Required space: ${REQUIRED_SPACE}KB"
+              
+              # If we don't have enough space, remove older backups until we do
+              while [ ${AVAILABLE_SPACE} -lt ${REQUIRED_SPACE} ] && [ $(ls -1 "${RUST_BACKUP_DIR}" | wc -l) -gt 1 ]; do
+                OLDEST_BACKUP=$(ls -t "${RUST_BACKUP_DIR}" | tail -n1)
+                echo "Removing oldest backup ${OLDEST_BACKUP} to free up space"
+                rm -rf "${RUST_BACKUP_DIR}/${OLDEST_BACKUP}"
+                
+                # Recalculate available space
+                AVAILABLE_SPACE=$(df -k "${RUST_BACKUP_DIR}" | awk 'NR==2 {print $4}')
+                echo "Available space after cleanup: ${AVAILABLE_SPACE}KB"
+              done
               
               # Copy the entire release directory using the correct build profile
               cp -r rustsorter/target/${{ env.BUILD_MODE == 'prod' && 'release' || 'staging' }}/* "${RUST_BACKUP_DIR}/${RUST_BACKUP_NAME}/"

@@ -443,12 +443,39 @@
                                :tags ["Tags"]
                                :summary "Get tag permissions"
                                :description "Get the permissions for a tag"
+                               :parameters {:query [:map
+                                                    [:tag_id {:description "ID of the tag to get permissions for"} :int]]}
+                               :responses {200 {:description "Tag permissions retrieved successfully"
+                                                :content {:default {:schema [:map
+                                                                             [:can_vote :boolean]
+                                                                             [:can_add :boolean]
+                                                                             [:can_view :boolean]]
+                                                                    :examples {:ok {:value {:can_vote true
+                                                                                            :can_add true
+                                                                                            :can_view true}}}}}}}
                                :handler perms/get-perms}
                          :post {:no-doc false
                                 :tags ["Tags"]
                                 :middleware [[wrap-rate-limit one-per-minute]]
                                 :summary "Update tag permissions"
-                                :description "Update the permissions for a tag"
+                                :description "Update the permissions for a tag. You MUST be the owner of this tag to update its permissions."
+                                :parameters {:body [:map
+                                                    [:tag_id {:description "ID of the tag to update permissions for"} :int]
+                                                    [:perms [:map
+                                                             [:can_vote :boolean]
+                                                             [:can_add :boolean]
+                                                             [:can_view :boolean]]]]}
+                                :responses {200 {:description "Tag permissions updated successfully" 
+                                                 :content {:default {:schema [:map]
+                                                                            [:can_vote :boolean]
+                                                                            [:can_add :boolean
+                                                                            [:can_view :boolean]]}}}
+                                            401 {:description "Authentication required"
+                                                 :content {:default {:schema ErrorSchema
+                                                                     :examples {:unauthenticated {:value {:message "must be logged in to update tag permissions"}}}}}}
+                                            403 {:description "Not authorized to update this tag"
+                                                 :content {:default {:schema ErrorSchema
+                                                                     :examples {:not-owner {:value {:message "must own tag to modify its permissions"}}}}}}}
                                 :handler perms/post-perms}}]
     ["/vote" {:post {:no-doc false
                      :openapi {:security [{"apiKeyAuth" []
