@@ -61,7 +61,7 @@
             [com.rpl.specter :refer :all]
             [app.api-keys :as api-keys]
 
-            [app.schemas :refer [ItemSchema VoteSchema UserSchema TagSchema ErrorSchema InfoSchema AttributeSchema TagPageResponseSchema PermsSchema]]
+            [app.schemas :refer [ItemSchema VoteSchema UserSchema TagSchema ErrorSchema InfoSchema AttributeSchema TagPageResponseSchema PermsSchema CommentSchema]]
             [app.ratelimits :refer [one-per-minute one-per-second five-per-minute three-per-five-minutes]]
             [app.tag :refer [query-tags post-tag delete-tag tag-slug-check tag-exists-check tag-info-request tag-info-request2]]
             [app.misc :refer [get-leaderboard get-namespaces]]
@@ -148,19 +148,18 @@
                          :summary "Get frontpage feed"
                          :tags ["Feed"]
                          :description "Retrieves a 'frontpage' feed showing recent activity across all accessible tags"
+                         :parameters {:query [:map
+                                              [:day {:description "Number of days to get feed for" :optional true} :int]]}
                          :responses {200 {:description "Frontpage feed items"
                                           :content {:default {:schema [:map  
-                                                                       [:items [:vector ItemSchema]]
-                                                                       [:votes [:vector VoteSchema]]
-                                                                       [:tags [:vector TagSchema]]]
+                                                                       [:items [:vector {:min 0} ItemSchema]] 
+                                                                       [:votes [:vector {:min 0} VoteSchema]]
+                                                                       [:comments [:vector {:min 0} CommentSchema]]
+                                                                       [:date {:description "date string representing the start of the next feed"}:string]]
                                                               :examples {:ok {:value {:items [{:id 1 :title "Example Item"}] 
-                                                                                      :owner "user1"
-                                                                                      :created_at "2023-01-01T12:00:00Z"
                                                                                       :votes [{:id 1 :left_item_id 1 :right_item_id 2 :magnitude 40}]
-                                                                                      :tags [{:id 1 :title "Example Tag" 
-                                                                                              :slug "example-tag"
-                                                                                              :owner "user1"
-                                                                                              :created_at "2023-01-01T12:00:00Z"}]}}}}}}}}
+                                                                                      :comments [{:id 1 :body "Example Comment" :owner "user1" :created_at "2023-01-01T12:00:00Z"}]
+                                                                                      :date "Tue Mar 11 13:47:04 CDT 2025"}}}}}}}}
                    :handler feed/get-frontpage-feed}] 
     ["/leaderboard" {:get {:no-doc false
                            :summary "Get user leaderboard"

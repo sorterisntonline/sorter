@@ -28,7 +28,19 @@
     
     (def req req)
     
-    (def yesterday (days-ago (-> req :params (get "day") Integer/parseInt)))
+    (def day-param (-> req :params (get "day")))
+    (def day (if day-param (Integer/parseInt day-param) 0))
+    
+    (def yesterday (days-ago day))
+    
+    (def remove-ns (fn [m]
+                     (reduce-kv
+                      (fn [acc k v]
+                        (let [new-k (if (namespace k)
+                                      (keyword (name k))
+                                      k)]
+                          (assoc acc new-k v)))
+                      {} m)))
     
     (def items (->> (db/exec! (-> {:select [:items/*
                                             [:tags/title :tag_title]
@@ -46,7 +58,8 @@
                               (perms/can-tag
                                (:tags/tag_id item)
                                "view"
-                               (-> req :session :user_name))))))
+                               (-> req :session :user_name))))
+                    (map remove-ns)))
     
     (def comments (->> (db/exec! (-> {:select [:comments/*
                                                [:tags/title :tag_title]
@@ -69,7 +82,8 @@
                                  (perms/can-tag
                                   (:tags/tag_id item)
                                   "view"
-                                  (-> req :session :user_name))))))
+                                  (-> req :session :user_name))))
+                       (map remove-ns)))
 
     (def votes (->> (db/exec! (-> {:select [:votes/* :tags/title
                                             [:left_item/title :left_title]
@@ -90,7 +104,8 @@
                               (perms/can-tag
                                (:tags/tag_id item)
                                "view"
-                               (-> req :session :user_name))))))
+                               (-> req :session :user_name))))
+                    (map remove-ns)))
     {:status 200 :body {:votes votes
                         :items items
                         :comments comments
