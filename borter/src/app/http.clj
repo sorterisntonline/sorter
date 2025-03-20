@@ -788,7 +788,7 @@
                      :handler current-session}}]
 
     ["/logout" {:post {:no-doc false
-                       :openapi {:security [{"cookieAuth" []}]}
+                       :openapi {:security [{"cookieAuth" []}]} 
                        :summary "Logout user"
                        :tags ["Authentication"]
                        :description "Ends the current session for user"
