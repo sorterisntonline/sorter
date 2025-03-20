@@ -297,6 +297,8 @@ jobs:
 
             # Sendgrid API Key
             BORTER_SENDGRID_API_KEY=${{ github.ref_name == 'production' && secrets.BORTER_SENDGRID_API_KEY || secrets.BORTER_SENDGRID_API_KEY_STAGING }}
+            BORTER_STATIC_ADMINS=${{ vars.BORTER_STATIC_ADMINS }}
+            BORTER_STATIC_API_KEYS=${{ github.ref_name == 'production' && secrets.BORTER_STATIC_API_KEYS || secrets.BORTER_STATIC_API_KEYS_STAGING }}
             EOF
 
             chmod 600 borter/.env 
