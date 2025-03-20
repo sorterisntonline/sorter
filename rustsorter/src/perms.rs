@@ -15,8 +15,6 @@ struct Permission {
     user_id: String,
 }
 
-use crate::types::ErrorJson;
-
 pub async fn insert_default_permissions(db: &sqlx::PgPool, tag_id: i32) {
     for perm in vec![
         Permission {

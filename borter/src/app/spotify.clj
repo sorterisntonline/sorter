@@ -138,26 +138,26 @@
     
     {:spotify/search-results
      {:spotify.artist/artists (map (fn [artist]
-                              {:spotify.artist/id (:id artist)
-                               :spotify.artist/name (:name artist)
-                               :spotify.artist/images (:images artist)
-                               :spotify.artist/existing-tag (first (filter #(= (:domain_pk %) (:id artist)) 
-                                                                    existing-records))})
-                            (get-in results [:artists :items]))
+                                    {:spotify.artist/id (:id artist)
+                                     :spotify.artist/name (:name artist)
+                                     :spotify.artist/images (:images artist)
+                                     :spotify.artist/existing-tag (first (filter #(= (:domain_pk %) (:id artist)) 
+                                                                          existing-records))})
+                               (get-in results [:artists :items]))
       :spotify.album/albums (map (fn [album]
-                             {:spotify.album/id (:id album)
-                              :spotify.album/name (:name album)
-                              :spotify.album/images (:images album)
-                              :spotify.album/existing-tag (first (filter #(= (:domain_pk %) (:id album)) 
-                                                                   existing-records))})
-                           (get-in results [:albums :items]))
+                                  {:spotify.album/id (:id album)
+                                   :spotify.album/name (:name album)
+                                   :spotify.album/images (:images album)
+                                   :spotify.album/existing-tag (first (filter #(= (:domain_pk %) (:id album)) 
+                                                                        existing-records))})
+                             (get-in results [:albums :items]))
       :spotify.track/tracks (map (fn [track]
-                             {:spotify.track/id (:id track)
-                              :spotify.track/name (:name track)
-                              :spotify.track/album (:album track)
-                              :spotify.track/existing-tag (first (filter #(= (:domain_pk %) (:id track)) 
-                                                                   existing-records))})
-                           (get-in results [:tracks :items]))}}))
+                                  {:spotify.track/id (:id track)
+                                   :spotify.track/name (:name track)
+                                   :spotify.track/album (:album track)
+                                   :spotify.track/existing-tag (first (filter #(= (:domain_pk %) (:id track)) 
+                                                                        existing-records))})
+                             (get-in results [:tracks :items]))}}))
 
 (pco/defresolver ensure-artist-tag [{:keys [spotify.artist/artist-id spotify.artist/artist-name]}]
   {::pco/input [:spotify.artist/artist-id :spotify.artist/artist-name]
@@ -290,10 +290,10 @@
                     (db/exec!
                      (-> (h/insert-into :items)
                          (h/values [{:title name
-                                   :slug (sluj name)
-                                   :domain_pk album-id
-                                   :domain_pk_namespace "spotify.album"
-                                   :owner "spotify"}])
+                                     :slug (sluj name)
+                                     :domain_pk album-id
+                                     :domain_pk_namespace "spotify.album"
+                                     :owner "spotify"}])
                          (h/returning :*))))]
     {:spotify.album/item-id (:items/id new-record)
      :spotify.album/name (:items/title new-record)}))
@@ -321,9 +321,9 @@
   (println "Running album-tracks resolver with input:" input)
   (let [tracks (get-album-tracks album-id access-token)]
     {:spotify.album/tracks (map (fn [track]
-                          {:spotify.track/id (:id track)
-                           :spotify.track/name (:name track)})
-                        tracks)}))
+                                 {:spotify.track/id (:id track)
+                                  :spotify.track/name (:name track)})
+                            tracks)}))
 
 (pco/defresolver process-album-tracks [{:keys [spotify.album/tracks spotify.artist/tag-id spotify.album/tag-id] :as input}]
   {::pco/input [:spotify.album/tracks
@@ -333,22 +333,22 @@
   (println "Running process-album-tracks resolver with input:" input)
   (doseq [{:keys [spotify.track/id spotify.track/name]} tracks]
     (when-let [item-id (:items/id
-                       (or (first
-                           (db/exec!
-                            (-> (h/select :*)
-                                (h/from :items)
-                                (h/where [:and
-                                        [:= :domain_pk id]
-                                        [:= :domain_pk_namespace "spotify.track"]]))))
-                           (first
-                            (db/exec!
-                             (-> (h/insert-into :items)
-                                 (h/values [{:title name
-                                           :slug (sluj name)
-                                           :domain_pk id
-                                           :domain_pk_namespace "spotify.track"
-                                           :owner "spotify"}])
-                                 (h/returning :*))))))]
+                        (or (first
+                             (db/exec!
+                              (-> (h/select :*)
+                                  (h/from :items)
+                                  (h/where [:and
+                                            [:= :domain_pk id]
+                                            [:= :domain_pk_namespace "spotify.track"]]))))
+                            (first
+                             (db/exec!
+                              (-> (h/insert-into :items)
+                                  (h/values [{:title name
+                                              :slug (sluj name)
+                                              :domain_pk id
+                                              :domain_pk_namespace "spotify.track"
+                                              :owner "spotify"}])
+                                  (h/returning :*))))))]
       (db/exec!
        (-> (h/insert-into :items_in_tags)
            (h/values [{:item_id item-id
@@ -392,15 +392,15 @@
                          (-> (h/select :*)
                              (h/from :tags)
                              (h/where [:and
-                                     [:= :domain_pk album-id]
-                                     [:= :domain_pk_namespace "spotify.album"]]))))]
+                                       [:= :domain_pk album-id]
+                                       [:= :domain_pk_namespace "spotify.album"]]))))]
     (let [tracks-in-db (db/exec!
                         (-> (h/select :*)
                             (h/from :items_in_tags)
                             (h/join :items [:= :items.id :items_in_tags.item_id])
                             (h/where [:and
-                                    [:= :tag_id (:tags/id album-tag)]
-                                    [:= :items.domain_pk_namespace "spotify.track"]])))]
+                                      [:= :tag_id (:tags/id album-tag)]
+                                      [:= :items.domain_pk_namespace "spotify.track"]])))]
       ; Always return a map with all promised outputs, even if some are nil
       {:spotify.album/name (:tags/title album-tag)
        :spotify.album/tracks-processed? (boolean (seq tracks-in-db))  ; Ensure this is always returned
@@ -506,19 +506,21 @@
        :body {:error "Not yet implemented for this entity type"}})))
 
 (comment
-  (db/exec! {:select :* :from :tags :where [:= :domain_pk_namespace "spotify.album"]})
+  (db/exec! {:select :* :from :tags :where [:= :domain_pk_namespace "spotify.album"]}))
   
   
 
 
 
-  )
+  
 
 (def routes 
   (concat
     so/oauth-routes  ; Use the pre-defined OAuth routes
-    [["/resolve" {:post {:handler #'resolve-spotify-entity}}]
-     ["/search" {:get {:handler #'search-endpoint}}]]))
+    [["/resolve" {:post {:no-doc false
+                         :handler resolve-spotify-entity}}]
+     ["/search" {:get {:no-doc false
+                       :handler search-endpoint}}]]))
 
 (defn clean-spotify-data! []
   ;; First remove votes for spotify items

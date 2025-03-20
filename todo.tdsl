@@ -1,7 +1,0 @@
-advanced mode trigger
-login for clisorter
-push to staging.
-fix twitch on empty query
-make item panel on click 
-fix multiple tags using commas on the forntend
-make it skip the spotify api call in pathom when it already has indexed the item

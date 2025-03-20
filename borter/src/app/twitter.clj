@@ -23,14 +23,14 @@
 (comment
   (hc/get "https://api.twitter.com/2/tweets/thmorriss/liked_tweets"
           {:headers {"Authorization" (str "Bearer " bearer-token)}
-           :as :json} ))
+           :as :json}))
 
 (defn step-zero [req]
   
   (def resp (hc/post "https://api.twitter.com/2/oauth2/token"
                      {:form-params {:oauth_callback "https://localhost:3000/api/twitter/callback"
-                                    :oauth_consumer_key key
-                                    }}))
+                                    :oauth_consumer_key key}}))
+                                    
   {:status 200 :body "Step One" :headers {"Content-type" "text/html"}})
 
 (defn urlencode-params [params]
@@ -56,7 +56,7 @@
                                                :grant_type "authorization_code"
                                                :code_verifier "challenge"
                                                :client_id oauth-clientid
-                                               :redirect_uri (get-hostname) } )
+                                               :redirect_uri (get-hostname)})
                       :headers {"Content-type" "application/x-www-form-urlencoded"
                                 "Authorization" (basic-string)}}))
   (def token (-> resp :body (json/read-str :key-fn keyword) :access_token))
@@ -82,7 +82,7 @@
                            :platform_user_id (:id userid)
                            :access_token token}]}
                 (h/on-conflict :platform :platform_user_id)
-                (h/do-update-set {:access_token token})) )
+                (h/do-update-set {:access_token token})))
   
   (assoc (response/redirect "/x") :session {:user_name user_name}))
 
@@ -159,7 +159,7 @@
   (deflet
     (def time (get-current-month-year))
     (def tag-slug (str "x-" (:month time) "-" (:year time)))
-    (def tag (get-or-create-tag tag-slug) )
+    (def tag (get-or-create-tag tag-slug))
     (def items (db/exec! {:insert-into :items
                           :values (for [tweet (-> req :params :tweets)]
                                     {:owner (-> req :session :user_name)
@@ -167,8 +167,8 @@
                                      :domain_pk (:id tweet)
                                      :title (str "@" (:username (:author tweet)))
                                      :slug (:username (:author tweet))
-                                     :url (str "https://x.com/" (:username (:author tweet)) "/status/" (:id tweet))
-                                     })
+                                     :url (str "https://x.com/" (:username (:author tweet)) "/status/" (:id tweet))})
+                                     
                           :returning :*
                           :on-conflict [:domain_pk_namespace :domain_pk]
                           :do-nothing true}))
@@ -185,8 +185,8 @@
   
 
 (comment
-  (db/exec! {:delete-from :tags :where [:= :slug tag-slug]} )
-  (db/exec! {:delete-from :tags :where [:= :slug "all-xeets"]} ))
+  (db/exec! {:delete-from :tags :where [:= :slug "tag-slug"]})
+  (db/exec! {:delete-from :tags :where [:= :slug "all-xeets"]}))
 
 (comment
   (db/exec! {:delete-from :linked_accounts :where [:= :user_name "thmorriss"]})
@@ -194,11 +194,17 @@
   (db/exec! {:delete-from :linked_accounts :where [:= :user_name "x/thmorriss"]})
   (db/exec! {:delete-from :users :where [:= :user_name "x/thmorriss"]}))
 
-(def routes [["/step/0" {:get {:handler #'step-zero}}]
-             ["/callback" {:get {:handler #'api-callback}}]
-             (or ["/liked" {:get {:handler (rl/wrap-ratelimit #'get-liked
+(def routes [["/step/0" {:get {:no-doc false
+                              :handler step-zero}}]
+             ["/callback" {:get {:no-doc false
+                                :handler api-callback}}]
+             (or ["/liked" {:get {:no-doc false
+                                  :handler (rl/wrap-ratelimit get-liked
                                                               {:limits [(rl/ip-limit 3)]})}}]
-                 ["/liked" {:get {:handler #'get-liked}}])
-             ["/page" {:get {:handler #'get-tag}}]
-             ["/import" {:post {:handler #'import}}]])
+                 ["/liked" {:get {:no-doc false
+                                  :handler get-liked}}])
+             ["/page" {:get {:no-doc false
+                             :handler get-tag}}]
+             ["/import" {:post {:no-doc false
+                                :handler import}}]])
 

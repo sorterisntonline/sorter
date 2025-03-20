@@ -1,11 +1,10 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
+import { Auth0Provider, useAuth0 } from '@auth0/auth0-react';
 import App from "./App.jsx";
 import "./index.css";
 import { Router, Route, Switch, useLocation } from "wouter";
 import { TagList } from "./TagList.jsx";
-import { TagList2 } from "./TagList2.jsx";
-import { TagList3 } from "./TagList3.jsx";
 import { tag, selected_item } from "./App.jsx";
 import { Login } from "./Login.jsx";
 import { Register } from "./Register.jsx";
@@ -16,6 +15,7 @@ import { FrontpageFeed } from "./FrontpageFeed.jsx";
 import { Graph } from "./Graph.jsx";
 import { Leaderboard } from "./Leaderboard.jsx";
 import { Profile } from "./Profile.jsx";
+import APIKeys from "./APIKeys.jsx";
 import { signal } from "@preact/signals-react";
 import { current_session, fetchSession } from "./session";
 import AnnouncementBar, { showAnnouncement } from './components/AnnouncementBar';
@@ -23,33 +23,73 @@ import { MobileNav } from './MobileNav';
 import { MobileNewTagChooser } from './components/MobileNewTagChooser.jsx';
 import { TopNav } from './TopNav';  // Import the new TopNav
 import { handleLogout } from './utils/authUtils.js';
-import { NEW_TAG_ROUTES, NEW_ITEM_ROUTES } from './constants/navigation';
-import { AllSortViz } from './viz/AllSortViz.jsx';
-import { initializeTheme } from './utils/themeUtils';
+import { initializeTheme, dark_mode } from './utils/themeUtils';
 import { EmailVerification } from './EmailVerification';
 import { ForgotPassword, ResetPassword } from './ForgotPassword';
+import { Authorized } from './Authorized.jsx';
+import { NoAuth } from './NoAuth.jsx';
+import { LinkAuth0 } from './LinkAuth0.jsx';
+import { SetupUsername } from './SetupUsername.jsx';
+
+// Initialize theme immediately before any rendering
+initializeTheme();
 
 export const namespace = signal(false);
 
 const LogoutRoute = () => {
+  const { logout } = useAuth0();
+  const [_, setLocation] = useLocation();
+  
   useEffect(() => {
-    handleLogout();
-  }, []);
+    const performLogout = async () => {
+      const result = await handleLogout(logout);
+      
+      // If we're not using Auth0 logout (which handles redirect itself),
+      // we need to manually redirect to /noauth
+      if (result && !logout) {
+        // Clear the session state after logout
+        current_session.value = false;
+        setLocation('/noauth');
+      }
+    };
+    
+    performLogout();
+  }, [logout, setLocation]);
 
-  return null;
+  return (
+    <div className="flex items-center justify-center h-screen bg-white dark:bg-black">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500"></div>
+    </div>
+  );
 };
 
 const Root = () => {
+  const [sessionInitialized, setSessionInitialized] = useState(false);
+
   useEffect(() => {
-    fetchSession();
-    initializeTheme();
+    const initializeApp = async () => {
+      await fetchSession();
+      // Theme is already initialized at the top level
+      setSessionInitialized(true);
+    };
+    
+    initializeApp();
   }, []);
 
   const [location] = useLocation();
   const isVoting = location.includes('/voting');
   
   // Only handle tag chooser here
-  const showTagChooser = NEW_TAG_ROUTES.includes(location) && current_session.value?.user_name;
+  const showTagChooser = location == "/" && current_session.value?.user_name;
+
+  // Don't render the app until session is initialized
+  if (!sessionInitialized) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-white dark:bg-black">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500"></div>
+      </div>
+    );
+  }
 
   return (
     <React.StrictMode>
@@ -58,7 +98,7 @@ const Root = () => {
         <div className="fixed top-0 left-0 right-0 h-[56px] min-h-[56px] flex-none bg-white dark:bg-black z-[9996] lg:hidden" />
       )}
       <MobileNav />
-      <div className={`min-h-screen flex flex-col lg:pt-0 ${!isVoting ? 'pt-[56px]' : ''}`}>
+      <div className={`min-h-screen flex flex-col lg:pt-0 ${!isVoting ? 'pt-[56px]' : ''} bg-white dark:bg-black text-black dark:text-white`}>
         <AnnouncementBar />
         <TopNav />
         <div 
@@ -67,28 +107,17 @@ const Root = () => {
         >
           <Router>
             <Switch>
-              <Route path="/viz"><AllSortViz /></Route>
               <Route path="/login"><Login /></Route>
               <Route path="/register"><Register /></Route>
+              <Route path="/authorized"><Authorized /></Route>
+              <Route path="/noauth"><NoAuth /></Route>
+              <Route path="/link-auth0"><LinkAuth0 /></Route>
+              <Route path="/setup-username"><SetupUsername /></Route>
               <Route path="/feed">
                 {(params) => {
                   tag.value = null;
                   selected_item.value = false;
                   return <FrontpageFeed />;
-                }}
-              </Route>
-              <Route path="/tags3">
-                {(params) => {
-                  tag.value = null;
-                  selected_item.value = false;
-                  return <TagList3 />;
-                }}
-              </Route>
-              <Route path="/tags2">
-                {(params) => {
-                  tag.value = null;
-                  selected_item.value = false;
-                  return <TagList2 />;
                 }}
               </Route>
               <Route path="/">
@@ -141,6 +170,9 @@ const Root = () => {
               <Route path="/profile">
                 <Profile />
               </Route>
+              <Route path="/keys">
+                <APIKeys />
+              </Route>
               <Route path="/logout">
                 <LogoutRoute />
               </Route>
@@ -177,4 +209,25 @@ const Root = () => {
   );
 };
 
-ReactDOM.createRoot(document.getElementById("root")).render(<Root />);
+// Add dark mode class to html element based on initial state
+if (dark_mode.value) {
+  document.documentElement.classList.add('dark');
+} else {
+  document.documentElement.classList.remove('dark');
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <Auth0Provider
+    domain="auth.sorter.social"
+    clientId="GiBSx3V86zKjB4d0PRwso4mZBXTlRQci"
+    authorizationParams={{
+      redirect_uri: `${window.location.origin}/authorized`,
+      response_type: 'code',
+      scope: 'openid profile email'
+    }}
+    useRefreshTokens={true}
+    cacheLocation="localstorage"
+  >
+    <Root />
+  </Auth0Provider>
+);

@@ -1,4 +1,4 @@
-import { tag } from "./App";
+import { tag, current_attribute } from "./App";
 import Creatable from "react-select/creatable"
 import { signal, computed } from "@preact/signals-react";
 import { loadTag } from "./Network";
@@ -6,10 +6,13 @@ import { dark_mode } from "./utils/themeUtils";
 import Select from "react-select";
 
 export const selected_attribute = computed(() => {
-    return { value: tag.value.selected_attribute, label: ":" + tag.value.selected_attribute.title };
+    if (!current_attribute.value) return null;
+    return { value: current_attribute.value, label: ":" + current_attribute.value.title };
 });
 
 export const AttributePanel = () => {
+    if (!tag.value || !tag.value.attributes) return null;
+    
     const options = tag.value.attributes.map((attr) => {
         return { value: attr, label: ":" + attr.title + " (" + attr.votes + ")" }
     });
@@ -24,16 +27,13 @@ export const AttributePanel = () => {
                 onChange={(e) => {
                     if (e["__isNew__"]) {
                         if (e.label.startsWith(":")) {
-                            tag.value.selected_attribute = { id: -1, title: e.label.substring(1) }
+                            current_attribute.value = { id: -1, title: e.label.substring(1) }
                         } else {
-                            tag.value.selected_attribute = { id: -1, title: e.label }
+                            current_attribute.value = { id: -1, title: e.label }
                         }
                     } else {
-                        tag.value.selected_attribute = e.value;
+                        current_attribute.value = e.value;
                     }
-                    // hack to force selected_attribute to refresh
-                    const temp = tag.value;
-                    tag.value = temp;
                     loadTag(undefined);
                 }}
                 isMulti={false}

@@ -9,5 +9,11 @@
             "autoSelectForConnect": true
         }
     ],
-    "calva.autoConnectRepl": true
+    "calva.autoConnectRepl": true,
+    "[clojure]": {
+        "editor.autoClosingBrackets": "never",
+        "editor.defaultFormatter": "betterthantomorrow.calva",
+        "editor.matchBrackets": "always"
+    },
+    "postman.settings.dotenv-detection-notification-visibility": false,
 }

@@ -297,6 +297,8 @@ jobs:
 
             # Sendgrid API Key
             BORTER_SENDGRID_API_KEY=${{ github.ref_name == 'production' && secrets.BORTER_SENDGRID_API_KEY || secrets.BORTER_SENDGRID_API_KEY_STAGING }}
+            BORTER_STATIC_ADMINS=${{ vars.BORTER_STATIC_ADMINS }}
+            BORTER_STATIC_API_KEYS=${{ github.ref_name == 'production' && secrets.BORTER_STATIC_API_KEYS || secrets.BORTER_STATIC_API_KEYS_STAGING }}
             EOF
 
             chmod 600 borter/.env 
@@ -319,13 +321,6 @@ jobs:
               cd forter
               npm install
               npm run ${{ env.BRANCH }}
-              cd ..
-
-              # Build clisorter
-              echo -e "\033[3mBuilding clisorter...\033[0m"
-              cd clisorter
-              npm install
-              npm run build # eventually this needs to include mode via branch or something like that
               cd ..
 
               # Build borter

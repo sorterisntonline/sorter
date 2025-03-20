@@ -8,8 +8,6 @@ import { IntegrationsPanel } from "./integrations/IntegrationsPanel";
 import { ItemsLists } from "./ItemsLists";
 import { ItemPanel } from "./ItemPanel";
 import { toggle } from "./App";
-import { useElo } from "./App";
-import { showPin } from "./App";
 import { MobileNewItemChooser } from "./components/MobileNewItemChooser";
 import { WarningPopup } from "./components/WarningPopup";
 import { errorState, clearError } from "./ErrorHandler";
@@ -22,13 +20,37 @@ export const Tag = ({ isVoting, handleError, onSelectItem, onCloseItem }) => {
   const [location, setLocation] = useLocation();
   const isMobileDevice = () => window.innerWidth < 1024;
   const touchStartX = useRef(null);
+  const [renderError, setRenderError] = useState(null);
+  const [isDataReady, setIsDataReady] = useState(false);
 
-  const { can_vote = false, can_view = false, can_add = false } = tag.value?.perms || {};
+  // Debug output - always run this hook regardless of tag.value state
+  useEffect(() => {
+    console.log("Tag component mounting with tag.value:", tag.value);
+    
+    // Validate tag data structure to catch potential issues
+    if (!tag.value || typeof tag.value !== 'object') {
+      console.error("Tag.jsx: tag.value is not ready yet");
+      setIsDataReady(false);
+      return;
+    }
+    
+    if (!tag.value.tag) {
+      console.error("Tag.jsx: tag.value.tag is missing");
+      setIsDataReady(false);
+      return;
+    }
+    
+    if (!tag.value.sorted || !tag.value.unsorted) {
+      console.error("Tag.jsx: sorted or unsorted items missing", tag.value);
+      setIsDataReady(false);
+      return;
+    }
+    
+    console.log("Tag.jsx: Data validation passed");
+    setIsDataReady(true);
+  }, [tag.value]);
 
-  if (!tag.value || !can_view) {
-    return <div>you do not have permission to view this tag</div>;
-  }
-
+  // All hooks must appear before any conditional returns
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('newItem') === 'true') {
@@ -83,107 +105,135 @@ export const Tag = ({ isVoting, handleError, onSelectItem, onCloseItem }) => {
     }
   }, [isVoting, setLocation]);
 
-  return (
-    <>
-      <div className="dark:text-white justify-start">
-        {isVoting ? (
-          <Voting 
-            handleError={handleError} 
-            onSelectItem={onSelectItem}
-            onCloseItem={onCloseItem}
-          />
-        ) : (
-          <>
-            <IntegrationsPanel />
-            <TextSummary can_vote={can_vote} can_add={can_add} />
-            
-            <div className="flex lg:flex-row flex-col lg:space-x-24">
-              <div className={`${toggle.value ? 'lg:w-3/4' : 'lg:w-full'} transition-all duration-300`}>
-                <ItemsLists 
-                  sorteditems={tag.value.sorted}
-                  unsorteditems={tag.value.unsorted}
-                  skippedItems={tag.value.skipped}
-                  onSelectItem={onSelectItem}
-                />
-              </div>
-              
-              {/* Desktop sidebar */}
-              {toggle.value && (
-                <div className="lg:ml-auto lg:w-1/4">
-                  <div className="flex flex-col">
-                    <div
-                      className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
-                      onClick={() => toggle.value = !toggle.value}
-                      role="button"
-                    >
-                      {toggle.value ? "[more space <-]" : "[less space ->]"}
-                    </div>
-                    <div
-                      className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
-                      onClick={() => {
-                        useElo.value = !useElo.value;
-                        loadTag(undefined);
-                      }}
-                      role="button"
-                    >
-                      {useElo.value ? "[use pagerank]" : "[use elo]"}
-                    </div>
-                    <div
-                      className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
-                      onClick={() => {
-                        setLocation('/' + tag.value.tag.id + '/' + tag.value.tag.slug + '/graph');
-                      }}
-                      role="button"
-                    >
-                      [show graph]
-                    </div>
-                    <div
-                      className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
-                      onClick={() => {
-                        showPin.value = !showPin.value;
-                      }}
-                      role="button"
-                    >
-                      {showPin.value ? "[hide pin]" : "[show pin]"}
-                    </div>
-                  </div>
-                  <div className="page-padding-top hidden lg:block">
-                    <div className="sticky top-0 z-10">
-                      {(editing_item.value || selected_item.value) && 
-                        <ItemPanel onClose={onCloseItem} />
-                      }
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </>
-        )}
+  // After all hooks are defined, we can have conditional returns
+  // IMPORTANT: Safety check - if data isn't ready yet, show a loading state
+  if (!isDataReady) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-pulse text-gray-500">Loading tag data...</div>
       </div>
-      
-      {/* Shared Mobile Drawer */}
-      {isMobileDevice() && (selected_item.value || editing_item.value) && (
-        <Drawer 
-          isOpen={drawer_open.value} 
-          onClose={() => {
-            drawer_open.value = false;
-            selected_item.value = null;
-            editing_item.value = null;
-            onCloseItem?.();
-          }}
-        >
-          <div className="h-full overflow-y-auto">
-            <ItemPanel onClose={onCloseItem} />
-          </div>
-        </Drawer>
-      )}
+    );
+  }
 
-      {/* Show MobileNewItemChooser on mobile when not editing/viewing */}
-      {isMobileDevice() && can_add && !isVoting && !selected_item.value && (
-        <div className="fixed bottom-4 right-4 z-[99999]">
-          <MobileNewItemChooser />
+  // Now we know tag.value is properly initialized
+  const { can_vote = false, can_view = false, can_add = false } = tag.value.perms || {};
+
+  // Wrap the rendering in a try-catch to prevent white screens on render errors
+  try {
+    if (!can_view) {
+      return <div className="p-4 text-center">You do not have permission to view this tag</div>;
+    }
+
+    console.log("Tag.jsx: Rendering with tag data", tag.value);
+
+    return (
+      <>
+        <div className="dark:text-white justify-start">
+          {isVoting ? (
+            <Voting 
+              handleError={handleError} 
+              onSelectItem={onSelectItem}
+              onCloseItem={onCloseItem}
+            />
+          ) : (
+            <>
+              <IntegrationsPanel />
+              <TextSummary can_vote={can_vote} can_add={can_add} />
+              
+              <div className="flex lg:flex-row flex-col">
+                <div className={`${toggle.value ? 'lg:w-3/4' : 'lg:w-full'} transition-all duration-300`}>
+                  <ItemsLists 
+                    sorteditems={tag.value.sorted}
+                    unsorteditems={tag.value.unsorted}
+                    skippedItems={tag.value.skipped}
+                    onSelectItem={onSelectItem}
+                  />
+                </div>
+                
+                {/* Desktop sidebar */}
+                {toggle.value ? (
+                  <div className="lg:ml-24 lg:w-1/4">
+                    <div className="flex flex-col">
+                      {!isMobileDevice() && (
+                        <div
+                          className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
+                          onClick={() => toggle.value = !toggle.value}
+                          role="button"
+                        >
+                          {"[more space <-]"}
+                        </div>
+                      )}
+                      <div
+                        className="justify-self-start cursor-pointer border-1 border-gray-300 whitespace-nowrap"
+                        onClick={() => {
+                          setLocation('/' + tag.value.tag.id + '/' + tag.value.tag.slug + '/graph');
+                        }}
+                        role="button"
+                      >
+                        [show graph]
+                      </div>
+                    </div>
+                    <div className="page-padding-top hidden lg:block">
+                      <div className="sticky top-0 z-10">
+                        {(editing_item.value || selected_item.value) && 
+                          <ItemPanel onClose={onCloseItem} />
+                        }
+                      </div>
+                    </div>
+                  </div>
+                ) : !isMobileDevice() && (
+                  <div
+                    className="cursor-pointer border-1 border-gray-300 whitespace-nowrap"
+                    onClick={() => toggle.value = !toggle.value}
+                    role="button"
+                  >
+                    {"[->]"}
+                  </div>
+                )
+              }
+              </div>
+            </>
+          )}
         </div>
-      )}
-    </>
-  );
+        
+        {/* Shared Mobile Drawer */}
+        {isMobileDevice() && (selected_item.value || editing_item.value) && (
+          <Drawer 
+            isOpen={drawer_open.value} 
+            onClose={() => {
+              drawer_open.value = false;
+              selected_item.value = null;
+              editing_item.value = null;
+              onCloseItem?.();
+            }}
+          >
+            <div className="h-full overflow-y-auto">
+              <ItemPanel onClose={onCloseItem} />
+            </div>
+          </Drawer>
+        )}
+
+        {/* Show MobileNewItemChooser on mobile when not editing/viewing */}
+        {isMobileDevice() && can_add && !isVoting && !selected_item.value && (
+          <div className="fixed bottom-4 right-4 z-[99999]">
+            <MobileNewItemChooser />
+          </div>
+        )}
+      </>
+    );
+  } catch (error) {
+    console.error("Render error in Tag component:", error);
+    return (
+      <div className="flex flex-col items-center justify-center h-screen p-4">
+        <div className="text-red-500 text-xl mb-4">Error rendering content</div>
+        <div className="mb-4">{error.message}</div>
+        <button 
+          className="px-4 py-2 bg-purple-500 text-white rounded"
+          onClick={() => window.location.reload()}
+        >
+          Reload page
+        </button>
+      </div>
+    );
+  }
 }; 

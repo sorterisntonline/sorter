@@ -1,0 +1,10 @@
+# Add patterns to ignore here, one per line
+# Example:
+# *.log
+# tmp/
+borter/API_DOC.md
+rustsorter/.sqlx
+*.json
+forter/src/viz/AllSortViz.tsx
+discorter/
+forter/public/sitemap.xml

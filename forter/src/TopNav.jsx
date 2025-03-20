@@ -4,7 +4,8 @@ import { NAV_ITEMS } from './constants/navigation';
 import { current_session } from './session';
 import { ProfileHoverPane } from './components/ProfileHoverPane';
 import { showAnnouncement } from './components/AnnouncementBar';
-import { redirectToLogin, redirectToRegister } from './utils/authUtils';
+import { redirectToLogin, redirectToRegister, handleLogout } from './utils/authUtils';
+import { useAuth0 } from '@auth0/auth0-react';
 
 const MyLink = ({ to, children, className = "" }) => {
   const [isActive] = useRoute(to);
@@ -28,46 +29,14 @@ const ShowLink = () => {
 };
 
 const NavItem = ({ item }) => {
-  const [showDropdown, setShowDropdown] = useState(false);
-
-  if (!item.children) {
-    return <MyLink to={item.path}>{item.name}</MyLink>;
-  }
-
-  return (
-    <div
-      className="relative"
-      onMouseEnter={() => setShowDropdown(true)}
-      onMouseLeave={() => setShowDropdown(false)}
-    >
-      <MyLink to={item.path} className="flex items-center gap-1">
-        {item.name}
-        <span>▼</span>
-      </MyLink>
-      
-      {showDropdown && (
-        <div className="absolute top-full left-0 bg-white dark:bg-black border border-gray-200 
-          dark:border-gray-700 shadow-lg rounded-md overflow-hidden min-w-[120px] z-50"
-        >
-          {item.children.map(child => (
-            <MyLink
-              key={child.name}
-              to={child.path}
-              className="block w-full hover:bg-gray-100 dark:hover:bg-gray-800"
-            >
-              {child.name}
-            </MyLink>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+  return <MyLink to={item.path}>{item.name}</MyLink>;
 };
 
 export const TopNav = () => {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const [isHovered, setIsHovered] = useState(false);
   const [hideTimeout, setHideTimeout] = useState(null);
+  const { logout, isAuthenticated } = useAuth0();
 
   const isAuthPage = location === "/login" || location === "/register";
   const isLoggedIn = current_session.value && current_session.value.user_name;
@@ -82,6 +51,19 @@ export const TopNav = () => {
       setIsHovered(false);
     }, 300);
     setHideTimeout(timeout);
+  };
+  
+  const handleLogoutClick = async () => {
+    // Determine which logout method to use based on authentication type
+    const success = await handleLogout(isAuthenticated ? logout : null);
+    
+    if (success) {
+      // Force refresh the current session
+      current_session.value = false;
+      
+      // Redirect to home page
+      setLocation('/');
+    }
   };
 
   useEffect(() => {
@@ -115,11 +97,18 @@ export const TopNav = () => {
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
           >
-            <div className="cursor-default">
+            <div className="cursor-default px-3 py-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-200 flex items-center">
+              {current_session.value.pfp_url && (
+                <img 
+                  src={current_session.value.pfp_url} 
+                  alt="Profile" 
+                  className="w-6 h-6 rounded-full mr-2 border border-gray-200 dark:border-gray-700" 
+                />
+              )}
               {"@" + current_session.value.user_name}
             </div>
             {isHovered && (
-              <ProfileHoverPane onClose={() => setIsHovered(false)} />
+              <ProfileHoverPane onClose={() => setIsHovered(false)} onLogout={handleLogoutClick} />
             )}
           </div>
         ) : (
@@ -127,14 +116,16 @@ export const TopNav = () => {
             <div className="flex items-center gap-2">
               <button
                 className="bg-blue-200 dark:bg-blue-950 hover:bg-blue-300 dark:hover:bg-blue-900 
-                  text-black dark:text-white px-3 py-1 transition-colors border border-transparent"
+                  text-black dark:text-white px-3 py-1.5 transition-colors duration-200 rounded-md
+                  border border-transparent hover:shadow-sm"
                 onClick={redirectToLogin}
               >
                 login
               </button>
               <button
                 className="bg-green-200 dark:bg-green-950 hover:bg-green-300 dark:hover:bg-green-900 
-                  text-black dark:text-white px-3 py-1 transition-colors border border-transparent"
+                  text-black dark:text-white px-3 py-1.5 transition-colors duration-200 rounded-md
+                  border border-transparent hover:shadow-sm"
                 onClick={redirectToRegister}
               >
                 register

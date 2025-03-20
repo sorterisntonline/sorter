@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useLocation } from 'wouter';
 import { current_session } from '../session';
 import { loginLinear } from '../integrations/Linear';
-import { NEW_TAG_ROUTES, NEW_TAG_BUTTONS } from '../constants/navigation';
+import { NEW_TAG_BUTTONS } from '../constants/navigation';
 import { TagForm } from '../TagForm';
 import { FloatingActionButton } from './FloatingActionButton';
 
@@ -14,12 +14,11 @@ export const MobileNewTagChooser = () => {
   // Add debug logging
   console.log('MobileNewTagChooser:', {
     location,
-    shouldShow: NEW_TAG_ROUTES.includes(location),
     isLoggedIn: !!current_session.value?.user_name
   });
 
   // Check if we should show the button
-  const shouldShow = NEW_TAG_ROUTES.includes(location) && current_session.value?.user_name;
+  const shouldShow = location == "/" && current_session.value?.user_name;
   
   if (!shouldShow) return null;
 

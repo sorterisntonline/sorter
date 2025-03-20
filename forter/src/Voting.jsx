@@ -6,7 +6,7 @@ import { AttributePanel, selected_attribute } from "./AttributePanel";
 import { namespace } from "./main";
 import { showAllSorted, showAllUnsorted } from "./App";
 import { ItemsLists } from './ItemsLists';
-import { tag, toggle } from "./App";
+import { tag, toggle, selected_item, drawer_open, current_attribute } from "./App";
 import { Tag } from "./Tag";
 import { useEffect, useState, useRef } from "react";
 import { ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/24/solid";
@@ -41,7 +41,7 @@ export const Voting = ({ handleError, onSelectItem, onCloseItem }) => {
   const [showVotesPanel, setShowVotesPanel] = useState(false);
   const votesPanelRef = useRef(null);
 
-  const filteredVotes = tag.value?.votes?.filter(v => v.attribute === selected_attribute.value?.value?.id) || [];
+  const filteredVotes = tag.value?.votes?.filter(v => v.attribute === current_attribute.value?.id) || [];
   const sorteditems = tag.value?.["sorted"] || [];
   const unsorteditems = tag.value?.["unsorted"] || [];
 

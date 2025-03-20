@@ -1,4 +1,2 @@
-clisorter/
-rustsorter/
-
 borter/database/pgdata/
+**/output.calva-repl

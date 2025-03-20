@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/update-env.js $ENVIRONMENT && vite build --mode $ENVIRONMENT",
-    "dev": "vite build --watch --mode development",
+    "dev": "export ENVIRONMENT=development && vite build --mode development --watch ",
     "dev:client": "echo 'starting client-only dev server' && ENVIRONMENT=development vite",
     "development": "ENVIRONMENT=development npm run build --mode development",
     "staging": "cross-env ENVIRONMENT=staging npm run build",
@@ -18,6 +18,7 @@
     "generate-sitemap": "node scripts/generate-sitemap.js"
   },
   "dependencies": {
+    "@auth0/auth0-react": "^2.3.0",
     "@heroicons/react": "^2.2.0",
     "@preact/signals-react": "^1.3.8",
     "chart.js": "^4.4.7",
@@ -65,6 +66,6 @@
     "sitemap": "^8.0.0",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.3",
-    "vite": "^6.1.0"
+    "vite": "^6.2.1"
   }
 }
