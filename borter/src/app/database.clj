@@ -273,7 +273,8 @@
   (migratus/create (migratus-config) "add-api-key-table")
   (migratus/create (migratus-config) "ns-to-namespace-in-tag-table") ;; do this one later! 
   (migratus/create (migratus-config) "remove-item-title-check-gt-1")
-  (migratus/create (migratus-config) "update-users-for-auth0"))
+  (migratus/create (migratus-config) "update-users-for-auth0")
+  (migratus/create (migratus-config) "fix-instants-with-timezone"))
   ;; (exec! {:delete-from :tags :where [:= :id 9]})
   
 

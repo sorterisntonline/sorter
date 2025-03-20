@@ -396,18 +396,18 @@
                                                                                            :title "Example Tag"
                                                                                            :slug "example-tag"
                                                                                            :owner "user1"
-                                                                                           :created_at "2023-01-01T12:00:00Z"}
+                                                                                           :created_at "2024-03-02T03:22:05.640946"}
                                                                                      :sorted [{:id 1
                                                                                                :title "Top Item"
                                                                                                :elo 1500.0
                                                                                                :vote_count 10
                                                                                                :num_comments 0
                                                                                                :owner "user1"
-                                                                                               :created_at "2023-01-01T12:00:00Z"}]
+                                                                                               :created_at "2024-03-02T03:22:05.640946"}]
                                                                                      :unsorted [{:id 2
                                                                                                  :title "New Item"
                                                                                                  :owner "user2"
-                                                                                                 :created_at "2023-01-01T12:00:00Z"
+                                                                                                 :created_at "2024-03-02T03:22:05.640946"
                                                                                                  :num_comments 0}]
                                                                                      :skipped []
                                                                                      :perms {:can_vote true
@@ -418,27 +418,27 @@
                                                                                              :title "Left Item"
                                                                                              :owner "user1"
                                                                                              :num_comments 0
-                                                                                             :created_at "2023-01-01T12:00:00Z"}
+                                                                                             :created_at "2024-03-02T03:22:05.640946"}
                                                                                             {:id 4
                                                                                              :title "Right Item"
                                                                                              :owner "user2"
                                                                                              :num_comments 0
-                                                                                             :created_at "2023-01-01T12:00:00Z"}]
+                                                                                             :created_at "2024-03-02T03:22:05.640946"}]
                                                                                      :votes [{:id 1
                                                                                               :left_item_id 3
                                                                                               :right_item_id 4
                                                                                               :magnitude 36
                                                                                               :owner "user1"
                                                                                               :attribute 0
-                                                                                              :created_at "2023-01-01T12:00:00Z"}]
+                                                                                              :created_at "2024-03-02T03:22:05.640946"}]
                                                                                      :attributes [{:id 0
                                                                                                    :title "default"
                                                                                                    :owner "all"
-                                                                                                   :created_at "2023-01-01T12:00:00Z"}]
+                                                                                                   :created_at "2024-03-02T03:22:05.640946"}]
                                                                                      :selected_attribute {:id 0
                                                                                                           :title "default"
                                                                                                           :owner "all"
-                                                                                                          :created_at "2023-01-01T12:00:00Z"}}}}}}}}
+                                                                                                          :created_at "2024-03-02T03:22:05.640946"}}}}}}}}
                         :handler tag-info-request}}] 
     ["/tag/permissions" {:get {:no-doc false
                                :tags ["Tags"]
@@ -656,10 +656,10 @@
                                :responses {200 {:description "Item membership information"
                                                 :content {:default {:schema [:map
                                                                              [:membership [:vector [:map
-                                                                                                    [:item_id :int]
-                                                                                                    [:tag_id :int]
-                                                                                                    [:discord_channel_id {:optional true} [:maybe :string]]
-                                                                                                    [:discord_server_id {:optional true} [:maybe :string]]
+                                                                                                    [:items_in_tags/item_id :int]
+                                                                                                    [:items_in_tags/tag_id :int]
+                                                                                                    [:items_in_tags/discord_channel_id {:optional true} [:maybe :string]]
+                                                                                                    [:items_in_tags/discord_server_id {:optional true} [:maybe :string]]
                                                                                                     [:tags/id :int]
                                                                                                     [:tags/title :string]
                                                                                                     [:tags/slug :string]
@@ -667,8 +667,8 @@
                                                                              [:skips [:vector [:map
                                                                                                [:item_id :int]
                                                                                                [:owner :string]]]]]
-                                                                    :examples {:ok {:value {:membership [{:item_id 123
-                                                                                                          :tag_id 42
+                                                                    :examples {:ok {:value {:membership [{:items_in_tags/item_id 123
+                                                                                                          :items_in_tags/tag_id 42
                                                                                                           :tags/id 42
                                                                                                           :tags/title "Example Tag"
                                                                                                           :tags/slug "example-tag"
@@ -1094,8 +1094,8 @@
                              muuntaja/format-request-middleware
                              exception-middleware
                              coercion/coerce-request-middleware
-                             coercion/coerce-response-middleware
-                             ]}})
+                             coercion/coerce-response-middleware]}})
+                             
                               
                              
        (-> #'default-handler

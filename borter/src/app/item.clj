@@ -273,7 +273,7 @@
 
 (defn item-owner [id] (-> {:select [:owner] :from :items :where [:= :items/id id]}
                           db/exec! first :items/owner))
-(defn item-post [req]
+(defn item-post [req] ;; TODO: fix that this returns really ugly global scoped fields (ie, :items_in_tags/discord_channel_id)
   (let [username (-> req :session :user_name)
         tagids [(-> req :body-params :tag_id)]
         admin-users (get-admin-users)
@@ -373,24 +373,24 @@
    
    ["/slug-check" {:get {:handler item-slug-check
                          :parameters {:query {:title string?
-                                             :tag_id string?}}}}]
+                                              :tag_id string?}}}}]
    
    ["/exists" {:post {:handler item-exists-check
                       :parameters {:body {:title string?
-                                         :tag_id int?
-                                         :domain_pk_namespace string?
-                                         :domain_pk string?}}}}]
+                                          :tag_id int?
+                                          :domain_pk_namespace string?
+                                          :domain_pk string?}}}}]
    
    ["/membership" {:get {:handler item-m-get
                          :parameters {:query {:item_id string?}}}
                    
                    :post {:handler item-m-post
                           :parameters {:body {:tag_id int?
-                                             :item_id int?}}}
+                                              :item_id int?}}}
                    
                    :delete {:handler item-m-delete
                             :parameters {:body {:tag_id int?
-                                               :item_id int?}}}}]
+                                                :item_id int?}}}}]
    
    ["/skip" {:post {:handler item-skip
                     :parameters {:body {:item_id int?}}}
