@@ -99,31 +99,48 @@
 
 
 (defn get-perms [req]
-  (def req req)
-  (let [tagid (-> req :query-params (get "tag_id") Integer/parseInt)
-        owner (get-owner tagid)]
-    (when-not (= owner (-> req :session :user_name))
-      (throw (ex-info "must own tag to get its perms" {:status 400})))
-    
-    {:status 200 :body (db/exec! {:select :* :from :perms
-                                  :where [:= :tag_id tagid]})}))
+   (let [username (-> req :session :user_name)]
+    (if-not username
+      {:status 401 :body {:message "must be logged in to get tag permissions"}}
+      (try
+        (let [tag-id-param (get-in req [:query-params "tag_id"])]
+          (if-not tag-id-param
+            {:status 400 :body {:message "tag_id parameter is required"}}
+            (let [tagid (try (Integer/parseInt tag-id-param)
+                          (catch Exception _ nil))]
+              (if-not tagid
+                {:status 400 :body {:message "tag_id must be a valid integer"}}
+                (let [owner (get-owner tagid)]
+                  (if-not (= owner username)
+                    {:status 403 :body {:message "must own tag to get its permissions"}}
+                    {:status 200 
+                     :body (get-tag-perms tagid username)}))))))
+        (catch Exception e
+          {:status 400 :body {:message (.getMessage e)}})))))
 
 (defn post-perms [req]
-  (def req req)
-
-  (let [tagid (-> req :body-params :tag_id)
-        p (-> req :body-params :perms)]
-    (when-not (= (get-owner tagid) (-> req :session :user_name))
-      (throw (ex-info "must own tag to modify its permissions" {:status 403})))
-    
-    (db/exec! (-> {:insert-into :perms
-                   :values (for [[cap perm] p]
-                             {:tag_id tagid :capability (name cap) :user_id perm})}
-                  (h/on-conflict :tag_id :capability)
-                  (h/do-update-set {:fields [ :user_id]})))
-    
-    {:status 200 :body (db/exec! {:select :* :from :perms
-                                  :where [:= :tag_id tagid]})}))
+   (let [username (-> req :session :user_name)]
+    (if-not username
+      {:status 401 :body {:message "must be logged in to update tag permissions"}}
+      (try
+        (let [tagid (-> req :body-params :tag_id)
+              perms (-> req :body-params :perms)]
+          (if-not tagid
+            {:status 400 :body {:message "tag_id is required"}}
+            (if-not perms
+              {:status 400 :body {:message "perms object is required"}}
+              (if-not (= (get-owner tagid) username)
+                {:status 403 :body {:message "must own tag to modify its permissions"}}
+                (do
+                  (db/exec! (-> {:insert-into :perms
+                                 :values (for [[cap perm] perms]
+                                           {:tag_id tagid :capability (name cap) :user_id perm})}
+                                (h/on-conflict :tag_id :capability)
+                                (h/do-update-set {:fields [:user_id]})))
+                  
+                  {:status 200 :body (get-tag-perms tagid username)})))))
+        (catch Exception e
+          {:status 400 :body {:message (.getMessage e)}})))))
 
 (comment
 
