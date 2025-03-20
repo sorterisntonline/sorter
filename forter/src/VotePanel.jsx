@@ -480,7 +480,7 @@ const VotePanelComponent = ({ handleError, isMobile = false }) => {
         "left_item_id": left["id"],
         "right_item_id": right["id"],
         "magnitude": magnitude.value,
-        "attribute": current_attribute.value,
+        "attribute": current_attribute.value?.id,
         "tag_id": tag.value.tag["id"],
       });
 

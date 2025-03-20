@@ -45,6 +45,16 @@
           left-item-id (-> r :body-params :left_item_id)
           right-item-id (-> r :body-params :right_item_id)
           
+          ;; Function to remove namespace from keys
+          remove-ns (fn [m]
+                      (reduce-kv
+                       (fn [acc k v]
+                         (let [new-k (if (namespace k)
+                                       (keyword (name k))
+                                       k)]
+                           (assoc acc new-k v)))
+                       {} m))
+          
           ;; Find existing vote if any
           duplicate (first (find-existing-vote 
                             userid
@@ -64,18 +74,24 @@
                                                  (dissoc :tag_id)))
                                       (h/where [:= :votes/id (:votes/id duplicate)])))
                         ;; Get updated vote data
-                        (first (db/exec! (-> (h/select :*)
-                                             (h/from :votes)
-                                             (h/where [:= :votes/id (:votes/id duplicate)])))))
+                        (-> (db/exec! (-> (h/select :*)
+                                          (h/from :votes)
+                                          (h/where [:= :votes/id (:votes/id duplicate)])))
+                            first
+                            remove-ns
+                            (dissoc :domain_pk_namespace))) ;; @thmorriss why do votes have a domain_pk_namespace? 
                       
                       ;; Insert new vote
-                      (first (db/exec! (-> (h/insert-into :votes)
-                                           (h/values [(-> r
-                                                          :body-params
-                                                          (assoc :owner userid
-                                                                 :attribute attr-id)
-                                                          (dissoc :tag_id))])
-                                           (h/returning :*)))))]
+                      (-> (db/exec! (-> (h/insert-into :votes)
+                                        (h/values [(-> r
+                                                       :body-params
+                                                       (assoc :owner userid
+                                                              :attribute attr-id)
+                                                       (dissoc :tag_id))])
+                                        (h/returning :*)))
+                          first
+                          remove-ns
+                          (dissoc :domain_pk_namespace)))]
 
       {:status 200 
        :body vote-data})))
@@ -214,6 +230,7 @@
                                         (h/returning :*))))]
         
         {:status 200 :body result}))))
+
 (defn attribute-get [r]
   (let [query (-> (h/select :*)
                   (h/from :attributes))]

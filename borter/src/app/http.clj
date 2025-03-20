@@ -92,7 +92,7 @@
     {:get {:no-doc true
            :openapi {:info {:title "Sorter API"
                             :description "API for sorter.social - a platform for democratic consensus on any content"
-                            :version "1.0.1"}
+                            :version "1.2.0"}
                      :tags [{:name "System" :description "System and health endpoints"}
                             {:name "Authentication" :description "User authentication endpoints"}
                             {:name "API Keys" :description "API key management endpoints"}
