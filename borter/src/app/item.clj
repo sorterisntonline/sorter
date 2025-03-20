@@ -273,7 +273,7 @@
 
 (defn item-owner [id] (-> {:select [:owner] :from :items :where [:= :items/id id]}
                           db/exec! first :items/owner))
-(defn item-post [req] ;; TODO: fix that this returns really ugly global scoped fields (ie, :items_in_tags/discord_channel_id)
+(defn item-post [req] 
   (let [username (-> req :session :user_name)
         tagids [(-> req :body-params :tag_id)]
         admin-users (get-admin-users)
@@ -299,17 +299,29 @@
   (let [itemid (-> r :query-params (get "item_id"))]
     (if (= -1 itemid)
       {:status 200 :body {:membership [] :skips []}}
-      {:status 200 :body (let [itemid (Integer/parseInt itemid)]
+      {:status 200 :body (let [itemid (Integer/parseInt itemid)
+                               ;; Function to remove namespace from keys
+                               remove-ns (fn [m]
+                                           (reduce-kv
+                                            (fn [acc k v]
+                                              (let [new-k (if (namespace k)
+                                                            (keyword (name k))
+                                                            k)]
+                                                (assoc acc new-k v)))
+                                            {} m))]
                            {:membership
-                            (db/exec! (-> (h/select :*)
-                                          (h/from :items_in_tags)
-                                          (h/where [:= :item_id itemid]) (h/join :tags [:= :items_in_tags.tag_id :tags.id])))
+                            (map remove-ns
+                                 (db/exec! (-> (h/select :*)
+                                               (h/from :items_in_tags)
+                                               (h/where [:= :item_id itemid]) 
+                                               (h/join :tags [:= :items_in_tags.tag_id :tags.id]))))
                             :skips
-                            (db/exec! (-> (h/select :*)
-                                          (h/from :skipped)
-                                          (h/where [:and
-                                                    [:= :item_id itemid]
-                                                    [:= :owner (-> r :session :user_name)]])))})})))
+                            (map remove-ns
+                                 (db/exec! (-> (h/select :*)
+                                               (h/from :skipped)
+                                               (h/where [:and
+                                                         [:= :item_id itemid]
+                                                         [:= :owner (-> r :session :user_name)]]))))})})))
 
 (defn item-m-delete [r]
   (let [admin-users (get-admin-users)
@@ -329,7 +341,7 @@
                           [:= :tag_id (-> r :body-params :tag_id)]])))
   {:status 200 :body {:ok true}})
 
-(defn item-m-post [req]
+(defn item-m-post [req] ;; TODO: fix that this returns really ugly global scoped fields (ie, :items_in_tags/discord_channel_id)
   ;; TODO change so that you just need add permission on that tag?
   (when-not (perms/can-tag (-> req :body-params :tag_id) "add" (-> req :session :user_name))
     (throw (ex-info "must have add permission on target tag" {:status 401})))

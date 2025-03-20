@@ -656,23 +656,23 @@
                                :responses {200 {:description "Item membership information"
                                                 :content {:default {:schema [:map
                                                                              [:membership [:vector [:map
-                                                                                                    [:items_in_tags/item_id :int]
-                                                                                                    [:items_in_tags/tag_id :int]
-                                                                                                    [:items_in_tags/discord_channel_id {:optional true} [:maybe :string]]
-                                                                                                    [:items_in_tags/discord_server_id {:optional true} [:maybe :string]]
-                                                                                                    [:tags/id :int]
-                                                                                                    [:tags/title :string]
-                                                                                                    [:tags/slug :string]
-                                                                                                    [:tags/owner :string]]]]
+                                                                                                    [:item_id :int]
+                                                                                                    [:tag_id :int]
+                                                                                                    [:discord_channel_id {:optional true} [:maybe :string]]
+                                                                                                    [:discord_server_id {:optional true} [:maybe :string]]
+                                                                                                    [:id :int]
+                                                                                                    [:title :string]
+                                                                                                    [:slug :string]
+                                                                                                    [:owner :string]]]]
                                                                              [:skips [:vector [:map
                                                                                                [:item_id :int]
                                                                                                [:owner :string]]]]]
-                                                                    :examples {:ok {:value {:membership [{:items_in_tags/item_id 123
-                                                                                                          :items_in_tags/tag_id 42
-                                                                                                          :tags/id 42
-                                                                                                          :tags/title "Example Tag"
-                                                                                                          :tags/slug "example-tag"
-                                                                                                          :tags/owner "user1"}]
+                                                                    :examples {:ok {:value {:membership [{:item_id 123
+                                                                                                          :tag_id 42
+                                                                                                          :id 42
+                                                                                                          :title "Example Tag"
+                                                                                                          :slug "example-tag"
+                                                                                                          :owner "user1"}]
                                                                                             :skips []}}}}}}}
                                :handler item/item-m-get}
                          :delete {:no-doc false
