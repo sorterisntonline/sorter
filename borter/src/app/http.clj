@@ -114,16 +114,7 @@
 
    ["/api" 
     {:no-doc true}
-    ["/health" {:get {:no-doc false
-                      :summary "Health check endpoint"
-                      :tags ["System"]
-                      :description "Simple health check to verify the API is running"
-                      :responses {200 {:description "Health status"
-                                       :content {:default {:schema [:map
-                                                                    [:status :string]
-                                                                    [:version :string] 
-                                                                    [:database :string]]}}}}
-                      :handler health/check-health}}] 
+    ["/health" health/routes] 
     ["/feed" {:get {:no-doc false
                     :summary "Get feed for a tag"
                     :tags ["Feed"] 
@@ -469,7 +460,7 @@
                                                  :content {:default {:schema [:map]
                                                                             [:can_vote :boolean]
                                                                             [:can_add :boolean
-                                                                            [:can_view :boolean]]}}}
+                                                                             [:can_view :boolean]]}}}
                                             401 {:description "Authentication required"
                                                  :content {:default {:schema ErrorSchema
                                                                      :examples {:unauthenticated {:value {:message "must be logged in to update tag permissions"}}}}}}
@@ -553,7 +544,7 @@
                                                 "cookieAuth" []}]}
                           :middleware [[wrap-rate-limit one-per-second]]
                           :summary "Create attribute"
-                          :tags ["Votes"]
+                          :tags ["Attributes" "Votes"]
                           :description "Creates a new attribute used for votes"
                           :parameters {:body [:map
                                               [:title {:description "Title of the attribute"} :string]
@@ -575,8 +566,10 @@
                           :handler vote/attribute-post}
                     :get {:no-doc false
                           :summary "List attributes"
-                          :tags ["Votes"]
+                          :tags ["Attributes" "Votes"]
                           :description "Retrieves all available attributes"
+                          :parameters {:query [:map
+                                               [:id {:description "ID of the attribute to find. Guarantees one result if specified." :optional true} :int]]}
                           :responses {200 {:description "List of attributes"
                                            :content {:default {:schema [:map
                                                                         [:attributes [:vector AttributeSchema]]]
@@ -595,6 +588,22 @@
                                                                                                      :edited_at "2023-01-01T12:00:00Z"}]}}}}}}} 
                                       
                           :handler vote/attribute-get}}]
+    ["/attribute/exists" {:get {:no-doc false
+                                :summary "Check if attribute exists"
+                                :tags ["Attributes" "Votes"]
+                                :description "Checks if an attribute with the given title exists"
+                                :parameters {:query [:map
+                                                     [:title {:description "Title of the attribute"} :string]]}
+                                :responses {200 {:description "Attribute exists"
+                                                 :content {:default {:schema [:map
+                                                                              [:exists :boolean]
+                                                                              [:id :int]]
+                                                                     :examples {:ok {:value {:exists true}}}}}}
+                                            404 {:description "Attribute does not exist"
+                                                 :content {:default {:schema ErrorSchema
+                                                                     :examples {:ok {:value {:exists false
+                                                                                             :message "Attribute does not exist"}}}}}}}}
+                               :handler vote/attribute-exists-check}]
     ["/item" {:middleware [[wrap-rate-limit one-per-second]]
               :post {:no-doc false
                      :openapi {:security [{"apiKeyAuth" []
@@ -1161,6 +1170,5 @@
 (defn start [{:keys [port]}]
   (log/info "Starting HTTP server on port" port)
   (jetty/run-jetty #'app {:port port :join? false :host "0.0.0.0"})
-  (log/info "HTTP server running on port" port)
-  (println (str "http server running on port " port)))
+  (log/info "HTTP server running on port" port))
 

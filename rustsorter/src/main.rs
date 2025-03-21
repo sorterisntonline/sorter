@@ -10,9 +10,19 @@ pub struct AppState {
 
 use std::{env, sync::Arc};
 
-use actix_web::{App, HttpServer, middleware::Logger, web};
+use actix_web::{App, HttpServer, middleware::Logger, web, HttpResponse, get};
 use dotenv::dotenv;
 use tokio::sync::oneshot; // For clean shutdown
+use serde_json::json;
+
+// Health endpoint handler
+#[get("/api/health")]
+async fn health() -> HttpResponse {
+    HttpResponse::Ok().json(json!({
+        "status": "healthy",
+        "version": env!("CARGO_PKG_VERSION")
+    }))
+}
 
 #[actix_web::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -43,6 +53,7 @@ async fn main() -> Result<(), anyhow::Error> {
             .app_data(web::Data::new(AppState { db: pool.clone() }))
             .service(tag::hello)
             .service(feed::feed)
+            .service(health)
             .wrap(Logger::default())
     })
     .bind(("127.0.0.1", 8081)).expect("unable to bind on port 8081")

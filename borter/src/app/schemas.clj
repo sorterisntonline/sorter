@@ -2,12 +2,12 @@
 
 ;; Define schemas using malli syntax
 (def ErrorSchema
-  [:map 
+  [:map {:closed false}
    [:message :string]
    [:error {:optional true} :map]])
 
 (def InfoSchema
-  [:map
+  [:map {:closed false}
    [:success :boolean]
    [:message :string]])
 
@@ -95,7 +95,7 @@
    [:pfp_url {:optional true} [:maybe :string]]
    [:email_verified {:optional true} [:maybe :boolean]]
    [:discord_id {:optional true} [:maybe :string]]
-   [:created_at [:or :string inst?]]])
+   [:created_at {:optional true} [:or :string inst?]]]) ;; for /api/tag/page, I don't want to fix the rust code to return this
 
 (def AttributeSchema
   [:map
