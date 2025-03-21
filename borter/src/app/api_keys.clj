@@ -245,7 +245,7 @@
 
 ;; Define routes for API key management
 (def routes
-  [["/"
+  [[""
     {:get {:no-doc false
            :summary "List all active API keys for a user"
            :tags ["API Keys"] 

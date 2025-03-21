@@ -214,7 +214,15 @@
       (throw (ex-info "need to be logged in to create attribute" {:status 401})))
     
     (let [title (-> r :body-params :title)
-          description (or (-> r :body-params :description) "")]
+          description (or (-> r :body-params :description) "")
+          remove-ns (fn [m]
+                      (reduce-kv
+                       (fn [acc k v]
+                         (let [new-k (if (namespace k)
+                                       (keyword (name k))
+                                       k)]
+                           (assoc acc new-k v)))
+                       {} m))]
       
       ;; Check if attribute with same title already exists
       (when (not-empty (db/exec! (-> {:select :id
@@ -227,12 +235,46 @@
                                         (h/values [{:owner userid
                                                     :title (sluj title)
                                                     :description description}])
-                                        (h/returning :*))))]
+                                        (h/returning :*))))
+            result-without-ns (remove-ns result)]
         
-        {:status 200 :body result}))))
+        {:status 200 :body result-without-ns}))))
 
 (defn attribute-get [r]
-  (let [query (-> (h/select :*)
-                  (h/from :attributes))]
-    {:status 200
-     :body {:attributes (db/exec! query)}}))
+  (let [id (-> r :query-params (get "id"))
+        remove-ns (fn [m]
+                    (reduce-kv
+                     (fn [acc k v]
+                       (let [new-k (if (namespace k)
+                                     (keyword (name k))
+                                     k)]
+                         (assoc acc new-k v)))
+                     {} m))]
+    (if id
+      (let [attribute (first (db/exec! (-> (h/select :*)
+                                           (h/from :attributes)
+                                           (h/where [:= :attributes/id (Integer/parseInt id)]))))]
+        (if attribute
+          {:status 200
+           :body {:attributes [(remove-ns attribute)]}}
+          {:status 400
+           :body {:message "id doesn't exist"}}))
+      (let [query (-> (h/select :*)
+                      (h/from :attributes))
+            attributes (map remove-ns (db/exec! query))]
+        {:status 200
+         :body {:attributes attributes}}))))
+
+(defn attribute-exists-check [r]
+  (let [title (-> r :query-params (get "title"))
+        attr (when title
+               (first (db/exec! (-> (h/select :*)
+                                    (h/from :attributes)
+                                    (h/where [:= :attributes/title title])))))]
+    (if attr
+      {:status 200
+       :body {:exists true
+              :id (or (:id attr) (:attributes/id attr))}}
+      {:status 404
+       :body {:exists false
+              :message "Attribute does not exist"}})))
