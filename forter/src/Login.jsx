@@ -153,7 +153,7 @@ export const Login = () => {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ user_name: username, password }),
       });
 
       let responseData;
@@ -290,10 +290,17 @@ export const Login = () => {
                 icon={logoutIcon}
                 variant="danger"
                 onClick={async () => {
-                  const success = await handleLogout(isAuthenticated ? logout : null);
-                  if (success) {
-                    current_session.value = false;
-                    setLocation("/");
+                  try {
+                    const response = await fetch("/api/logout", {
+                      method: "POST",
+                      credentials: "include"
+                    });
+                    if (response.ok) {
+                      current_session.value = false;
+                      setLocation("/");
+                    }
+                  } catch (error) {
+                    console.error("Logout error:", error);
                   }
                 }}
                 className="mt-2"
@@ -379,7 +386,9 @@ export const Login = () => {
         {/* Auth0 Login Button */}
         <button
           onClick={handleAuth0Login}
-          className="w-full bg-blue-600 text-white p-2 hover:bg-blue-700 rounded mb-4 flex items-center justify-center"
+          className="w-full bg-blue-600 text-white p-2 hover:bg-blue-700 rounded mb-4 flex items-center justify-center opacity-60 cursor-not-allowed"
+          disabled={true}
+          title="too buggy rn"
         >
           <svg width="20" height="20" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" className="mr-2">
             <path d="M19.9999 16.0001C19.9999 14.4088 20.6321 12.8828 21.7574 11.7576C22.8826 10.6324 24.4086 10.0001 25.9999 10.0001C27.5912 10.0001 29.1173 10.6324 30.2425 11.7576C31.3678 12.8828 32 14.4088 32 16.0001C32 17.5914 31.3678 19.1175 30.2425 20.2427C29.1173 21.3679 27.5912 22.0001 25.9999 22.0001C24.4086 22.0001 22.8826 21.3679 21.7574 20.2427C20.6321 19.1175 19.9999 17.5914 19.9999 16.0001Z" fill="white"/>
