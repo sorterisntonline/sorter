@@ -114,16 +114,7 @@
 
    ["/api" 
     {:no-doc true}
-    ["/health" {:get {:no-doc false
-                      :summary "Health check endpoint"
-                      :tags ["System"]
-                      :description "Simple health check to verify the API is running"
-                      :responses {200 {:description "Health status"
-                                       :content {:default {:schema [:map
-                                                                    [:status :string]
-                                                                    [:version :string] 
-                                                                    [:database :string]]}}}}
-                      :handler health/check-health}}] 
+    ["/health" health/routes] 
     ["/feed" {:get {:no-doc false
                     :summary "Get feed for a tag"
                     :tags ["Feed"] 
@@ -1179,6 +1170,5 @@
 (defn start [{:keys [port]}]
   (log/info "Starting HTTP server on port" port)
   (jetty/run-jetty #'app {:port port :join? false :host "0.0.0.0"})
-  (log/info "HTTP server running on port" port)
-  (println (str "http server running on port " port)))
+  (log/info "HTTP server running on port" port))
 

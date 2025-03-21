@@ -218,7 +218,6 @@
 
 (defn run-migrations []
   (try
-    (println "running migrations")
     (if-let [config (migratus-config)]
       (try
         (migratus/migrate config)

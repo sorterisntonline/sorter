@@ -6,7 +6,11 @@
    [cider.nrepl :refer (cider-nrepl-handler)]  ; Directly refer cider-nrepl-handler
    [clojure.tools.logging :as log]  ; Add logging require
    [app.http :as http]
-   [app.database :as db]))
+   [app.database :as db]
+   [app.version :as version]))
+
+;; Use version from app.version namespace
+(def version version/version)
 
 (def environment (or (System/getenv "ENVIRONMENT") "development"))
 
@@ -43,8 +47,8 @@
 (defn -main
   "Run with `clj -M -m prod` or with optional port override {:port 3000}"
   [& {:keys [port] :or {port 8080}}]
-  (log/info "\n ______   _____   ______ _______ _______  ______\n |_____] |     | |_____/    |    |______ |_____/\n |_____] |_____| |    \\_    |    |______ |    \\_\n")
-  (log/info "starting borter in" environment "environment")
+  (log/info "\n ______   _____   ______ _______ _______  ______\n |_____] |     | |_____/    |    |______ |_____/\n |_____] |_____| |    \\_    |    |______ |    \\_\n\n📦️" version "\n")
+  (log/info "starting borter" version "in" environment "environment")
   (log/debug "server configuration:" electric-server-config)
   (log/info "starting repl with config" (dissoc nrepl-config :auth))  ; don't log password
   (reset! server-instance (nrepl-server/start-server nrepl-config))
