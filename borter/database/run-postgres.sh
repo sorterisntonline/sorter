@@ -244,14 +244,13 @@ for i in $(seq 1 $MAX_ATTEMPTS); do
         echo "PostgreSQL is ready!"
         echo "PostgreSQL is ready. Ensuring admin user exists..."
         docker exec -i -e PGPASSWORD=password $NAME psql -U postgres -d postgres << EOF
--- First delete existing admin user
-DELETE FROM users WHERE user_name = 'admin';
-
--- Then insert with our known working hash and new fields
+-- Using upsert pattern to handle admin user
 INSERT INTO users (user_name, email, password_hash, created_at, email_verified)
-SELECT 'admin', 'admin@sorter.social', '\$2a\$11\$OtrVZGZGG9L.bWvVgYeH2uLgP3qv5O5px47XVlyJLOKjgTkiBtaji', NOW(), true;
+VALUES ('admin', 'admin@sorter.social', '\$2a\$11\$OtrVZGZGG9L.bWvVgYeH2uLgP3qv5O5px47XVlyJLOKjgTkiBtaji', NOW(), true)
+ON CONFLICT (user_name) 
+DO UPDATE SET password_hash = '\$2a\$11\$OtrVZGZGG9L.bWvVgYeH2uLgP3qv5O5px47XVlyJLOKjgTkiBtaji';
 
--- Verify the insert
+-- Verify the insert/update
 SELECT user_name, email, password_hash, email_verified FROM users WHERE user_name = 'admin';
 EOF
         break

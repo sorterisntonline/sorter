@@ -10,7 +10,9 @@
 (defonce db-state (atom {:healthy false
                          :last-error nil
                          :datasource nil
-                         :init-attempted false}))
+                         :health-check-passed false
+                         :init-attempted false
+                         :last-reconnect-attempt nil}))
 
 (defn parse-jdbc [jdbc-url]
   (try
@@ -67,6 +69,20 @@
         (swap! db-state assoc :last-error error-msg)
         nil))))
 
+(defn reset-connection! []
+  "Close the current datasource and reset the state to allow reconnection"
+  (try
+    (when-let [ds (:datasource @db-state)]
+      (log/info "Closing database connection pool")
+      (close-datasource ds))
+    (catch Exception e
+      (log/error "Error closing datasource:" (.getMessage e))))
+  (swap! db-state assoc 
+         :datasource nil 
+         :init-attempted false
+         :health-check-passed false
+         :last-reconnect-attempt (System/currentTimeMillis)))
+
 (defn db []
   "Returns the datasource, may return nil if database is not available"
   (if (:datasource @db-state)
@@ -83,7 +99,8 @@
           (catch Exception e
             (let [error-msg (str "Database connection test failed: " (.getMessage e))]
               (log/error error-msg)
-              (swap! db-state assoc :healthy false :last-error error-msg)))))
+              (swap! db-state assoc :healthy false :last-error error-msg)
+              (reset-connection!)))))
       ds)))
 
 (defn check-db-health []
@@ -93,21 +110,54 @@
       (try
         (with-open [conn (jdbc/get-connection ds)]
           (jdbc/execute! conn ["SELECT 1"])
-          (swap! db-state assoc :healthy true :last-error nil)
+          (let [first-success? (not (:health-check-passed @db-state))]
+            (when first-success?
+              (log/info "Database health check passed"))
+            (swap! db-state assoc :healthy true :last-error nil :health-check-passed true))
           true)
         (catch Exception e
           (let [error-msg (str "Database health check failed: " (.getMessage e))]
             (log/error error-msg)
-            (swap! db-state assoc :healthy false :last-error error-msg)
+            (swap! db-state assoc :healthy false :last-error error-msg :health-check-passed false)
+            ;; Reset the connection on failure to allow reconnection on next attempt
+            (reset-connection!)
             false)))
       (do
         ;; Only try to initialize if we haven't done so already
-        (when (not (:init-attempted @db-state))
-          (db))
-        false))
+        ;; or if we haven't attempted reconnection in the last 10 seconds
+        (let [current-time (System/currentTimeMillis)
+              last-attempt (:last-reconnect-attempt @db-state)
+              should-try (or (not (:init-attempted @db-state))
+                             (and last-attempt (> (- current-time last-attempt) 10000))
+                             (nil? last-attempt))]
+          (when should-try
+            (log/info "Database was down, attempting to establish connection")
+            (swap! db-state assoc :last-reconnect-attempt current-time)
+            (let [new-ds (build-datasource)]
+              (if new-ds
+                (try
+                  (log/info "Got new datasource, testing connection")
+                  (with-open [conn (jdbc/get-connection new-ds)]
+                    (jdbc/execute! conn ["SELECT 1"])
+                    (swap! db-state assoc 
+                           :datasource new-ds
+                           :healthy true 
+                           :health-check-passed true
+                           :last-error nil)
+                    (log/info "Database reconnection successful")
+                    true)
+                  (catch Exception e
+                    (let [error-msg (str "Database reconnection test failed: " (.getMessage e))]
+                      (log/error error-msg)
+                      (swap! db-state assoc :healthy false :last-error error-msg :health-check-passed false)
+                      false)))
+                (do
+                  (log/warn "Failed to create new datasource during reconnection attempt")
+                  false)))))
+        (:healthy @db-state)))
     (catch Throwable e
       (log/error "Critical error in database health check:" (.getMessage e))
-      (swap! db-state assoc :healthy false :last-error (.getMessage e))
+      (swap! db-state assoc :healthy false :last-error (.getMessage e) :health-check-passed false)
       false)))
 
 (defn get-db-status []
@@ -115,7 +165,8 @@
   {:healthy (:healthy @db-state)
    :error (:last-error @db-state)
    :datasource-initialized (not (nil? (:datasource @db-state)))
-   :init-attempted (:init-attempted @db-state)})
+   :init-attempted (:init-attempted @db-state)
+   :last-reconnect-attempt (:last-reconnect-attempt @db-state)})
 
 ;; Safe version that won't throw exceptions
 (defn migratus-config []
