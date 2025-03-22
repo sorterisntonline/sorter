@@ -3,6 +3,7 @@
 .DS_Store
 .env*
 !.env.example
+!.env.*.example
 .cursorignore
 .lsp
 repomix-output.txt
