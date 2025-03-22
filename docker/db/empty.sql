@@ -1,0 +1,3 @@
+-- This is an empty SQL file used as a fallback when no PGDUMP_FILE is specified
+-- The empty file ensures that the volume mount works correctly
+-- and doesn't cause errors in the container startup. 

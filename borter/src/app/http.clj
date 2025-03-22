@@ -1029,11 +1029,22 @@
 (defn error-response [exception request]
   (def exception exception)
   (cond
+    ;; Handle reitit coercion errors
     (and (= (type exception) clojure.lang.ExceptionInfo)
-     (= :reitit.coercion/response-coercion (:type (ex-data exception))))
+         (= :reitit.coercion/response-coercion (:type (ex-data exception))))
     {:status 500
      :body {:exception (read-string (pr-str (first (:errors  (ex-data exception)))))
             :data (:body (:response (ex-data exception)))}}
+    
+    ;; Return ex-data directly if it exists
+    (and (= (type exception) clojure.lang.ExceptionInfo)
+         (ex-data exception))
+    (let [data (ex-data exception)]
+      (if (:status data)
+        {:status (:status data)
+         :body (dissoc data :status)}
+        {:status 500
+         :body data}))
 
     :else
     {:status 500
@@ -1095,12 +1106,15 @@
 
 (defn wrap-db-health-check [handler]
   (fn [request]
-    (if (db/check-db-health)
+    ;; Skip the database check for the health endpoint
+    (if (= (:uri request) "/api/health")
       (handler request)
-      {:status 503
-       :headers {"Content-Type" "application/json"}
-       :body {:error "Database is currently unavailable"
-              :details "Failed to establish database connection"}})))
+      (if (db/check-db-health)
+        (handler request)
+        {:status 503
+         :headers {"Content-Type" "application/json"}
+         :body {:error "Database is currently unavailable"
+                :details "Failed to establish database connection"}}))))
 
 
 ;; Create a single shared session store instance

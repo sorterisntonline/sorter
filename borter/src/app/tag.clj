@@ -122,6 +122,16 @@
         ;; Check if this is an update or a new tag creation
         is-update (boolean tag-id)
 
+        ;; Function to remove namespace from keys
+        remove-ns (fn [m]
+                    (reduce-kv
+                     (fn [acc k v]
+                       (let [new-k (if (namespace k)
+                                     (keyword (name k))
+                                     k)]
+                         (assoc acc new-k v)))
+                     {} m))
+
         ;; Check if tag already exists for this Discord channel
         existing-tag (when (and is-discord-channel
                                 (or has-discord-context
@@ -130,11 +140,11 @@
                                                :where [:and
                                                        [:= :user_name (-> r :session :user_name)]
                                                        [:not= :discord_id nil]]})))
-                       (first (db/exec! {:select :*
-                                         :from :tags
-                                         :where [:and
-                                                 [:= :tags/domain_pk_namespace domain-pk-ns]
-                                                 [:= :tags/domain_pk domain-pk]]})))]
+                       (remove-ns (first (db/exec! {:select :*
+                                                    :from :tags
+                                                    :where [:and
+                                                            [:= :tags/domain_pk_namespace domain-pk-ns]
+                                                            [:= :tags/domain_pk domain-pk]]}))))]
 
     ;; For non-update operations, check if slug already exists in the namespace
     (when (and (not is-update)
@@ -183,14 +193,14 @@
                        ret (db/exec! (-> (h/update :tags)
                                          (h/set update-values)
                                          (h/where [:= :tags/id tag-id])
-                                         (h/returning :*)))]
+                                         (h/returning :*)))
+                       result (remove-ns (first ret))]
                    (log/info "Tag updated:" tag-id)
                    (log/debug "Updated tag result:" ret)
-                   (let [result (first ret)]
-                     ;; Ensure ID is correctly included in response
-                     (if (contains? result :id)
-                       result
-                       (assoc result :id tag-id)))))
+                   ;; Ensure ID is correctly included in response
+                   (if (contains? result :id)
+                     result
+                     (assoc result :id tag-id))))
 
       ;; Case 2: Discord channel tag exists (update)
              (and is-discord-channel existing-tag)
@@ -211,14 +221,14 @@
                        ret (db/exec! (-> (h/update :tags)
                                          (h/set update-values)
                                          (h/where [:= :tags/id existing-id])
-                                         (h/returning :*)))]
+                                         (h/returning :*)))
+                       result (remove-ns (first ret))]
                    (log/info "Discord channel tag updated:" existing-id)
                    (log/debug "Updated Discord channel tag result:" ret)
-                   (let [result (first ret)]
-                     ;; Ensure ID is correctly included in response
-                     (if (contains? result :id)
-                       result
-                       (assoc result :id existing-id)))))
+                   ;; Ensure ID is correctly included in response
+                   (if (contains? result :id)
+                     result
+                     (assoc result :id existing-id))))
 
       ;; Case 3: Create new tag
              :else
@@ -241,7 +251,7 @@
                    ret (db/exec! (-> (h/insert-into :tags)
                                      (h/values [tag-values])
                                      (h/returning :*)))
-                   tag-result (first ret)
+                   tag-result (remove-ns (first ret))
                    tagid (or (:id tag-result) (:tags/id tag-result))]
                (db/exec! (-> (h/insert-into :perms)
                              (h/values (perms/public-permissions tagid))))

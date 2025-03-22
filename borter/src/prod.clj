@@ -33,6 +33,40 @@
       (assoc base-config :handler cider-nrepl-handler))))  ; development: use cider-nrepl-handler
 
 (def server-instance (atom nil))
+(def db-health-checker (atom nil))
+
+(defn start-db-health-checker []
+  (when-not @db-health-checker
+    (let [thread (Thread. 
+                  (fn []
+                    (try
+                      (log/info "Database health checker thread started")
+                      (loop []
+                        (try
+                          (let [db-up (db/check-db-health)
+                                sleep-time (if db-up
+                                             10000  ;; Check every 10 seconds if DB is up
+                                             3000)] ;; Check every 3 seconds if DB is down
+                            (Thread/sleep sleep-time))
+                          (catch Throwable e
+                            (log/warn "Error in database health check:" (.getMessage e))
+                            (Thread/sleep 3000))) ;; Short sleep on error
+                        (recur))
+                      (catch InterruptedException _
+                        (log/info "Database health checker thread interrupted"))
+                      (catch Throwable e
+                        (log/error "Database health checker thread failed:" (.getMessage e)))))
+                  "db-health-checker")]
+      (.setDaemon thread true)
+      (.start thread)
+      (reset! db-health-checker thread)
+      (log/info "Database health checker thread started"))))
+
+(defn stop-db-health-checker []
+  (when @db-health-checker
+    (.interrupt @db-health-checker)
+    (reset! db-health-checker nil)
+    (log/info "Database health checker thread stopped")))
 
 ;; Test logging levels
 (comment
@@ -61,4 +95,17 @@
     (http/start {:port port})
     (log/info "http server started successfully on port" port)
     (catch Exception e
-      (log/error e "failed to start http server"))))
+      (log/error e "failed to start http server")))
+  ;; Start the database health checker
+  (start-db-health-checker))
+
+(defn -shutdown-hook []
+  (log/info "Shutdown hook called, cleaning up resources")
+  (stop-db-health-checker)
+  (when @server-instance
+    (nrepl-server/stop-server @server-instance)
+    (reset! server-instance nil)
+    (log/info "REPL server stopped")))
+
+;; Add JVM shutdown hook to clean up resources
+(.addShutdownHook (Runtime/getRuntime) (Thread. -shutdown-hook))
