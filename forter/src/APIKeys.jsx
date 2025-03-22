@@ -59,7 +59,7 @@ const APIKeys = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch("/api/keys/", {
+      const response = await fetch("/api/keys", {
         method: "GET",
         credentials: "include",
       });

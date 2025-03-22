@@ -113,3 +113,75 @@ npm run dev
 access application at: `http://localhost:3000`
 
 *note: terminal restore configuration requires manual first-time service startup before it can work*
+
+## Docker Compose Development
+
+### Using Docker Compose
+
+1. **Setup environment**:
+```sh
+# Copy sample environment file for development
+cp .env.docker .env
+# Edit the .env file with your preferred settings
+```
+
+2. **Start the development stack**:
+```sh
+docker compose up
+```
+
+This will start:
+- PostgreSQL database
+- Combined forter/borter service
+- rustsorter service
+
+3. **Access the application**:
+- Frontend and API: http://localhost:3000
+- Clojure nREPL: localhost:7888
+- rustsorter API: http://localhost:8081
+
+### Production Deployment
+
+For production deployments, use the production configuration:
+
+1. **Setup production environment**:
+```sh
+# Copy the production environment template
+cp .env.production .env
+# Edit the .env file with your production settings
+```
+
+2. **Start the production stack**:
+```sh
+docker compose -f docker-compose.prod.yml up -d
+```
+
+The production configuration:
+- Secures database access
+- Optimizes for production performance
+- Disables development features
+- Removes unnecessary port exposures
+
+### Environment Configuration
+
+The Docker setup supports three environments:
+- `development`: Default for local development with debugging enabled
+- `staging`: For testing in a production-like environment
+- `production`: For production deployments with optimized settings
+
+Set the `ENVIRONMENT` variable in your .env file to specify which environment to use.
+
+### Using VS Code DevContainers
+
+1. Install the "Dev Containers" extension in VS Code
+2. Open the project folder in VS Code
+3. Click on the green button in the bottom-left corner and select "Reopen in Container"
+4. VS Code will build and start the containers, then open the workspace inside the development container
+
+Benefits:
+- Pre-configured development environment
+- Integrated REPL support for Clojure development
+- Live-reload for frontend development
+- Code running in the same environment as production
+
+## Project Structure

@@ -1,0 +1,159 @@
+services:
+  db:
+    image: postgres:14.1
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/db/init-scripts:/docker-entrypoint-initdb.d
+      - ${PGDUMP_FILE:-./docker/db/empty.sql}:/docker-entrypoint-initdb.d/00-import-data.sql
+      - ./docker/db/always-run.sh:/always-run.sh
+    command: ["bash", "-c", "/always-run.sh & /usr/local/bin/docker-entrypoint.sh postgres"]
+    ports:
+      - "5432:5432"
+    networks:
+      - sorter-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-postgres}"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 10s
+    restart: unless-stopped
+
+  fborter:
+    build:
+      context: .
+      dockerfile: ./docker/fborter/Dockerfile
+    environment:
+      # Environment Type
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      
+      # PostgreSQL
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-postgres}
+      
+      # Development Mode
+      NODE_ENV: ${NODE_ENV:-development}
+      IS_DOCKER: "true"
+      
+      # Hostname and Logging
+      HOSTNAME: ${HOSTNAME:-localhost}
+      BORTER_LOG_PATH: ${BORTER_LOG_PATH:-./logs}
+      BORTER_LOG_LEVEL: ${BORTER_LOG_LEVEL:-debug}
+      
+      # REPL
+      REPL_PASSWORD: ${REPL_PASSWORD:-dev_password}
+      
+      # Linear Integration
+      VITE_LINEAR_CLIENT_ID: ${VITE_LINEAR_CLIENT_ID:-}
+      BORTER_LINEAR_CLIENT_ID: ${BORTER_LINEAR_CLIENT_ID:-}
+      BORTER_LINEAR_CLIENT_SECRET: ${BORTER_LINEAR_CLIENT_SECRET:-}
+      
+      # Spotify Integration
+      VITE_SPOTIFY_CLIENT_ID: ${VITE_SPOTIFY_CLIENT_ID:-}
+      BORTER_SPOTIFY_CLIENT_ID: ${BORTER_SPOTIFY_CLIENT_ID:-}
+      BORTER_SPOTIFY_CLIENT_SECRET: ${BORTER_SPOTIFY_CLIENT_SECRET:-}
+      
+      # Reddit Integration
+      BORTER_REDDIT_CLIENT_ID: ${BORTER_REDDIT_CLIENT_ID:-}
+      BORTER_REDDIT_SECRET: ${BORTER_REDDIT_SECRET:-}
+      
+      # Twitter Integration
+      BORTER_TWITTER_KEY: ${BORTER_TWITTER_KEY:-}
+      BORTER_TWITTER_KEY_SECRET: ${BORTER_TWITTER_KEY_SECRET:-}
+      BORTER_TWITTER_BEARER_TOKEN: ${BORTER_TWITTER_BEARER_TOKEN:-}
+      BORTER_TWITTER_OAUTH_CLIENTID: ${BORTER_TWITTER_OAUTH_CLIENTID:-}
+      BORTER_TWITTER_OAUTH_CLIENTSECRET: ${BORTER_TWITTER_OAUTH_CLIENTSECRET:-}
+      
+      # YouTube Integration
+      VITE_YOUTUBE_CLIENT_ID: ${VITE_YOUTUBE_CLIENT_ID:-}
+      BORTER_YOUTUBE_API_KEY: ${BORTER_YOUTUBE_API_KEY:-}
+      BORTER_YOUTUBE_CLIENT_ID: ${BORTER_YOUTUBE_CLIENT_ID:-}
+      BORTER_YOUTUBE_CLIENT_SECRET: ${BORTER_YOUTUBE_CLIENT_SECRET:-}
+      BORTER_YOUTUBE_REDIRECT_URIS: ${BORTER_YOUTUBE_REDIRECT_URIS:-http://localhost:3000/auth/youtube/callback}
+      BORTER_YOUTUBE_JAVASCRIPT_ORIGINS: ${BORTER_YOUTUBE_JAVASCRIPT_ORIGINS:-http://localhost:3000}
+      
+      # Email Integration
+      BORTER_SENDGRID_API_KEY: ${BORTER_SENDGRID_API_KEY:-}
+      
+      # Admin Configuration
+      BORTER_STATIC_ADMINS: ${BORTER_STATIC_ADMINS:-admin}
+      BORTER_STATIC_API_KEYS: ${BORTER_STATIC_API_KEYS:-dev_api_key}
+      
+      # Development Features
+      AUTO_LOGIN: ${AUTO_LOGIN:-true}
+      NO_RATE_LIMITS: ${NO_RATE_LIMITS:-false}
+      
+      # API URLs
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"  # Main port for accessing both frontend and API
+      - "7888:7888"  # REPL port
+    volumes:
+      # Use more selective volume mounts
+      - ./forter/src:/app/forter/src:cached
+      - ./forter/public:/app/forter/public:cached
+      - ./borter/src:/app/borter/src:cached
+      - ./borter/resources:/app/borter/resources:cached
+      - node_modules:/app/forter/node_modules
+      - borter_target:/app/borter/target
+      - ./logs:/app/borter/logs
+      # Exclude mounting pgdata and mnt_data directories
+      - ./borter/database/config.edn:/app/borter/database/config.edn:cached
+    networks:
+      - sorter-network
+    restart: unless-stopped
+
+  rustsorter:
+    build:
+      context: .
+      dockerfile: ./docker/rustsorter/Dockerfile
+    environment:
+      # Environment Type
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      
+      # PostgreSQL
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-postgres}
+      
+      # Discord Integration
+      DISCORD_TOKEN: ${DISCORD_TOKEN:-}
+      
+      # Development Mode
+      SQLX_OFFLINE: "true"
+      NODE_ENV: ${NODE_ENV:-development}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8081:8081"  # Use port 8081 to match rustsorter port
+    volumes:
+      - ./rustsorter:/usr/src/app:cached
+      - cargo_registry:/usr/local/cargo/registry
+      - cargo_git:/usr/local/cargo/git
+      - cargo_target:/usr/src/app/target
+    networks:
+      - sorter-network
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  node_modules:
+  cargo_registry:
+  cargo_git:
+  cargo_target:
+  borter_target:
+
+networks:
+  sorter-network: 

@@ -1,0 +1,131 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:14.1
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-sorter}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"  # Only expose locally in production
+    networks:
+      - sorter-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-sorter}"]
+      interval: 30s
+      retries: 3
+      start_period: 30s
+      timeout: 10s
+    restart: unless-stopped
+
+  fborter:
+    build:
+      context: .
+      dockerfile: ./docker/fborter/Dockerfile
+      args:
+        NODE_ENV: production
+        ENVIRONMENT: production
+    environment:
+      # Environment Type
+      ENVIRONMENT: production
+      
+      # PostgreSQL
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-sorter}
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-sorter}
+      
+      # Production Mode
+      NODE_ENV: production
+      IS_DOCKER: "true"
+      
+      # Hostname and Logging
+      HOSTNAME: ${HOSTNAME:-localhost}
+      BORTER_LOG_PATH: ${BORTER_LOG_PATH:-/app/borter/logs}
+      BORTER_LOG_LEVEL: ${BORTER_LOG_LEVEL:-info}
+      
+      # REPL
+      REPL_PASSWORD: ${REPL_PASSWORD}
+      
+      # Integration Services
+      VITE_LINEAR_CLIENT_ID: ${VITE_LINEAR_CLIENT_ID}
+      BORTER_LINEAR_CLIENT_ID: ${BORTER_LINEAR_CLIENT_ID}
+      BORTER_LINEAR_CLIENT_SECRET: ${BORTER_LINEAR_CLIENT_SECRET}
+      VITE_SPOTIFY_CLIENT_ID: ${VITE_SPOTIFY_CLIENT_ID}
+      BORTER_SPOTIFY_CLIENT_ID: ${BORTER_SPOTIFY_CLIENT_ID}
+      BORTER_SPOTIFY_CLIENT_SECRET: ${BORTER_SPOTIFY_CLIENT_SECRET}
+      BORTER_REDDIT_CLIENT_ID: ${BORTER_REDDIT_CLIENT_ID}
+      BORTER_REDDIT_SECRET: ${BORTER_REDDIT_SECRET}
+      BORTER_TWITTER_KEY: ${BORTER_TWITTER_KEY}
+      BORTER_TWITTER_KEY_SECRET: ${BORTER_TWITTER_KEY_SECRET}
+      BORTER_TWITTER_BEARER_TOKEN: ${BORTER_TWITTER_BEARER_TOKEN}
+      BORTER_TWITTER_OAUTH_CLIENTID: ${BORTER_TWITTER_OAUTH_CLIENTID}
+      BORTER_TWITTER_OAUTH_CLIENTSECRET: ${BORTER_TWITTER_OAUTH_CLIENTSECRET}
+      VITE_YOUTUBE_CLIENT_ID: ${VITE_YOUTUBE_CLIENT_ID}
+      BORTER_YOUTUBE_API_KEY: ${BORTER_YOUTUBE_API_KEY}
+      BORTER_YOUTUBE_CLIENT_ID: ${BORTER_YOUTUBE_CLIENT_ID}
+      BORTER_YOUTUBE_CLIENT_SECRET: ${BORTER_YOUTUBE_CLIENT_SECRET}
+      BORTER_YOUTUBE_REDIRECT_URIS: ${BORTER_YOUTUBE_REDIRECT_URIS}
+      BORTER_YOUTUBE_JAVASCRIPT_ORIGINS: ${BORTER_YOUTUBE_JAVASCRIPT_ORIGINS}
+      BORTER_SENDGRID_API_KEY: ${BORTER_SENDGRID_API_KEY}
+      
+      # Admin Configuration
+      BORTER_STATIC_ADMINS: ${BORTER_STATIC_ADMINS}
+      BORTER_STATIC_API_KEYS: ${BORTER_STATIC_API_KEYS}
+      
+      # Production settings
+      AUTO_LOGIN: "false"
+      NO_RATE_LIMITS: "false"
+      
+      # API URLs
+      VITE_API_URL: ${VITE_API_URL}
+    depends_on:
+      - db
+    ports:
+      - "3000:3000"  # Main port for accessing both frontend and API
+    networks:
+      - sorter-network
+    restart: unless-stopped
+    volumes:
+      - borter_logs:/app/borter/logs
+
+  rustsorter:
+    build:
+      context: .
+      dockerfile: ./docker/rustsorter/Dockerfile
+      args:
+        NODE_ENV: production
+        ENVIRONMENT: production
+    environment:
+      # Environment Type
+      ENVIRONMENT: production
+      
+      # PostgreSQL
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-sorter}
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-sorter}
+      
+      # Discord Integration
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      
+      # Production Mode
+      SQLX_OFFLINE: "true"
+      NODE_ENV: production
+    depends_on:
+      - db
+    ports:
+      - "8081:8081"  # Use port 8081 to match rustsorter port
+    networks:
+      - sorter-network
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  borter_logs:
+
+networks:
+  sorter-network: 
