@@ -109,10 +109,10 @@ const Root = () => {
             <Switch>
               <Route path="/login"><Login /></Route>
               <Route path="/register"><Register /></Route>
-              <Route path="/authorized"><Authorized /></Route>
+              {/* <Route path="/authorized"><Authorized /></Route>
               <Route path="/noauth"><NoAuth /></Route>
               <Route path="/link-auth0"><LinkAuth0 /></Route>
-              <Route path="/setup-username"><SetupUsername /></Route>
+              <Route path="/setup-username"><SetupUsername /></Route> */}
               <Route path="/feed">
                 {(params) => {
                   tag.value = null;
