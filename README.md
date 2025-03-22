@@ -25,7 +25,7 @@ clojure, rust, and react based pair-wise staunchly democratic social media appli
 sudo apt install -y git curl jq rsync rlwrap pkg-config libssl-dev build-essential openjdk-17-jdk cmake
 
 # node.js v21.x
-curl -fsSL https://deb.nodesource.com/setup_21.x | sudo -E bash -
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs
 
 # rust
