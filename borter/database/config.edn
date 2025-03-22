@@ -1,1 +1,1 @@
-{:jdbc-url "postgres://postgres:password@db:5432/postgres"}
+{:jdbc-url "postgres://postgres:password@localhost:5432/postgres"}

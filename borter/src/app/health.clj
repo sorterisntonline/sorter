@@ -72,8 +72,8 @@
                                     :last_reconnect_attempt (when-let [last-attempt (:last-reconnect-attempt db-status)]
                                                              (.toString (java.time.Instant/ofEpochMilli last-attempt)))}
                          :internal-api {:status (if (:healthy internal-api) "connected" "error")
-                                      :error (:error internal-api)
-                                      :version (:version internal-api)}}]
+                                        :error (:error internal-api)
+                                        :version (:version internal-api)}}]
       (log/info "Health check, db status:" db-health "internal-api status:" (:healthy internal-api))
       ;; Return a properly formatted response
       {:status status-code 

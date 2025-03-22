@@ -1029,11 +1029,22 @@
 (defn error-response [exception request]
   (def exception exception)
   (cond
+    ;; Handle reitit coercion errors
     (and (= (type exception) clojure.lang.ExceptionInfo)
-     (= :reitit.coercion/response-coercion (:type (ex-data exception))))
+         (= :reitit.coercion/response-coercion (:type (ex-data exception))))
     {:status 500
      :body {:exception (read-string (pr-str (first (:errors  (ex-data exception)))))
             :data (:body (:response (ex-data exception)))}}
+    
+    ;; Return ex-data directly if it exists
+    (and (= (type exception) clojure.lang.ExceptionInfo)
+         (ex-data exception))
+    (let [data (ex-data exception)]
+      (if (:status data)
+        {:status (:status data)
+         :body (dissoc data :status)}
+        {:status 500
+         :body data}))
 
     :else
     {:status 500
