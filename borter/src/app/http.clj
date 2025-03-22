@@ -1095,12 +1095,15 @@
 
 (defn wrap-db-health-check [handler]
   (fn [request]
-    (if (db/check-db-health)
+    ;; Skip the database check for the health endpoint
+    (if (= (:uri request) "/api/health")
       (handler request)
-      {:status 503
-       :headers {"Content-Type" "application/json"}
-       :body {:error "Database is currently unavailable"
-              :details "Failed to establish database connection"}})))
+      (if (db/check-db-health)
+        (handler request)
+        {:status 503
+         :headers {"Content-Type" "application/json"}
+         :body {:error "Database is currently unavailable"
+                :details "Failed to establish database connection"}}))))
 
 
 ;; Create a single shared session store instance

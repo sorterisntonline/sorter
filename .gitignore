@@ -1,10 +1,12 @@
 .clj-kondo
 .cursorrules
 .DS_Store
-.env
+.env*
+!.env.example
 .cursorignore
 .lsp
 repomix-output.txt
 
 !.clj-kondo/config.edn
 all.txt
+
