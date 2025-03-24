@@ -38,4 +38,4 @@ pytest --cov=. --cov-report=term-missing
 
 ## test documentation
 
-see [docs.md](docs.md) for more information on the test structure and available fixtures. 
+see [docs.md](docs.md) for more information on the test structure and available fixtures.

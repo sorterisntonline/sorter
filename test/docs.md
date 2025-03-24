@@ -67,4 +67,4 @@ the following fixtures are available:
 - **test_password**: a password for testing
 - **check_borter_config**: an automatic fixture that checks if borter is running correctly
 
-these are defined in `conftest.py` 
+these are defined in `conftest.py`

@@ -1,0 +1,17 @@
+{
+  "deprecateTypingAliases": true,
+  "reportCallInDefaultInitializer": true,
+  "reportImplicitOverride": true,
+  "reportImportCycles": true,
+  "reportMissingSuperCall": true,
+  "reportPropertyTypeMismatch": true,
+  "reportShadowedImports": true,
+  "reportUninitializedInstanceVariable": true,
+  "reportUnknownArgumentType": true,
+  "reportUnknownMemberType": true,
+  "reportUnknownParameterType": true,
+  "reportUnknownVariableType": true,
+  "reportUnnecessaryTypeIgnoreComment": true,
+  "strict": ["**"],
+  "typeCheckingMode": "strict"
+}
