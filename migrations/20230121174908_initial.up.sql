@@ -32,7 +32,7 @@ CREATE TABLE users_in_groups (
 	   role_id integer REFERENCES roles(id),
 
 	   PRIMARY KEY (user_id, group_id, role_id)
-)
+);
 --;;
 CREATE TABLE items (
 	   id SERIAL PRIMARY KEY,
@@ -54,7 +54,7 @@ CREATE TABLE items (
 
 	   UNIQUE (domain_pk_namespace, domain_pk),
 	   CHECK (length(title) > 1)
-)
+);
 --;;
 CREATE TABLE attributes (
 	   id SERIAL PRIMARY KEY,
@@ -65,7 +65,7 @@ CREATE TABLE attributes (
 
 	   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
 	   edited_at TIMESTAMP NOT NULL DEFAULT NOW()
-)
+);
 --;;
 CREATE TABLE votes (
 	   id SERIAL PRIMARY KEY,
@@ -79,5 +79,5 @@ CREATE TABLE votes (
 
 	   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
 	   edited_at TIMESTAMP NOT NULL DEFAULT NOW()
-)
+);
 --;;

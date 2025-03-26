@@ -15,7 +15,7 @@ CREATE TABLE tags (
 
 	   UNIQUE (domain_pk_namespace, domain_pk),
 	   CHECK (length(title) > 1)
-)
+);
 --;;
 CREATE TABLE items_in_tags (
 	   item_id integer REFERENCES items(id) NOT NULL,
@@ -23,4 +23,4 @@ CREATE TABLE items_in_tags (
 	   status integer NOT NULL DEFAULT 0,
 
 	   PRIMARY KEY (item_id, tag_id)
-)
+);
