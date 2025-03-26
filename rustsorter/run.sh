@@ -4,4 +4,4 @@
 pkill -f "rustsorter"
 
 # Run new instance
-cargo run
+cargo run --release
