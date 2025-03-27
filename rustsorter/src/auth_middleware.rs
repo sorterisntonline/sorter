@@ -1,6 +1,6 @@
 // src/auth_middleware.rs
 use crate::{
-    AppState,
+    models::AppState,
     api_key::{find_active_key_by_hash, get_user_by_username, hash_api_key, User},
 };
 use actix_web::{

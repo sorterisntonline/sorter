@@ -217,7 +217,7 @@ impl From<anyhow::Error> for ApiKeyError {
 #[get("/")]
 async fn list_keys(
     req: actix_web::HttpRequest,
-    data: web::Data<crate::AppState>,
+    data: web::Data<crate::models::AppState>,
 ) -> Result<HttpResponse, ApiKeyError> {
     // Extract user from request extensions (inserted by middleware)
     let user = req.extensions().get::<User>().cloned().ok_or(ApiKeyError::Unauthorized)?;
@@ -239,7 +239,7 @@ async fn list_keys(
 #[post("/")]
 async fn create_key(
     req: actix_web::HttpRequest,
-    data: web::Data<crate::AppState>,
+    data: web::Data<crate::models::AppState>,
     payload: web::Json<CreateKeyRequest>,
 ) -> Result<HttpResponse, ApiKeyError> {
     let user = req.extensions().get::<User>().cloned().ok_or(ApiKeyError::Unauthorized)?;
@@ -289,7 +289,7 @@ async fn create_key(
 #[post("/revoke")]
 async fn revoke_key(
     req: actix_web::HttpRequest,
-    data: web::Data<crate::AppState>,
+    data: web::Data<crate::models::AppState>,
     payload: web::Json<KeyNameRequest>,
 ) -> Result<HttpResponse, ApiKeyError> {
     let user = req.extensions().get::<User>().cloned().ok_or(ApiKeyError::Unauthorized)?;
@@ -313,7 +313,7 @@ async fn revoke_key(
 #[post("/regenerate")]
 async fn regenerate_key(
     req: actix_web::HttpRequest,
-    data: web::Data<crate::AppState>,
+    data: web::Data<crate::models::AppState>,
     payload: web::Json<KeyNameRequest>,
 ) -> Result<HttpResponse, ApiKeyError> {
      let user = req.extensions().get::<User>().cloned().ok_or(ApiKeyError::Unauthorized)?;

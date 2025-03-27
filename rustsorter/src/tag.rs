@@ -6,7 +6,7 @@ use std::{
 use actix_web::{HttpResponse, Responder, get, web};
 use sqlx::types::chrono;
 
-use crate::models::{Tag, Item, SortedItem, Vote, Skip, Attribute, User, UserDb, Perms};
+use crate::models::{Tag, Item, SortedItem, Vote, Skip, Attribute, User, UserDb, Perms, AppState};
 
 #[derive(serde::Deserialize, Debug)]
 struct TagInfo {
@@ -62,8 +62,9 @@ async fn get_items_from_tagid(tag_id: i32, db: &sqlx::PgPool) -> Vec<Item> {
     return items;
 }
 
+
 #[get("/api/tag/page")]
-pub async fn hello(data: web::Data<crate::AppState>, info: web::Query<TagInfo>) -> impl Responder {
+pub async fn hello(data: web::Data<AppState>, info: web::Query<TagInfo>) -> impl Responder {
     let items = get_items_from_tagid(info.id.expect("Tag ID should be present"), &data.db).await;
 
     let tag = if info.namespace == None {
