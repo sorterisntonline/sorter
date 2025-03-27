@@ -27,7 +27,7 @@ async fn health() -> HttpResponse {
 }
 
 // Add new protected route
-#[get("/api/protected")]
+#[get("/protected")]
 async fn protected_route(req: actix_web::HttpRequest) -> Result<HttpResponse, Error> {
     if let Some(user) = req.extensions().get::<models::User>() {
         Ok(HttpResponse::Ok().json(json!({

@@ -6,7 +6,7 @@ use std::{
 use actix_web::{HttpResponse, Responder, get, web};
 use sqlx::types::chrono;
 
-use crate::models::{Tag, Item, SortedItem, Vote, Skip, Attribute, User, UserDb, Perms, AppState};
+use crate::models::{Tag, Item, SortedItem, Vote, Skip, Attribute, User, Perms, AppState};
 
 #[derive(serde::Deserialize, Debug)]
 struct TagInfo {
@@ -39,6 +39,12 @@ struct TagPageResponse<'a> {
 struct GroupUser {
     user_id: String,
     usergroup_id: String,
+}
+
+#[derive(sqlx::FromRow)]
+struct UserGroupJoin {
+    user_name: String,
+    owner: Option<String>,
 }
 
 async fn get_items_from_tagid(tag_id: i32, db: &sqlx::PgPool) -> Vec<Item> {
@@ -312,12 +318,13 @@ pub async fn hello(data: web::Data<AppState>, info: web::Query<TagInfo>) -> impl
         .into_iter()
         .map(|x| User {
             user_name: x,
-            owner: None,
+            email: None,
+            email_verified: None,
         })
         .collect::<Vec<_>>();
 
     let groups_who_voted = sqlx::query_as!(
-        UserDb,
+        UserGroupJoin,
         "SELECT DISTINCT user_name, owner FROM users_in_usergroups INNER JOIN usergroups ON \
          user_name = usergroup_id WHERE user_id = ANY($1)",
         &users_who_voted
@@ -331,7 +338,8 @@ pub async fn hello(data: web::Data<AppState>, info: web::Query<TagInfo>) -> impl
 
     users_who_voted.extend(groups_who_voted.iter().map(|x| User {
         user_name: x.user_name.clone(),
-        owner: Some(x.owner.clone()),
+        email: None,
+        email_verified: None,
     }));
 
     let skips = match &info.user_name {

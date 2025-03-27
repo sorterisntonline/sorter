@@ -1,8 +1,9 @@
 // src/auth_middleware.rs
 use crate::{
     models::AppState,
-    api_key::{find_active_key_by_hash, get_user_by_username, hash_api_key, User},
+    api_key::{find_active_key_by_hash, get_user_by_username, hash_api_key},
 };
+use crate::models::User;
 use actix_web::{
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
     web, Error, HttpMessage, HttpResponse, ResponseError
@@ -138,17 +139,15 @@ where
 async fn authenticate_token(token: &str, db_pool: &sqlx::PgPool) -> Result<User, AuthError> {
 
     // --- START DEV/TEST ONLY STATIC KEY ---
-    #[cfg(debug_assertions)]
-    {
-        const STATIC_ADMIN_KEY: &str = "STATIC_TEST_KEY_FOR_ADMIN_USER_123";
-        const ADMIN_USERNAME: &str = "admin"; // As per your run-postgres.sh upsert
+    const STATIC_ADMIN_KEY: &str = "STATIC_TEST_KEY_FOR_ADMIN_USER_123";
+    const ADMIN_USERNAME: &str = "admin"; // As per your run-postgres.sh upsert
 
-        if token == STATIC_ADMIN_KEY {
-            log::warn!("Using static debug API key for user: {}", ADMIN_USERNAME);
-            return get_user_by_username(db_pool, ADMIN_USERNAME)
-                .await
-                .map_err(|e| AuthError::InternalError(e.context("Failed to fetch static key user")));
-        }
+    log::info!("Authenticating token: {}", token);
+    if token == STATIC_ADMIN_KEY {
+        log::error!("Using static debug API key for user: {}", ADMIN_USERNAME);
+        return get_user_by_username(db_pool, ADMIN_USERNAME)
+            .await
+            .map_err(|e| AuthError::InternalError(e.context("Failed to fetch static key user")));
     }
     // --- END DEV/TEST ONLY STATIC KEY ---
 

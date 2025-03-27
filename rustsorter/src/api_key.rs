@@ -6,15 +6,7 @@ use rand::{distributions::Alphanumeric, Rng};
 use bcrypt::{hash, DEFAULT_COST};
 use anyhow::{Result, Context};
 use sqlx::PgPool;
-
-#[derive(Serialize, FromRow, Debug, Clone)]
-pub struct User {
-    pub user_name: String,
-    pub email: Option<String>,
-    pub email_verified: Option<bool>, // Made optional for simplicity if not always needed
-}
-
-// Represents the data stored in the DB
+use crate::models::User;
 #[derive(FromRow, Debug)]
 pub struct ApiKeyDb {
     pub id: i32,

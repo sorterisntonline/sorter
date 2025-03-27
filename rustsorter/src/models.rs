@@ -123,16 +123,13 @@ pub struct Attribute {
     pub votes: i32,
 }
 
-#[derive(sqlx::FromRow, serde::Serialize, Debug)]
-pub struct UserDb {
-    pub user_name: String,
-    pub owner: String,
-}
-
-#[derive(sqlx::FromRow, serde::Serialize, Debug)]
+#[derive(sqlx::FromRow, serde::Serialize, Debug, Clone)]
 pub struct User {
     pub user_name: String,
 
     #[sqlx(default)]
-    pub owner: Option<String>,
+    pub email: Option<String>,
+
+    #[sqlx(default)]
+    pub email_verified: Option<bool>,
 }
