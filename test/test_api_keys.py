@@ -26,7 +26,7 @@ async def test_health_endpoint():
 
 
 @pytest.mark.asyncio
-@pytest.mark.dependency(depends=["test_health_endpoint"])
+@pytest.mark.dependency()
 class TestApiKeyFlow:
     # Class variables to store state between dependent tests
     created_key_name: str | None = None
@@ -57,6 +57,7 @@ class TestApiKeyFlow:
 
     # --- Authentication Tests ---
 
+    @pytest.mark.dependency()
     @pytest.mark.dependency(depends=["test_health_endpoint"])
     async def test_protected_route_no_auth(self):
         """Tests accessing a protected route without any authentication."""
@@ -64,6 +65,7 @@ class TestApiKeyFlow:
         assert response.status_code == 401
         assert "No authentication credentials" in response.json().get("error", "")
 
+    @pytest.mark.dependency()
     @pytest.mark.dependency(depends=["test_health_endpoint"])
     async def test_protected_route_invalid_key(self):
         """Tests accessing a protected route with an invalid key."""
@@ -72,6 +74,7 @@ class TestApiKeyFlow:
         assert response.status_code == 401
         assert "Invalid or expired API key" in response.json().get("error", "")
 
+    @pytest.mark.dependency()
     @pytest.mark.dependency(depends=["test_health_endpoint"])
     async def test_protected_route_static_key(self):
         """Tests accessing a protected route using the static debug key."""
@@ -83,7 +86,8 @@ class TestApiKeyFlow:
 
     # --- CRUD Tests ---
 
-    @pytest.mark.dependency(depends=["test_protected_route_static_key"])
+    @pytest.mark.dependency()
+    @pytest.mark.dependency(depends=["TestApiKeyFlow::test_protected_route_static_key"])
     async def test_create_key_success(self):
         """Tests successfully creating a new API key."""
         key_name = f"test_key_{uuid.uuid4()}"
@@ -104,7 +108,8 @@ class TestApiKeyFlow:
         TestApiKeyFlow.created_plain_text_key = data["api_key"]
         print(f"Created key: Name='{key_name}', Key='{data['api_key']}'") # Log for debugging
 
-    @pytest.mark.dependency(depends=["test_create_key_success"])
+    @pytest.mark.dependency()
+    @pytest.mark.dependency(depends=["TestApiKeyFlow::test_create_key_success"])
     async def test_create_key_conflict(self):
         """Tests trying to create a key with a name that already exists."""
         assert TestApiKeyFlow.created_key_name is not None, "Dependency test_create_key_success must run first"
@@ -113,7 +118,8 @@ class TestApiKeyFlow:
         assert response.status_code == 409 # Conflict
         assert "already exists" in response.json().get("error", "").lower()
 
-    @pytest.mark.dependency(depends=["test_protected_route_static_key"])
+    @pytest.mark.dependency()
+    @pytest.mark.dependency(depends=["TestApiKeyFlow::test_protected_route_static_key"])
     async def test_create_key_invalid_name_empty(self):
         """Tests creating a key with an empty name."""
         payload = {"name": ""}
@@ -121,7 +127,8 @@ class TestApiKeyFlow:
         assert response.status_code == 400 # Bad Request
         assert "Invalid key name" in response.json().get("error", "")
 
-    @pytest.mark.dependency(depends=["test_create_key_success"])
+    @pytest.mark.dependency()
+    @pytest.mark.dependency(depends=["TestApiKeyFlow::test_create_key_success"])
     async def test_list_keys(self):
         """Tests listing the API keys for the user."""
         assert TestApiKeyFlow.created_key_name is not None, "Dependency test_create_key_success must run first"
@@ -151,7 +158,8 @@ class TestApiKeyFlow:
 
         assert found_key, f"Newly created key '{TestApiKeyFlow.created_key_name}' not found in list"
 
-    @pytest.mark.dependency(depends=["test_create_key_success"])
+    @pytest.mark.dependency()
+    @pytest.mark.dependency(depends=["TestApiKeyFlow::test_create_key_success"])
     async def test_protected_route_real_key(self):
         """Tests accessing a protected route using the newly created real API key."""
         assert TestApiKeyFlow.created_plain_text_key is not None, "Need plain text key from creation test"
@@ -163,7 +171,8 @@ class TestApiKeyFlow:
         assert data.get("authenticated_user") == "admin"
         # Check that last_used_at was likely updated (hard to assert time exactly)
 
-    @pytest.mark.dependency(depends=["test_protected_route_real_key"])
+    @pytest.mark.dependency()
+    @pytest.mark.dependency(depends=["TestApiKeyFlow::test_protected_route_real_key"])
     async def test_regenerate_key_success(self):
         """Tests regenerating an existing API key."""
         assert TestApiKeyFlow.created_key_name is not None, "Need key name from creation test"
@@ -183,7 +192,8 @@ class TestApiKeyFlow:
         TestApiKeyFlow.regenerated_plain_text_key = data["api_key"]
         print(f"Regenerated key: Name='{TestApiKeyFlow.created_key_name}', New Key='{data['api_key']}'")
 
-    @pytest.mark.dependency(depends=["test_regenerate_key_success"])
+    @pytest.mark.dependency()
+    @pytest.mark.dependency(depends=["TestApiKeyFlow::test_regenerate_key_success"])
     async def test_regenerate_old_key_fails(self):
         """Tests that the OLD key no longer works after regeneration."""
         assert TestApiKeyFlow.created_plain_text_key is not None, "Need old plain text key"
@@ -192,7 +202,8 @@ class TestApiKeyFlow:
         assert response.status_code == 401 # Should be unauthorized now
         assert "Invalid or expired API key" in response.json().get("error", "")
 
-    @pytest.mark.dependency(depends=["test_regenerate_key_success"])
+    @pytest.mark.dependency()
+    @pytest.mark.dependency(depends=["TestApiKeyFlow::test_regenerate_key_success"])
     async def test_regenerate_new_key_works(self):
         """Tests that the NEW key works after regeneration."""
         assert TestApiKeyFlow.regenerated_plain_text_key is not None, "Need regenerated plain text key"
@@ -203,7 +214,8 @@ class TestApiKeyFlow:
         assert "Hello, admin!" in data.get("message", "")
         assert data.get("authenticated_user") == "admin"
 
-    @pytest.mark.dependency(depends=["test_protected_route_static_key"])
+    @pytest.mark.dependency()
+    @pytest.mark.dependency(depends=["TestApiKeyFlow::test_protected_route_static_key"])
     async def test_regenerate_nonexistent_key_creates(self):
         """Tests regenerating a non-existent key name (should create it based on current Rust impl)."""
         key_name = f"nonexistent_then_created_{uuid.uuid4()}"
@@ -219,7 +231,8 @@ class TestApiKeyFlow:
         await self.make_request("POST", "/keys/revoke", headers=STATIC_ADMIN_AUTH_HEADER, json_payload=revoke_payload)
 
 
-    @pytest.mark.dependency(depends=["test_regenerate_new_key_works"])
+    @pytest.mark.dependency()
+    @pytest.mark.dependency(depends=["TestApiKeyFlow::test_regenerate_new_key_works"])
     async def test_revoke_key_success(self):
         """Tests revoking the currently active (regenerated) key."""
         assert TestApiKeyFlow.created_key_name is not None, "Need key name"
@@ -228,7 +241,8 @@ class TestApiKeyFlow:
         assert response.status_code == 200
         assert "revoked successfully" in response.json().get("message", "")
 
-    @pytest.mark.dependency(depends=["test_revoke_key_success"])
+    @pytest.mark.dependency()
+    @pytest.mark.dependency(depends=["TestApiKeyFlow::test_revoke_key_success"])
     async def test_revoke_key_fails_auth(self):
         """Tests that the revoked key no longer works for authentication."""
         assert TestApiKeyFlow.regenerated_plain_text_key is not None, "Need revoked plain text key"
@@ -237,7 +251,8 @@ class TestApiKeyFlow:
         assert response.status_code == 401 # Should be unauthorized now
         assert "Invalid or expired API key" in response.json().get("error", "")
 
-    @pytest.mark.dependency(depends=["test_revoke_key_success"])
+    @pytest.mark.dependency()
+    @pytest.mark.dependency(depends=["TestApiKeyFlow::test_revoke_key_success"])
     async def test_revoke_already_revoked_key(self):
         """Tests trying to revoke a key that has already been revoked."""
         assert TestApiKeyFlow.created_key_name is not None, "Need key name"
@@ -246,7 +261,8 @@ class TestApiKeyFlow:
         assert response.status_code == 404 # Not Found (as no *active* key with that name exists)
         assert "not found" in response.json().get("error", "").lower()
 
-    @pytest.mark.dependency(depends=["test_protected_route_static_key"])
+    @pytest.mark.dependency()
+    @pytest.mark.dependency(depends=["TestApiKeyFlow::test_protected_route_static_key"])
     async def test_revoke_nonexistent_key(self):
         """Tests trying to revoke a key name that never existed."""
         payload = {"name": f"does_not_exist_{uuid.uuid4()}"}
@@ -254,6 +270,7 @@ class TestApiKeyFlow:
         assert response.status_code == 404 # Not Found
         assert "not found" in response.json().get("error", "").lower()
 
+    @pytest.mark.dependency()
     @pytest.mark.dependency(depends=["test_revoke_key_success"])
     async def test_list_keys_after_revoke(self):
         """Tests listing keys again to check the status of the revoked key."""
