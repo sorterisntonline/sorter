@@ -7,6 +7,8 @@ use actix_web::{HttpResponse, Responder, get, web};
 use sqlx::types::chrono;
 use crate::AppState;
 
+use crate::models::{Tag, Item, SortedItem, Vote, Skip, Attribute, User, UserDb, Perms};
+
 #[derive(serde::Deserialize, Debug)]
 struct TagInfo {
     id: Option<i32>,
@@ -19,138 +21,6 @@ struct TagInfo {
     namespace: Option<String>,
 }
 
-#[derive(sqlx::FromRow, Debug, serde::Serialize)]
-pub struct Tag {
-    pub id: i32,
-    pub owner: String,
-    pub title: String,
-    pub slug: String,
-    pub description: Option<String>,
-    pub domain_pk: Option<String>,
-    pub domain_pk_namespace: Option<String>,
-    pub domain_url: Option<String>,
-    pub ns: Option<String>,
-    pub created_at: chrono::NaiveDateTime,
-    pub edited_at: chrono::NaiveDateTime,
-    pub unlisted: bool,
-    pub nsfw: bool,
-    pub hide_item_authors: bool,
-}
-
-#[derive(sqlx::FromRow, Debug)]
-struct ItemsInTag {
-    item_id: i32,
-    tag_id: i32,
-    status: i32,
-}
-
-#[derive(sqlx::FromRow, Debug, serde::Serialize, Clone)]
-pub struct Item {
-    pub id: i32,
-    pub owner: String,
-    pub title: String,
-    pub slug: String,
-    pub body: Option<String>,
-    pub domain_pk: Option<String>,
-    pub domain_pk_namespace: Option<String>,
-    pub url: Option<String>,
-    pub created_at: chrono::NaiveDateTime,
-    pub edited_at: chrono::NaiveDateTime,
-
-    #[sqlx(default)]
-    pub num_comments: Option<i64>,
-}
-
-#[derive(Debug, serde::Serialize, Clone, PartialEq)]
-pub struct SortedItem {
-    pub id: i32,
-    pub owner: String,
-    pub title: String,
-    pub slug: String,
-    pub body: Option<String>,
-    pub domain_pk: Option<String>,
-    pub domain_pk_namespace: Option<String>,
-    pub url: Option<String>,
-    pub created_at: chrono::NaiveDateTime,
-    pub edited_at: chrono::NaiveDateTime,
-    pub elo: f32,
-    pub vote_count: i32,
-
-    pub num_comments: Option<i64>,
-}
-
-impl From<SortedItem> for Item {
-    fn from(item: SortedItem) -> Self {
-        Item {
-            id: item.id,
-            owner: item.owner,
-            title: item.title,
-            slug: item.slug,
-            body: item.body,
-            domain_pk: item.domain_pk,
-            domain_pk_namespace: item.domain_pk_namespace,
-            url: item.url,
-            created_at: item.created_at,
-            edited_at: item.edited_at,
-            num_comments: item.num_comments,
-        }
-    }
-}
-
-#[derive(sqlx::FromRow, Debug, serde::Serialize, Clone)]
-pub struct Vote {
-    pub id: i32,
-    pub owner: String,
-    pub left_item_id: i32,
-    pub right_item_id: i32,
-    pub magnitude: i32,
-    pub attribute: i32,
-
-    pub created_at: chrono::NaiveDateTime,
-    pub edited_at: chrono::NaiveDateTime,
-}
-
-#[derive(sqlx::FromRow, Debug)]
-pub struct Skip {
-    pub owner: String,
-    pub item_id: i32,
-}
-
-#[derive(serde::Serialize)]
-struct Perms {
-    can_vote: bool,
-    can_add: bool,
-    can_view: bool,
-}
-
-#[derive(sqlx::FromRow, serde::Serialize, Debug)]
-struct Attribute {
-    id: i32,
-    owner: String,
-
-    title: String,
-    description: Option<String>,
-
-    created_at: chrono::NaiveDateTime,
-    edited_at: chrono::NaiveDateTime,
-
-    #[sqlx(default)]
-    votes: i32,
-}
-
-#[derive(sqlx::FromRow, serde::Serialize, Debug)]
-struct UserDb {
-    user_name: String,
-    owner: String,
-}
-
-#[derive(sqlx::FromRow, serde::Serialize, Debug)]
-struct User {
-    user_name: String,
-
-    #[sqlx(default)]
-    owner: Option<String>,
-}
 
 #[derive(serde::Serialize)]
 struct TagPageResponse<'a> {
@@ -193,67 +63,9 @@ async fn get_items_from_tagid(tag_id: i32, db: &sqlx::PgPool) -> Vec<Item> {
     return items;
 }
 
-async fn get_items_from_namespace(namespace: String, db: &sqlx::PgPool) -> Vec<Item> {
-    sqlx::query_as::<_, Item>("SELECT * FROM items WHERE domain_pk_namespace = $1")
-        .bind(namespace)
-        .fetch_all(db)
-        .await
-        .expect("Unable to fetch data from database")
-}
-
-async fn get_tags_as_items(db: &sqlx::PgPool) -> Vec<Item> {
-    let tags = sqlx::query_as::<_, Tag>("SELECT * FROM tags")
-        .fetch_all(db)
-        .await
-        .expect("Unable to fetch data from database");
-    let mut items: Vec<Item> = vec![];
-    for tag in tags.iter() {
-        // get item with domain_pk_namespace = "sorter.tag", and domain_pk = tag.id
-        // if that doesn't exist, create it
-        // return the item
-        let item = sqlx::query_as::<_, Item>(
-            "SELECT * FROM items WHERE domain_pk_namespace = 'sorter.tag' AND domain_pk = $1::text",
-        )
-        .bind(tag.id.to_string())
-        .fetch_optional(db)
-        .await
-        .expect("Unable to fetch data from database");
-
-        if item.is_none() {
-            // create it
-            let item = sqlx::query_as::<_, Item>(
-                "INSERT INTO items (owner, title, slug, domain_pk, domain_pk_namespace) VALUES \
-                 ($1, $2, $3, $4::text, $5) RETURNING *",
-            )
-            .bind("---")
-            .bind(tag.title.clone())
-            .bind(tag.slug.clone())
-            .bind(tag.id.to_string())
-            .bind("sorter.tag")
-            .fetch_one(db)
-            .await
-            .expect("Unable to insert data into database");
-            items.push(item);
-        } else {
-            items.push(item.unwrap());
-        }
-    }
-    return items;
-}
-
 #[get("/api/tag/page")]
 pub async fn hello(data: web::Data<crate::AppState>, info: web::Query<TagInfo>) -> impl Responder {
-    let items = if info.namespace == None {
-        get_items_from_tagid(info.id.expect("Tag ID should be present"), &data.db).await
-    } else if info.namespace == Some("tag-hierarchy".to_string()) {
-        get_tags_as_items(&data.db).await
-    } else {
-        get_items_from_namespace(
-            info.namespace.clone().expect("Namespace should be present"),
-            &data.db,
-        )
-        .await
-    };
+    let items = get_items_from_tagid(info.id.expect("Tag ID should be present"), &data.db).await;
 
     let tag = if info.namespace == None {
         sqlx::query_as::<_, Tag>("SELECT * FROM tags WHERE id = $1")

@@ -4,7 +4,7 @@ use graph::wcc::UnionFind;
 use graph_builder::{DirectedCsrGraph, Graph, index::Idx};
 use rand::seq::{IteratorRandom, SliceRandom};
 
-use crate::tag::{Item, Skip, SortedItem, Vote};
+use crate::models::{Item, Skip, SortedItem, Vote};
 
 // TODO check for pinned
 // TODO check for A A or B B pairs
@@ -255,7 +255,7 @@ mod tests {
     use crate::{
         pagerank,
         pair::pair,
-        tag::{Item, SortedItem, Vote},
+        models::{Item, SortedItem, Vote},
     };
 
     fn vote_correctly_alphabet(left: &Item, right: &Item) -> Vote {

@@ -3,6 +3,8 @@ use std::{collections::HashSet, hash::Hash};
 use actix_session::Session;
 use actix_web::{HttpResponse, Responder, delete, get, post, web};
 
+use crate::models::Tag;
+
 #[derive(serde::Deserialize, Debug)]
 struct PermissionsParams {
     tag_id: i32,
@@ -52,7 +54,7 @@ struct UsersInUsergroup {
 
 pub async fn can(
     action: &str,
-    tag: &crate::tag::Tag,
+    tag: &Tag,
     user_id: &Option<String>,
     db: &sqlx::PgPool,
 ) -> bool {
