@@ -68,14 +68,12 @@ async fn main() -> Result<(), anyhow::Error> {
             .service(health)
             // Protected API Key Management Routes
             .service(
-                web::scope("/api/keys")
-                    .wrap(ApiKeyAuth)
-                    .configure(rustsorter::api_key::config)
-            )
-            // Other Protected API Routes
-            .service(
                 web::scope("/api")
                     .wrap(ApiKeyAuth)
+                    .service(
+                        web::scope("/keys")
+                            .configure(rustsorter::api_key::config)
+                    )
                     .service(protected_route)
                     .service(feed::feed)
             )

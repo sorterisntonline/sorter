@@ -228,7 +228,7 @@ async fn list_keys(
 }
 
 // POST /api/keys - Create a new API key
-#[post("/")]
+#[post("")]
 async fn create_key(
     req: actix_web::HttpRequest,
     data: web::Data<crate::models::AppState>,
