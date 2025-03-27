@@ -142,6 +142,9 @@ pub async fn find_active_key_by_hash(pool: &PgPool, hashed_key: &str) -> Result<
             tx.commit().await.context("Failed to commit transaction")?;
             Ok(k)
         }
-        None => Err(anyhow::anyhow!("API key not found or not active")),
+        None => {
+            tx.rollback().await.context("Failed to rollback transaction")?;
+            Err(anyhow::anyhow!("API key not found or not active"))
+        }
     }
 }
