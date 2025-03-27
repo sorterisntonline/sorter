@@ -13,6 +13,7 @@ use dotenv::dotenv;
 use serde_json::json;
 use tokio;
 use rustsorter::auth_middleware::ApiKeyAuth;
+use rustsorter::models::User;
 
 
 
@@ -29,7 +30,7 @@ async fn health() -> HttpResponse {
 // Add new protected route
 #[get("/protected")]
 async fn protected_route(req: actix_web::HttpRequest) -> Result<HttpResponse, Error> {
-    if let Some(user) = req.extensions().get::<models::User>() {
+    if let Some(user) = req.extensions().get::<User>() {
         Ok(HttpResponse::Ok().json(json!({
             "message": format!("Hello, {}! This is a protected route.", user.user_name),
             "authenticated_user": user.user_name

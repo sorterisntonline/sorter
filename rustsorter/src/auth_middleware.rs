@@ -121,6 +121,7 @@ where
             match user_result {
                 Ok(user) => {
                     // Insert user into request extensions
+                    log::info!("Inserting user into request extensions: {}", user.user_name);
                     req.extensions_mut().insert(user);
                     // Call the next service
                     service.call(req).await
