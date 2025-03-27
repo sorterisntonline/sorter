@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use rayon::prelude::*;
 use rand::seq::SliceRandom;
-use rustsorter::tag::{Item, SortedItem, Vote};
+use rustsorter::models::{Item, Vote};
 
 fn get_vote_weight(left: &Item, right: &Item) -> i32 {
     let max_dist = 25.0; // Maximum possible distance (Z-A)
