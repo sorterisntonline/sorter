@@ -345,7 +345,7 @@ class TestApiKeyFlow:
         assert "not found" in response.json().get("error", "").lower()
 
     @pytest.mark.dependency()
-    @pytest.mark.dependency(depends=["test_revoke_key_success"])
+    @pytest.mark.dependency(depends=["TestApiKeyFlow::test_revoke_key_success"])
     async def test_list_keys_after_revoke(self):
         """Tests listing keys again to check the status of the revoked key."""
         assert TestApiKeyFlow.created_key_name is not None, "Need key name"

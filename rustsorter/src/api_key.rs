@@ -142,7 +142,7 @@ impl From<sqlx::Error> for ApiKeyError {
         if let sqlx::Error::Database(db_err) = &err {
              if db_err.is_unique_violation() {
                  // Check common unique constraints related to API keys
-                 if db_err.constraint() == Some("api_keys_user_name_name_active_key") {
+                 if db_err.constraint() == Some("api_keys_user_name_name_active_key_idx") {
                     return ApiKeyError::Conflict("An active key with this name already exists.".to_string());
                  }
                  if db_err.constraint() == Some("api_keys_key_identifier_key") { // Assuming a UNIQUE constraint on key_identifier
@@ -397,7 +397,7 @@ async fn revoke_key(
         Err(sqlx_err) => {
              // Explicitly check if the error is the specific unique constraint violation
              if let sqlx::Error::Database(db_err) = &sqlx_err {
-                 if db_err.is_unique_violation() && db_err.constraint() == Some("api_keys_user_name_name_active_key") {
+                 if db_err.is_unique_violation() && db_err.constraint() == Some("api_keys_user_name_name_active_key_idx") {
                      // This specific error is unexpected during revoke. Log detailed info and return 500.
                      log::error!(
                          "Unexpected unique constraint violation ('{}') during key revocation for user '{}', name '{}'. This likely indicates a DB schema issue or inconsistent state. DB Error: {}",
