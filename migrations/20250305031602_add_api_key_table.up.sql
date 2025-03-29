@@ -6,8 +6,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
   hashed_key TEXT NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   last_used_at TIMESTAMP,
-  active BOOLEAN NOT NULL DEFAULT TRUE,
-  UNIQUE(user_name, name, active)
+  active BOOLEAN NOT NULL DEFAULT TRUE
 );
 
 --;;
@@ -21,3 +20,8 @@ CREATE INDEX idx_api_keys_user_name ON api_keys(user_name, active);
 -- New index for the key_identifier column
 CREATE INDEX idx_api_keys_key_identifier ON api_keys(key_identifier);
 --;;
+
+-- Ensure only one *active* key with a given name exists per user
+CREATE UNIQUE INDEX api_keys_user_name_name_active_key_idx
+ON api_keys (user_name, name)
+WHERE active = TRUE;

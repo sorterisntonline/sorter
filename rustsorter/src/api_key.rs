@@ -372,21 +372,51 @@ async fn revoke_key(
     let user = req.extensions().get::<User>().cloned().ok_or(ApiKeyError::Unauthorized)?;
     log::debug!("Authenticated user for revoke_key: {}", user.user_name);
 
-    let result = sqlx::query!(
+    // Explicitly handle the result here instead of just using '?' to diagnose the unexpected constraint violation
+    let execution_result = sqlx::query!(
         "UPDATE api_keys SET active = FALSE, last_used_at = $1 WHERE user_name = $2 AND name = $3 AND active = TRUE",
         Utc::now().naive_utc(), // Set last_used on revoke as well
         user.user_name,
         payload.name
     )
     .execute(&data.db)
-    .await?;
+    .await; // Remove '?' to handle the result manually below
 
-    if result.rows_affected() == 0 {
-         log::warn!("Attempted to revoke non-existent or inactive key named '{}' for user '{}'", payload.name, user.user_name);
-         Err(ApiKeyError::NotFound(format!("Active API key named '{}' not found.", payload.name)))
-    } else {
-        log::info!("Successfully revoked API key named '{}' for user '{}'", payload.name, user.user_name);
-        Ok(HttpResponse::Ok().json(serde_json::json!({ "message": "API key revoked successfully." })))
+    // Check the result of the execution
+    match execution_result {
+        Ok(result) => {
+            // If the update succeeded, check if any rows were affected
+            if result.rows_affected() == 0 {
+                 log::warn!("Attempted to revoke non-existent or inactive key named '{}' for user '{}'", payload.name, user.user_name);
+                 Err(ApiKeyError::NotFound(format!("Active API key named '{}' not found.", payload.name)))
+            } else {
+                log::info!("Successfully revoked API key named '{}' for user '{}'", payload.name, user.user_name);
+                Ok(HttpResponse::Ok().json(serde_json::json!({ "message": "API key revoked successfully." })))
+            }
+        }
+        Err(sqlx_err) => {
+             // Explicitly check if the error is the specific unique constraint violation
+             if let sqlx::Error::Database(db_err) = &sqlx_err {
+                 if db_err.is_unique_violation() && db_err.constraint() == Some("api_keys_user_name_name_active_key") {
+                     // This specific error is unexpected during revoke. Log detailed info and return 500.
+                     log::error!(
+                         "Unexpected unique constraint violation ('{}') during key revocation for user '{}', name '{}'. This likely indicates a DB schema issue or inconsistent state. DB Error: {}",
+                         db_err.constraint().unwrap_or("unknown"),
+                         user.user_name,
+                         payload.name,
+                         db_err
+                     );
+                     // Return 500 Internal Server Error instead of the misleading 409 Conflict
+                     return Err(ApiKeyError::InternalError(format!(
+                         "Unexpected database error while revoking key '{}'. Please contact support or try again later.",
+                         payload.name
+                     )));
+                 }
+             }
+             // For any other database errors, use the existing From<sqlx::Error> conversion
+             log::error!("Database error during key revocation for user '{}', name '{}': {}", user.user_name, payload.name, sqlx_err);
+             Err(sqlx_err.into()) // Convert using the From trait
+        }
     }
 }
 
