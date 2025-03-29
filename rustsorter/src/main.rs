@@ -4,6 +4,7 @@ pub mod pair;
 pub mod perms;
 pub mod tag;
 pub mod models;
+pub mod tag_routes;
 use std::env;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -73,6 +74,10 @@ async fn main() -> Result<(), anyhow::Error> {
                     .service(
                         web::scope("/keys")
                             .configure(rustsorter::api_key::config)
+                    )
+                    .service(
+                        web::scope("/tags")
+                            .configure(tag_routes::config)
                     )
                     .service(protected_route)
                     .service(feed::feed)

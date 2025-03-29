@@ -4,9 +4,11 @@ pub struct AppState {
     pub db: sqlx::PgPool,
 }
 
-#[derive(sqlx::FromRow, Debug, serde::Serialize)]
+#[derive(sqlx::FromRow, Debug, serde::Serialize, serde::Deserialize, Clone)]
 pub struct Tag {
+    #[serde(default)]
     pub id: i32,
+    #[serde(default)]
     pub owner: String,
     pub title: String,
     pub slug: String,
@@ -15,10 +17,15 @@ pub struct Tag {
     pub domain_pk_namespace: Option<String>,
     pub domain_url: Option<String>,
     pub ns: Option<String>,
+    #[serde(default)]
     pub created_at: chrono::NaiveDateTime,
+    #[serde(default)]
     pub edited_at: chrono::NaiveDateTime,
+    #[serde(default)]
     pub unlisted: bool,
+    #[serde(default)]
     pub nsfw: bool,
+    #[serde(default)]
     pub hide_item_authors: bool,
 }
 
