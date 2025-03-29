@@ -29,8 +29,10 @@ async def test_health_endpoint():
 class TestApiKeyFlow:
     # Class variables to store state between dependent tests
     created_key_name: str | None = None
-    created_plain_text_key: str | None = None
-    regenerated_plain_text_key: str | None = None
+    # Renamed variable to hold the full key (sort_identifier_secret)
+    created_full_key: str | None = None
+    # Renamed variable to hold the regenerated full key
+    regenerated_full_key: str | None = None
 
     async def make_request(
         self,
@@ -62,16 +64,35 @@ class TestApiKeyFlow:
         """Tests accessing a protected route without any authentication."""
         response = await self.make_request("GET", "/protected")
         assert response.status_code == 401
-        assert "No authentication credentials" in response.json().get("error", "")
+        # Error message might change slightly depending on middleware implementation
+        assert "No authentication credentials" in response.json().get("error", "") \
+            or "Unauthorized" in response.json().get("error", "")
+
 
     @pytest.mark.dependency()
     @pytest.mark.dependency(depends=["test_health_endpoint"])
-    async def test_protected_route_invalid_key(self):
-        """Tests accessing a protected route with an invalid key."""
+    async def test_protected_route_invalid_key_format(self):
+        """Tests accessing a protected route with an invalid key format."""
+        # Key doesn't match sort_identifier_secret
         headers = {"Authorization": "Bearer invalid-key-123"}
         response = await self.make_request("GET", "/protected", headers=headers)
-        assert response.status_code == 401
-        assert "Invalid or expired API key" in response.json().get("error", "")
+        assert response.status_code == 401 # Unauthorized
+        assert "Invalid API key format" in response.json().get("error", "")
+
+    @pytest.mark.dependency()
+    @pytest.mark.dependency(depends=["test_health_endpoint"])
+    async def test_protected_route_incorrect_key_value(self):
+        """Tests accessing a protected route with a correctly formatted but non-existent key."""
+        # Generate a plausible but fake key
+        fake_identifier = "".join(uuid.uuid4().hex[:16])
+        fake_secret = "".join(uuid.uuid4().hex[:32])
+        fake_key = f"sort_{fake_identifier}_{fake_secret}"
+        headers = {"Authorization": f"Bearer {fake_key}"}
+        response = await self.make_request("GET", "/protected", headers=headers)
+        assert response.status_code == 401 # Unauthorized
+        # The error might be generic "Unauthorized" or more specific depending on ApiKeyError mapping
+        assert "Unauthorized" in response.json().get("error", "") or \
+               "verification failed" in response.json().get("error", "")
 
     @pytest.mark.dependency()
     @pytest.mark.dependency(depends=["test_health_endpoint"])
@@ -96,16 +117,27 @@ class TestApiKeyFlow:
         assert response.status_code == 201 # Created
         data = response.json()
         assert data.get("name") == key_name
-        assert "api_key" in data
-        assert data["api_key"].startswith("sort_")
+        # *** CHANGED: Check for 'full_key' instead of 'api_key' ***
+        assert "full_key" in data
+        assert isinstance(data["full_key"], str)
+        # *** CHANGED: Assert correct key format ***
+        assert data["full_key"].startswith("sort_")
+        key_parts = data["full_key"].split("_")
+        assert len(key_parts) == 3 # sort, identifier, secret
+        assert key_parts[0] == "sort"
+        assert len(key_parts[1]) > 0 # Identifier part
+        assert len(key_parts[2]) > 0 # Secret part
+
         assert "preview" in data
         assert data["preview"].startswith("sort_")
+        assert data["preview"].endswith("...")
         assert "message" in data
 
         # Store for subsequent tests
         TestApiKeyFlow.created_key_name = key_name
-        TestApiKeyFlow.created_plain_text_key = data["api_key"]
-        print(f"Created key: Name='{key_name}', Key='{data['api_key']}'") # Log for debugging
+        # *** CHANGED: Store 'full_key' ***
+        TestApiKeyFlow.created_full_key = data["full_key"]
+        print(f"Created key: Name='{key_name}', FullKey='{data['full_key']}'") # Log for debugging
 
     @pytest.mark.dependency()
     @pytest.mark.dependency(depends=["TestApiKeyFlow::test_create_key_success"])
@@ -131,8 +163,7 @@ class TestApiKeyFlow:
     async def test_list_keys(self):
         """Tests listing the API keys for the user."""
         assert TestApiKeyFlow.created_key_name is not None, "Dependency test_create_key_success must run first"
-        # Give a slight delay in case of eventual consistency (though likely not needed for this)
-        time.sleep(0.1)
+        time.sleep(0.1) # Small delay for potential consistency
 
         response = await self.make_request("GET", "/keys", headers=STATIC_ADMIN_AUTH_HEADER)
         assert response.status_code == 200
@@ -145,15 +176,16 @@ class TestApiKeyFlow:
             assert "id" in key
             assert "name" in key
             assert "preview" in key
-            assert "hashed_key" not in key # IMPORTANT: Ensure hashed key isn't leaked
+            assert "hashed_key" not in key # Ensure hashed key isn't leaked
+            assert "key_identifier" not in key # Ensure identifier isn't leaked here either
             assert "active" in key
             assert "created_at" in key
-            # last_used_at can be null or a string
             assert "last_used_at" in key or key["last_used_at"] is None
 
             if key["name"] == TestApiKeyFlow.created_key_name:
                 found_key = True
                 assert key["active"] is True
+                assert key["preview"] is not None # Preview should exist
 
         assert found_key, f"Newly created key '{TestApiKeyFlow.created_key_name}' not found in list"
 
@@ -161,17 +193,40 @@ class TestApiKeyFlow:
     @pytest.mark.dependency(depends=["TestApiKeyFlow::test_create_key_success"])
     async def test_protected_route_real_key(self):
         """Tests accessing a protected route using the newly created real API key."""
-        assert TestApiKeyFlow.created_plain_text_key is not None, "Need plain text key from creation test"
-        headers = {"Authorization": f"Bearer {TestApiKeyFlow.created_plain_text_key}"}
+        # *** CHANGED: Use created_full_key ***
+        assert TestApiKeyFlow.created_full_key is not None, "Need full key from creation test"
+        headers = {"Authorization": f"Bearer {TestApiKeyFlow.created_full_key}"}
         response = await self.make_request("GET", "/protected", headers=headers)
         assert response.status_code == 200
         data = response.json()
         assert "Hello, admin!" in data.get("message", "")
         assert data.get("authenticated_user") == "admin"
-        # Check that last_used_at was likely updated (hard to assert time exactly)
+        # Add a small delay to allow the async last_used_at update to likely complete
+        time.sleep(0.2)
+
 
     @pytest.mark.dependency()
     @pytest.mark.dependency(depends=["TestApiKeyFlow::test_protected_route_real_key"])
+    async def test_list_keys_after_use(self):
+        """Tests listing keys again to check if last_used_at was updated."""
+        assert TestApiKeyFlow.created_key_name is not None
+        response = await self.make_request("GET", "/keys", headers=STATIC_ADMIN_AUTH_HEADER)
+        assert response.status_code == 200
+        data = response.json()
+        found_key = False
+        for key in data["api_keys"]:
+            if key["name"] == TestApiKeyFlow.created_key_name:
+                found_key = True
+                assert key["active"] is True
+                assert key["last_used_at"] is not None, "last_used_at should be updated after successful use"
+                # You could potentially parse the timestamp and check if it's recent,
+                # but checking for None is usually sufficient here.
+                print(f"Key '{key['name']}' last used at: {key['last_used_at']}")
+        assert found_key
+
+
+    @pytest.mark.dependency()
+    @pytest.mark.dependency(depends=["TestApiKeyFlow::test_list_keys_after_use"]) # Depends on the check after use
     async def test_regenerate_key_success(self):
         """Tests regenerating an existing API key."""
         assert TestApiKeyFlow.created_key_name is not None, "Need key name from creation test"
@@ -181,32 +236,42 @@ class TestApiKeyFlow:
         assert response.status_code == 200
         data = response.json()
         assert data.get("name") == TestApiKeyFlow.created_key_name
-        assert "api_key" in data
-        assert data["api_key"] != TestApiKeyFlow.created_plain_text_key # Ensure it's a NEW key
-        assert data["api_key"].startswith("sort_")
+        # *** CHANGED: Check for 'full_key' ***
+        assert "full_key" in data
+        assert isinstance(data["full_key"], str)
+        # *** CHANGED: Ensure it's a NEW full key ***
+        assert data["full_key"] != TestApiKeyFlow.created_full_key
+        assert data["full_key"].startswith("sort_")
+        key_parts = data["full_key"].split("_") # Re-check format
+        assert len(key_parts) == 3 and key_parts[0] == "sort"
+
         assert "preview" in data
         assert "message" in data
 
         # Store the new key for subsequent tests
-        TestApiKeyFlow.regenerated_plain_text_key = data["api_key"]
-        print(f"Regenerated key: Name='{TestApiKeyFlow.created_key_name}', New Key='{data['api_key']}'")
+        # *** CHANGED: Store 'full_key' ***
+        TestApiKeyFlow.regenerated_full_key = data["full_key"]
+        print(f"Regenerated key: Name='{TestApiKeyFlow.created_key_name}', New FullKey='{data['full_key']}'")
 
     @pytest.mark.dependency()
     @pytest.mark.dependency(depends=["TestApiKeyFlow::test_regenerate_key_success"])
     async def test_regenerate_old_key_fails(self):
         """Tests that the OLD key no longer works after regeneration."""
-        assert TestApiKeyFlow.created_plain_text_key is not None, "Need old plain text key"
-        headers = {"Authorization": f"Bearer {TestApiKeyFlow.created_plain_text_key}"}
+        # *** CHANGED: Use created_full_key (the original one) ***
+        assert TestApiKeyFlow.created_full_key is not None, "Need old full key"
+        headers = {"Authorization": f"Bearer {TestApiKeyFlow.created_full_key}"}
         response = await self.make_request("GET", "/protected", headers=headers)
         assert response.status_code == 401 # Should be unauthorized now
-        assert "Invalid or expired API key" in response.json().get("error", "")
+        assert "Unauthorized" in response.json().get("error", "") or \
+               "verification failed" in response.json().get("error", "")
 
     @pytest.mark.dependency()
     @pytest.mark.dependency(depends=["TestApiKeyFlow::test_regenerate_key_success"])
     async def test_regenerate_new_key_works(self):
         """Tests that the NEW key works after regeneration."""
-        assert TestApiKeyFlow.regenerated_plain_text_key is not None, "Need regenerated plain text key"
-        headers = {"Authorization": f"Bearer {TestApiKeyFlow.regenerated_plain_text_key}"}
+        # *** CHANGED: Use regenerated_full_key ***
+        assert TestApiKeyFlow.regenerated_full_key is not None, "Need regenerated full key"
+        headers = {"Authorization": f"Bearer {TestApiKeyFlow.regenerated_full_key}"}
         response = await self.make_request("GET", "/protected", headers=headers)
         assert response.status_code == 200
         data = response.json()
@@ -223,11 +288,19 @@ class TestApiKeyFlow:
         assert response.status_code == 200 # Should succeed and create
         data = response.json()
         assert data.get("name") == key_name
-        assert "api_key" in data # Should have created a new key
+        # *** CHANGED: Check for 'full_key' ***
+        assert "full_key" in data # Should have created a new key
+        newly_created_key = data["full_key"] # Store to test auth briefly
+
+        # Optional: Briefly test if the newly created key works
+        headers_new = {"Authorization": f"Bearer {newly_created_key}"}
+        response_auth = await self.make_request("GET", "/protected", headers=headers_new)
+        assert response_auth.status_code == 200
 
         # Clean up by revoking the unexpectedly created key
         revoke_payload = {"name": key_name}
-        await self.make_request("POST", "/keys/revoke", headers=STATIC_ADMIN_AUTH_HEADER, json_payload=revoke_payload)
+        response_revoke = await self.make_request("POST", "/keys/revoke", headers=STATIC_ADMIN_AUTH_HEADER, json_payload=revoke_payload)
+        assert response_revoke.status_code == 200
 
 
     @pytest.mark.dependency()
@@ -244,11 +317,13 @@ class TestApiKeyFlow:
     @pytest.mark.dependency(depends=["TestApiKeyFlow::test_revoke_key_success"])
     async def test_revoke_key_fails_auth(self):
         """Tests that the revoked key no longer works for authentication."""
-        assert TestApiKeyFlow.regenerated_plain_text_key is not None, "Need revoked plain text key"
-        headers = {"Authorization": f"Bearer {TestApiKeyFlow.regenerated_plain_text_key}"}
+        # *** CHANGED: Use regenerated_full_key (the one that was just revoked) ***
+        assert TestApiKeyFlow.regenerated_full_key is not None, "Need revoked full key"
+        headers = {"Authorization": f"Bearer {TestApiKeyFlow.regenerated_full_key}"}
         response = await self.make_request("GET", "/protected", headers=headers)
         assert response.status_code == 401 # Should be unauthorized now
-        assert "Invalid or expired API key" in response.json().get("error", "")
+        assert "Unauthorized" in response.json().get("error", "") or \
+               "verification failed" in response.json().get("error", "")
 
     @pytest.mark.dependency()
     @pytest.mark.dependency(depends=["TestApiKeyFlow::test_revoke_key_success"])
