@@ -206,11 +206,12 @@ impl From<anyhow::Error> for ApiKeyError {
 // --- Handlers ---
 
 // GET /api/keys - List keys for the authenticated user
-#[get("/")]
+#[get("")]
 async fn list_keys(
     req: actix_web::HttpRequest,
     data: web::Data<crate::models::AppState>,
 ) -> Result<HttpResponse, ApiKeyError> {
+    log::info!("Received request to list API keys");
     // Extract user from request extensions (inserted by middleware)
     let user = req.extensions().get::<User>().cloned().ok_or(ApiKeyError::Unauthorized)?;
 

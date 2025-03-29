@@ -6,7 +6,6 @@ import time
 # --- Configuration ---
 BASE_URL = "http://localhost:8081/api"
 # This MUST match the static key defined in your Rust auth_middleware.rs
-# inside the #[cfg(debug_assertions)] block
 STATIC_ADMIN_KEY = "STATIC_TEST_KEY_FOR_ADMIN_USER_123"
 STATIC_ADMIN_AUTH_HEADER = {"Authorization": f"Bearer {STATIC_ADMIN_KEY}"}
 
