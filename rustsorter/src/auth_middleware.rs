@@ -1,6 +1,5 @@
 use crate::{
-    models::{AppState, User}, // Assuming AppState is in models
-    api_key::{self, ApiKeyDb, ApiKeyError}, // Import necessary items from api_key module
+    api_key::{self, ApiKeyError}, // Import necessary items from api_key module
 };
 use actix_web::{
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
@@ -95,7 +94,7 @@ where
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let service = self.service.clone();
         // Clone the necessary parts of AppState or the whole thing if cheap
-        let db_pool = match req.app_data::<web::Data<AppState>>() {
+        let db_pool = match req.app_data::<web::Data<crate::models::AppState>>() {
             Some(data) => data.db.clone(), // Clone the pool
             None => {
                  log::error!("AppState not found in request for ApiKeyAuthMiddleware");

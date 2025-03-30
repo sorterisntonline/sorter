@@ -14,7 +14,7 @@ use dotenv::dotenv;
 use serde_json::json;
 use tokio;
 use rustsorter::auth_middleware::ApiKeyAuth;
-use rustsorter::models::User;
+use crate::models::{AppState, User};
 
 
 
@@ -57,8 +57,8 @@ async fn main() -> Result<(), anyhow::Error> {
         .await
         .expect("Unable to connect to database");
 
-    // Create shared app state
-    let app_state = web::Data::new(rustsorter::models::AppState { db: pool.clone() });
+    // Create shared app state using crate::models::AppState
+    let app_state = web::Data::new(crate::models::AppState { db: pool.clone() });
 
     // Start the HTTP server
     let server = HttpServer::new(move || {
@@ -70,6 +70,7 @@ async fn main() -> Result<(), anyhow::Error> {
             // Protected API Key Management Routes
             .service(
                 web::scope("/api")
+                    .app_data(app_state.clone())
                     .wrap(ApiKeyAuth)
                     .service(
                         web::scope("/keys")
