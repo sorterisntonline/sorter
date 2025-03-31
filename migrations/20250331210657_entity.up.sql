@@ -54,7 +54,7 @@ CREATE TABLE attributes (
 );
 
 INSERT INTO attributes (id, slug, description) VALUES
-(0, 'default', 'which do you prefer. what upvoting/liking means on other platforms');
+(0, 'like', 'which do you prefer. what upvoting/liking means on other platforms');
 
 CREATE TABLE votes (
   left_entity_pk_namespace TEXT NOT NULL,
