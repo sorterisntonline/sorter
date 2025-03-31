@@ -189,7 +189,7 @@ async fn update_tag(
 #[delete("/{tag_id}")]
 async fn delete_tag(
     req: HttpRequest,
-    state: web::Data<crate::models::AppState>,
+    state: web::Data<AppState>,
     path: web::Path<i32>,
 ) -> Result<HttpResponse, error::Error> {
     let user = get_user(&req)?;
@@ -250,8 +250,11 @@ async fn delete_tag(
 
 // --- Configuration Function ---
 pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg.service(create_tag)
-        .service(get_tag)
-        .service(update_tag)
-        .service(delete_tag);
+    cfg.service(
+        web::scope("/tags") // Base path for tag routes
+            .service(create_tag)
+            .service(get_tag)
+            .service(update_tag)
+            .service(delete_tag)
+    );
 } 

@@ -163,6 +163,7 @@ class TestApiKeyFlow:
     async def test_list_keys(self):
         """Tests listing the API keys for the user."""
         assert TestApiKeyFlow.created_key_name is not None, "Dependency test_create_key_success must run first"
+        time.sleep(0.1) # Small delay for potential consistency
 
         response = await self.make_request("GET", "/keys", headers=STATIC_ADMIN_AUTH_HEADER)
         assert response.status_code == 200
@@ -201,6 +202,7 @@ class TestApiKeyFlow:
         assert "Hello, admin!" in data.get("message", "")
         assert data.get("authenticated_user") == "admin"
         # Add a small delay to allow the async last_used_at update to likely complete
+        time.sleep(0.2)
 
 
     @pytest.mark.dependency()
