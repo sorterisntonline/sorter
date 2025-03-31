@@ -43,7 +43,7 @@ pub async fn insert_default_permissions(db: &sqlx::PgPool, tag_id: i32) {
         )
         .execute(db)
         .await
-        .unwrap();
+        .unwrap(); // TODO remove
     }
 }
 

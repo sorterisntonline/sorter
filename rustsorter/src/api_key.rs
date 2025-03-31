@@ -351,12 +351,12 @@ async fn create_key(
 
     log::info!("Successfully created API key named '{}' for user '{}'", payload.name, user.user_name);
     // Return the *plain text* full key THIS ONE TIME
-    Ok(axum::Json(NewApiKeyResponse {
+    Ok((StatusCode::CREATED, axum::Json(NewApiKeyResponse {
         name: payload.name.clone(),
         full_key, // Return the full key
         preview,
         message: "API key created successfully. Store it securely, it will not be shown again.".to_string(),
-    }))
+    })))
 }
 async fn revoke_key(
     State(state): State<AppState>,
@@ -480,6 +480,6 @@ async fn regenerate_key(
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/", get(list_keys).post(create_key))
-        //.route("/revoke", post(revoke_key)) // TODO
+        .route("/revoke", post(revoke_key)) // TODO
         .route("/regenerate", post(regenerate_key))
 }
