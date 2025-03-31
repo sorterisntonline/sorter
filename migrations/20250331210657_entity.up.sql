@@ -12,6 +12,17 @@ CREATE TABLE users (
   bio TEXT,
   created_at TIMESTAMP DEFAULT now()
 );
+-- For API authentication
+CREATE TABLE api_keys (
+  id SERIAL PRIMARY KEY,
+  user_auth0_sub TEXT NOT NULL REFERENCES users(auth0_sub),
+  name VARCHAR(255) NOT NULL,
+  key_identifier TEXT NOT NULL,
+  hashed_key TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  last_used_at TIMESTAMP,
+  active BOOLEAN NOT NULL DEFAULT TRUE
+);
 
 -- === ENTITIES ===
 -- Universal, federated objects (posts, tags, songs, albums, datasets...)
@@ -33,8 +44,28 @@ CREATE TABLE entity_relationships_proposed (
   child_pk TEXT NOT NULL,
   submitter_user_id UUID REFERENCES users(id),
   action TEXT NOT NULL CHECK (action IN ('add', 'tombstone')),
-  submitted_at TIMESTAMP DEFAULT now(),
-  PRIMARY KEY (parent_domain, parent_id, child_domain, child_id, submitter_user_id)
+  created_at TIMESTAMP DEFAULT now(),
+  PRIMARY KEY (parent_pk_namespace, parent_pk, child_pk_namespace, child_pk, submitter_user_id)
+);
+
+CREATE TABLE attributes (
+  id SERIAL PRIMARY KEY,
+  slug TEXT NOT NULL UNIQUE,
+  description TEXT NOT NULL
+);
+
+INSERT INTO attributes (id, slug, description) VALUES
+(0, 'default', 'which do you prefer. what upvoting/liking means on other platforms');
+
+CREATE TABLE votes (
+  left_entity_pk_namespace TEXT NOT NULL,
+  last_used_ateft_entity_pk TEXT NOT NULL,
+  right_entity_pk_namespace TEXT NOT NULL,
+  right_entity_pk TEXT NOT NULL,
+  voter_user_id UUID REFERENCES users(id),
+  magnitude INT NOT NULL,
+  attribute_id INT NOT NULL REFERENCES attributes(id),
+  PRIMARY KEY (left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, voter_user_id)
 );
 
 -- === GLOBAL SLUGS (PUBLIC URLs) ===
@@ -69,6 +100,15 @@ CREATE TABLE entity_permissions (
   grantee_id TEXT, -- nullable if grantee_type is 'public'
   PRIMARY KEY (entity_pk_namespace, entity_pk, action, grantee_type, grantee_id)
 );
+
+CREATE INDEX idx_api_keys_hashed_key ON api_keys(hashed_key);
+CREATE INDEX idx_api_keys_user_auth0_sub ON api_keys(user_auth0_sub, active);
+CREATE INDEX idx_api_keys_key_identifier ON api_keys(key_identifier);
+
+-- Recreate indexes using the new foreign key column (example with user_auth0_sub)
+CREATE UNIQUE INDEX api_keys_user_auth0_sub_name_active_key_idx
+ON api_keys (user_auth0_sub, name)
+WHERE active = TRUE;
 
 -- === INDEX RECOMMENDATIONS (optional) ===
 -- For efficient queries (example indexes)
