@@ -1,4 +1,4 @@
-use actix_web::{web, HttpRequest, HttpResponse, Responder, Scope, get, post, put, delete};
+use actix_web::{web, HttpRequest, HttpResponse, Responder, Scope, get, post, put, delete, HttpMessage};
 use actix_web::http::StatusCode;
 use actix_web::error;
 use sqlx::PgPool;
