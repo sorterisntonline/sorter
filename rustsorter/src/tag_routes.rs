@@ -250,11 +250,8 @@ async fn delete_tag(
 
 // --- Configuration Function ---
 pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg.service(
-        web::scope("/tags") // Base path for tag routes
-            .service(create_tag)
-            .service(get_tag)
-            .service(update_tag)
-            .service(delete_tag)
-    );
+    cfg.service(create_tag)
+       .service(get_tag)
+       .service(update_tag)
+       .service(delete_tag);
 } 
