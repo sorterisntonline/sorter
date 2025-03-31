@@ -4,7 +4,14 @@ use chrono::{NaiveDateTime, Utc};
 use rand::{distributions::Alphanumeric, Rng};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use anyhow::{Result, Context, anyhow}; // Use anyhow consistently
-use actix_web::{web, get, post, HttpResponse, HttpMessage, ResponseError, HttpRequest}; // Added HttpRequest
+use axum::{
+    async_trait, // If needed for traits
+    extract::{State, Path, Json, Request, Extension}, // Axum extractors
+    response::{IntoResponse, Response}, // Axum response types
+    routing::{get, post}, // Axum routing methods
+    http::StatusCode, // HTTP status codes
+    Router, // Axum router
+};
 use std::fmt;
 use tokio; // For spawning the update task
 
@@ -110,30 +117,22 @@ impl fmt::Display for ApiKeyError {
     }
 }
 
-impl ResponseError for ApiKeyError {
-    fn status_code(&self) -> actix_web::http::StatusCode {
-        match self {
-            ApiKeyError::DatabaseError(_) | ApiKeyError::HashingError(_) | ApiKeyError::InternalError(_) | ApiKeyError::VerificationError(_) => actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
-            ApiKeyError::Conflict(_) => actix_web::http::StatusCode::CONFLICT,
-            ApiKeyError::NotFound(_) => actix_web::http::StatusCode::NOT_FOUND,
-            ApiKeyError::Unauthorized | ApiKeyError::InvalidKeyFormat => actix_web::http::StatusCode::UNAUTHORIZED,
-            ApiKeyError::BadRequest(_) => actix_web::http::StatusCode::BAD_REQUEST,
-        }
-    }
-
-     fn error_response(&self) -> HttpResponse {
-        let error_message = self.to_string();
-        log::warn!("API Key Error Response: status={}, message='{}'", self.status_code(), error_message); // Log user-facing errors as warnings
-        // Avoid logging detailed internal errors like SQL states directly to the user response log
-        match self {
-             ApiKeyError::DatabaseError(_) | ApiKeyError::HashingError(_) | ApiKeyError::InternalError(_) | ApiKeyError::VerificationError(_) => {
-                 log::error!("Underlying internal error for API Key operation: {}", error_message); // Log internal details as errors
-             },
-             _ => {} // Logged as warning above
-         }
-
-        HttpResponse::build(self.status_code())
-            .json(serde_json::json!({ "error": error_message }))
+// Implement Axum's IntoResponse for ApiKeyError
+impl IntoResponse for ApiKeyError {
+    fn into_response(self) -> Response {
+        let (status, error_message) = match &self {
+            ApiKeyError::DatabaseError(_) | ApiKeyError::HashingError(_) | ApiKeyError::InternalError(_) | ApiKeyError::VerificationError(_) => {
+                 log::error!("Internal API Key Error: {}", self);
+                 (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())
+            },
+            ApiKeyError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
+            ApiKeyError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
+            ApiKeyError::Unauthorized | ApiKeyError::InvalidKeyFormat => (StatusCode::UNAUTHORIZED, self.to_string()),
+            ApiKeyError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
+        };
+         // Log user-facing errors as warnings
+        if status != StatusCode::INTERNAL_SERVER_ERROR { log::warn!("API Key Response: status={}, message='{}'", status, error_message); }
+        (status, axum::Json(serde_json::json!({ "error": error_message }))).into_response()
     }
 }
 
@@ -293,13 +292,12 @@ pub async fn update_last_used(pool: &PgPool, key_id: i32) -> Result<()> {
 
 // --- API Handlers ---
 
-#[get("")]
 async fn list_keys(
-    req: HttpRequest, // Changed from actix_web::HttpRequest
-    data: web::Data<AppState>,
-) -> Result<HttpResponse, ApiKeyError> {
+    State(state): State<AppState>, // Use Axum's State extractor
+    Extension(user): Extension<User>, // Use Axum's Extension extractor (populated by middleware)
+) -> Result<impl IntoResponse, ApiKeyError> {
     log::debug!("Handler: list_keys called");
-    let user = req.extensions().get::<User>().cloned().ok_or(ApiKeyError::Unauthorized)?;
+    // user is extracted directly via Extension
     log::debug!("Authenticated user for list_keys: {}", user.user_name);
 
     let keys = sqlx::query_as!(
@@ -309,23 +307,22 @@ async fn list_keys(
          WHERE user_name = $1 ORDER BY created_at DESC",
         user.user_name
     )
-    .fetch_all(&data.db)
+    .fetch_all(&state.db)
     .await?; // Propagates DB errors
 
     let response_keys: Vec<ApiKeyResponse> = keys.into_iter().map(ApiKeyResponse::from).collect();
     log::debug!("Found {} keys for user {}", response_keys.len(), user.user_name);
 
-    Ok(HttpResponse::Ok().json(serde_json::json!({ "api_keys": response_keys })))
+    Ok((StatusCode::OK, axum::Json(serde_json::json!({ "api_keys": response_keys }))))
 }
 
-#[post("")]
 async fn create_key(
-    req: HttpRequest,
-    data: web::Data<AppState>,
-    payload: web::Json<CreateKeyRequest>,
-) -> Result<HttpResponse, ApiKeyError> {
+    State(state): State<AppState>,
+    Extension(user): Extension<User>,
+    Json(payload): Json<CreateKeyRequest>, // Axum
+) -> Result<impl IntoResponse, ApiKeyError> {
     log::debug!("Handler: create_key called for name: {}", payload.name);
-    let user = req.extensions().get::<User>().cloned().ok_or(ApiKeyError::Unauthorized)?;
+    // user is extracted directly via Extension
      log::debug!("Authenticated user for create_key: {}", user.user_name);
 
     if payload.name.trim().is_empty() || payload.name.len() > 255 {
@@ -350,28 +347,24 @@ async fn create_key(
         &preview,
         Utc::now().naive_utc() // Explicitly set created_at
     )
-    .execute(&data.db)
+    .execute(&state.db)
     .await?; // Let the From<sqlx::Error> handle unique constraint violations
 
     log::info!("Successfully created API key named '{}' for user '{}'", payload.name, user.user_name);
     // Return the *plain text* full key THIS ONE TIME
-    Ok(HttpResponse::Created().json(NewApiKeyResponse {
+    Ok(axum::Json(NewApiKeyResponse {
         name: payload.name.clone(),
         full_key, // Return the full key
         preview,
         message: "API key created successfully. Store it securely, it will not be shown again.".to_string(),
     }))
 }
-
-#[post("/revoke")]
 async fn revoke_key(
-    req: HttpRequest,
-    data: web::Data<AppState>,
-    payload: web::Json<KeyNameRequest>,
-) -> Result<HttpResponse, ApiKeyError> {
+    State(state): State<AppState>,
+    Extension(user): Extension<User>,
+    Json(payload): Json<KeyNameRequest>, // Axum
+) -> Result<impl IntoResponse, ApiKeyError> {
     log::debug!("Handler: revoke_key called for name: {}", payload.name);
-    let user = req.extensions().get::<User>().cloned().ok_or(ApiKeyError::Unauthorized)?;
-    log::debug!("Authenticated user for revoke_key: {}", user.user_name);
 
     // Explicitly handle the result here instead of just using '?' to diagnose the unexpected constraint violation
     let execution_result = sqlx::query!(
@@ -380,7 +373,7 @@ async fn revoke_key(
         user.user_name,
         payload.name
     )
-    .execute(&data.db)
+    .execute(&state.db)
     .await; // Remove '?' to handle the result manually below
 
     // Check the result of the execution
@@ -392,7 +385,7 @@ async fn revoke_key(
                  Err(ApiKeyError::NotFound(format!("Active API key named '{}' not found.", payload.name)))
             } else {
                 log::info!("Successfully revoked API key named '{}' for user '{}'", payload.name, user.user_name);
-                Ok(HttpResponse::Ok().json(serde_json::json!({ "message": "API key revoked successfully." })))
+                Ok(axum::Json(serde_json::json!({ "message": "API key revoked successfully." })))
             }
         }
         Err(sqlx_err) => {
@@ -421,22 +414,18 @@ async fn revoke_key(
     }
 }
 
-#[post("/regenerate")]
 async fn regenerate_key(
-    req: HttpRequest,
-    data: web::Data<AppState>,
-    payload: web::Json<KeyNameRequest>,
-) -> Result<HttpResponse, ApiKeyError> {
-    log::debug!("Handler: regenerate_key called for name: {}", payload.name);
-    let user = req.extensions().get::<User>().cloned().ok_or(ApiKeyError::Unauthorized)?;
-    log::debug!("Authenticated user for regenerate_key: {}", user.user_name);
+    State(state): State<AppState>,
+    Extension(user): Extension<User>,
+    Json(payload): Json<KeyNameRequest>, // Axum
+) -> Result<impl IntoResponse, ApiKeyError> {
 
     if payload.name.trim().is_empty() || payload.name.len() > 255 {
          return Err(ApiKeyError::BadRequest("Invalid key name provided.".to_string()));
     }
 
     // Use a transaction
-    let mut tx: Transaction<Postgres> = data.db.begin().await?;
+    let mut tx: Transaction<Postgres> = state.db.begin().await?;
 
     // 1. Revoke the old key(s) with the same name
     let revoke_result = sqlx::query!(
@@ -479,7 +468,7 @@ async fn regenerate_key(
 
     log::info!("Successfully regenerated API key named '{}' for user '{}'", payload.name, user.user_name);
     // Return the *plain text* key THIS ONE TIME
-    Ok(HttpResponse::Ok().json(NewApiKeyResponse {
+    Ok(axum::Json(NewApiKeyResponse {
         name: payload.name.clone(),
         full_key: new_full_key, // Return the new full key
         preview: new_preview,
@@ -489,9 +478,9 @@ async fn regenerate_key(
 
 // --- Service Configuration ---
 
-pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg.service(list_keys)
-       .service(create_key)
-       .service(revoke_key)
-       .service(regenerate_key);
+pub fn routes() -> Router<AppState> {
+    Router::new()
+        .route("/", get(list_keys).post(create_key))
+        //.route("/revoke", post(revoke_key)) // TODO
+        .route("/regenerate", post(regenerate_key))
 }

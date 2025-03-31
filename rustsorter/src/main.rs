@@ -10,15 +10,22 @@ use std::env;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use actix_web::{App, HttpServer, middleware::Logger, web, HttpResponse, get, Error, HttpMessage};
+// Removed Actix-Web imports
+// Added Axum and related imports
+use axum::{
+    routing::{get, post}, // Import routing methods
+    Router, Server, Json, Extension, // Import core Axum types
+    response::{IntoResponse, Response}, // For responses
+    http::StatusCode, // For status codes
+    middleware, extract::State, extract::Request, // For middleware and extractors
+};
+use tower_http::trace::TraceLayer; // For logging middleware
 use dotenv::dotenv;
 use serde_json::json;
 use tokio;
-use rustsorter::auth_middleware::ApiKeyAuth;
+// use rustsorter::auth_middleware::ApiKeyAuth;
 use rustsorter::models::User;
-
-
-
+//
 
 // Health endpoint handler
 #[get("/api/health")]
@@ -30,16 +37,15 @@ async fn health() -> HttpResponse {
 }
 
 // Add new protected route
-#[get("/protected")]
-async fn protected_route(req: actix_web::HttpRequest) -> Result<HttpResponse, Error> {
-    if let Some(user) = req.extensions().get::<User>() {
-        Ok(HttpResponse::Ok().json(json!({
-            "message": format!("Hello, {}! This is a protected route.", user.user_name),
-            "authenticated_user": user.user_name
-        })))
-    } else {
-        Ok(HttpResponse::InternalServerError().body("User data not found after authentication"))
-    }
+// Example Axum handler signature
+async fn protected_route(
+    Extension(user): Extension<User> // Use Axum's Extension extractor (assuming middleware adds it)
+) -> impl IntoResponse {
+    // User is guaranteed by middleware or the request wouldn't reach here
+    (StatusCode::OK, Json(json!({
+        "message": format!("Hello, {}! This is a protected route.", user.user_name),
+        "authenticated_user": user.user_name
+    })))
 }
 
 #[tokio::main]
@@ -58,35 +64,39 @@ async fn main() -> Result<(), anyhow::Error> {
         .await
         .expect("Unable to connect to database");
 
-    // Create shared app state
-    let app_state = web::Data::new(app_state::AppState { db: pool.clone() });
+    // Create shared app state (No specific wrapper needed like web::Data)
+    let app_state = app_state::AppState { db: pool.clone() };
 
     // Start the HTTP server
-    let server = HttpServer::new(move || {
-        App::new()
-            .app_data(app_state.clone())
-            .wrap(Logger::default())
-            // Public Routes
-            .service(health)
-            // Protected API Key Management Routes
-            .service(
-                web::scope("/api")
-                    .wrap(ApiKeyAuth)
-                    .service(
-                        web::scope("/keys")
-                            .configure(rustsorter::api_key::config)
-                    )
-                    .service(
-                        web::scope("/tags")
-                            .configure(tag_routes::config)
-                    )
-                    .service(protected_route)
-                    .service(feed::feed)
-            )
-            .service(tag::hello)
-    })
-    .bind(("127.0.0.1", 8081)).expect("unable to bind on port 8081")
-    .run().await?;
+    // Define the Axum router
+    let app = Router::new()
+        // Public Routes
+        .route("/api/health", get(health)) // Use axum::routing::get
+        // Protected API Key Management Routes need middleware
+        .nest("/api", api_routes()) // Nest API routes
+        // Apply middleware and state
+        .with_state(app_state) // Provide state to all handlers
+        .layer(TraceLayer::new_for_http()); // Add logging middleware
 
-    Ok(server)
+    // Define listener address
+    let addr = "127.0.0.1:8081".parse().unwrap();
+    log::info!("Starting server on {}", addr);
+
+    // Run the server
+    axum::serve(tokio::net::TcpListener::bind(addr).await.unwrap(), app.into_make_service())
+        .await
+        .expect("Failed to start server");
+
+    Ok(())
+}
+
+// Helper function to define nested API routes with middleware
+fn api_routes() -> Router<app_state::AppState> {
+    Router::new()
+        .route("/protected", get(protected_route))
+        .nest("/keys", rustsorter::api_key::routes()) // Get routes from api_key module
+        .nest("/tags", rustsorter::tag_routes::routes()) // Get routes from tag_routes module
+        // .route("/feed", get(feed::feed)) // Assuming feed::feed is refactored
+        // Apply the authentication middleware to all routes in this router
+        .layer(rustsorter::auth_middleware::ApiKeyAuth)
 }

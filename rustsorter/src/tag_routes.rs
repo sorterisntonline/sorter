@@ -1,6 +1,12 @@
-use actix_web::{web, HttpRequest, HttpResponse, Responder, Scope, get, post, put, delete, HttpMessage};
-use actix_web::http::StatusCode;
-use actix_web::error;
+use axum::{
+    async_trait, // If needed
+    extract::{State, Path, Json, Extension}, // Axum extractors
+    response::{IntoResponse, Response}, // Axum response types
+    routing::{get, post, put, delete}, // Axum routing methods
+    http::StatusCode, // HTTP status codes
+    Router, // Axum router
+};
+use axum::http::Request; // For request extensions if needed directly
 use sqlx::PgPool;
 
 use crate::app_state::AppState;
@@ -14,24 +20,54 @@ use crate::perms;
 // type CreateTagPayload = Tag; // Example if we used a specific struct
 // type UpdateTagPayload = Tag; // Example
 
-// --- Helper Function to Get User ---
-fn get_user(req: &HttpRequest) -> Result<User, error::Error> {
-    req.extensions()
-        .get::<User>()
-        .cloned()
-        .ok_or_else(|| error::ErrorInternalServerError("User data not found after authentication"))
+// --- Define a custom Error type for Tag routes ---
+// This makes error handling cleaner than using actix_web::error directly
+#[derive(Debug)]
+enum TagError {
+    SqlxError(sqlx::Error),
+    NotFound,
+    Forbidden(String),
+    Conflict(String),
+    InternalError(String),
+    Unauthorized, // Added for consistency if get_user fails
+}
+
+// Implement IntoResponse for TagError
+impl IntoResponse for TagError {
+    fn into_response(self) -> Response {
+        let (status, msg) = match self {
+            TagError::NotFound => (StatusCode::NOT_FOUND, "Tag not found".to_string()),
+            TagError::Forbidden(m) => (StatusCode::FORBIDDEN, m),
+            TagError::Conflict(m) => (StatusCode::CONFLICT, m),
+            TagError::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()),
+            TagError::SqlxError(e) => {
+                log::error!("SQLx error in tag route: {}", e);
+                (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string())
+            },
+            TagError::InternalError(m) => {
+                log::error!("Internal error in tag route: {}", m);
+                (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())
+            },
+        };
+        (status, axum::Json(serde_json::json!({"error": msg}))).into_response()
+    }
+}
+
+// Implement From<sqlx::Error> for TagError
+impl From<sqlx::Error> for TagError {
+    fn from(err: sqlx::Error) -> Self {
+        // You could add more specific checks here, e.g., for unique constraints
+        TagError::SqlxError(err)
+    }
 }
 
 // --- Route Handlers ---
 
-#[post("")]
 async fn create_tag(
-    req: HttpRequest,
-    state: web::Data<AppState>,
-    mut tag_payload: web::Json<Tag>,
-) -> Result<HttpResponse, error::Error> {
-    let user = get_user(&req)?;
-
+    State(state): State<AppState>,
+    Extension(user): Extension<User>, // Get user from extensions
+    Json(mut tag_payload): Json<Tag>, // Axum
+) -> Result<impl IntoResponse, TagError> {
     // Set owner from authenticated user
     tag_payload.owner = user.user_name.clone();
     // Ensure defaults are respected (though DB defaults might handle some)
@@ -39,7 +75,6 @@ async fn create_tag(
     let now = chrono::Utc::now().naive_utc();
     tag_payload.created_at = now;
     tag_payload.edited_at = now;
-
 
     // Insert into database
     let result = sqlx::query_as!(
@@ -67,62 +102,55 @@ async fn create_tag(
     match result {
         Ok(new_tag) => {
             // Insert default permissions for the new tag
+            // TODO make this return error correctly
             perms::insert_default_permissions(&state.db, new_tag.id).await;
-            Ok(HttpResponse::Created().json(new_tag))
+            Ok((StatusCode::CREATED, axum::Json(new_tag)))
         },
         Err(e) => {
-            log::error!("Failed to create tag: {}", e);
             // Handle potential errors like unique constraint violation on slug
              if let Some(db_err) = e.as_database_error() {
                 if db_err.constraint() == Some("tags_owner_slug_key") {
-                    return Ok(HttpResponse::Conflict().json(serde_json::json!({"error": "Slug already exists for this owner."})));
+                    return Err(TagError::Conflict("Slug already exists for this owner.".to_string()));
                 }
             }
-            Ok(HttpResponse::InternalServerError().json(serde_json::json!({"error": "Failed to create tag"})))
+            Err(TagError::InternalError("Failed to create tag".to_string()))
         }
     }
 }
 
-#[get("/{tag_id}")]
 async fn get_tag(
-    req: HttpRequest,
-    state: web::Data<AppState>,
-    path: web::Path<i32>,
-) -> Result<HttpResponse, error::Error> {
-    let user = get_user(&req)?;
-    let tag_id = path.into_inner();
-
+    State(state): State<AppState>,
+    Extension(user): Extension<User>,
+    Path(tag_id): Path<i32>,
+) -> Result<impl IntoResponse, TagError> {
     let tag = sqlx::query_as!(Tag, "SELECT * FROM tags WHERE id = $1", tag_id)
         .fetch_optional(&state.db)
         .await
         .map_err(|e| {
             log::error!("Failed to fetch tag {}: {}", tag_id, e);
-            error::ErrorInternalServerError("Failed to fetch tag")
+            TagError::SqlxError(e)
         })?;
 
     match tag {
         Some(t) => {
             let can_view = perms::can("view", &t, &Some(user.user_name), &state.db).await;
             if can_view {
-                Ok(HttpResponse::Ok().json(t))
+                Ok(axum::Json(t))
             } else {
                 // Return Not Found instead of Forbidden to avoid leaking existence
-                Ok(HttpResponse::NotFound().finish())
+                Err(TagError::NotFound)
             }
         }
-        None => Ok(HttpResponse::NotFound().finish()),
+        None => Err(TagError::NotFound),
     }
 }
 
-#[put("/{tag_id}")]
 async fn update_tag(
-    req: HttpRequest,
-    state: web::Data<AppState>,
-    path: web::Path<i32>,
-    update_payload: web::Json<Tag>, // Using Tag directly for simplicity now
-) -> Result<HttpResponse, error::Error> {
-    let user = get_user(&req)?;
-    let tag_id = path.into_inner();
+    State(state): State<AppState>,
+    Extension(user): Extension<User>,
+    Path(tag_id): Path<i32>,
+    update_payload: Json<Tag>, // Using Tag directly for simplicity now
+) -> Result<impl IntoResponse, TagError> {
 
     // Fetch the existing tag first to check ownership
     let existing_tag = sqlx::query_as!(Tag, "SELECT * FROM tags WHERE id = $1", tag_id)
@@ -130,7 +158,7 @@ async fn update_tag(
         .await
         .map_err(|e| {
             log::error!("Failed to fetch tag for update {}: {}", tag_id, e);
-            error::ErrorInternalServerError("Failed to fetch tag")
+            TagError::SqlxError(e)
         })?;
 
      match existing_tag {
@@ -138,7 +166,7 @@ async fn update_tag(
              // Check ownership
             if tag.owner != user.user_name {
                 log::warn!("User {} attempted to update tag {} owned by {}", user.user_name, tag_id, tag.owner);
-                return Ok(HttpResponse::Forbidden().json(serde_json::json!({"error": "You do not own this tag"})));
+                return Err(TagError::Forbidden("You do not own this tag".to_string()));
             }
 
             // Perform the update
@@ -173,28 +201,25 @@ async fn update_tag(
                  if let Some(db_err) = e.as_database_error() {
                     if db_err.constraint() == Some("tags_owner_slug_key") {
                         // Use actix_web::error::ErrorConflict which results in a 409
-                        return error::ErrorConflict("Slug already exists for this owner.");
+                        return TagError::Conflict("Slug already exists for this owner.".to_string())
                     }
                  }
-                error::ErrorInternalServerError("Failed to update tag")
+                return TagError::InternalError("Failed to update tag".to_string())
             })?;
 
-            Ok(HttpResponse::Ok().json(updated_tag))
+            Ok(axum::Json(updated_tag))
 
         }
-        None => Ok(HttpResponse::NotFound().finish()),
+        None => Err(TagError::NotFound),
     }
 }
 
 
-#[delete("/{tag_id}")]
 async fn delete_tag(
-    req: HttpRequest,
-    state: web::Data<AppState>,
-    path: web::Path<i32>,
-) -> Result<HttpResponse, error::Error> {
-    let user = get_user(&req)?;
-    let tag_id = path.into_inner();
+    State(state): State<AppState>,
+    Extension(user): Extension<User>,
+    Path(tag_id): Path<i32>,
+) -> Result<impl IntoResponse, TagError> {
 
      // Fetch the existing tag first to check ownership
     let existing_tag = sqlx::query_as!(Tag, "SELECT * FROM tags WHERE id = $1", tag_id)
@@ -202,7 +227,7 @@ async fn delete_tag(
         .await
         .map_err(|e| {
             log::error!("Failed to fetch tag for delete {}: {}", tag_id, e);
-            error::ErrorInternalServerError("Failed to fetch tag")
+            TagError::SqlxError(e)
         })?;
 
     match existing_tag {
@@ -210,7 +235,7 @@ async fn delete_tag(
              // Check ownership
             if tag.owner != user.user_name {
                 log::warn!("User {} attempted to delete tag {} owned by {}", user.user_name, tag_id, tag.owner);
-                 return Ok(HttpResponse::Forbidden().json(serde_json::json!({"error": "You do not own this tag"})));
+                 return Err(TagError::Forbidden("You do not own this tag".to_string()));
             }
 
             // TODO: Consider what to do with items/permissions associated with this tag.
@@ -232,27 +257,26 @@ async fn delete_tag(
             match delete_tag_result {
                 // Use `execute` which returns rows_affected
                 Ok(result) if result.rows_affected() > 0 => {
-                    Ok(HttpResponse::Ok().finish()) // Or HttpResponse::NoContent()
+                    Ok(axum::Json(serde_json::json!({"status": "success"})))
                 }
                 Ok(_) => {
                     // Tag might have been deleted between fetch and delete, or ID was invalid initially
-                    Ok(HttpResponse::NotFound().finish())
+                    Ok(axum::Json(serde_json::json!({"error": "Tag not found"})))
                 }
                 Err(e) => {
                     log::error!("Failed to delete tag {}: {}", tag_id, e);
-                    Ok(HttpResponse::InternalServerError().json(serde_json::json!({"error": "Failed to delete tag"})))
+                    Err(TagError::InternalError("Failed to delete tag".to_string()))
                 }
             }
         }
-         None => Ok(HttpResponse::NotFound().finish()),
+         None => Err(TagError::NotFound),
     }
 }
 
 
 // --- Configuration Function ---
-pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg.service(create_tag)
-       .service(get_tag)
-       .service(update_tag)
-       .service(delete_tag);
+pub fn routes() -> Router<AppState> {
+    Router::new()
+        .route("/", post(create_tag)) // POST to root for creation
+        .route("/:tag_id", get(get_tag).put(update_tag).delete(delete_tag)) // Routes with tag_id path param
 } 
