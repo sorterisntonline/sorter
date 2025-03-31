@@ -5,6 +5,7 @@ pub mod perms;
 pub mod tag;
 pub mod models;
 pub mod tag_routes;
+pub mod app_state;
 use std::env;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -58,7 +59,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .expect("Unable to connect to database");
 
     // Create shared app state
-    let app_state = web::Data::new(rustsorter::models::AppState { db: pool.clone() });
+    let app_state = web::Data::new(app_state::AppState { db: pool.clone() });
 
     // Start the HTTP server
     let server = HttpServer::new(move || {

@@ -13,7 +13,7 @@ struct Feed {
 
 #[get("/api/feed")]
 pub async fn feed(
-    data: web::Data<crate::models::AppState>,
+    data: web::Data<crate::app_state::AppState>,
     info: web::Query<FeedParams>,
 ) -> impl Responder {
     let items = sqlx::query_as::<_, crate::models::Item>(

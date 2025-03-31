@@ -8,7 +8,8 @@ use actix_web::{web, get, post, HttpResponse, HttpMessage, ResponseError, HttpRe
 use std::fmt;
 use tokio; // For spawning the update task
 
-use crate::models::{User, AppState}; // Assuming AppState is in models
+use crate::models::User; // Assuming AppState is in models
+use crate::app_state::AppState;
 
 // --- Constants ---
 const API_KEY_PREFIX: &str = "sort"; // Prefix without underscore for easier splitting

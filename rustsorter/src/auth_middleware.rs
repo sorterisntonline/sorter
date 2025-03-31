@@ -1,7 +1,8 @@
 use crate::{
-    models::{AppState, User}, // Assuming AppState is in models
+    models::User, // Assuming AppState is in models
     api_key::{self, ApiKeyDb, ApiKeyError}, // Import necessary items from api_key module
 };
+use crate::app_state::AppState;
 use actix_web::{
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
     web, Error as ActixError, HttpMessage, HttpResponse, ResponseError

@@ -3,7 +3,8 @@ use actix_web::http::StatusCode;
 use actix_web::error;
 use sqlx::PgPool;
 
-use crate::models::{AppState, Tag, User};
+use crate::app_state::AppState;
+use crate::models::{Tag, User};
 use crate::perms;
 
 // --- Payload Structs (Optional but good practice) ---

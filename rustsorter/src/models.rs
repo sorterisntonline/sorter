@@ -1,9 +1,3 @@
-use serde::{Deserialize, Serialize};
-
-pub struct AppState {
-    pub db: sqlx::PgPool,
-}
-
 #[derive(sqlx::FromRow, Debug, serde::Serialize, serde::Deserialize, Clone)]
 pub struct Tag {
     #[serde(default)]

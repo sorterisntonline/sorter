@@ -6,7 +6,8 @@ use std::{
 use actix_web::{HttpResponse, Responder, get, web};
 use sqlx::types::chrono;
 
-use crate::models::{Tag, Item, SortedItem, Vote, Skip, Attribute, User, Perms, AppState};
+use crate::models::{Tag, Item, SortedItem, Vote, Skip, Attribute, User, Perms};
+use crate::app_state::AppState;
 
 #[derive(serde::Deserialize, Debug)]
 struct TagInfo {
