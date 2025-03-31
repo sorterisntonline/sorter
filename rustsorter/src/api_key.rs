@@ -5,8 +5,7 @@ use rand::{distributions::Alphanumeric, Rng};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use anyhow::{Result, Context, anyhow}; // Use anyhow consistently
 use axum::{
-    async_trait, // If needed for traits
-    extract::{State, Path, Json, Request, Extension}, // Axum extractors
+    extract::{State, Path, Json, Extension}, // Axum extractors
     response::{IntoResponse, Response}, // Axum response types
     routing::{get, post}, // Axum routing methods
     http::StatusCode, // HTTP status codes

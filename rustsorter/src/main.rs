@@ -14,7 +14,7 @@ use std::sync::Arc;
 // Added Axum and related imports
 use axum::{
     routing::{get, post}, // Import routing methods
-    Router, Server, Json, Extension, // Import core Axum types
+    Router, Json, Extension, // Import core Axum types
     response::{IntoResponse, Response}, // For responses
     http::StatusCode, // For status codes
     middleware, extract::State, extract::Request, // For middleware and extractors
@@ -28,12 +28,11 @@ use rustsorter::models::User;
 //
 
 // Health endpoint handler
-#[get("/api/health")]
-async fn health() -> HttpResponse {
-    HttpResponse::Ok().json(json!({
+async fn health() -> impl IntoResponse {
+    (StatusCode::OK, Json(json!({
         "status": "healthy",
         "version": env!("CARGO_PKG_VERSION")
-    }))
+    })))
 }
 
 // Add new protected route
@@ -64,8 +63,8 @@ async fn main() -> Result<(), anyhow::Error> {
         .await
         .expect("Unable to connect to database");
 
-    // Create shared app state (No specific wrapper needed like web::Data)
-    let app_state = app_state::AppState { db: pool.clone() };
+    // Create shared app state
+    let app_state = rustsorter::app_state::AppState { db: pool.clone() }; // Use qualified type name
 
     // Start the HTTP server
     // Define the Axum router
@@ -73,13 +72,13 @@ async fn main() -> Result<(), anyhow::Error> {
         // Public Routes
         .route("/api/health", get(health)) // Use axum::routing::get
         // Protected API Key Management Routes need middleware
-        .nest("/api", api_routes()) // Nest API routes
-        // Apply middleware and state
+        .nest("/api", api_routes(app_state.clone())) // Pass state when creating API routes
+        // Apply middleware and state (Outer state needed if other routes outside /api need it)
         .with_state(app_state) // Provide state to all handlers
         .layer(TraceLayer::new_for_http()); // Add logging middleware
 
     // Define listener address
-    let addr = "127.0.0.1:8081".parse().unwrap();
+    let addr = "127.0.0.1:8081";
     log::info!("Starting server on {}", addr);
 
     // Run the server
@@ -90,13 +89,16 @@ async fn main() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-// Helper function to define nested API routes with middleware
-fn api_routes() -> Router<app_state::AppState> {
+// Helper function accepts AppState and uses from_fn_with_state
+fn api_routes(app_state: rustsorter::app_state::AppState) -> Router<rustsorter::app_state::AppState> {
     Router::new()
         .route("/protected", get(protected_route))
-        .nest("/keys", rustsorter::api_key::routes()) // Get routes from api_key module
-        .nest("/tags", rustsorter::tag_routes::routes()) // Get routes from tag_routes module
+        .nest("/keys", rustsorter::api_key::routes())
+        .nest("/tags", rustsorter::tag_routes::routes())
         // .route("/feed", get(feed::feed)) // Assuming feed::feed is refactored
-        // Apply the authentication middleware to all routes in this router
-        .layer(rustsorter::auth_middleware::ApiKeyAuth)
+        // Use from_fn_with_state, passing the state object directly
+        .layer(middleware::from_fn_with_state(
+            app_state, // The state to pass
+            rustsorter::auth_middleware::auth // The async function
+        ))
 }

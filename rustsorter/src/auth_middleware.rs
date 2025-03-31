@@ -3,12 +3,6 @@ use crate::{
     api_key::{self, ApiKeyDb, ApiKeyError}, // Import necessary items from api_key module
 };
 use crate::app_state::AppState;
-use actix_web::{
-    dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
-    web, Error as ActixError, HttpMessage, HttpResponse, ResponseError
-};
-use futures_util::future::{self, LocalBoxFuture, Ready};
-use std::rc::Rc;
 use std::fmt;
 use tokio; // For spawning background task
 use axum::{
@@ -63,11 +57,11 @@ impl IntoResponse for AuthError {
 // --- Axum Middleware Function ---
 
 pub async fn auth(
-    State(app_state): State<AppState>, // Extract AppState
-    mut request: Request, // Use Axum's Request type
-    next: Next, // The next middleware or handler
+    State(app_state): State<AppState>, // State is now the first argument
+    mut request: Request, // Request becomes the second argument
+    next: Next, // Next becomes the third argument
 ) -> Result<Response, AuthError> { // Return Result<Response, AuthError>
-    let db_pool = app_state.db; // Get pool from state
+    let db_pool = app_state.db; // Use the passed state directly
 
     // --- Extract Token ---
     let auth_header = request.headers()
