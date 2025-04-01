@@ -80,6 +80,7 @@ fn api_routes(app_state: rustsorter::app_state::AppState) -> Router<rustsorter::
     Router::new()
         .route("/protected", get(protected_route))
         .nest("/keys", rustsorter::api_key::routes())
+        .nest("/entity", rustsorter::entity::routes())
         .layer(middleware::from_fn_with_state(
             app_state, // The state to pass
             rustsorter::auth_middleware::auth // The async function
