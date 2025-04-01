@@ -67,7 +67,7 @@ CREATE TABLE votes (
   voter_user_id UUID REFERENCES users(id),
   magnitude INT NOT NULL,
   attribute_id INT NOT NULL REFERENCES attributes(id),
-  PRIMARY KEY (left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, voter_user_id)
+  PRIMARY KEY (left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, voter_user_id, attribute_id)
 );
 
 -- === GLOBAL SLUGS (PUBLIC URLs) ===
