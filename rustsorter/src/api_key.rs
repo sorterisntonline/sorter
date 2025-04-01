@@ -214,7 +214,7 @@ fn parse_key_identifier(full_key: &str) -> Result<String, ApiKeyError> {
 pub async fn get_user_by_auth0_sub(pool: &PgPool, auth0_sub: &str) -> Result<User, ApiKeyError> {
     sqlx::query_as!(
         User,
-        "SELECT auth0_sub, username  FROM users WHERE auth0_sub = $1",
+        "SELECT auth0_sub, username, id  FROM users WHERE auth0_sub = $1",
         auth0_sub
     )
     .fetch_one(pool)
