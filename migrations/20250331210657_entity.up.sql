@@ -13,7 +13,7 @@ CREATE TABLE users (
   created_at TIMESTAMP DEFAULT now()
 );
 -- For unit testing, create admin user
-INSERT INTO users (auth0_sub, username) VALUES ('auth0|1234567890', 'admin');
+INSERT INTO users (auth0_sub, username) VALUES ('admin', 'admin');
 
 -- For API authentication
 CREATE TABLE api_keys (
@@ -24,7 +24,7 @@ CREATE TABLE api_keys (
   hashed_key TEXT NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   last_used_at TIMESTAMP,
-  active BOOLEAN NOT NULL DEFAULT TRUE,
+  active BOOLEAN NOT NULL DEFAULT TRUE
 );
 
 -- === ENTITIES ===

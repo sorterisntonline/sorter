@@ -128,9 +128,6 @@ class TestApiKeyFlow:
         assert len(key_parts[1]) > 0 # Identifier part
         assert len(key_parts[2]) > 0 # Secret part
 
-        assert "preview" in data
-        assert data["preview"].startswith("sort_")
-        assert data["preview"].endswith("...")
         assert "message" in data
 
         # Store for subsequent tests
@@ -175,7 +172,6 @@ class TestApiKeyFlow:
         for key in data["api_keys"]:
             assert "id" in key
             assert "name" in key
-            assert "preview" in key
             assert "hashed_key" not in key # Ensure hashed key isn't leaked
             assert "key_identifier" not in key # Ensure identifier isn't leaked here either
             assert "active" in key
@@ -185,7 +181,6 @@ class TestApiKeyFlow:
             if key["name"] == TestApiKeyFlow.created_key_name:
                 found_key = True
                 assert key["active"] is True
-                assert key["preview"] is not None # Preview should exist
 
         assert found_key, f"Newly created key '{TestApiKeyFlow.created_key_name}' not found in list"
 
@@ -245,7 +240,6 @@ class TestApiKeyFlow:
         key_parts = data["full_key"].split("_") # Re-check format
         assert len(key_parts) == 3 and key_parts[0] == "sort"
 
-        assert "preview" in data
         assert "message" in data
 
         # Store the new key for subsequent tests

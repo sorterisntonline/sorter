@@ -46,7 +46,6 @@ pub struct ApiKeyResponse {
     pub created_at: NaiveDateTime,
     pub last_used_at: Option<NaiveDateTime>,
     pub active: bool,
-    pub key_identifier: String,
 }
 
 impl From<ApiKeyDb> for ApiKeyResponse {
@@ -58,7 +57,6 @@ impl From<ApiKeyDb> for ApiKeyResponse {
             created_at: db_key.created_at,
             last_used_at: db_key.last_used_at,
             active: db_key.active,
-            key_identifier: db_key.key_identifier,
         }
     }
 }
