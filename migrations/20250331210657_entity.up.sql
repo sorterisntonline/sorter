@@ -12,6 +12,9 @@ CREATE TABLE users (
   bio TEXT,
   created_at TIMESTAMP DEFAULT now()
 );
+-- For unit testing, create admin user
+INSERT INTO users (auth0_sub, username) VALUES ('auth0|1234567890', 'admin');
+
 -- For API authentication
 CREATE TABLE api_keys (
   id SERIAL PRIMARY KEY,

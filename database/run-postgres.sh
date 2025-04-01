@@ -235,29 +235,5 @@ else
     sleep 10  # Add initial wait similar to the import path
 fi
 
-# Improve the wait-for-ready logic
-echo "Checking if PostgreSQL is accepting connections..."
-MAX_ATTEMPTS=60  # Increased from 30 to 60
-for i in $(seq 1 $MAX_ATTEMPTS); do
-    echo "Attempt $i of $MAX_ATTEMPTS..."
-    if docker exec -e PGPASSWORD=password $NAME pg_isready -U postgres 2>/dev/null; then
-        echo "PostgreSQL is ready!"
-        echo "PostgreSQL is ready. Ensuring admin user exists..."
-        docker exec -i -e PGPASSWORD=password $NAME psql -U postgres -d postgres << EOF
--- First delete existing admin user
-DELETE FROM users WHERE user_name = 'admin';
-
--- Then insert with our known working hash and new fields
-INSERT INTO users (user_name, email, password_hash, created_at, email_verified)
-SELECT 'admin', 'admin@sorter.social', '\$2a\$11\$OtrVZGZGG9L.bWvVgYeH2uLgP3qv5O5px47XVlyJLOKjgTkiBtaji', NOW(), true;
-
--- Verify the insert
-SELECT user_name, email, password_hash, email_verified FROM users WHERE user_name = 'admin';
-EOF
-        break
-    fi
-    sleep 1
-done
-
 # Keep the script running
 wait
