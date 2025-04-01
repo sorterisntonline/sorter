@@ -2,7 +2,12 @@ use std::collections::HashMap;
 
 use graph::prelude::*;
 
-use crate::models::Vote;
+// just to make this compile
+struct Vote {
+    left_item_id: i32,
+    right_item_id: i32, 
+    magnitude: i32,
+}
 
 pub fn build_graph(
     filteredvotes: &Vec<Vote>,
