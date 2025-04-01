@@ -135,7 +135,7 @@ impl From<sqlx::Error> for ApiKeyError {
         if let sqlx::Error::Database(db_err) = &err {
              if db_err.is_unique_violation() {
                  // Check common unique constraints related to API keys
-                 if db_err.constraint() == Some("api_keys_user_name_name_active_key_idx") {
+                 if db_err.constraint() == Some("api_keys_auth0_sub_name_active_key_idx") {
                     return ApiKeyError::Conflict("An active key with this name already exists.".to_string());
                  }
                  if db_err.constraint() == Some("api_keys_key_identifier_key") { // Assuming a UNIQUE constraint on key_identifier
