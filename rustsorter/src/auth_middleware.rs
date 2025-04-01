@@ -2,9 +2,9 @@ use crate::{
     models::User, // Assuming AppState is in models
     api_key::{self, ApiKeyDb, ApiKeyError}, // Import necessary items from api_key module
 };
-use crate::app_state::AppState;
 use std::fmt;
 use tokio; // For spawning background task
+use crate::app_state::AppState;
 use axum::{
     extract::{Request, State}, // Use Axum's Request and State extractors
     middleware::{self, Next}, // Use Axum's middleware utilities
@@ -79,7 +79,7 @@ pub async fn auth(
 
     if token == STATIC_ADMIN_KEY {
         log::warn!("Using static debug API key for user: {}", ADMIN_USERNAME);
-        return match api_key::get_user_by_username(&db_pool, ADMIN_USERNAME).await {
+        return match api_key::get_user_by_auth0_sub(&db_pool, ADMIN_USERNAME).await {
             Ok(user) => {
                 request.extensions_mut().insert(user); // Insert user into request extensions
                 Ok(next.run(request).await) // Call the next layer
@@ -96,7 +96,7 @@ pub async fn auth(
     // --- Normal API Key Verification ---
     match api_key::verify_api_key(&db_pool, token).await {
         Ok((api_key_record, user)) => {
-            log::debug!("Authentication successful for user: {}", user.user_name);
+            log::debug!("Authentication successful for user: {}", user.auth0_sub);
             let key_id = api_key_record.id;
 
             // Insert user data into request extensions for handlers to use

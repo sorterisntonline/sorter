@@ -1,33 +1,22 @@
-pub mod feed;
 pub mod pagerank;
 pub mod pair;
-pub mod perms;
-pub mod tag;
 pub mod models;
-pub mod tag_routes;
 pub mod app_state;
 use std::env;
-use std::collections::HashMap;
-use std::sync::Arc;
 
-// Removed Actix-Web imports
-// Added Axum and related imports
 use axum::{
-    routing::{get, post}, // Import routing methods
-    Router, Json, Extension, // Import core Axum types
-    response::{IntoResponse, Response}, // For responses
-    http::StatusCode, // For status codes
-    middleware, extract::State, extract::Request, // For middleware and extractors
+    routing::get,
+    Router, Json, Extension,
+    response::{IntoResponse, Response},
+    http::StatusCode,
+    middleware, extract::State, extract::Request,
 };
-use tower_http::trace::TraceLayer; // For logging middleware
+use tower_http::trace::TraceLayer;
 use dotenv::dotenv;
 use serde_json::json;
 use tokio;
-// use rustsorter::auth_middleware::ApiKeyAuth;
 use rustsorter::models::User;
-//
 
-// Health endpoint handler
 async fn health() -> impl IntoResponse {
     (StatusCode::OK, Json(json!({
         "status": "healthy",
@@ -35,15 +24,12 @@ async fn health() -> impl IntoResponse {
     })))
 }
 
-// Add new protected route
-// Example Axum handler signature
 async fn protected_route(
-    Extension(user): Extension<User> // Use Axum's Extension extractor (assuming middleware adds it)
+    Extension(user): Extension<User>
 ) -> impl IntoResponse {
-    // User is guaranteed by middleware or the request wouldn't reach here
     (StatusCode::OK, Json(json!({
-        "message": format!("Hello, {}! This is a protected route.", user.user_name),
-        "authenticated_user": user.user_name
+        "message": format!("Hello, {}! This is a protected route.", user.auth0_sub),
+        "authenticated_user": user.auth0_sub
     })))
 }
 
@@ -94,9 +80,6 @@ fn api_routes(app_state: rustsorter::app_state::AppState) -> Router<rustsorter::
     Router::new()
         .route("/protected", get(protected_route))
         .nest("/keys", rustsorter::api_key::routes())
-        .nest("/tags", rustsorter::tag_routes::routes())
-        // .route("/feed", get(feed::feed)) // Assuming feed::feed is refactored
-        // Use from_fn_with_state, passing the state object directly
         .layer(middleware::from_fn_with_state(
             app_state, // The state to pass
             rustsorter::auth_middleware::auth // The async function

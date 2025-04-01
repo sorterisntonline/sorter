@@ -126,11 +126,6 @@ pub struct Attribute {
 
 #[derive(sqlx::FromRow, serde::Serialize, Debug, Clone)]
 pub struct User {
-    pub user_name: String,
-
-    #[sqlx(default)]
-    pub email: Option<String>,
-
-    #[sqlx(default)]
-    pub email_verified: Option<bool>,
+    pub auth0_sub: String,
+    pub username: String,
 }

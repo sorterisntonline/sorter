@@ -19,12 +19,12 @@ INSERT INTO users (auth0_sub, username) VALUES ('auth0|1234567890', 'admin');
 CREATE TABLE api_keys (
   id SERIAL PRIMARY KEY,
   auth0_sub TEXT NOT NULL,
-  name VARCHAR(255) NOT NULL,
+  name TEXT NOT NULL,
   key_identifier TEXT NOT NULL,
   hashed_key TEXT NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   last_used_at TIMESTAMP,
-  active BOOLEAN NOT NULL DEFAULT TRUE
+  active BOOLEAN NOT NULL DEFAULT TRUE,
 );
 
 -- === ENTITIES ===
