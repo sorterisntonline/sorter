@@ -1,15 +1,15 @@
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    response::{IntoResponse, Json},
-    routing::{delete, get, post, put},
+    response::IntoResponse,
+    routing::{get, post},
     Router,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
-use chrono::{DateTime, Utc, NaiveDateTime};
+use chrono::NaiveDateTime;
 
-use crate::app_state::AppState;
+use crate::{app_state::AppState, models::{ErrorResponse, Json}};
 
 // Represents an entity fetched from the database
 #[derive(Serialize, Debug, sqlx::FromRow)]
@@ -44,7 +44,7 @@ pub fn routes() -> Router<AppState> {
 async fn create_entity(
     State(state): State<AppState>,
     Json(payload): Json<EntityPayload>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, impl IntoResponse> {
     match sqlx::query_as!(
         Entity,
         r#"
@@ -65,10 +65,10 @@ async fn create_entity(
             log::error!("Failed to create entity: {}", e);
             if let Some(db_err) = e.as_database_error() {
                 if db_err.is_unique_violation() {
-                    return Err((StatusCode::CONFLICT, format!("Entity with pk_namespace '{}' and pk '{}' already exists.", payload.pk_namespace, payload.pk)));
+                    return Err(ErrorResponse::new(StatusCode::CONFLICT, format!("Entity with pk_namespace '{}' and pk '{}' already exists.", payload.pk_namespace, payload.pk)));
                 }
             }
-            Err((StatusCode::INTERNAL_SERVER_ERROR, "Failed to create entity".to_string()))
+            Err(ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "Failed to create entity".to_string()))
         }
     }
 }
@@ -77,7 +77,7 @@ async fn create_entity(
 async fn get_entity(
     State(state): State<AppState>,
     Path((pk_namespace, pk)): Path<(String, String)>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, impl IntoResponse> {
     match sqlx::query_as!(
         Entity,
         r#"
@@ -92,10 +92,10 @@ async fn get_entity(
     .await
     {
         Ok(Some(entity)) => Ok((StatusCode::OK, Json(entity))),
-        Ok(None) => Err((StatusCode::NOT_FOUND, "Entity not found".to_string())),
+        Ok(None) => Err(ErrorResponse::new(StatusCode::NOT_FOUND, "Entity not found".to_string())),
         Err(e) => {
             log::error!("Failed to get entity: {}", e);
-            Err((StatusCode::INTERNAL_SERVER_ERROR, "Failed to retrieve entity".to_string()))
+            Err(ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "Failed to retrieve entity".to_string()))
         }
     }
 }
@@ -124,9 +124,9 @@ async fn update_entity(
     State(state): State<AppState>,
     Path((pk_namespace, pk)): Path<(String, String)>,
     Json(payload): Json<EntityPayload>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, impl IntoResponse> {
     if pk_namespace != payload.pk_namespace || pk != payload.pk {
-        return Err((StatusCode::BAD_REQUEST, "Path parameters must match payload primary key".to_string()));
+        return Err(ErrorResponse::new(StatusCode::BAD_REQUEST, "Path parameters must match payload primary key".to_string()));
     }
 
     match sqlx::query_as!(
@@ -146,10 +146,10 @@ async fn update_entity(
     .await
     {
         Ok(Some(entity)) => Ok((StatusCode::OK, Json(entity))),
-        Ok(None) => Err((StatusCode::NOT_FOUND, "Entity not found".to_string())),
+        Ok(None) => Err(ErrorResponse::new(StatusCode::NOT_FOUND, "Entity not found".to_string())),
         Err(e) => {
             log::error!("Failed to update entity: {}", e);
-            Err((StatusCode::INTERNAL_SERVER_ERROR, "Failed to update entity".to_string()))
+            Err(ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "Failed to update entity".to_string()))
         }
     }
 }
