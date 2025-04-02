@@ -16,15 +16,55 @@ use dotenv::dotenv;
 use serde_json::json;
 use tokio;
 use rustsorter::models::User;
+use utoipa::{OpenApi, IntoParams};
+use utoipa_swagger_ui::SwaggerUi;
 
-async fn health() -> impl IntoResponse {
+/// API Documentation
+#[derive(OpenApi)]
+#[openapi(
+    paths(
+        health,
+        protected_route
+    ),
+    components(
+        schemas(User)
+    ),
+    tags(
+        (name = "health", description = "Health check endpoints"),
+        (name = "protected", description = "Protected endpoints requiring authentication")
+    )
+)]
+struct ApiDoc;
+
+/// Health check endpoint
+#[utoipa::path(
+    get,
+    path = "/api/health",
+    tag = "health",
+    responses(
+        (status = 200, description = "Health check successful", body = String)
+    )
+)]
+pub async fn health() -> impl IntoResponse {
     (StatusCode::OK, Json(json!({
         "status": "healthy",
         "version": env!("CARGO_PKG_VERSION")
     })))
 }
 
-async fn protected_route(
+/// Protected route requiring authentication
+#[utoipa::path(
+    get,
+    path = "/api/protected",
+    tag = "protected",
+    responses(
+        (status = 200, description = "Protected route accessed successfully", body = User)
+    ),
+    security(
+        ("api_key" = [])
+    )
+)]
+pub async fn protected_route(
     Extension(user): Extension<User>
 ) -> impl IntoResponse {
     (StatusCode::OK, Json(json!({
@@ -50,22 +90,23 @@ async fn main() -> Result<(), anyhow::Error> {
         .expect("Unable to connect to database");
 
     // Create shared app state
-    let app_state = rustsorter::app_state::AppState { db: pool.clone() }; // Use qualified type name
+    let app_state = rustsorter::app_state::AppState { db: pool.clone() };
 
-    // Start the HTTP server
     // Define the Axum router
     let app = Router::new()
+        .merge(SwaggerUi::new("/api/docs").url("/api/docs/openapi.json", ApiDoc::openapi()))
         // Public Routes
-        .route("/api/health", get(health)) // Use axum::routing::get
+        .route("/api/health", get(health))
         // Protected API Key Management Routes need middleware
-        .nest("/api", api_routes(app_state.clone())) // Pass state when creating API routes
-        // Apply middleware and state (Outer state needed if other routes outside /api need it)
-        .with_state(app_state) // Provide state to all handlers
-        .layer(TraceLayer::new_for_http()); // Add logging middleware
+        .nest("/api", api_routes(app_state.clone()))
+        // Apply middleware and state
+        .with_state(app_state)
+        .layer(TraceLayer::new_for_http());
 
     // Define listener address
     let addr = "127.0.0.1:8081";
     log::info!("Starting server on {}", addr);
+    log::info!("OpenAPI documentation available at http://{}/api/docs/", addr);
 
     // Run the server
     axum::serve(tokio::net::TcpListener::bind(addr).await.unwrap(), app.into_make_service())
@@ -82,7 +123,7 @@ fn api_routes(app_state: rustsorter::app_state::AppState) -> Router<rustsorter::
         .nest("/keys", rustsorter::api_key::routes())
         .nest("/entity", rustsorter::entity::routes())
         .layer(middleware::from_fn_with_state(
-            app_state, // The state to pass
-            rustsorter::auth_middleware::auth // The async function
+            app_state,
+            rustsorter::auth_middleware::auth
         ))
 }
