@@ -1,36 +1,41 @@
+pub mod app_state;
+pub mod models;
 pub mod pagerank;
 pub mod pair;
-pub mod models;
-pub mod app_state;
 use std::env;
 
 use axum::{
-    routing::get,
-    Router, Json, Extension,
-    response::{IntoResponse, Response},
+    Extension,
+    Json,
+    Router,
     http::StatusCode,
-    middleware, extract::State, extract::Request,
+    middleware,
+    response::IntoResponse,
+    routing::get,
 };
-use tower_http::trace::TraceLayer;
 use dotenv::dotenv;
-use serde_json::json;
-use tokio;
 use rustsorter::models::User;
+use serde_json::json;
+use tower_http::trace::TraceLayer;
 
 async fn health() -> impl IntoResponse {
-    (StatusCode::OK, Json(json!({
+    (
+        StatusCode::OK,
+        Json(json!({
         "status": "healthy",
         "version": env!("CARGO_PKG_VERSION")
-    })))
+        })),
+    )
 }
 
-async fn protected_route(
-    Extension(user): Extension<User>
-) -> impl IntoResponse {
-    (StatusCode::OK, Json(json!({
+async fn protected_route(Extension(user): Extension<User>) -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        Json(json!({
         "message": format!("Hello, {}! This is a protected route.", user.auth0_sub),
         "authenticated_user": user.auth0_sub
-    })))
+        })),
+    )
 }
 
 #[tokio::main]
@@ -68,21 +73,26 @@ async fn main() -> Result<(), anyhow::Error> {
     log::info!("Starting server on {}", addr);
 
     // Run the server
-    axum::serve(tokio::net::TcpListener::bind(addr).await.unwrap(), app.into_make_service())
-        .await
-        .expect("Failed to start server");
+    axum::serve(
+        tokio::net::TcpListener::bind(addr).await.unwrap(),
+        app.into_make_service(),
+    )
+    .await
+    .expect("Failed to start server");
 
     Ok(())
 }
 
 // Helper function accepts AppState and uses from_fn_with_state
-fn api_routes(app_state: rustsorter::app_state::AppState) -> Router<rustsorter::app_state::AppState> {
+fn api_routes(
+    app_state: rustsorter::app_state::AppState,
+) -> Router<rustsorter::app_state::AppState> {
     Router::new()
         .route("/protected", get(protected_route))
         .nest("/keys", rustsorter::api_key::routes())
         .nest("/entity", rustsorter::entity::routes())
         .layer(middleware::from_fn_with_state(
-            app_state, // The state to pass
-            rustsorter::auth_middleware::auth // The async function
+            app_state,                         // The state to pass
+            rustsorter::auth_middleware::auth, // The async function
         ))
 }
