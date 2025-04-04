@@ -4,8 +4,7 @@ use axum::{
     Json, Router, response::{IntoResponse, Response}, http::StatusCode,
 };
 use rspotify::{
-    prelude::*, // Import necessary rspotify traits
-    model::{SearchType, AlbumType, Country, Market}, // Import necessary enums/structs
+    model::{Country, SimplifiedAlbum, Market, SearchType}, prelude::* // Import necessary enums/structs
 };
 use serde::{Deserialize, Serialize};
 // Remove unused imports if get_spotify_client is no longer here
@@ -20,19 +19,9 @@ pub struct AlbumSearchQuery {
     q: String, // The search query string
 }
 
-// Define a more structured response (optional, but good practice)
-#[derive(Serialize)]
-pub struct AlbumSearchResult {
-    id: Option<String>, // Spotify Album ID
-    name: String,
-    artists: Vec<String>,
-    release_date: Option<String>,
-    image_url: Option<String>, // URL of the album cover
-}
-
 #[derive(Serialize)]
 pub struct AlbumSearchResponse {
-    pub results: Vec<AlbumSearchResult>,
+    pub results: Vec<SimplifiedAlbum>,
 }
 
 // Define a custom error type for the handler
@@ -100,17 +89,7 @@ async fn search_albums(
     };
 
     // Map the rspotify FullAlbum results to our AlbumSearchResult struct
-    let results = albums.into_iter().map(|album| {
-        AlbumSearchResult {
-            id: album.id.map(|id| id.id().to_string()), // Get the string ID
-            name: album.name,
-            artists: album.artists.into_iter().map(|a| a.name).collect(),
-            release_date: album.release_date,
-            image_url: album.images.first().map(|img| img.url.clone()),
-        }
-    }).collect();
-
-    Ok(Json(AlbumSearchResponse { results }))
+    Ok(Json(AlbumSearchResponse { results: albums }))
 }
 
 // Routes function remains the same, but handlers now use State extractor

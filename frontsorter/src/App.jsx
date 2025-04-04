@@ -8,7 +8,6 @@ import { useDebounce } from 'use-debounce'
 // import { useDebounce } from 'use-debounce'
 import './App.css'
 
-
 // Fetch function for Spotify album search
 const fetchSpotifyAlbums = async (artistId, query) => {
   if (!query && !artistId) {
