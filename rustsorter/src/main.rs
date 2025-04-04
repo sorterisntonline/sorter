@@ -2,6 +2,12 @@ pub mod app_state;
 pub mod models;
 pub mod pagerank;
 pub mod pair;
+pub mod api_key;
+pub mod auth_middleware;
+pub mod entity;
+pub mod entity_relationships;
+pub mod spotify;
+
 use std::env;
 
 use axum::{
@@ -14,7 +20,7 @@ use axum::{
     routing::get,
 };
 use dotenv::dotenv;
-use rustsorter::models::User;
+use crate::models::User;
 use serde_json::json;
 use tower_http::trace::TraceLayer;
 
@@ -55,7 +61,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .expect("Unable to connect to database");
 
     // Create shared app state
-    let app_state = rustsorter::app_state::AppState { db: pool.clone() }; // Use qualified type name
+    let app_state = crate::app_state::AppState { db: pool.clone() }; // Use qualified type name
 
     // Start the HTTP server
     // Define the Axum router
@@ -85,14 +91,14 @@ async fn main() -> Result<(), anyhow::Error> {
 
 // Helper function accepts AppState and uses from_fn_with_state
 fn api_routes(
-    app_state: rustsorter::app_state::AppState,
-) -> Router<rustsorter::app_state::AppState> {
+    app_state: crate::app_state::AppState,
+) -> Router<crate::app_state::AppState> {
     Router::new()
         .route("/protected", get(protected_route))
-        .nest("/keys", rustsorter::api_key::routes())
-        .nest("/entity", rustsorter::entity::routes())
+        .nest("/keys", crate::api_key::routes())
+        .nest("/entity", crate::entity::routes())
         .layer(middleware::from_fn_with_state(
             app_state,                         // The state to pass
-            rustsorter::auth_middleware::auth, // The async function
+            crate::auth_middleware::auth, // The async function
         ))
 }
