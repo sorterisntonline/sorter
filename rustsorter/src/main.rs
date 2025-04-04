@@ -68,6 +68,8 @@ async fn main() -> Result<(), anyhow::Error> {
     let app = Router::new()
         // Public Routes
         .route("/api/health", get(health)) // Use axum::routing::get
+        // Unauthenticated Spotify Routes
+        .nest("/spotify", crate::spotify::routes()) // Mount Spotify routes separately
         // Protected API Key Management Routes need middleware
         .nest("/api", api_routes(app_state.clone())) // Pass state when creating API routes
         // Apply middleware and state (Outer state needed if other routes outside /api need it)

@@ -1,7 +1,6 @@
 use axum::{routing::get, Json, Router, extract::Query};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use rspotify::ClientCredsSpotify;
-use rspotify::model::{SearchType, SearchResult};
 use rspotify::prelude::*;
 use rspotify::AuthCodeSpotify;
 use std::env;
@@ -12,8 +11,13 @@ pub struct AlbumSearchQuery {
     q: String, // The search query string
 }
 
+#[derive(Serialize)]
+pub struct Test {
+    pub results: Vec<String>,
+}
+
 // Placeholder for now, will implement actual search logic
-async fn search_albums(Query(params): Query<AlbumSearchQuery>) -> Result<Json<SearchResult>, String> {
+async fn search_albums(Query(params): Query<AlbumSearchQuery>) -> Result<Json<Test>, String> {
     // TODO: Initialize Spotify client (ideally share via AppState)
     // TODO: Perform search using rspotify
     // TODO: Handle errors properly
@@ -22,7 +26,7 @@ async fn search_albums(Query(params): Query<AlbumSearchQuery>) -> Result<Json<Se
     println!("Searching for albums with query: {}", params.q);
     // Replace with actual rspotify search call
     // For now, return an error or dummy data
-    Err(format!("Spotify search not yet implemented for query: {}", params.q))
+    Ok(Json(Test { results: vec!["test".to_string()] }))
 }
 
 pub fn routes() -> Router<crate::app_state::AppState> {
