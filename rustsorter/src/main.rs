@@ -10,6 +10,7 @@ pub mod spotify;
 
 use std::env;
 
+use anyhow::Result;
 use axum::{
     Extension,
     Json,
@@ -23,6 +24,7 @@ use dotenv::dotenv;
 use crate::models::User;
 use serde_json::json;
 use tower_http::trace::TraceLayer;
+use rspotify::{ClientCredsSpotify, Credentials, Config};
 
 async fn health() -> impl IntoResponse {
     (
@@ -44,43 +46,53 @@ async fn protected_route(Extension(user): Extension<User>) -> impl IntoResponse 
     )
 }
 
+async fn get_spotify_client() -> Result<ClientCredsSpotify> {
+    let creds = Credentials::from_env().ok_or_else(|| anyhow::anyhow!("Spotify credentials (RSPOTIFY_CLIENT_ID, RSPOTIFY_CLIENT_SECRET) not found in environment"))?;
+
+    let config = Config {
+        token_refreshing: true,
+        ..Default::default()
+    };
+
+    let spotify = ClientCredsSpotify::with_config(creds, config);
+
+    spotify.request_token().await.map_err(|e| anyhow::anyhow!("Failed to get Spotify token: {}", e))?;
+    log::info!("Successfully obtained Spotify token.");
+
+    Ok(spotify)
+}
+
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    // Initialize logging and dotenv
     env_logger::init();
     dotenv().ok();
 
-    // Retrieve the database URL from the environment
     let database_string = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-    // Create the database pool
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(5)
         .connect(&database_string)
         .await
         .expect("Unable to connect to database");
 
-    // Create shared app state
-    let app_state = crate::app_state::AppState { db: pool.clone() }; // Use qualified type name
+    let spotify_client = get_spotify_client().await?;
+    log::info!("Spotify client initialized.");
 
-    // Start the HTTP server
-    // Define the Axum router
+    let app_state = crate::app_state::AppState {
+        db: pool.clone(),
+        spotify_client,
+    };
+
     let app = Router::new()
-        // Public Routes
-        .route("/api/health", get(health)) // Use axum::routing::get
-        // Unauthenticated Spotify Routes
-        .nest("/spotify", crate::spotify::routes()) // Mount Spotify routes separately
-        // Protected API Key Management Routes need middleware
-        .nest("/api", api_routes(app_state.clone())) // Pass state when creating API routes
-        // Apply middleware and state (Outer state needed if other routes outside /api need it)
-        .with_state(app_state) // Provide state to all handlers
-        .layer(TraceLayer::new_for_http()); // Add logging middleware
+        .route("/api/health", get(health))
+        .nest("/spotify", crate::spotify::routes())
+        .nest("/api", api_routes(app_state.clone()))
+        .with_state(app_state)
+        .layer(TraceLayer::new_for_http());
 
-    // Define listener address
     let addr = "127.0.0.1:8081";
     log::info!("Starting server on {}", addr);
 
-    // Run the server
     axum::serve(
         tokio::net::TcpListener::bind(addr).await.unwrap(),
         app.into_make_service(),
@@ -91,7 +103,6 @@ async fn main() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-// Helper function accepts AppState and uses from_fn_with_state
 fn api_routes(
     app_state: crate::app_state::AppState,
 ) -> Router<crate::app_state::AppState> {
@@ -100,7 +111,7 @@ fn api_routes(
         .nest("/keys", crate::api_key::routes())
         .nest("/entity", crate::entity::routes())
         .layer(middleware::from_fn_with_state(
-            app_state,                         // The state to pass
-            crate::auth_middleware::auth, // The async function
+            app_state,
+            crate::auth_middleware::auth,
         ))
 }
