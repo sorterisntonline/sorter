@@ -1,119 +1,195 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useDebounce } from 'use-debounce'
 // Removed unused logos
 // import reactLogo from './assets/react.svg'
 // import viteLogo from '/vite.svg'
-import { useDebounce } from 'use-debounce'
+// import { useQuery } from '@tanstack/react-query'
+// import { useDebounce } from 'use-debounce'
 import './App.css'
 
+
 // Fetch function for Spotify album search
-const fetchSpotifyAlbums = async (query) => {
-  if (!query) {
-    // Don't fetch if the query is empty
-    return { results: [] };
+const fetchSpotifyAlbums = async (artistId, query) => {
+  if (!query && !artistId) {
+      // Don't fetch if no artist is selected and query is empty
+      return { results: [] };
   }
-  // Use relative path for the proxy
-  const response = await fetch(`/spotify/albums/search?q=${encodeURIComponent(query)}`);
+
+  let url = '/spotify/albums/search?';
+  const params = new URLSearchParams();
+
+  if (artistId) {
+    // TODO: Add backend support for filtering by artist ID
+    // For now, we still just search by query, but conceptually we might want
+    // an endpoint like `/spotify/artists/{artistId}/albums?q=...`
+    // params.append('artistId', artistId); // Placeholder
+    console.warn("Filtering albums by artist ID not yet implemented on backend.");
+  }
+  if (query) {
+      params.append('q', query);
+  }
+
+  url += params.toString();
+
+
+  const response = await fetch(url);
   if (!response.ok) {
-    // Attempt to parse error response from backend if possible
-    let errorBody = 'Network response was not ok';
-    try {
-        const errJson = await response.json();
-        errorBody = errJson.error || errorBody; // Use backend error if available
-    } catch (e) {
-        // Ignore if response is not JSON
-    }
-    throw new Error(errorBody);
+      let errorBody = 'Network response was not ok';
+      try {
+          const errJson = await response.json();
+          errorBody = errJson.error || errorBody;
+      } catch (e) {
+          // Ignore
+      }
+      throw new Error(errorBody);
   }
-  return response.json(); // Backend returns { results: [AlbumSearchResult] }
+  return response.json(); // Expects { results: [AlbumSearchResult] }
 };
 
-function App() {
-  // Removed unused count state
-  // const [count, setCount] = useState(0)
-  // State for the search input
-  const [searchQuery, setSearchQuery] = useState('');
-  // Create a debounced version of the search query
-  // Wait 500ms after the user stops typing before updating debouncedSearchQuery
-  const [debouncedSearchQuery] = useDebounce(searchQuery, 500);
+// TODO: Add fetch functions for artists and songs
+// const fetchSpotifyArtists = async (query) => { ... };
+// const fetchSpotifySongs = async (albumId, query) => { ... };
 
-  // useQuery hook to fetch data
-  const { data, error, isLoading, isFetching } = useQuery({
-    // Use debouncedSearchQuery in the queryKey
-    queryKey: ['spotifyAlbums', debouncedSearchQuery],
-    // Pass debouncedSearchQuery to the fetch function
-    queryFn: () => fetchSpotifyAlbums(debouncedSearchQuery),
-    // Only run the query if debouncedSearchQuery is not empty
-    enabled: !!debouncedSearchQuery,
-    staleTime: 1000 * 60 * 5, // Keep data fresh for 5 minutes
-    // Keep previous data while loading new data for smoother UX
-    keepPreviousData: true,
-  });
+// Artist Panel Component
+function ArtistPanel({ onArtistSelect }) {
+    const [searchQuery, setSearchQuery] = useState('');
+    // TODO: Add artist search logic (useQuery, debouncing)
 
-  return (
-    <>
-      {/* Removed the default Vite/React boilerplate */}
-      {/* <div> ... links and logos ... </div> */}
-      {/* <h1>Vite + React</h1> */}
-      {/* <div className="card"> ... counter button ... </div> */}
+    const handleSelect = (artist) => {
+        onArtistSelect(artist);
+    };
 
-      {/* Spotify Search Section */}
-      <div className="card">
-        <h2>Search Spotify Albums</h2>
-        <div style={{ marginBottom: '1rem' }}> {/* Add some spacing */}
+    return (
+        <div className="panel artist-panel">
+            <h2>Artists</h2>
             <input
-              type="text"
-              placeholder="Enter album name..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ marginRight: '10px', padding: '8px', minWidth: '300px' }}
+                type="text"
+                placeholder="Search artists..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{ width: '90%', padding: '8px', marginBottom: '10px' }}
             />
-            {/* Indicate fetching state (based on the debounced query's fetch) */}
-            {(isLoading || isFetching) && <span style={{ marginLeft: '10px' }}>Loading...</span>}
+            {/* TODO: Display artist results */}
+            <p>(Artist Search Results Here)</p>
+            {/* Example interaction */}
+            <button onClick={() => handleSelect({ id: 'artist1', name: 'Example Artist' })}>Select Example Artist</button>
         </div>
+    );
+}
 
-        {/* Display error state */}
-        {error && <p style={{ color: 'red' }}>Error: {error.message}</p>}
+// Album Panel Component (incorporates previous search logic)
+function AlbumPanel({ selectedArtist, onAlbumSelect }) {
+    const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedSearchQuery] = useDebounce(searchQuery, 500);
 
-        {/* Display results */}
-        {/* Only show results area if not initial loading and data exists */}
-        {!isLoading && data && (
-          <ul style={{ listStyle: 'none', padding: 0 }}> {/* Style list */}
-            {data.results.map((album) => (
-              // Use album.id as the key
-              <li key={album.id || album.name} style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #eee', paddingBottom: '1rem' }}>
-                {/* Album Cover Image */}
-                {album.image_url && (
-                  <img
-                    src={album.image_url}
-                    alt={`Cover for ${album.name}`}
-                    style={{ width: '64px', height: '64px', marginRight: '1rem', objectFit: 'cover' }}
-                  />
-                )}
-                {/* Album Details */}
-                <div>
-                    <strong style={{ display: 'block' }}>{album.name}</strong>
-                    <span style={{ display: 'block', color: '#555' }}>
-                        {album.artists.join(', ')}
-                    </span>
-                    {album.release_date && (
-                         <span style={{ display: 'block', color: '#888', fontSize: '0.9em' }}>
-                            Released: {album.release_date}
-                         </span>
-                    )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-        {/* Use debounced query for "No results" message consistency */}
-        {data && data.results.length === 0 && !isFetching && debouncedSearchQuery && <p>No results found for "{debouncedSearchQuery}".</p>}
-      </div>
+    // Fetch albums based on selected artist (if any) and the search query
+    const { data, error, isLoading, isFetching } = useQuery({
+        queryKey: ['spotifyAlbums', selectedArtist?.id, debouncedSearchQuery],
+        queryFn: () => fetchSpotifyAlbums(selectedArtist?.id, debouncedSearchQuery),
+        // Enable query if a search term exists OR an artist is selected (to show their albums)
+        enabled: !!debouncedSearchQuery || !!selectedArtist,
+        staleTime: 1000 * 60 * 5, // 5 minutes
+        keepPreviousData: true,
+    });
 
-      {/* Removed the default Vite/React docs link */}
-      {/* <p className="read-the-docs"> ... </p> */}
-    </>
-  )
+    // Effect to clear search if artist changes (optional, depends on desired UX)
+    // useEffect(() => {
+    //   setSearchQuery('');
+    // }, [selectedArtist]);
+
+    return (
+        <div className="panel album-panel">
+            <h2>Albums {selectedArtist ? `by ${selectedArtist.name}` : ''}</h2>
+            <input
+                type="text"
+                placeholder="Search albums..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{ width: '90%', padding: '8px', marginBottom: '10px' }}
+            />
+             {(isLoading || isFetching) && <span style={{ marginLeft: '10px' }}>Loading...</span>}
+             {error && <p style={{ color: 'red' }}>Error: {error.message}</p>}
+
+             {/* Display results */}
+             {!isLoading && data && (
+                 <ul style={{ listStyle: 'none', padding: 0, overflowY: 'auto', maxHeight: 'calc(100vh - 150px)' /* Adjust height as needed */ }}>
+                    {data.results.map((album) => (
+                        <li key={album.id || album.name} onClick={() => onAlbumSelect(album)} className="list-item">
+                           {/* Basic display for now, add image later if needed */}
+                           <strong>{album.name}</strong>
+                           <span style={{ display: 'block', color: '#555', fontSize: '0.9em' }}>
+                                {album.artists?.join(', ') || 'Unknown Artist'}
+                           </span>
+                            {album.release_date && (
+                               <span style={{ display: 'block', color: '#888', fontSize: '0.8em' }}>
+                                  {album.release_date}
+                               </span>
+                            )}
+                        </li>
+                    ))}
+                 </ul>
+             )}
+             {data && data.results.length === 0 && !isFetching && (debouncedSearchQuery || selectedArtist) && <p>No results found.</p>}
+        </div>
+    );
+}
+
+// Song Panel Component
+function SongPanel({ selectedAlbum }) {
+    const [searchQuery, setSearchQuery] = useState('');
+    // TODO: Add song fetching/filtering logic (useQuery, debouncing)
+
+    if (!selectedAlbum) {
+        return (
+            <div className="panel song-panel">
+                <h2>Songs</h2>
+                <p>Select an album to see songs.</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="panel song-panel">
+            <h2>Songs in {selectedAlbum.name}</h2>
+             <input
+                type="text"
+                placeholder="Filter songs..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{ width: '90%', padding: '8px', marginBottom: '10px' }}
+            />
+            {/* TODO: Display song results */}
+            <p>(Song List Here)</p>
+        </div>
+    );
+}
+
+// Main App Component
+function App() {
+    const [selectedArtist, setSelectedArtist] = useState(null)
+    const [selectedAlbum, setSelectedAlbum] = useState(null)
+
+    // When a new artist is selected, clear the album selection
+    const handleArtistSelect = (artist) => {
+        setSelectedAlbum(null)
+        setSelectedArtist(artist)
+    }
+
+    return (
+        <div className="app-container">
+            <ArtistPanel
+                onArtistSelect={handleArtistSelect}
+            />
+            <AlbumPanel
+                selectedArtist={selectedArtist}
+                onAlbumSelect={setSelectedAlbum}
+            />
+            <SongPanel
+                selectedAlbum={selectedAlbum}
+            />
+        </div>
+    )
 }
 
 export default App

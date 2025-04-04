@@ -1,9 +1,63 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+/* Keep existing styles or reset if needed */
+body {
+  margin: 0;
+  font-family: sans-serif; /* Example font */
 }
+
+#root {
+  /* Optional: Ensure root takes full height if needed */
+   /* max-width: 1280px; */
+   /* margin: 0 auto; */
+   /* padding: 2rem; */
+   /* text-align: center; */
+   height: 100vh;
+   width: 100vw;
+   overflow: hidden; /* Prevent body scrolling */
+}
+
+
+.app-container {
+  display: flex;
+  height: 100vh; /* Full viewport height */
+  border-top: 1px solid #ccc;
+  width: 100%;
+}
+
+.panel {
+  flex: 1; /* Each panel takes equal width */
+  border-right: 1px solid #ccc;
+  padding: 15px;
+  box-sizing: border-box; /* Include padding in width calculation */
+  overflow-y: auto; /* Allow vertical scrolling within panels */
+  height: 100%; /* Ensure panels take full height of container */
+  min-width: 250px; /* Minimum width for panels */
+}
+
+.panel:last-child {
+  border-right: none; /* No border on the last panel */
+}
+
+/* Simple list item styling */
+.list-item {
+  padding: 8px 5px;
+  border-bottom: 1px solid #eee;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.list-item:hover {
+  background-color: #f0f0f0;
+}
+
+.list-item strong {
+  display: block;
+}
+
+
+/* Remove default card styles if they conflict */
+/* .card { ... } */
+
+/* Other styles */
 
 .logo {
   height: 6em;
@@ -31,10 +85,6 @@
   a:nth-of-type(2) .logo {
     animation: logo-spin infinite 20s linear;
   }
-}
-
-.card {
-  padding: 2em;
 }
 
 .read-the-docs {
