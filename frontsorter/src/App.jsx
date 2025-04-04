@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 // Removed unused logos
 // import reactLogo from './assets/react.svg'
 // import viteLogo from '/vite.svg'
+import { useDebounce } from 'use-debounce'
 import './App.css'
 
 // Fetch function for Spotify album search
@@ -32,12 +33,18 @@ function App() {
   // const [count, setCount] = useState(0)
   // State for the search input
   const [searchQuery, setSearchQuery] = useState('');
+  // Create a debounced version of the search query
+  // Wait 500ms after the user stops typing before updating debouncedSearchQuery
+  const [debouncedSearchQuery] = useDebounce(searchQuery, 500);
 
   // useQuery hook to fetch data
   const { data, error, isLoading, isFetching } = useQuery({
-    queryKey: ['spotifyAlbums', searchQuery], // Query key includes the search query
-    queryFn: () => fetchSpotifyAlbums(searchQuery), // Query function
-    enabled: !!searchQuery, // Only run the query if searchQuery is not empty
+    // Use debouncedSearchQuery in the queryKey
+    queryKey: ['spotifyAlbums', debouncedSearchQuery],
+    // Pass debouncedSearchQuery to the fetch function
+    queryFn: () => fetchSpotifyAlbums(debouncedSearchQuery),
+    // Only run the query if debouncedSearchQuery is not empty
+    enabled: !!debouncedSearchQuery,
     staleTime: 1000 * 60 * 5, // Keep data fresh for 5 minutes
     // Keep previous data while loading new data for smoother UX
     keepPreviousData: true,
@@ -61,7 +68,7 @@ function App() {
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{ marginRight: '10px', padding: '8px', minWidth: '300px' }}
             />
-            {/* Indicate fetching state */}
+            {/* Indicate fetching state (based on the debounced query's fetch) */}
             {(isLoading || isFetching) && <span style={{ marginLeft: '10px' }}>Loading...</span>}
         </div>
 
@@ -99,8 +106,8 @@ function App() {
             ))}
           </ul>
         )}
-        {/* Display "No results" message */}
-         {data && data.results.length === 0 && !isFetching && searchQuery && <p>No results found for "{searchQuery}".</p>}
+        {/* Use debounced query for "No results" message consistency */}
+        {data && data.results.length === 0 && !isFetching && debouncedSearchQuery && <p>No results found for "{debouncedSearchQuery}".</p>}
       </div>
 
       {/* Removed the default Vite/React docs link */}
