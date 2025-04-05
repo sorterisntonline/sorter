@@ -250,8 +250,6 @@ function App() {
     const [highlightedIndex, setHighlightedIndex] = useState(-1);
     const suggestionBoxRef = useRef(null);
     const queryClient = useQueryClient();
-    // Ref to track if initial load from URL has been attempted
-    const initialLoadAttempted = useRef(false);
 
     // --- React Query Hooks (Using v5 Object Syntax) ---
 
@@ -625,30 +623,47 @@ function App() {
                 </div>
 
                 {/* Suggestions dropdown */}
-                 { (inputValue.length > 0 || suggestionsQuery.isFetching) && suggestionsQuery.fetchStatus !== 'idle' && !displayTag && (
-                    <div ref={suggestionBoxRef} className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                        {suggestionsQuery.isLoading && !suggestionsQuery.data?.length ? ( // Loading state
-                           <div className="p-2 text-gray-500">Loading...</div>
-                       ) : suggestionsQuery.isError ? ( // Error state
-                           <div className="p-2 text-red-500">Error: {suggestionsQuery.error.message}</div>
-                        ) : suggestionsQuery.data && suggestionsQuery.data.length > 0 ? ( // Success state
-                            <ul>
-                                {suggestionsQuery.data.map((suggestion, index) => (
-                                    <li
-                                        key={`${suggestion.pk_namespace}-${suggestion.pk}`}
-                                        className={`p-2 cursor-pointer hover:bg-blue-100 ${index === highlightedIndex ? 'bg-blue-100' : ''}`}
-                                        onMouseDown={(e) => { e.preventDefault(); addTag(suggestion); }}
-                                    >
-                                       {renderSuggestionDetails(suggestion)}
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : !suggestionsQuery.isFetching && debouncedInputValue.length >= 2 ? (
-                           <div className="p-2 text-gray-500">No results found.</div>
-                        ) : null
-                        }
-                    </div>
-                )}
+                 {(() => {
+                    const shouldRenderDropdown = (inputValue.length > 0 || suggestionsQuery.isFetching) && !displayTag;
+                    console.log("Should render dropdown:", shouldRenderDropdown, { inputValueLength: inputValue.length, isFetching: suggestionsQuery.isFetching, fetchStatus: suggestionsQuery.fetchStatus, displayTag: !!displayTag });
+                    if (!shouldRenderDropdown) return null;
+
+                    return (
+                      <div ref={suggestionBoxRef} className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                          {(() => {
+                            console.log("Dropdown content check:", { isLoading: suggestionsQuery.isLoading, isError: suggestionsQuery.isError, data: suggestionsQuery.data, isFetching: suggestionsQuery.isFetching, debouncedInputValueLength: debouncedInputValue.length });
+                            if (suggestionsQuery.isLoading && !suggestionsQuery.data?.length) { // Loading state
+                              console.log("Rendering: Loading...");
+                              return <div className="p-2 text-gray-500">Loading...</div>;
+                            } else if (suggestionsQuery.isError) { // Error state
+                              console.log("Rendering: Error", suggestionsQuery.error.message);
+                              return <div className="p-2 text-red-500">Error: {suggestionsQuery.error.message}</div>;
+                            } else if (suggestionsQuery.data && suggestionsQuery.data.length > 0) { // Success state
+                              console.log("Rendering: Success -", suggestionsQuery.data.length, "items");
+                              return (
+                                  <ul>
+                                      {suggestionsQuery.data.map((suggestion, index) => (
+                                          <li
+                                              key={`${suggestion.pk_namespace}-${suggestion.pk}`}
+                                              className={`p-2 cursor-pointer hover:bg-blue-100 ${index === highlightedIndex ? 'bg-blue-100' : ''}`}
+                                              onMouseDown={(e) => { e.preventDefault(); addTag(suggestion); }}
+                                          >
+                                             {renderSuggestionDetails(suggestion)}
+                                          </li>
+                                      ))}
+                                  </ul>
+                              );
+                            } else if (!suggestionsQuery.isFetching && debouncedInputValue.length >= 2) {
+                               console.log("Rendering: No results found");
+                               return <div className="p-2 text-gray-500">No results found.</div>;
+                            } else {
+                               console.log("Rendering: Nothing (intermediate state?)");
+                               return null;
+                            }
+                          })()}
+                      </div>
+                    );
+                 })()}
             </div>
 
             {/* Display Area for Entity Details */}
