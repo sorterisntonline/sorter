@@ -86,26 +86,6 @@ function EntityDetailsDisplay({ entityDetails }) {
     }
     // Add more specific details based on entityType if needed...
 
-    // Track list (for albums)
-    let trackListElement = null;
-    if (entityType === 'album' && metadata?.tracks?.items && metadata.tracks.items.length > 0) {
-        trackListElement = (
-            <div className="mt-4 clear-both"> {/* clear-both to wrap around floated image */}
-                <h4 className="text-lg font-medium mb-2">Tracks:</h4>
-                <ol className="list-decimal list-inside text-sm space-y-1">
-                    {metadata.tracks.items.map(track => (
-                        <li key={track.id}>
-                            {track.name}
-                            <span className="text-gray-500 text-xs ml-1"> ({formatArtists(track.artists)})</span>
-                        </li>
-                     ))}
-                </ol>
-            </div>
-        );
-    }
-
-    // TODO: Render parents and children nicely later
-
     return (
         <div className="p-4 border border-gray-300 rounded-md bg-white shadow-sm clear-both"> {/* clear-both needed if image floats */}
             {imageElement}
@@ -115,7 +95,6 @@ function EntityDetailsDisplay({ entityDetails }) {
                      {detailsList}
                  </ul>
             )}
-            {trackListElement}
             {/* Placeholder for Parent/Child rendering */}
              {(parents?.length > 0 || children?.length > 0) && (
                 <div className="mt-4 pt-2 border-t border-gray-200 text-xs text-gray-600">
