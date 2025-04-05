@@ -14,12 +14,12 @@ use crate::{app_state::AppState, models::{ErrorResponse, Json}};
 // Represents an entity fetched from the database
 #[derive(Serialize, Debug, sqlx::FromRow)]
 pub struct Entity {
-    pk_namespace: String,
-    pk: String,
-    title: Option<String>,
+    pub pk_namespace: String,
+    pub pk: String,
+    pub title: Option<String>,
     #[sqlx(json)]
-    metadata: Option<JsonValue>,
-    created_at: Option<NaiveDateTime>,
+    pub metadata: Option<JsonValue>,
+    pub created_at: Option<NaiveDateTime>,
 }
 
 // Represents the payload for creating/updating an entity
