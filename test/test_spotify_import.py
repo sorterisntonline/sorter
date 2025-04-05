@@ -3,6 +3,7 @@ import pytest
 import uuid
 import time
 from typing import Dict, Any, Optional, Tuple
+import pytest_asyncio
 
 # --- Configuration ---
 BASE_URL = "http://localhost:8081/"
@@ -70,7 +71,7 @@ class TestSpotifyEnsure:
     radiohead_artist_pk = "6zvul52xwTWzilBZl6BUbT"
     radiohead_artist_ns = "spotify:artist"
 
-    @pytest.fixture(scope="class", autouse=True)
+    @pytest_asyncio.fixture(scope="class", autouse=True)
     async def setup_and_teardown_class(cls):
         # Class-scoped setup (runs once before any test in the class)
         # Reset class variables to ensure clean state before the first test
