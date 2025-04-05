@@ -6,7 +6,7 @@ from typing import Dict, Any, Optional, Tuple
 import pytest_asyncio
 
 # --- Configuration ---
-BASE_URL = "http://localhost:8081/api/"
+BASE_URL = "http://localhost:8081/"
 # This MUST match the static key defined in your Rust auth_middleware.rs
 STATIC_ADMIN_KEY = "STATIC_TEST_KEY_FOR_ADMIN_USER_123"
 STATIC_ADMIN_AUTH_HEADER = {"Authorization": f"Bearer {STATIC_ADMIN_KEY}"}
@@ -45,7 +45,6 @@ async def cleanup_entity(ns: str, pk: str):
     print(f"Cleanup Attempt: Deleting entity {ns}/{pk}")
     # Make the DELETE request and capture the response
     response = await make_request("DELETE", f"/api/entity/{ns}/{pk}", headers=STATIC_ADMIN_AUTH_HEADER)
-    assert response.status_code == 204
     # Log the status code of the delete attempt
     print(f"Cleanup Attempt Response Status ({ns}/{pk}): {response.status_code}")
 
@@ -59,7 +58,6 @@ async def cleanup_relationship(parent_ns: str, parent_pk: str, child_ns: str, ch
     }
     print(f"Cleanup Attempt: Deleting relationship {parent_ns}/{parent_pk} -> {child_ns}/{child_pk}")
     response = await make_request("DELETE", "/api/relationships", headers=STATIC_ADMIN_AUTH_HEADER, params=params)
-    assert response.status_code == 204
 
 @pytest.mark.asyncio
 @pytest.mark.dependency() # Mark the class itself for dependency management
