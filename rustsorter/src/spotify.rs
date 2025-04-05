@@ -189,7 +189,7 @@ async fn ensure_spotify_entity(
         payload.pk
     );
 
-    if !payload.pk_namespace.starts_with("spotify:") {
+    if !payload.pk_namespace.starts_with("spotify.") {
         return Err(SpotifyApiError::BadRequest(format!(
             "Invalid namespace '{}' for Spotify ensure endpoint.",
             payload.pk_namespace
