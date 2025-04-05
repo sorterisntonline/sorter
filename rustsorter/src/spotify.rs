@@ -9,18 +9,8 @@ use rspotify::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue; // For metadata
 
-// Import Entity struct from entity module
 use crate::entity::Entity;
-// Import ErrorResponse for consistent error handling if desired, or use custom error type
-use crate::models::ErrorResponse;
 
-// Remove unused imports if get_spotify_client is no longer here
-// use rspotify::ClientCredsSpotify;
-// use rspotify::AuthCodeSpotify;
-// use std::env;
-// use anyhow::Result;
-
-// Keep the query struct for search
 #[derive(Deserialize)]
 pub struct AlbumSearchQuery {
     q: String, // The search query string
