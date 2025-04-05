@@ -29,11 +29,13 @@ const getSmallestImageUrl = (images) => {
 
 function App() {
     const [inputValue, setInputValue] = useState('');
-    // Store objects in selectedTags if you need type/id/image later
+    // Store more info in selectedTags, including pk_namespace and pk
     const [selectedTags, setSelectedTags] = useState([]);
-    const [suggestions, setSuggestions] = useState([]); // Combined list of suggestions
+    const [suggestions, setSuggestions] = useState([]);
     const [highlightedIndex, setHighlightedIndex] = useState(-1);
     const [isLoading, setIsLoading] = useState(false);
+    // State to hold the details fetched for a single selected entity
+    const [entityDetails, setEntityDetails] = useState(null);
 
     const suggestionBoxRef = useRef(null);
 
@@ -46,19 +48,24 @@ function App() {
         setIsLoading(true);
         setHighlightedIndex(-1);
         try {
-            const response = await fetch(`/spotify/search?q=${encodeURIComponent(query)}`);
+            // Assuming backend provides pk_namespace in results now, or derive it
+            const response = await fetch(`/spotify/search?q=${encodeURIComponent(query)}`); // Ensure this returns pk/pk_namespace
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-            const data = await response.json(); // Expect { albums: [], artists: [], tracks: [] }
+            const data = await response.json();
 
-            // Combine results into a single list with type and image information
             const combinedSuggestions = [];
+            // --- MOCKUP: Assume backend /spotify/search now provides pk_namespace ---
+            // Example: data.albums = [{ id: 'abc', name: 'Album A', type: 'album', images: [...], pk_namespace: 'spotify.album' }]
+            // --- END MOCKUP ---
+
             if (data.albums) {
                 combinedSuggestions.push(...data.albums.map(item => ({
                     ...item,
                     type: 'album',
-                    // Ensure images is always an array
+                    pk_namespace: item.pk_namespace || 'spotify.album', // Add pk_namespace
+                    pk: item.id, // Use id as pk
                     images: item.images || []
                 })));
             }
@@ -66,7 +73,8 @@ function App() {
                  combinedSuggestions.push(...data.artists.map(item => ({
                     ...item,
                     type: 'artist',
-                     // Ensure images is always an array
+                    pk_namespace: item.pk_namespace || 'spotify.artist', // Add pk_namespace
+                    pk: item.id, // Use id as pk
                     images: item.images || []
                 })));
             }
@@ -74,13 +82,22 @@ function App() {
                 combinedSuggestions.push(...data.tracks.map(item => ({
                     ...item,
                     type: 'track',
-                    // Tracks use album images, ensure album and images exist
+                    pk_namespace: item.pk_namespace || 'spotify.track', // Add pk_namespace
+                    pk: item.id, // Use id as pk
                     images: item.album?.images || []
                 })));
             }
-
-            // Optional: Sort or limit combined suggestions if needed
-            // combinedSuggestions.sort((a, b) => a.name.localeCompare(b.name));
+             // Add potential 'sorter.tag' suggestions if backend supports it
+             if (data.sorter_tags) {
+                combinedSuggestions.push(...data.sorter_tags.map(item => ({
+                    ...item, // Assuming item has { pk_namespace: 'sorter.tag', pk: 'tagname', title: '#TagName' }
+                    name: item.title || item.pk,
+                    type: 'tag', // Differentiate type
+                    pk_namespace: item.pk_namespace,
+                    pk: item.pk,
+                    images: [] // Tags likely don't have images
+                })));
+             }
 
             setSuggestions(combinedSuggestions);
 
@@ -100,33 +117,41 @@ function App() {
         debouncedFetchSuggestions(value);
     };
 
-    // Updated addTag to handle suggestion objects and store image URL
+    // Updated addTag to store pk_namespace and pk
     const addTag = (suggestion) => {
-         // Prevent duplicates based on type and id
-         if (suggestion && !selectedTags.some(tag => tag.id === suggestion.id && tag.type === suggestion.type)) {
+        // Prevent duplicates based on pk_namespace and pk
+        if (suggestion && !selectedTags.some(tag => tag.pk === suggestion.pk && tag.pk_namespace === suggestion.pk_namespace)) {
             const imageUrl = getSmallestImageUrl(suggestion.images);
-            // Store the whole suggestion object or just parts as needed, plus imageUrl
             setSelectedTags([...selectedTags, {
-                id: suggestion.id,
+                // Store the essential info needed for display and API calls
+                pk_namespace: suggestion.pk_namespace, // Store pk_namespace
+                pk: suggestion.pk,                   // Store pk
                 name: suggestion.name,
                 type: suggestion.type,
-                imageUrl: imageUrl // Store the smallest image URL
+                imageUrl: imageUrl
             }]);
         }
         setInputValue('');
         setSuggestions([]);
         setHighlightedIndex(-1);
+        // Don't fetch details here, let useEffect handle it
     }
+
+    // Updated removeTag to filter correctly
+    const removeTag = (tagToRemove) => {
+        setSelectedTags(selectedTags.filter(tag => !(tag.pk === tagToRemove.pk && tag.pk_namespace === tagToRemove.pk_namespace)));
+        // Don't clear details here, let useEffect handle it
+    };
 
     const handleKeyDown = (event) => {
         if (suggestions.length > 0) {
             if (event.key === 'ArrowDown') {
                 event.preventDefault();
-                setHighlightedIndex(prevIndex => (prevIndex + 1) % suggestions.length); // Simplified loop
+                setHighlightedIndex(prevIndex => (prevIndex + 1) % suggestions.length);
                 return;
             } else if (event.key === 'ArrowUp') {
                 event.preventDefault();
-                 setHighlightedIndex(prevIndex => (prevIndex - 1 + suggestions.length) % suggestions.length); // Simplified loop
+                 setHighlightedIndex(prevIndex => (prevIndex - 1 + suggestions.length) % suggestions.length);
                 return;
             }
         }
@@ -134,36 +159,24 @@ function App() {
         if (event.key === 'Enter') {
             event.preventDefault();
             if (highlightedIndex >= 0 && suggestions[highlightedIndex]) {
-                addTag(suggestions[highlightedIndex]); // Add the selected suggestion object
-            } else if (inputValue.trim() !== '') {
-                 // Optional: Add raw input as a generic tag if needed
-                 // addTag({ name: inputValue.trim(), type: 'generic', id: Date.now() }); // Example generic tag
-                 console.log("Enter pressed on raw input:", inputValue);
+                addTag(suggestions[highlightedIndex]); // Use updated addTag
             } else {
-                console.log("Enter pressed, but no suggestion highlighted or input entered.");
+                 // console.log("Enter pressed on raw input:", inputValue); // Decide if raw input should do anything
             }
-            // Clear input and suggestions regardless of adding a tag or not
+            // Clear input and suggestions after Enter regardless
             setInputValue('');
             setSuggestions([]);
             setHighlightedIndex(-1);
         }
 
         if (event.key === 'Backspace' && inputValue === '' && selectedTags.length > 0) {
-           // Remove the last tag object based on its properties (e.g., id)
-           removeTag(selectedTags[selectedTags.length - 1]);
+           removeTag(selectedTags[selectedTags.length - 1]); // Use updated removeTag
         }
-    };
-
-    // Updated removeTag to handle tag objects
-    const removeTag = (tagToRemove) => {
-        // Filter based on type and id
-        setSelectedTags(selectedTags.filter(tag => !(tag.id === tagToRemove.id && tag.type === tagToRemove.type)));
     };
 
     useEffect(() => {
         function handleClickOutside(event) {
             if (suggestionBoxRef.current && !suggestionBoxRef.current.contains(event.target)) {
-                 // Check if the click was outside the suggestion box AND not on the input itself
                  const inputElement = document.getElementById('tag-input');
                  if (!inputElement || !inputElement.contains(event.target)) {
                    setSuggestions([]);
@@ -177,7 +190,39 @@ function App() {
         };
     }, [suggestionBoxRef]);
 
-    // Helper to render item details based on type, including image
+    // --- NEW useEffect to fetch details when a single tag is selected ---
+    useEffect(() => {
+        const fetchDetails = async () => {
+            if (selectedTags.length === 1) {
+                const singleTag = selectedTags[0];
+                // Assuming backend API is mounted at /api/entity/...
+                // Adjust the URL path if needed!
+                const apiUrl = `/api/entity/${encodeURIComponent(singleTag.pk_namespace)}/${encodeURIComponent(singleTag.pk)}/details`;
+                console.log("Fetching details for:", apiUrl);
+                try {
+                    setIsLoading(true); // Indicate loading
+                    const response = await fetch(apiUrl);
+                    if (!response.ok) {
+                         throw new Error(`HTTP error! status: ${response.status} for ${apiUrl}`);
+                    }
+                    const data = await response.json();
+                    setEntityDetails(data);
+                } catch (error) {
+                    console.error("Failed to fetch entity details:", error);
+                    setEntityDetails({ error: error.message }); // Store error state
+                } finally {
+                     setIsLoading(false);
+                }
+            } else {
+                // Clear details if more or less than one tag is selected
+                setEntityDetails(null);
+            }
+        };
+
+        fetchDetails();
+    }, [selectedTags]); // Re-run whenever selectedTags changes
+
+    // Updated renderSuggestionDetails to potentially handle 'sorter.tag' type
     const renderSuggestionDetails = (suggestion) => {
         const imageUrl = getSmallestImageUrl(suggestion.images);
         const imageElement = imageUrl ? (
@@ -187,8 +232,10 @@ function App() {
                 className="suggestion-preview-image w-6 h-6 mr-2 rounded inline-block object-cover align-middle"
             />
         ) : (
-             // Optional: Placeholder for items without images
-             <span className="suggestion-preview-image w-6 h-6 mr-2 rounded inline-block bg-gray-200 align-middle"></span>
+             // Optional: Placeholder for items without images or sorter tags
+             <span className={`suggestion-preview-image w-6 h-6 mr-2 rounded inline-block ${suggestion.type === 'tag' ? 'bg-gray-400' : 'bg-gray-200'} align-middle`}>
+                 {suggestion.type === 'tag' && '#'} {/* Indicate tag */}
+             </span>
         );
 
         switch(suggestion.type) {
@@ -218,6 +265,14 @@ function App() {
                         <span className="text-xs text-gray-500 ml-2 align-middle">({trackArtists}) [Track]</span>
                      </>
                  );
+             case 'tag': // Handle sorter tags
+                 return (
+                     <>
+                        {imageElement}
+                        <span className="align-middle">{suggestion.name}</span>
+                        <span className="text-xs text-gray-500 ml-2 align-middle">[Sorter Tag]</span>
+                     </>
+                 );
             default:
                  return (
                      <>
@@ -233,8 +288,8 @@ function App() {
           <div className="w-full max-w-lg relative">
             <div className="flex flex-wrap items-center border border-gray-300 rounded-md p-2 bg-white shadow-sm focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500">
               {selectedTags.map((tag) => (
-                // Use tag.type and tag.id for a unique key
-                <span key={`${tag.type}-${tag.id}`} className="flex items-center bg-blue-500 text-white text-sm font-medium mr-2 mb-1 px-2.5 py-0.5 rounded-full">
+                // Use pk_namespace and pk for a unique key
+                <span key={`${tag.pk_namespace}-${tag.pk}`} className="flex items-center bg-blue-500 text-white text-sm font-medium mr-2 mb-1 px-2.5 py-0.5 rounded-full">
                   {tag.imageUrl && (
                       <img
                           src={tag.imageUrl}
@@ -259,34 +314,34 @@ function App() {
                 value={inputValue}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
-                placeholder={selectedTags.length === 0 ? "Search Spotify..." : ""}
+                placeholder={selectedTags.length === 0 ? "Search Spotify, #tags..." : ""}
                 className="flex-grow p-1 outline-none text-sm min-w-[100px]" // Added min-width
                 autoComplete="off"
               />
             </div>
 
-            {/* Suggestions dropdown - Updated Rendering */}
+            {/* Suggestions dropdown */}
             { (isLoading || suggestions.length > 0) && (
                 <div
                     ref={suggestionBoxRef}
                     className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto"
                 >
-                   {isLoading ? (
+                   {isLoading && !suggestions.length ? ( // Show loading only if suggestions aren't loaded yet
                        <div className="p-2 text-gray-500">Loading...</div>
                    ) : (
                         <ul>
                             {suggestions.map((suggestion, index) => (
                                 <li
-                                    key={`${suggestion.type}-${suggestion.id}`} // Ensure unique key using type and id
+                                    key={`${suggestion.pk_namespace}-${suggestion.pk}`} // Use pk_namespace and pk for key
                                     className={`p-2 cursor-pointer hover:bg-blue-100 ${
                                         index === highlightedIndex ? 'bg-blue-100' : ''
                                     }`}
-                                    onMouseDown={(e) => { // Use onMouseDown to register click before blur closes suggestions
-                                        e.preventDefault(); // Prevent input blur
-                                        addTag(suggestion); // Pass the whole suggestion object
+                                    onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        addTag(suggestion); // Use updated addTag
                                     }}
                                 >
-                                   {renderSuggestionDetails(suggestion)} {/* Use helper function for rendering */}
+                                   {renderSuggestionDetails(suggestion)}
                                 </li>
                             ))}
                         </ul>
@@ -294,8 +349,23 @@ function App() {
                 </div>
             )}
           </div>
+
+            {/* --- NEW: Display Area for Entity Details --- */}
+            {entityDetails && (
+                 <div className="mt-4 p-4 border border-gray-300 rounded-md bg-white shadow-sm w-full max-w-lg">
+                    <h3 className="text-lg font-semibold mb-2">Selected Entity Details:</h3>
+                     <pre className="text-xs bg-gray-50 p-2 rounded overflow-auto">
+                         {JSON.stringify(entityDetails, null, 2)}
+                     </pre>
+                 </div>
+            )}
+            {/* Show loading indicator specifically for details fetch */}
+            {isLoading && selectedTags.length === 1 && !entityDetails && (
+                 <div className="mt-4 text-gray-500">Loading details...</div>
+            )}
+
         </div>
-    )
+    );
 }
 
 export default App
