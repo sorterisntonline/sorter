@@ -144,6 +144,8 @@ async fn search_spotify(
 }
 
 // first called when a new entity is selected from the dropdown
+// TODO make helper functions for inserts
+// TODO make entity_relationship inserts
 async fn ensure_spotify_entity(
     State(state): State<crate::app_state::AppState>,
     Json(payload): Json<EnsureEntityPayload>,
@@ -155,7 +157,7 @@ async fn ensure_spotify_entity(
     );
 
     // 1. Check if the namespace is valid for this handler
-    if !payload.pk_namespace.starts_with("spotify:") {
+    if !payload.pk_namespace.starts_with("spotify.") {
         return Err(SpotifyApiError::BadRequest(format!(
             "Invalid namespace '{}' for Spotify ensure endpoint.",
             payload.pk_namespace
