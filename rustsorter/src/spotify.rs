@@ -539,49 +539,38 @@ async fn ensure_spotify_entity(
                                 // Ensure the album for this track (SimplifiedAlbum from FullTrack)
                                 log::info!("Ensuring album for track: {}", track_id_str);
                                 // Check the Option<SimplifiedAlbum> first
-                                if let Some(album) = full_track.album {
-                                    // album is SimplifiedAlbum (moved from full_track)
-                                    // Clone the Option<AlbumId> from the album
-                                    let album_id_opt = album.id.clone();
+                                let album = full_track.album;
+                                // album is SimplifiedAlbum (moved from full_track)
+                                // Clone the Option<AlbumId> from the album
+                                let album_id_opt = album.id.clone();
 
-                                    // Check the cloned Option
-                                    if let Some(album_id) = album_id_opt {
-                                        let album_pk = album_id.id().to_string();
-                                        let album_ns = "spotify:album".to_string();
-                                        // Now clone name and serialize album since ID exists
-                                        let album_title = Some(album.name.clone());
-                                        let album_meta = Some(serde_json::to_value(&album)?);
+                                // Check the cloned Option
+                                if let Some(album_id) = album_id_opt {
+                                    let album_pk = album_id.id().to_string();
+                                    let album_ns = "spotify:album".to_string();
+                                    // Now clone name and serialize album since ID exists
+                                    let album_title = Some(album.name.clone());
+                                    let album_meta = Some(serde_json::to_value(&album)?);
 
-                                        log::info!(
-                                            "Ensuring related album: {}/{}",
-                                            album_ns,
-                                            album_pk
-                                        );
-                                        sqlx::query!(
-                                            /* ... INSERT ON CONFLICT DO UPDATE ... */
-                                            r#"
+                                    log::info!("Ensuring related album: {}/{}", album_ns, album_pk);
+                                    sqlx::query!(
+                                        /* ... INSERT ON CONFLICT DO UPDATE ... */
+                                        r#"
                                             INSERT INTO entities (pk_namespace, pk, title, metadata)
                                             VALUES ($1, $2, $3, $4)
                                             ON CONFLICT (pk_namespace, pk) DO UPDATE
                                             SET title = excluded.title, metadata = excluded.metadata
                                             "#,
-                                            album_ns,
-                                            album_pk,
-                                            album_title,
-                                            album_meta
-                                        )
-                                        .execute(&state.db)
-                                        .await?;
-                                    } else {
-                                        // album.id was None
-                                        log::warn!("Album associated with track {} exists but is missing its own ID", track_id_str);
-                                    }
+                                        album_ns,
+                                        album_pk,
+                                        album_title,
+                                        album_meta
+                                    )
+                                    .execute(&state.db)
+                                    .await?;
                                 } else {
-                                    // full_track.album was None
-                                    log::warn!(
-                                        "Track {} seems to be missing album info entirely",
-                                        track_id_str
-                                    );
+                                    // album.id was None
+                                    log::warn!("Album associated with track {} exists but is missing its own ID", track_id_str);
                                 }
                             }
                             Err(e) => log::error!(
