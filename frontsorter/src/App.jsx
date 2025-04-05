@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import './App.css'
 
 // Debounce function (simple implementation)
@@ -114,6 +115,8 @@ function EntityDetailsDisplay({ entityDetails }) {
 // --- END NEW COMPONENT ---
 
 function App() {
+    // Get searchParams and setSearchParams from the hook
+    const [searchParams, setSearchParams] = useSearchParams();
     const [inputValue, setInputValue] = useState('');
     // Store more info in selectedTags, including pk_namespace and pk
     const [selectedTags, setSelectedTags] = useState([]);
@@ -209,7 +212,8 @@ function App() {
         if (suggestion && !selectedTags.some(tag => tag.pk === suggestion.pk && tag.pk_namespace === suggestion.pk_namespace)) {
             const imageUrl = getSmallestImageUrl(suggestion.images);
             // Store enough info to potentially call ensure later
-            setSelectedTags([...selectedTags, {
+            // When adding a tag, we now set it as the *only* selected tag
+            setSelectedTags([{
                 pk_namespace: suggestion.pk_namespace,
                 pk: suggestion.pk,
                 name: suggestion.name,
@@ -228,7 +232,8 @@ function App() {
 
     // Updated removeTag to filter correctly
     const removeTag = (tagToRemove) => {
-        setSelectedTags(selectedTags.filter(tag => !(tag.pk === tagToRemove.pk && tag.pk_namespace === tagToRemove.pk_namespace)));
+        // Since we only allow one tag now for viewing details, removing means clearing all
+        setSelectedTags([]);
         // Don't clear details here, let useEffect handle it
     };
 
@@ -279,17 +284,62 @@ function App() {
         };
     }, [suggestionBoxRef]);
 
-    // --- Updated useEffect to Ensure Entity then Fetch Details ---
+    // --- NEW useEffect for Initial Load from Query Params ---
+    useEffect(() => {
+        const initialPkNamespace = searchParams.get('pk_namespace');
+        const initialPk = searchParams.get('pk');
+
+        // Only set initial state if query params exist AND selectedTags is currently empty
+        // to avoid overwriting user selections after initial load.
+        if (initialPkNamespace && initialPk && selectedTags.length === 0) {
+            console.log("Setting initial tag from URL params:", initialPkNamespace, initialPk);
+            // Set a placeholder tag; the details useEffect will fetch the actual data
+            setSelectedTags([{
+                pk_namespace: initialPkNamespace,
+                pk: initialPk,
+                name: 'Loading from URL...', // Placeholder name
+                type: 'unknown', // Placeholder type
+                imageUrl: null
+            }]);
+        }
+        // This effect should only run once on mount, or if searchParams change externally
+        // We don't include selectedTags here to avoid loops on initial load.
+    }, [searchParams]); // Depend on searchParams
+
+    // --- Updated useEffect to Ensure Entity then Fetch Details AND Update URL ---
     useEffect(() => {
         const processSingleTag = async () => {
             if (selectedTags.length !== 1) {
                 setEntityDetails(null); // Clear details if not exactly one tag
+                // Clear query params if no single tag is selected
+                if (searchParams.has('pk_namespace') || searchParams.has('pk')) {
+                    console.log("Clearing URL params");
+                    setSearchParams({});
+                }
                 return;
             }
 
             const singleTag = selectedTags[0];
             const { pk_namespace, pk, name, type, imageUrl, artists, albumName } = singleTag;
             const isSpotifyEntity = pk_namespace.startsWith('spotify.');
+
+            // Update URL params when a single tag is selected
+            // Check if params are already correct to prevent unnecessary updates/re-renders
+            if (searchParams.get('pk_namespace') !== pk_namespace || searchParams.get('pk') !== pk) {
+                 console.log("Setting URL params:", pk_namespace, pk);
+                 setSearchParams({ pk_namespace, pk });
+            }
+
+            // Skip fetching if name isn't the placeholder (means details might already be loading or loaded)
+             if (name === 'Loading from URL...') {
+                 console.log("Placeholder detected, proceeding to fetch...");
+             } else if (entityDetails && entityDetails.entity?.pk === pk && entityDetails.entity?.pk_namespace === pk_namespace) {
+                 console.log("Details seem to be already loaded or loading for this tag, skipping fetch.");
+                 // If details are already loaded for the *exact* same entity, we might skip fetching.
+                 // However, the ensure step might still be relevant depending on logic.
+                 // For simplicity now, we might still proceed, or add more robust checks.
+                 // Let's proceed for now to ensure consistency.
+             }
 
             setIsLoading(true); // Start loading indicator
             setEntityDetails(null); // Clear previous details
@@ -300,11 +350,13 @@ function App() {
                     console.log(`Ensuring Spotify entity: ${pk_namespace}/${pk}`);
                     // Prepare metadata for the ensure payload
                     const ensureMetadata = {
+                        // Use fetched/available data if possible, fallback to placeholders
                         imageUrl: imageUrl,
                         source: 'frontend_selection',
-                        // Add more relevant info if available
                         ...(artists && { artists: formatArtists(artists) }),
                         ...(albumName && { albumName: albumName }),
+                         // Include type if available and known
+                         ...(type !== 'unknown' && { type: type }),
                     };
 
                     const ensureResponse = await fetch(`/spotify/ensure`, { // Assuming mounted route from spotify.rs
@@ -313,21 +365,21 @@ function App() {
                         body: JSON.stringify({
                             pk_namespace: pk_namespace,
                             pk: pk,
-                            title: name,
-                            metadata: ensureMetadata, // Send some basic metadata
+                            title: name === 'Loading from URL...' ? pk : name, // Use pk if name is placeholder
+                            metadata: ensureMetadata,
                         }),
                     });
 
                     if (!ensureResponse.ok) {
-                        // Log the error but maybe try fetching details anyway? Or handle specific errors.
                         const errorText = await ensureResponse.text();
                         console.error(`Failed to ensure entity ${pk_namespace}/${pk}: ${ensureResponse.status} ${errorText}`);
-                        // Optional: throw new Error(`Ensure failed: ${ensureResponse.status}`);
-                        // If ensure fails critically, we might not want to proceed.
-                        // For now, we'll log and continue to fetch details.
+                        // Decide how to handle ensure failure - maybe show error and stop?
+                         // throw new Error(`Ensure failed: ${ensureResponse.status}`);
+                         // For now, log and continue to fetch details
                     } else {
                          console.log(`Ensure successful or entity already existed for: ${pk_namespace}/${pk}`);
-                         // Optionally use the returned entity from ensure if needed, but details fetch re-fetches
+                         // If ensure returns the confirmed entity, we could potentially use it
+                         // const ensuredEntity = await ensureResponse.json();
                     }
                 }
 
@@ -340,6 +392,26 @@ function App() {
                     throw new Error(`HTTP error! status: ${detailsResponse.status} for ${detailsApiUrl}`);
                 }
                 const data = await detailsResponse.json();
+                 // Update the selectedTag state with the fetched name/type/image if it was a placeholder
+                 if (selectedTags.length === 1 && selectedTags[0].name === 'Loading from URL...') {
+                     const fetchedEntity = data.entity;
+                     const fetchedMetadata = fetchedEntity.metadata;
+                     const fetchedImageUrl = fetchedMetadata?.images ? getSmallestImageUrl(fetchedMetadata.images) : null;
+                     // Use a function update to prevent race conditions if possible
+                     setSelectedTags(prev => {
+                         if (prev.length === 1 && prev[0].pk === pk && prev[0].pk_namespace === pk_namespace) {
+                             return [{
+                                 ...prev[0], // Keep pk/pk_namespace
+                                 name: fetchedEntity.title || 'Unknown Title',
+                                 type: pk_namespace.split('.')[1] || 'unknown', // Extract type
+                                 imageUrl: fetchedImageUrl,
+                                 // Potentially update artists/albumName if needed from fetched data
+                             }];
+                         }
+                         return prev; // No change if tag changed meanwhile
+                     });
+                 }
+
                 setEntityDetails(data);
 
             } catch (error) {
@@ -351,7 +423,8 @@ function App() {
         };
 
         processSingleTag();
-    }, [selectedTags]); // Re-run whenever selectedTags changes
+    // Depend on selectedTags and setSearchParams. Add searchParams too in case external navigation changes it.
+    }, [selectedTags, setSearchParams, searchParams]);
 
     // Updated renderSuggestionDetails to potentially handle 'sorter.tag' type
     const renderSuggestionDetails = (suggestion) => {
