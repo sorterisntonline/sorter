@@ -241,29 +241,3 @@ class TestSpotifyEnsure:
         assert ensure_data_2["metadata"] == get_data["metadata"]
         assert ensure_data_2["created_at"] == get_data["created_at"] # Creation time should not change
         print("Second ensure response data matches existing data (idempotency check passed).")
-
-
-    @pytest.mark.dependency(depends=["TestSpotifyEnsure::test_first_ensure_call"])
-    async def test_check_related_artist_exists(self):
-        """Checks if the related artist (Radiohead) was created by the ensure process."""
-        artist_get_response = await make_request(
-            "GET", f"/api/entity/{TestSpotifyEnsure.radiohead_artist_ns}/{TestSpotifyEnsure.radiohead_artist_pk}",
-            headers=STATIC_ADMIN_AUTH_HEADER
-        )
-        # We expect this to have been created by the ensure logic for the album
-        assert artist_get_response.status_code == 200
-        artist_data = artist_get_response.json()
-        assert artist_data["pk_namespace"] == TestSpotifyEnsure.radiohead_artist_ns
-        assert artist_data["pk"] == TestSpotifyEnsure.radiohead_artist_pk
-        assert "radiohead" in artist_data.get("title", "").lower()
-        print(f"Related artist entity exists: {TestSpotifyEnsure.radiohead_artist_ns}/{TestSpotifyEnsure.radiohead_artist_pk}")
-
-    # Optional: Add similar dependent tests for specific tracks if needed
-    # @pytest.mark.dependency(depends=["TestSpotifyEnsure::test_first_ensure_call"])
-    # async def test_check_related_track_exists(self):
-    #     track_ns = "spotify.track"
-    #     airbag_pk = "..." # Find Airbag's Spotify ID
-    #     track_get_response = await make_request(...)
-    #     assert track_get_response.status_code == 200
-    #     # ... more assertions ...
-

@@ -297,7 +297,7 @@ async fn ensure_spotify_entity(
         );
 
         match payload.pk_namespace.as_str() {
-            "spotify:artist" => {
+            "spotify.artist" => {
                 let artist_id_str = &payload.pk;
                 let artist_id = ArtistId::from_id(artist_id_str).map_err(|e| {
                     SpotifyApiError::BadRequest(format!("Invalid Spotify Artist ID: {}", e))
@@ -338,7 +338,7 @@ async fn ensure_spotify_entity(
                 for album in albums_page.items {
                     if let Some(album_id) = album.id.clone() {
                         let album_pk = album_id.id().to_string();
-                        let album_ns = "spotify:album".to_string();
+                        let album_ns = "spotify.album".to_string();
                         let album_title = Some(album.name.clone());
                         let album_meta = Some(serde_json::to_value(&album)?);
 
@@ -349,7 +349,7 @@ async fn ensure_spotify_entity(
                     }
                 }
             }
-            "spotify:album" => {
+            "spotify.album" => {
                 let album_id_str = &payload.pk;
                 let album_id = AlbumId::from_id(album_id_str).map_err(|e| {
                     SpotifyApiError::BadRequest(format!("Invalid Spotify Album ID: {}", e))
@@ -380,7 +380,7 @@ async fn ensure_spotify_entity(
                 for track in full_album.tracks.items {
                     if let Some(track_id) = track.id.clone() {
                         let track_pk = track_id.id().to_string();
-                        let track_ns = "spotify:track".to_string();
+                        let track_ns = "spotify.track".to_string();
                         let track_title = Some(track.name.clone());
                         let track_meta = Some(serde_json::to_value(&track)?);
 
@@ -390,7 +390,7 @@ async fn ensure_spotify_entity(
                         for artist in track.artists {
                             if let Some(artist_id) = artist.id.clone() {
                                 let artist_pk = artist_id.id().to_string();
-                                let artist_ns = "spotify:artist".to_string();
+                                let artist_ns = "spotify.artist".to_string();
                                 let artist_title = Some(artist.name.clone());
                                 let full_artist_details = spotify.artist(artist_id.clone()).await?;
                                 let artist_meta = Some(serde_json::to_value(&full_artist_details)?);
@@ -406,7 +406,7 @@ async fn ensure_spotify_entity(
                     }
                 }
             }
-            "spotify:track" => {
+            "spotify.track" => {
                 let track_id_str = &payload.pk;
                 let track_id = TrackId::from_id(track_id_str).map_err(|e| {
                     SpotifyApiError::BadRequest(format!("Invalid Spotify Track ID: {}", e))
@@ -437,7 +437,7 @@ async fn ensure_spotify_entity(
                 for artist in full_track.artists {
                     if let Some(artist_id) = artist.id.clone() {
                         let artist_pk = artist_id.id().to_string();
-                        let artist_ns = "spotify:artist".to_string();
+                        let artist_ns = "spotify.artist".to_string();
                         let artist_title = Some(artist.name.clone());
                         let full_artist_details = spotify.artist(artist_id.clone()).await?;
                         let artist_meta = Some(serde_json::to_value(&full_artist_details)?);
@@ -453,7 +453,7 @@ async fn ensure_spotify_entity(
                 let album = full_track.album;
                 if let Some(album_id) = album.id.clone() {
                     let album_pk = album_id.id().to_string();
-                    let album_ns = "spotify:album".to_string();
+                    let album_ns = "spotify.album".to_string();
                     let album_title = Some(album.name.clone());
                     let full_album_details = spotify.album(album_id.clone(), Some(Market::Country(Country::UnitedStates))).await?;
                     let album_meta = Some(serde_json::to_value(&full_album_details)?);
