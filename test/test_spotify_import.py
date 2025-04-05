@@ -6,7 +6,7 @@ from typing import Dict, Any, Optional, Tuple
 import pytest_asyncio
 
 # --- Configuration ---
-BASE_URL = "http://localhost:8081/"
+BASE_URL = "http://localhost:8081/api/"
 # This MUST match the static key defined in your Rust auth_middleware.rs
 STATIC_ADMIN_KEY = "STATIC_TEST_KEY_FOR_ADMIN_USER_123"
 STATIC_ADMIN_AUTH_HEADER = {"Authorization": f"Bearer {STATIC_ADMIN_KEY}"}
@@ -43,7 +43,11 @@ async def make_request(
 async def cleanup_entity(ns: str, pk: str):
     """Attempts to delete an entity, ignoring errors if it's already gone."""
     print(f"Cleanup Attempt: Deleting entity {ns}/{pk}")
-    await make_request("DELETE", f"/entity/{ns}/{pk}", headers=STATIC_ADMIN_AUTH_HEADER)
+    # Make the DELETE request and capture the response
+    response = await make_request("DELETE", f"/api/entity/{ns}/{pk}", headers=STATIC_ADMIN_AUTH_HEADER)
+    assert response.status_code == 204
+    # Log the status code of the delete attempt
+    print(f"Cleanup Attempt Response Status ({ns}/{pk}): {response.status_code}")
 
 async def cleanup_relationship(parent_ns: str, parent_pk: str, child_ns: str, child_pk: str):
     """Attempts to delete a relationship, ignoring errors."""
@@ -54,7 +58,8 @@ async def cleanup_relationship(parent_ns: str, parent_pk: str, child_ns: str, ch
         "child_pk": child_pk,
     }
     print(f"Cleanup Attempt: Deleting relationship {parent_ns}/{parent_pk} -> {child_ns}/{child_pk}")
-    await make_request("DELETE", "/relationships", headers=STATIC_ADMIN_AUTH_HEADER, params=params)
+    response = await make_request("DELETE", "/api/relationships", headers=STATIC_ADMIN_AUTH_HEADER, params=params)
+    assert response.status_code == 204
 
 @pytest.mark.asyncio
 @pytest.mark.dependency() # Mark the class itself for dependency management
@@ -71,30 +76,33 @@ class TestSpotifyEnsure:
     radiohead_artist_pk = "6zvul52xwTWzilBZl6BUbT"
     radiohead_artist_ns = "spotify.artist"
 
-    @pytest_asyncio.fixture(scope="class", autouse=True)
-    async def setup_and_teardown_class(cls):
-        # Class-scoped setup (runs once before any test in the class)
-        # Reset class variables to ensure clean state before the first test
-        cls.album_ns = None
-        cls.album_pk = None
-        cls.ensure_payload = None
-        cls.created_entity_data = None
-        cls.retrieved_entity_data = None
-        cls.second_ensure_data = None
-        print("\n--- TestSpotifyEnsure Class Setup ---")
-        yield
-        # --- Class Teardown (runs once after all tests in the class) ---
-        print("\n--- TestSpotifyEnsure Class Teardown ---")
-        if cls.album_ns and cls.album_pk:
-            print(f"Cleaning up primary entity: {cls.album_ns}/{cls.album_pk}")
-            await cleanup_entity(cls.album_ns, cls.album_pk)
-        # Attempt to cleanup related artist just in case tests failed midway
-        print(f"Attempting cleanup of related artist: {cls.radiohead_artist_ns}/{cls.radiohead_artist_pk}")
-        await cleanup_entity(cls.radiohead_artist_ns, cls.radiohead_artist_pk)
-        # Add cleanup for specific tracks if they were asserted/created
-
-
     @pytest.mark.dependency()
+    async def test_pre_cleanup(self):
+        # Class-scoped setup (runs once before any test in the class)
+        print("\n--- TestSpotifyEnsure Class Pre-Cleanup ---")
+        # Attempt to delete known entities before tests start
+        # Use known IDs directly here for pre-cleanup
+        album_to_cleanup_ns = "spotify.album"
+        album_to_cleanup_pk = "6dVIqQ8qmQ5GBnJ9shOYGE" # OK Computer ID
+        artist_to_cleanup_ns = "spotify.artist"
+        artist_to_cleanup_pk = "6zvul52xwTWzilBZl6BUbT" # Radiohead ID
+
+        print(f"Pre-cleanup Attempt: Deleting primary entity: {album_to_cleanup_ns}/{album_to_cleanup_pk}")
+        await cleanup_entity(album_to_cleanup_ns, album_to_cleanup_pk)
+        print(f"Pre-cleanup Attempt: Deleting related artist: {artist_to_cleanup_ns}/{artist_to_cleanup_pk}")
+        await cleanup_entity(artist_to_cleanup_ns, artist_to_cleanup_pk)
+        # Add cleanup for specific tracks if they might persist
+
+        # Reset class variables to ensure clean state before the first test
+        TestSpotifyEnsure.album_ns = None
+        TestSpotifyEnsure.album_pk = None
+        TestSpotifyEnsure.ensure_payload = None
+        TestSpotifyEnsure.created_entity_data = None
+        TestSpotifyEnsure.retrieved_entity_data = None
+        TestSpotifyEnsure.second_ensure_data = None
+
+
+    @pytest.mark.dependency(depends=["TestSpotifyEnsure::test_pre_cleanup"])
     async def test_search_for_album(self):
         """Searches for 'ok computer' album and stores its details."""
         search_params = {"q": "ok computer"}
@@ -183,7 +191,7 @@ class TestSpotifyEnsure:
         assert TestSpotifyEnsure.album_ns is not None and TestSpotifyEnsure.album_pk is not None
 
         get_response = await make_request(
-            "GET", f"/entity/{TestSpotifyEnsure.album_ns}/{TestSpotifyEnsure.album_pk}", headers=STATIC_ADMIN_AUTH_HEADER
+            "GET", f"/api/entity/{TestSpotifyEnsure.album_ns}/{TestSpotifyEnsure.album_pk}", headers=STATIC_ADMIN_AUTH_HEADER
         )
         assert get_response.status_code == 200
 
@@ -245,7 +253,7 @@ class TestSpotifyEnsure:
     async def test_check_related_artist_exists(self):
         """Checks if the related artist (Radiohead) was created by the ensure process."""
         artist_get_response = await make_request(
-            "GET", f"/entity/{TestSpotifyEnsure.radiohead_artist_ns}/{TestSpotifyEnsure.radiohead_artist_pk}",
+            "GET", f"/api/entity/{TestSpotifyEnsure.radiohead_artist_ns}/{TestSpotifyEnsure.radiohead_artist_pk}",
             headers=STATIC_ADMIN_AUTH_HEADER
         )
         # We expect this to have been created by the ensure logic for the album
