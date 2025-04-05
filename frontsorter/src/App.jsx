@@ -36,12 +36,8 @@ function App() {
     return (
         // Centering the content vertically and horizontally
         <div className="app-container flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
-          <h1 className="text-3xl font-bold mb-6 text-gray-800">Frontsorter</h1>
           {/* Container for the multi-tag input */}
           <div className="w-full max-w-lg">
-            <label htmlFor="tag-input" className="block text-sm font-medium text-gray-700 mb-1">
-              Select or add tags:
-            </label>
             {/* The input area */}
             <div className="flex flex-wrap items-center border border-gray-300 rounded-md p-2 bg-white shadow-sm">
               {/* Display selected tags */}
