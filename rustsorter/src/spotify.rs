@@ -367,7 +367,8 @@ async fn ensure_spotify_entity(
                                 let artist_pk = artist_id.id().to_string();
                                 let artist_ns = "spotify:artist".to_string();
                                 let artist_title = Some(artist.name.clone());
-                                let artist_meta = Some(serde_json::to_value(&artist)?); // Use ?
+                                let full_artist = spotify.artist(artist_id.clone()).await?; // Use ?
+                                let artist_meta = Some(serde_json::to_value(&full_artist)?); // Use ?
 
                                 log::info!(
                                     "Ensuring related artist from track: {}/{}",
@@ -438,7 +439,8 @@ async fn ensure_spotify_entity(
                         let artist_pk = artist_id.id().to_string();
                         let artist_ns = "spotify:artist".to_string();
                         let artist_title = Some(artist.name.clone());
-                        let artist_meta = Some(serde_json::to_value(&artist)?); // Use ?
+                        let full_artist = spotify.artist(artist_id.clone()).await?; // Use ?
+                        let artist_meta = Some(serde_json::to_value(&full_artist)?); // Use ?
 
                         log::info!("Ensuring related artist: {}/{}", artist_ns, artist_pk);
                         upsert_entity(db, &artist_ns, &artist_pk, artist_title, artist_meta)
@@ -456,7 +458,8 @@ async fn ensure_spotify_entity(
                     let album_pk = album_id.id().to_string();
                     let album_ns = "spotify:album".to_string();
                     let album_title = Some(album.name.clone());
-                    let album_meta = Some(serde_json::to_value(&album)?); // Use ?
+                    let full_album = spotify.album(album_id.clone(), Some(Market::Country(Country::UnitedStates))).await?; // Use ?
+                    let album_meta = Some(serde_json::to_value(&full_album)?); // Use ?
 
                     log::info!("Ensuring related album: {}/{}", album_ns, album_pk);
                     upsert_entity(db, &album_ns, &album_pk, album_title, album_meta).await?;
