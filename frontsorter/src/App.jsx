@@ -267,13 +267,14 @@ function App() {
 
     // --- React Query Hooks ---
 
-    // Suggestions query remains the same
+    // Suggestions query - enable based on input length, not URL state
     const suggestionsQuery = useQuery({
         queryKey: ['suggestions', debouncedInputValue],
         queryFn: () => fetchSuggestionsFn(debouncedInputValue),
-        enabled: debouncedInputValue.length >= 2 && !urlPkNamespace, // Only enable when NOT showing details from URL
+        // Enable only based on input length
+        enabled: debouncedInputValue.length >= 2,
         staleTime: 5 * 60 * 1000,
-        keepPreviousData: true,
+        keepPreviousData: true, // Keep showing old suggestions while new ones load
     });
 
     // --- Ensure Mutation (No change needed here) ---
@@ -369,18 +370,18 @@ function App() {
     const handleInputChange = (event) => {
         const value = event.target.value;
         setInputValue(value);
-        // Don't clear selectedTags here, URL controls the primary selection
+        // Trigger suggestion fetch based on input
         debouncedSetQuery(value);
-        setHighlightedIndex(-1);
+        setHighlightedIndex(-1); // Reset highlight on input change
     };
 
     // Navigate function to update URL params
     const navigateToEntity = (pk_ns, pk) => {
         console.log("Navigating to:", pk_ns, pk);
         setSearchParams({ pk_namespace: pk_ns, pk: pk });
-        // Clear input when navigating
+        // Clear input and debounced value *after* setting params
         setInputValue('');
-        setDebouncedInputValue('');
+        setDebouncedInputValue(''); // Stop suggestions query
         setHighlightedIndex(-1);
     };
 
@@ -414,15 +415,17 @@ function App() {
     // removeTag clears URL params
     const removeTag = () => {
         setSearchParams({}); // Clear pk_namespace and pk from URL
-        // Input might need focusing or clearing depending on desired UX
-        // setInputValue('');
-        // setDebouncedInputValue('');
+        // Optionally focus the input after removing the tag
+        document.getElementById('tag-input')?.focus();
     };
 
     const handleKeyDown = (event) => {
         const currentSuggestions = suggestionsQuery.data || [];
-        // Only handle arrows/enter if suggestions are visible (i.e., no entity selected via URL)
-        if (!urlPkNamespace && currentSuggestions.length > 0) {
+        // Handle arrows/enter only if suggestions ARE potentially visible
+        // (i.e. input has length > 0 or we are fetching)
+        const canShowSuggestions = inputValue.length > 0 || suggestionsQuery.isFetching;
+
+        if (canShowSuggestions && currentSuggestions.length > 0) {
             if (event.key === 'ArrowDown') {
                 event.preventDefault();
                 setHighlightedIndex(prevIndex => (prevIndex + 1) % currentSuggestions.length);
@@ -440,34 +443,35 @@ function App() {
                 return; // Prevent other keydown actions if Enter was handled
             }
         }
-        // Allow backspace to remove tag even if suggestions aren't showing
-        if (event.key === 'Backspace' && inputValue === '' && selectedTags.length > 0) {
+        // Allow backspace to remove tag IF the input is empty and a tag IS selected
+        if (event.key === 'Backspace' && inputValue === '' && displayTag) {
            removeTag();
         }
     };
 
-    // useEffect for closing suggestion box remains largely the same
-    useEffect(() => {
-        function handleClickOutside(event) {
-            if (suggestionBoxRef.current && !suggestionBoxRef.current.contains(event.target)) {
-                 const inputElement = document.getElementById('tag-input');
-                 // Also check if the click was on the selected tag itself
-                 const tagElement = document.querySelector('.selected-tag-display'); // Add a class for easier selection
-                 if ((!inputElement || !inputElement.contains(event.target)) && (!tagElement || !tagElement.contains(event.target))) {
-                    // Only clear input if we are in suggestion mode (no URL params)
-                    if (!urlPkNamespace) {
-                       setInputValue('');
-                       setDebouncedInputValue('');
-                    }
-                   setHighlightedIndex(-1);
-                }
-            }
-        }
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => {
-            document.removeEventListener("mousedown", handleClickOutside);
-        };
-    }, [suggestionBoxRef, urlPkNamespace]); // Add urlPkNamespace dependency
+    // useEffect for closing suggestion box - click outside should clear input/suggestions state
+     useEffect(() => {
+         function handleClickOutside(event) {
+             const inputElement = document.getElementById('tag-input');
+             const suggestionsElement = suggestionBoxRef.current;
+             const tagElement = document.querySelector('.selected-tag-display');
+
+             // Check if the click is outside the input, the suggestions box, and the displayed tag
+             if (suggestionsElement && !suggestionsElement.contains(event.target) &&
+                 (!inputElement || !inputElement.contains(event.target)) &&
+                 (!tagElement || !tagElement.contains(event.target)))
+             {
+                 // Clear the input and hide suggestions
+                 setInputValue('');
+                 setDebouncedInputValue('');
+                 setHighlightedIndex(-1);
+             }
+         }
+         document.addEventListener("mousedown", handleClickOutside);
+         return () => {
+             document.removeEventListener("mousedown", handleClickOutside);
+         };
+     }, [suggestionBoxRef]); // Removed urlPkNamespace dependency
 
 
     // --- Rendering Logic ---
@@ -554,7 +558,10 @@ function App() {
 
     // Get the tag to display (now derived from selectedTags, which is populated by detailsQuery.onSuccess)
     const displayTag = selectedTags.length === 1 ? selectedTags[0] : null;
-    const showSuggestions = !urlPkNamespace && (inputValue.length > 0 || suggestionsQuery.isFetching);
+    // *Corrected*: Show suggestions based on input/fetching state only
+    const showSuggestions = (inputValue.length > 0 || suggestionsQuery.isFetching) && debouncedInputValue.length >= 2;
+    // A flag to know if *any* entity is supposed to be loaded (even if loading/error)
+    const hasActiveEntity = !!urlPkNamespace && !!urlPk;
 
     return (
         <div className="app-container flex flex-col items-center justify-start min-h-screen bg-gray-100 p-4 pt-10">
@@ -578,23 +585,29 @@ function App() {
                       </button>
                     </span>
                   )}
-                  {/* Input field is conceptually always present, but disabled and placeholder changes */}
+                  {/* Input field is always rendered */}
                   <input
                     id="tag-input" type="text" value={inputValue}
                     onChange={handleInputChange} onKeyDown={handleKeyDown}
-                    placeholder={!displayTag ? "Search Spotify, #tags..." : ""} // Show placeholder only if no tag selected
-                    className={`flex-grow p-1 outline-none text-sm min-w-[100px] ${displayTag ? 'bg-gray-100' : ''}`} // Style disabled state
+                    // Placeholder logic remains the same
+                    placeholder={!hasActiveEntity ? "Search Spotify, #tags..." : "Search another..."}
+                    // Input is conceptually always enabled, just looks different maybe
+                    className={`flex-grow p-1 outline-none text-sm min-w-[100px] ${hasActiveEntity ? 'pl-1' : ''}`} // Adjust padding if needed when tag is shown
                     autoComplete="off"
-                    disabled={!!displayTag} // Disable input when a tag is displayed
+                    // No longer disable the input field
+                    // disabled={!!displayTag}
                   />
                 </div>
 
-                {/* Suggestions dropdown - Show only if no URL params and input has value/is fetching */}
+                {/* Suggestions dropdown - Render based on the corrected showSuggestions flag */}
                  {showSuggestions && (
                       <div ref={suggestionBoxRef} className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
                           {(() => {
-                              // console.log("Dropdown content check:", { isLoading: suggestionsQuery.isLoading, isError: suggestionsQuery.isError, data: suggestionsQuery.data, isFetching: suggestionsQuery.isFetching, debouncedInputValueLength: debouncedInputValue.length });
-                              if (suggestionsQuery.isLoading && !suggestionsQuery.data?.length) {
+                              // Loading state: Show if fetching and no data yet OR if debounced value changed but fetch hasn't started/returned
+                              const isLoadingSuggestions = suggestionsQuery.isFetching && !suggestionsQuery.data?.length;
+                              // console.log("Dropdown content check:", { isLoading: isLoadingSuggestions, isError: suggestionsQuery.isError, data: suggestionsQuery.data, isFetching: suggestionsQuery.isFetching, debouncedInputValueLength: debouncedInputValue.length });
+
+                              if (isLoadingSuggestions) {
                                   return <div className="p-2 text-gray-500">Loading...</div>;
                               } else if (suggestionsQuery.isError) {
                                   return <div className="p-2 text-red-500">Error: {suggestionsQuery.error.message}</div>;
@@ -612,10 +625,12 @@ function App() {
                                           ))}
                                       </ul>
                                   );
-                              } else if (!suggestionsQuery.isFetching && debouncedInputValue.length >= 2) {
+                              // Check if not loading/fetching, input is sufficient length, but data is empty
+                              } else if (!suggestionsQuery.isFetching && debouncedInputValue.length >= 2 && (!suggestionsQuery.data || suggestionsQuery.data.length === 0)) {
                                  return <div className="p-2 text-gray-500">No results found.</div>;
                               } else {
-                                 return null; // Nothing to show (e.g., input too short and not fetching)
+                                 // Should ideally not be reached if showSuggestions is true and length >= 2, but acts as fallback
+                                 return null;
                               }
                           })()}
                       </div>
