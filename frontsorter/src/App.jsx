@@ -88,27 +88,55 @@ function EntityDetailsDisplay({ entityDetails }) {
     // Add more specific details based on entityType if needed...
 
     return (
-        <div className="p-4 border border-gray-300 rounded-md bg-white shadow-sm clear-both"> {/* clear-both needed if image floats */}
-            {imageElement}
-            {basicInfo}
-            {detailsList.length > 0 && (
-                 <ul className="text-sm space-y-1 mb-2 list-none"> {/* Use list-none if using custom labels like <strong> */}
-                     {detailsList}
-                 </ul>
+        <div className="flex flex-col gap-4">
+            {/* Render Parents */}
+            {parents && parents.length > 0 && (
+                <div className="mt-4 pt-2 border-t border-gray-200">
+                    <h4 className="text-sm font-semibold mb-1 text-gray-700">Parents:</h4>
+                    <ul className="text-xs text-gray-600 list-disc list-inside space-y-1">
+                        {parents.map((parent) => {
+                            const parentType = parent.pk_namespace.split('.')[1];
+                            // Basic clickable link (won't navigate yet, but sets stage)
+                            return (
+                                <li key={`${parent.pk_namespace}-${parent.pk}`}>
+                                    <a href={`/?pk_namespace=${parent.pk_namespace}&pk=${parent.pk}`}
+                                        className="text-blue-600 hover:underline">
+                                            {parent.title} <span className="text-gray-500 capitalize">[{parentType}]</span>
+                                    </a>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </div>
             )}
-            {/* Placeholder for Parent/Child rendering */}
-             {(parents?.length > 0 || children?.length > 0) && (
-                <div className="mt-4 pt-2 border-t border-gray-200 text-xs text-gray-600">
-                    <p>Relationships placeholder (Parents: {parents?.length || 0}, Children: {children?.length || 0})</p>
-                 </div>
-             )}
-             {/* Debug Raw Data Link (Optional) */}
-             {/* <details className="mt-4 text-xs">
-                 <summary className="cursor-pointer text-gray-500">Show Raw Data</summary>
-                 <pre className="bg-gray-50 p-2 rounded overflow-auto mt-1">
-                     {JSON.stringify(entityDetails, null, 2)}
-                 </pre>
-             </details> */}
+            <div className="p-4 border border-gray-300 rounded-md bg-white shadow-sm clear-both"> {/* clear-both needed if image floats */}
+                {imageElement}
+                {basicInfo}
+                {detailsList.length > 0 && (
+                     <ul className="text-sm space-y-1 mb-2 list-none"> {/* Use list-none if using custom labels like <strong> */}
+                         {detailsList}
+                     </ul>
+                )}
+            </div>
+            {/* Render Children */}
+            {children && children.length > 0 && (
+                <div className="mt-3 pt-2 border-t border-gray-200"> {/* Adjusted margin/padding */}
+                    <h4 className="text-sm font-semibold mb-1 text-gray-700">Children:</h4>
+                    <ul className="text-xs text-gray-600 list-disc list-inside space-y-1">
+                        {children.map((child) => {
+                             const childType = child.pk_namespace.split('.')[1];
+                             return (
+                                 <li key={`${child.pk_namespace}-${child.pk}`}>
+                                    <a href={`/?pk_namespace=${child.pk_namespace}&pk=${child.pk}`}
+                                       className="text-blue-600 hover:underline">
+                                         {child.title} <span className="text-gray-500 capitalize">[{childType}]</span>
+                                    </a>
+                                </li>
+                             );
+                        })}
+                    </ul>
+                </div>
+            )}
         </div>
     );
 }
