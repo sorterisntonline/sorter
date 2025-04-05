@@ -98,7 +98,7 @@ const ensureEntityFn = async ({ pk_namespace, pk, title, metadata }) => {
         const errorText = await response.text();
         console.error(`Failed to ensure entity ${pk_namespace}/${pk}: ${response.status} ${errorText}`);
         // Throw an error that useMutation can catch
-        throw new Error(`Ensure failed for ${pk_namespace}/${pk}: ${response.status} ${errorText}`);
+        throw new Error(`Ensure failed for ${pk_namespace}/${pk}: ${response.status} ${errorText}`, { cause: { status: response.status } });
     }
 
     console.log(`Ensure successful or entity already existed for: ${pk_namespace}/${pk}`);
@@ -122,7 +122,10 @@ const fetchEntityDetailsFn = async (pk_namespace, pk) => {
 
     if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status} for ${detailsApiUrl}. ${errorText}`);
+         // Throw a custom error object including the status code
+         const error = new Error(`HTTP error! status: ${response.status} for ${detailsApiUrl}. ${errorText}`);
+         error.status = response.status; // Attach status code
+         throw error;
     }
     const data = await response.json();
 
@@ -247,6 +250,8 @@ function App() {
     const [highlightedIndex, setHighlightedIndex] = useState(-1);
     const suggestionBoxRef = useRef(null);
     const queryClient = useQueryClient();
+    // Ref to track if initial load from URL has been attempted
+    const initialLoadAttempted = useRef(false);
 
     // --- React Query Hooks (Using v5 Object Syntax) ---
 
@@ -258,16 +263,26 @@ function App() {
         keepPreviousData: true,
     });
 
-    const selectedEntity = selectedTags.length === 1 ? selectedTags[0] : null;
+    // --- Selected Entity Logic ---
+    // Get potential entity from URL first
+    const urlPkNamespace = searchParams.get('pk_namespace');
+    const urlPk = searchParams.get('pk');
 
+    // Derive the *intended* selected entity based on URL or user selection
+    const intendedEntity = selectedTags.length === 1
+        ? selectedTags[0]
+        : (urlPkNamespace && urlPk) // If no user selection, use URL params
+            ? { pk_namespace: urlPkNamespace, pk: urlPk, name: 'Loading from URL...', type: 'unknown', imageUrl: null }
+            : null;
+
+    // --- Ensure Mutation (No change needed here) ---
     const ensureMutation = useMutation({
         mutationFn: ensureEntityFn,
         onSuccess: (data, variables) => {
             console.log("Ensure mutation successful:", data);
-            // FIX: Use object syntax for invalidateQueries
             queryClient.invalidateQueries({ queryKey: ['entityDetails', variables.pk_namespace, variables.pk] });
-
-             if (!data?.skipped && data?.entity?.title && selectedEntity?.name === 'Loading from URL...') {
+            // Update tag state if needed (same logic as before)
+             if (!data?.skipped && data?.entity?.title && selectedTags.length === 1 && selectedTags[0].name === 'Loading from URL...') {
                  setSelectedTags(prev => {
                      if (prev.length === 1 && prev[0].pk === variables.pk && prev[0].pk_namespace === variables.pk_namespace) {
                          console.log("Updating tag name from ensure response");
@@ -286,27 +301,75 @@ function App() {
              }
         },
         onError: (error, variables) => {
-            console.error("Ensure mutation failed:", error);
+            console.error(`Ensure mutation failed for ${variables.pk_namespace}/${variables.pk}:`, error);
+             // Optionally update UI to show ensure error state
         },
     });
 
+    // --- Details Query (Modified onError) ---
     const detailsQuery = useQuery({
-        queryKey: ['entityDetails', selectedEntity?.pk_namespace, selectedEntity?.pk],
-        queryFn: () => fetchEntityDetailsFn(selectedEntity.pk_namespace, selectedEntity.pk),
-        enabled: !!selectedEntity,
+        queryKey: ['entityDetails', intendedEntity?.pk_namespace, intendedEntity?.pk],
+        queryFn: () => fetchEntityDetailsFn(intendedEntity.pk_namespace, intendedEntity.pk),
+        enabled: !!intendedEntity, // Enable if we have an intended entity (from URL or selection)
         staleTime: 10 * 60 * 1000,
+        retry: (failureCount, error) => {
+            // Don't retry automatically if it's a 404 we might handle with ensure
+            if (error.status === 404 && intendedEntity?.pk_namespace?.startsWith('spotify.')) {
+                return false;
+            }
+            // Default retry behavior otherwise (usually 3 times)
+            return failureCount < 3;
+        },
+        onError: (error) => {
+             console.error("Failed to fetch entity details:", error.message);
+             // Check if it's a potentially "ensurable" error (e.g., 404 for a Spotify item)
+             if (error.status === 404 && intendedEntity?.pk_namespace?.startsWith('spotify.') && !ensureMutation.isLoading) {
+                 console.log(`Details fetch failed with 404 for ${intendedEntity.pk_namespace}/${intendedEntity.pk}. Triggering ensure.`);
+                 // Trigger ensure mutation
+                 ensureMutation.mutate({
+                     pk_namespace: intendedEntity.pk_namespace,
+                     pk: intendedEntity.pk,
+                     // Use pk as placeholder title if name isn't available (e.g., from URL)
+                     title: intendedEntity.name === 'Loading from URL...' ? intendedEntity.pk : intendedEntity.name,
+                      // Pass minimal metadata or derive if possible
+                     metadata: {
+                         source: selectedTags.length === 1 ? 'frontend_selection_retry' : 'url_load_retry',
+                         imageUrl: intendedEntity.imageUrl, // Pass image if available
+                         ...(intendedEntity.artists && { artists: formatArtists(intendedEntity.artists) }),
+                         ...(intendedEntity.albumName && { albumName: intendedEntity.albumName }),
+                     },
+                 });
+             }
+             // If onError is triggered, the query is in an error state, handled in rendering logic
+        },
          onSuccess: (data) => {
-             if (selectedEntity?.name === 'Loading from URL...') {
+             // If details load successfully, make sure selectedTags reflects this data
+             // especially if it was loaded from URL initially
+             if (selectedTags.length === 0 && intendedEntity?.name === 'Loading from URL...') {
+                 const fetchedEntity = data.entity;
+                 const fetchedMetadata = fetchedEntity.metadata;
+                 const fetchedImageUrl = fetchedMetadata?.images ? getSmallestImageUrl(fetchedMetadata.images) : null;
+                 console.log("Details loaded successfully from URL, updating selectedTags state.");
+                 setSelectedTags([{
+                     pk_namespace: fetchedEntity.pk_namespace,
+                     pk: fetchedEntity.pk,
+                     name: fetchedEntity.title || 'Unknown Title',
+                     type: fetchedEntity.pk_namespace.split('.')[1] || 'unknown',
+                     imageUrl: fetchedImageUrl,
+                     // Potentially add artists/album from data if needed later
+                 }]);
+             } else if (selectedTags.length === 1 && selectedTags[0].name === 'Loading from URL...') {
+                 // Update if tag was already set but was placeholder
                   setSelectedTags(prev => {
-                     if (prev.length === 1 && prev[0].pk === selectedEntity.pk && prev[0].pk_namespace === selectedEntity.pk_namespace) {
-                         console.log("Updating tag name from details response");
+                     if (prev.length === 1 && prev[0].pk === data.entity.pk && prev[0].pk_namespace === data.entity.pk_namespace) {
+                         console.log("Updating placeholder tag name from details success");
                          const fetchedEntity = data.entity;
                          const fetchedMetadata = fetchedEntity.metadata;
                          const fetchedImageUrl = fetchedMetadata?.images ? getSmallestImageUrl(fetchedMetadata.images) : null;
                          return [{
                              ...prev[0],
                              name: fetchedEntity.title || 'Unknown Title',
-                             type: selectedEntity.pk_namespace.split('.')[1] || 'unknown',
+                             type: fetchedEntity.pk_namespace.split('.')[1] || 'unknown',
                              imageUrl: fetchedImageUrl,
                          }];
                      }
@@ -314,9 +377,6 @@ function App() {
                  });
              }
          },
-        onError: (error) => {
-             console.error("Failed to fetch entity details:", error);
-        }
     });
 
     // --- Event Handlers and Effects (Mostly Unchanged) ---
@@ -326,6 +386,12 @@ function App() {
     const handleInputChange = (event) => {
         const value = event.target.value;
         setInputValue(value);
+        // If user starts typing, clear any existing selection to allow new search
+        if (selectedTags.length > 0) {
+            setSelectedTags([]);
+            // Clear URL params when user interaction overrides URL state
+            setSearchParams({});
+        }
         debouncedSetQuery(value);
         setHighlightedIndex(-1);
     };
@@ -342,28 +408,41 @@ function App() {
                 artists: suggestion.artists,
                 albumName: suggestion.album?.name,
             };
+            // Clear input/suggestions first
+            setInputValue('');
+            setDebouncedInputValue('');
+            setHighlightedIndex(-1);
+            // Set the selected tag - this will trigger detailsQuery enable/disable
             setSelectedTags([newTag]);
-            // Trigger mutation using v5 syntax (already correct, but showing consistency)
-            ensureMutation.mutate({
-                 pk_namespace: newTag.pk_namespace,
-                 pk: newTag.pk,
-                 title: newTag.name,
-                 metadata: {
-                     imageUrl: newTag.imageUrl,
-                     source: 'frontend_selection',
-                     ...(newTag.artists && { artists: formatArtists(newTag.artists) }),
-                     ...(newTag.albumName && { albumName: newTag.albumName }),
-                     ...(newTag.type !== 'unknown' && { type: newTag.type }),
-                 },
-            });
+            // Update URL params
+            setSearchParams({ pk_namespace: newTag.pk_namespace, pk: newTag.pk });
+
+            // Check if details are already cached and fresh for this item
+            const existingData = queryClient.getQueryData(['entityDetails', newTag.pk_namespace, newTag.pk]);
+            if (!existingData || queryClient.isQueryStale(['entityDetails', newTag.pk_namespace, newTag.pk])) {
+                 // If no fresh data exists, proactively trigger ensure.
+                 // The detailsQuery will still run due to selectedTags change.
+                 // Ensure might run concurrently or slightly before details.
+                 console.log("Proactively ensuring selected tag:", newTag.pk_namespace, newTag.pk);
+                 ensureMutation.mutate({
+                     pk_namespace: newTag.pk_namespace, pk: newTag.pk, title: newTag.name,
+                     metadata: {
+                         imageUrl: newTag.imageUrl, source: 'frontend_selection',
+                         ...(newTag.artists && { artists: formatArtists(newTag.artists) }),
+                         ...(newTag.albumName && { albumName: newTag.albumName }),
+                         ...(newTag.type !== 'unknown' && { type: newTag.type }),
+                     },
+                 });
+            } else {
+                 console.log("Details already cached for selected tag, skipping proactive ensure.");
+            }
         }
-        setInputValue('');
-        setDebouncedInputValue('');
-        setHighlightedIndex(-1);
     };
 
     const removeTag = () => {
         setSelectedTags([]);
+        // Clear URL params when removing the tag
+        setSearchParams({});
     };
 
     const handleKeyDown = (event) => {
@@ -384,9 +463,7 @@ function App() {
             if (highlightedIndex >= 0 && currentSuggestions[highlightedIndex]) {
                 addTag(currentSuggestions[highlightedIndex]);
             }
-            setInputValue('');
-            setDebouncedInputValue('');
-            setHighlightedIndex(-1);
+            // Values cleared inside addTag now
         }
         if (event.key === 'Backspace' && inputValue === '' && selectedTags.length > 0) {
            removeTag();
@@ -410,45 +487,27 @@ function App() {
         };
     }, [suggestionBoxRef]);
 
-    useEffect(() => {
-        const initialPkNamespace = searchParams.get('pk_namespace');
-        const initialPk = searchParams.get('pk');
-        if (initialPkNamespace && initialPk && selectedTags.length === 0 && !detailsQuery.isLoading && !ensureMutation.isLoading) {
-            console.log("Setting initial tag from URL params:", initialPkNamespace, initialPk);
-            const initialTag = {
-                pk_namespace: initialPkNamespace,
-                pk: initialPk,
-                name: 'Loading from URL...',
-                type: initialPkNamespace.split('.')[1] || 'unknown',
-                imageUrl: null,
-            };
-            setSelectedTags([initialTag]);
-            // Trigger mutation using v5 syntax
-            ensureMutation.mutate({
-                pk_namespace: initialTag.pk_namespace,
-                pk: initialTag.pk,
-                title: initialTag.pk,
-                metadata: { source: 'url_load' },
-            });
-        }
-    }, [searchParams, ensureMutation, detailsQuery.isLoading, selectedTags.length]); // Adjusted dependencies slightly
-
-
+    // Effect to Update URL when selectedTags changes (mostly for user selections)
+    // Note: This might cause a flicker if detailsQuery onSuccess updates selectedTags later
     useEffect(() => {
         const currentPkNamespace = searchParams.get('pk_namespace');
         const currentPk = searchParams.get('pk');
-        if (selectedEntity) {
-            if (currentPkNamespace !== selectedEntity.pk_namespace || currentPk !== selectedEntity.pk) {
-                console.log("Setting URL params from selected tag:", selectedEntity.pk_namespace, selectedEntity.pk);
-                setSearchParams({ pk_namespace: selectedEntity.pk_namespace, pk: selectedEntity.pk });
+        const activeTag = selectedTags.length === 1 ? selectedTags[0] : null;
+
+        if (activeTag && activeTag.name !== 'Loading from URL...') { // Only sync URL if tag has loaded name
+            if (currentPkNamespace !== activeTag.pk_namespace || currentPk !== activeTag.pk) {
+                console.log("Syncing URL params from selected tag state:", activeTag.pk_namespace, activeTag.pk);
+                setSearchParams({ pk_namespace: activeTag.pk_namespace, pk: activeTag.pk }, { replace: true }); // Use replace to avoid history buildup
             }
-        } else {
+        } else if (!activeTag) {
+            // If no tag selected by user, clear params
             if (currentPkNamespace || currentPk) {
                 console.log("Clearing URL params as no tag is selected");
-                setSearchParams({});
+                setSearchParams({}, { replace: true });
             }
         }
-    }, [selectedEntity, setSearchParams, searchParams]);
+        // Dependency on the actual selectedTags array
+    }, [selectedTags, setSearchParams, searchParams]);
 
     // --- Rendering Logic (Unchanged) ---
     const renderSuggestionDetails = (suggestion) => {
@@ -517,44 +576,58 @@ function App() {
         }
     };
 
+    // Determine current display state based on queries/mutations
+     const displayState = (() => {
+         if (!intendedEntity) return 'placeholder'; // Nothing selected or loaded from URL
+         if (ensureMutation.isLoading) return 'loading'; // Ensure is actively running
+         // Details are loading *unless* ensure just failed
+         if (detailsQuery.isLoading && ensureMutation.status !== 'error') return 'loading';
+         if (ensureMutation.isError) return 'error_ensure'; // Ensure failed
+         if (detailsQuery.isError) return 'error_details'; // Details failed (and ensure didn't)
+         if (detailsQuery.isSuccess) return 'success'; // Details loaded successfully
+         return 'loading'; // Default/intermediate state
+     })();
+
+    // Get the tag to display (might be placeholder from URL or actual from state)
+    const displayTag = selectedTags.length === 1 ? selectedTags[0] : intendedEntity;
 
     return (
         <div className="app-container flex flex-col items-center justify-start min-h-screen bg-gray-100 p-4 pt-10">
             {/* Input and Tag Display Area */}
             <div className="w-full max-w-lg relative mb-4">
                 <div className="flex flex-wrap items-center border border-gray-300 rounded-md p-2 bg-white shadow-sm focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500">
-                  {selectedTags.map((tag) => (
-                    // Key uses pk_namespace and pk
-                    <span key={`${tag.pk_namespace}-${tag.pk}`} className="flex items-center bg-blue-500 text-white text-sm font-medium mr-2 mb-1 px-2.5 py-0.5 rounded-full">
-                      {tag.imageUrl && (
-                          <img src={tag.imageUrl} alt="" className="tag-preview-image w-4 h-4 mr-1.5 rounded-sm object-cover"/>
+                  {/* Only show tag if one is selected/intended */}
+                  {displayTag && (
+                    <span key={`${displayTag.pk_namespace}-${displayTag.pk}`} className="flex items-center bg-blue-500 text-white text-sm font-medium mr-2 mb-1 px-2.5 py-0.5 rounded-full">
+                      {displayTag.imageUrl && (
+                          <img src={displayTag.imageUrl} alt="" className="tag-preview-image w-4 h-4 mr-1.5 rounded-sm object-cover"/>
                       )}
-                      {/* Display name, potentially 'Loading...' */}
-                      {tag.name} <span className='text-xs opacity-80 ml-1'>[{tag.type}]</span>
+                      {displayTag.name} <span className='text-xs opacity-80 ml-1'>[{displayTag.type}]</span>
                       <button
                         type="button"
                         className="ml-1.5 flex-shrink-0 text-blue-100 hover:text-white focus:outline-none"
-                        onClick={removeTag} // Use updated removeTag
-                        aria-label={`Remove ${tag.name} (${tag.type})`}
+                        onClick={removeTag}
+                        aria-label={`Remove ${displayTag.name} (${displayTag.type})`}
                       >
                         &times;
                       </button>
                     </span>
-                  ))}
+                  )}
                   <input
                     id="tag-input" type="text" value={inputValue}
                     onChange={handleInputChange} onKeyDown={handleKeyDown}
-                    placeholder={selectedTags.length === 0 ? "Search Spotify, #tags..." : ""}
+                    // Disable input only if a tag is successfully loaded/selected (not just intended from URL)
+                    placeholder={!displayTag ? "Search Spotify, #tags..." : ""}
                     className="flex-grow p-1 outline-none text-sm min-w-[100px]"
                     autoComplete="off"
-                    disabled={selectedTags.length > 0} // Disable input when a tag is selected
+                    disabled={!!displayTag}
                   />
                 </div>
 
-                {/* Suggestions dropdown - Driven by suggestionsQuery */}
-                { (inputValue.length > 0 || suggestionsQuery.isFetching) && suggestionsQuery.fetchStatus !== 'idle' && ( // Show when input has value or query is fetching
+                {/* Suggestions dropdown */}
+                 { (inputValue.length > 0 || suggestionsQuery.isFetching) && suggestionsQuery.fetchStatus !== 'idle' && !displayTag && (
                     <div ref={suggestionBoxRef} className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                       {suggestionsQuery.isLoading && !suggestionsQuery.data?.length ? ( // Loading state
+                        {suggestionsQuery.isLoading && !suggestionsQuery.data?.length ? ( // Loading state
                            <div className="p-2 text-gray-500">Loading...</div>
                        ) : suggestionsQuery.isError ? ( // Error state
                            <div className="p-2 text-red-500">Error: {suggestionsQuery.error.message}</div>
@@ -570,43 +643,35 @@ function App() {
                                     </li>
                                 ))}
                             </ul>
-                        ) : !suggestionsQuery.isFetching && debouncedInputValue.length >= 2 ? ( // No results found state
+                        ) : !suggestionsQuery.isFetching && debouncedInputValue.length >= 2 ? (
                            <div className="p-2 text-gray-500">No results found.</div>
-                        ) : null /* Or a placeholder/prompt to type more */}
+                        ) : null
+                        }
                     </div>
                 )}
             </div>
 
-            {/* Display Area for Entity Details - Driven by detailsQuery and ensureMutation */}
+            {/* Display Area for Entity Details */}
             <div className="mt-4 w-full max-w-2xl">
-                {/* Loading: Either ensure is running OR details are fetching */}
-                {(ensureMutation.isLoading || (selectedEntity && detailsQuery.isFetching)) && (
+                {displayState === 'loading' && (
                     <div className="p-4 border border-gray-300 rounded-md bg-white shadow-sm text-gray-500 text-center">
                         Loading details...
                     </div>
                 )}
-
-                {/* Display Ensure Error */}
-                 {ensureMutation.isError && !detailsQuery.isFetching && (
+                {displayState === 'error_ensure' && (
                      <div className="p-4 border border-red-300 rounded-md bg-red-50 shadow-sm text-red-700">
                         Error ensuring entity: {ensureMutation.error.message}
                      </div>
                  )}
-
-                {/* Display Details Error (only if ensure didn't fail or isn't running) */}
-                 {!ensureMutation.isLoading && !ensureMutation.isError && detailsQuery.isError && (
+                {displayState === 'error_details' && (
                      <div className="p-4 border border-red-300 rounded-md bg-red-50 shadow-sm text-red-700">
                          Error loading details: {detailsQuery.error.message}
                      </div>
                  )}
-
-                 {/* Display Details Success */}
-                 {!ensureMutation.isLoading && !detailsQuery.isFetching && detailsQuery.isSuccess && selectedEntity && (
+                 {displayState === 'success' && detailsQuery.data && (
                     <EntityDetailsDisplay entityDetails={detailsQuery.data} />
                  )}
-
-                 {/* Placeholder when nothing is selected and not loading */}
-                {!selectedEntity && !ensureMutation.isLoading && !detailsQuery.isFetching && (
+                 {displayState === 'placeholder' && (
                     <div className="p-4 border border-dashed border-gray-300 rounded-md bg-white/50 shadow-sm text-gray-500 text-center">
                         Select an item to view details.
                     </div>
