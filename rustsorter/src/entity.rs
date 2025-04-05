@@ -34,19 +34,12 @@ pub struct EntityPayload {
     metadata: Option<JsonValue>,
 }
 
-// Add this new struct within entity.rs
-#[derive(Serialize, Debug)]
-pub struct RelatedEntityIdentifier {
-    pk_namespace: String,
-    pk: String,
-}
-
-// Add this new struct within entity.rs
+// Updated struct to hold full Entity for parents/children
 #[derive(Serialize, Debug)]
 pub struct EntityDetailResponse {
     entity: Entity,
-    parents: Vec<RelatedEntityIdentifier>,
-    children: Vec<RelatedEntityIdentifier>,
+    parents: Vec<Entity>,
+    children: Vec<Entity>,
 }
 
 // --- Handler Functions ---
@@ -251,7 +244,7 @@ pub async fn get_entity_details(
         }
         Err(e) => {
             log::error!("Failed to fetch entity for details view: {}", e);
-            return Err(ErrorResponse::new(
+            return Err(ErrorResponse::new   (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to retrieve entity".to_string(),
             ));
@@ -260,12 +253,13 @@ pub async fn get_entity_details(
 
     // 2. Fetch parents (entities that have this entity as a child)
     let parents_result = sqlx::query_as!(
-        RelatedEntityIdentifier,
+        Entity,
         r#"
-        SELECT parent_pk_namespace as "pk_namespace!", parent_pk as "pk!"
-        FROM entity_relationships
-        WHERE child_pk_namespace = $1 AND child_pk = $2
-        ORDER BY parent_pk_namespace, parent_pk -- Optional ordering
+        SELECT e.pk_namespace, e.pk, e.title, e.metadata, e.created_at
+        FROM entity_relationships er
+        JOIN entities e ON er.parent_pk_namespace = e.pk_namespace AND er.parent_pk = e.pk
+        WHERE er.child_pk_namespace = $1 AND er.child_pk = $2
+        ORDER BY e.pk_namespace, e.pk -- Optional ordering based on entity fields
         "#,
         pk_namespace,
         pk
@@ -273,7 +267,7 @@ pub async fn get_entity_details(
     .fetch_all(&state.db)
     .await;
 
-    let parents = match parents_result {
+    let parents: Vec<Entity> = match parents_result {
         Ok(parents) => parents,
         Err(e) => {
             log::error!(
@@ -293,12 +287,13 @@ pub async fn get_entity_details(
 
     // 3. Fetch children (entities that have this entity as a parent)
     let children_result = sqlx::query_as!(
-        RelatedEntityIdentifier,
+        Entity,
         r#"
-        SELECT child_pk_namespace as "pk_namespace!", child_pk as "pk!"
-        FROM entity_relationships
-        WHERE parent_pk_namespace = $1 AND parent_pk = $2
-        ORDER BY child_pk_namespace, child_pk -- Optional ordering
+        SELECT e.pk_namespace, e.pk, e.title, e.metadata, e.created_at
+        FROM entity_relationships er
+        JOIN entities e ON er.child_pk_namespace = e.pk_namespace AND er.child_pk = e.pk
+        WHERE er.parent_pk_namespace = $1 AND er.parent_pk = $2
+        ORDER BY e.pk_namespace, e.pk -- Optional ordering based on entity fields
         "#,
         pk_namespace,
         pk
@@ -306,7 +301,7 @@ pub async fn get_entity_details(
     .fetch_all(&state.db)
     .await;
 
-    let children = match children_result {
+    let children: Vec<Entity> = match children_result {
         Ok(children) => children,
         Err(e) => {
             log::error!(
@@ -331,6 +326,7 @@ pub async fn get_entity_details(
 
     Ok((StatusCode::OK, Json(response)))
 }
+
 // Define the routes for entity CRUD operations
 pub fn routes() -> Router<AppState> {
     Router::new()
