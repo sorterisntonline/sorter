@@ -344,6 +344,18 @@ async fn ensure_spotify_entity(
 
                         log::info!("Ensuring related album (in tx): {}/{}", album_ns, album_pk);
                         upsert_entity(&mut *tx, &album_ns, &album_pk, album_title, album_meta).await?;
+
+                        // Add relationship: Artist -> Album
+                        log::info!("Upserting relationship (in tx): {}/{} -> {}/{}", payload.pk_namespace, artist_id_str, album_ns, album_pk);
+                        upsert_entity_relationship(
+                            &mut *tx,
+                            &payload.pk_namespace, // parent_ns (artist)
+                            artist_id_str,        // parent_pk (artist)
+                            &album_ns,            // child_ns (album)
+                            &album_pk,            // child_pk (album)
+                            None,                 // submitter_user_id
+                        ).await?;
+
                     } else {
                         log::warn!("Skipping album with missing ID for artist {}", artist_id_str);
                     }
@@ -376,6 +388,34 @@ async fn ensure_spotify_entity(
                 .await?;
                 log::info!("Updated DB (in tx) with full album details for: {}", album_id_str);
 
+                // Ensure Album's Artists and relationship Artist -> Album
+                log::info!("Ensuring artists for album (in tx): {}", album_id_str);
+                for artist in full_album.artists.iter() { // Use iter() instead of into_iter() if full_album is needed later
+                    if let Some(artist_id) = artist.id.clone() {
+                        let artist_pk = artist_id.id().to_string();
+                        let artist_ns = "spotify.artist".to_string();
+                        let artist_title = Some(artist.name.clone());
+                        // Fetching full artist metadata here might be too much, use simplified
+                        let artist_meta = Some(serde_json::to_value(artist)?);
+
+                        log::info!("Ensuring related artist from album (in tx): {}/{}", artist_ns, artist_pk);
+                        upsert_entity(&mut *tx, &artist_ns, &artist_pk, artist_title, artist_meta).await?;
+
+                        // Add relationship: Artist -> Album
+                        log::info!("Upserting relationship (in tx): {}/{} -> {}/{}", artist_ns, artist_pk, payload.pk_namespace, album_id_str);
+                        upsert_entity_relationship(
+                            &mut *tx,
+                            &artist_ns,            // parent_ns (artist)
+                            &artist_pk,            // parent_pk (artist)
+                            &payload.pk_namespace, // child_ns (album)
+                            album_id_str,        // child_pk (album)
+                            None,                  // submitter_user_id
+                        ).await?;
+                    } else {
+                         log::warn!("Skipping artist with missing ID for album {}", album_id_str);
+                    }
+                }
+
                 log::info!("Ensuring tracks for album (in tx): {}", album_id_str);
                 for track in full_album.tracks.items {
                     if let Some(track_id) = track.id.clone() {
@@ -387,6 +427,17 @@ async fn ensure_spotify_entity(
                         log::info!("Ensuring related track (in tx): {}/{}", track_ns, track_pk);
                         upsert_entity(&mut *tx, &track_ns, &track_pk, track_title, track_meta).await?;
 
+                        // Add relationship: Album -> Track
+                        log::info!("Upserting relationship (in tx): {}/{} -> {}/{}", payload.pk_namespace, album_id_str, track_ns, track_pk);
+                        upsert_entity_relationship(
+                            &mut *tx,
+                            &payload.pk_namespace, // parent_ns (album)
+                            album_id_str,        // parent_pk (album)
+                            &track_ns,             // child_ns (track)
+                            &track_pk,             // child_pk (track)
+                            None,                  // submitter_user_id
+                        ).await?;
+
                         for artist in track.artists {
                             if let Some(artist_id) = artist.id.clone() {
                                 let artist_pk = artist_id.id().to_string();
@@ -396,6 +447,18 @@ async fn ensure_spotify_entity(
 
                                 log::info!("Ensuring related artist from track (in tx): {}/{}", artist_ns, artist_pk);
                                 upsert_entity(&mut *tx, &artist_ns, &artist_pk, artist_title, artist_meta).await?;
+
+                                // Add relationship: Artist -> Track
+                                log::info!("Upserting relationship (in tx): {}/{} -> {}/{}", artist_ns, artist_pk, track_ns, track_pk);
+                                upsert_entity_relationship(
+                                    &mut *tx,
+                                    &artist_ns, // parent_ns (artist)
+                                    &artist_pk, // parent_pk (artist)
+                                    &track_ns,  // child_ns (track)
+                                    &track_pk,  // child_pk (track)
+                                    None,       // submitter_user_id
+                                ).await?;
+
                             } else {
                                 log::warn!("Skipping artist with missing ID for track {}", track_pk);
                             }
@@ -433,22 +496,35 @@ async fn ensure_spotify_entity(
                 log::info!("Updated DB (in tx) with full track details for: {}", track_id_str);
 
                 log::info!("Ensuring artists for track (in tx): {}", track_id_str);
-                for artist in full_track.artists {
+                for artist in full_track.artists.iter() { // Use iter()
                     if let Some(artist_id) = artist.id.clone() {
                         let artist_pk = artist_id.id().to_string();
                         let artist_ns = "spotify.artist".to_string();
                         let artist_title = Some(artist.name.clone());
-                        let artist_meta = Some(serde_json::to_value(&artist)?);
+                        // Use simplified artist metadata from track object
+                        let artist_meta = Some(serde_json::to_value(artist)?);
 
                         log::info!("Ensuring related artist (in tx): {}/{}", artist_ns, artist_pk);
                         upsert_entity(&mut *tx, &artist_ns, &artist_pk, artist_title, artist_meta).await?;
+
+                        // Add relationship: Artist -> Track
+                        log::info!("Upserting relationship (in tx): {}/{} -> {}/{}", artist_ns, artist_pk, payload.pk_namespace, track_id_str);
+                         upsert_entity_relationship(
+                            &mut *tx,
+                            &artist_ns,             // parent_ns (artist)
+                            &artist_pk,             // parent_pk (artist)
+                            &payload.pk_namespace,  // child_ns (track)
+                            track_id_str,         // child_pk (track)
+                            None,                   // submitter_user_id
+                        ).await?;
+
                     } else {
                         log::warn!("Skipping artist with missing ID for track {}", track_id_str);
                     }
                 }
 
                 log::info!("Ensuring album for track (in tx): {}", track_id_str);
-                let album = full_track.album;
+                let album = full_track.album; // No need for clone if we consume it here
                 if let Some(album_id) = album.id.clone() {
                     let album_pk = album_id.id().to_string();
                     let album_ns = "spotify.album".to_string();
@@ -457,6 +533,18 @@ async fn ensure_spotify_entity(
 
                     log::info!("Ensuring related album (in tx): {}/{}", album_ns, album_pk);
                     upsert_entity(&mut *tx, &album_ns, &album_pk, album_title, album_meta).await?;
+
+                    // Add relationship: Album -> Track
+                    log::info!("Upserting relationship (in tx): {}/{} -> {}/{}", album_ns, album_pk, payload.pk_namespace, track_id_str);
+                    upsert_entity_relationship(
+                        &mut *tx,
+                        &album_ns,             // parent_ns (album)
+                        &album_pk,             // parent_pk (album)
+                        &payload.pk_namespace, // child_ns (track)
+                        track_id_str,        // child_pk (track)
+                        None,                  // submitter_user_id
+                    ).await?;
+
                 } else {
                     log::warn!("Album associated with track {} exists but is missing its own ID", track_id_str);
                 }
