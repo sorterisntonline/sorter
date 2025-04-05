@@ -69,7 +69,7 @@ class TestSpotifyEnsure:
     second_ensure_data: Optional[Dict[str, Any]] = None
     # Known Radiohead artist ID for related entity check
     radiohead_artist_pk = "6zvul52xwTWzilBZl6BUbT"
-    radiohead_artist_ns = "spotify:artist"
+    radiohead_artist_ns = "spotify.artist"
 
     @pytest_asyncio.fixture(scope="class", autouse=True)
     async def setup_and_teardown_class(cls):
@@ -116,7 +116,7 @@ class TestSpotifyEnsure:
 
         album_spotify_id = first_album_result["id"]
         album_name = first_album_result["name"]
-        album_namespace = "spotify:album"
+        album_namespace = "spotify.album"
 
         # Assert against known values for OK Computer
         assert album_spotify_id == "6dVIqQ8qmQ5GBnJ9shOYGE"
@@ -259,7 +259,7 @@ class TestSpotifyEnsure:
     # Optional: Add similar dependent tests for specific tracks if needed
     # @pytest.mark.dependency(depends=["TestSpotifyEnsure::test_first_ensure_call"])
     # async def test_check_related_track_exists(self):
-    #     track_ns = "spotify:track"
+    #     track_ns = "spotify.track"
     #     airbag_pk = "..." # Find Airbag's Spotify ID
     #     track_get_response = await make_request(...)
     #     assert track_get_response.status_code == 200
