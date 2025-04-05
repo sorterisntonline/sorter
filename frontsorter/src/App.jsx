@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+// Import react-router-dom hook
+import { useSearchParams } from 'react-router-dom';
 // Import react-query hooks
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 // Consider using a dedicated debounce hook library like 'use-debounce' for cleaner implementation
@@ -134,7 +136,7 @@ const fetchEntityDetailsFn = async (pk_namespace, pk) => {
 
 
 // --- EntityDetailsDisplay Component (Unchanged) ---
-function EntityDetailsDisplay({ entityDetails }) {
+function EntityDetailsDisplay({ entityDetails, onNavigate }) {
     if (!entityDetails || !entityDetails.entity) {
         return <div className="text-gray-500">No details available.</div>;
     }
@@ -184,6 +186,13 @@ function EntityDetailsDisplay({ entityDetails }) {
     }
     // Add more specific details based on entityType if needed...
 
+    // Handler for clicking parent/child links
+    const handleLinkClick = (e, pk_ns, pk) => {
+        e.preventDefault(); // Prevent full page reload
+        onNavigate(pk_ns, pk); // Call the navigation handler passed from App
+    };
+
+
     return (
         <div className="flex flex-col gap-4">
             {/* Render Parents */}
@@ -193,11 +202,12 @@ function EntityDetailsDisplay({ entityDetails }) {
                     <ul className="text-xs text-gray-600 list-disc list-inside space-y-1">
                         {parents.map((parent) => {
                             const parentType = parent.pk_namespace.split('.')[1];
-                            // Basic clickable link (won't navigate yet, but sets stage)
+                            // Use button/anchor styled as link and call handleLinkClick onClick
                             return (
                                 <li key={`${parent.pk_namespace}-${parent.pk}`}>
                                     <a href={`/?pk_namespace=${parent.pk_namespace}&pk=${parent.pk}`}
-                                        className="text-blue-600 hover:underline">
+                                        onClick={(e) => handleLinkClick(e, parent.pk_namespace, parent.pk)}
+                                        className="text-blue-600 hover:underline cursor-pointer">
                                             {parent.title} <span className="text-gray-500 capitalize">[{parentType}]</span>
                                     </a>
                                 </li>
@@ -225,7 +235,8 @@ function EntityDetailsDisplay({ entityDetails }) {
                              return (
                                  <li key={`${child.pk_namespace}-${child.pk}`}>
                                     <a href={`/?pk_namespace=${child.pk_namespace}&pk=${child.pk}`}
-                                       className="text-blue-600 hover:underline">
+                                       onClick={(e) => handleLinkClick(e, child.pk_namespace, child.pk)}
+                                       className="text-blue-600 hover:underline cursor-pointer">
                                          {child.title} <span className="text-gray-500 capitalize">[{childType}]</span>
                                     </a>
                                 </li>
@@ -244,141 +255,174 @@ function EntityDetailsDisplay({ entityDetails }) {
 function App() {
     const [inputValue, setInputValue] = useState('');
     const [debouncedInputValue, setDebouncedInputValue] = useState('');
+    // Selected tags now derived primarily from URL/details query result
     const [selectedTags, setSelectedTags] = useState([]);
     const [highlightedIndex, setHighlightedIndex] = useState(-1);
     const suggestionBoxRef = useRef(null);
     const queryClient = useQueryClient();
+    // --- Search Params ---
+    const [searchParams, setSearchParams] = useSearchParams();
+    const urlPkNamespace = searchParams.get('pk_namespace');
+    const urlPk = searchParams.get('pk');
 
-    // --- React Query Hooks (Using v5 Object Syntax) ---
+    // --- React Query Hooks ---
 
+    // Suggestions query remains the same
     const suggestionsQuery = useQuery({
         queryKey: ['suggestions', debouncedInputValue],
         queryFn: () => fetchSuggestionsFn(debouncedInputValue),
-        enabled: debouncedInputValue.length >= 2,
+        enabled: debouncedInputValue.length >= 2 && !urlPkNamespace, // Only enable when NOT showing details from URL
         staleTime: 5 * 60 * 1000,
         keepPreviousData: true,
     });
 
-    // --- Selected Entity Logic ---
-    // Derive the *intended* selected entity based ONLY on user selection
-    const intendedEntity = selectedTags.length === 1
-        ? selectedTags[0]
-        : null;
-
-    // --- Ensure Mutation (No change needed here, but simplify onSuccess logic) ---
+    // --- Ensure Mutation (No change needed here) ---
     const ensureMutation = useMutation({
         mutationFn: ensureEntityFn,
         onSuccess: (data, variables) => {
             console.log("Ensure mutation successful:", data);
+            // Invalidate details query based on URL params now
             queryClient.invalidateQueries({ queryKey: ['entityDetails', variables.pk_namespace, variables.pk] });
         },
         onError: (error, variables) => {
             console.error(`Ensure mutation failed for ${variables.pk_namespace}/${variables.pk}:`, error);
+            // Maybe clear URL params if ensure fails critically? Or show persistent error.
+            // For now, just log.
         },
     });
 
-    // --- Details Query (Modified onError) ---
+    // --- Details Query (Uses URL params) ---
     const detailsQuery = useQuery({
-        queryKey: ['entityDetails', intendedEntity?.pk_namespace, intendedEntity?.pk],
-        queryFn: () => fetchEntityDetailsFn(intendedEntity.pk_namespace, intendedEntity.pk),
-        enabled: !!intendedEntity, // Enable if we have an intended entity (from URL or selection)
+        // Use URL params directly in the query key
+        queryKey: ['entityDetails', urlPkNamespace, urlPk],
+        queryFn: () => fetchEntityDetailsFn(urlPkNamespace, urlPk),
+        // Enable only if both params are present in the URL
+        enabled: !!urlPkNamespace && !!urlPk,
         staleTime: 10 * 60 * 1000,
         retry: (failureCount, error) => {
-            // Don't retry automatically if it's a 404 we might handle with ensure
-            if (error.status === 404 && intendedEntity?.pk_namespace?.startsWith('spotify.')) {
-                return false;
+            if (error.status === 404 && urlPkNamespace?.startsWith('spotify.')) {
+                return false; // Don't retry 404 for Spotify, trigger ensure instead
             }
-            // Default retry behavior otherwise (usually 3 times)
             return failureCount < 3;
         },
         onError: (error) => {
-             console.error("Failed to fetch entity details:", error.message);
-             // Check if it's a potentially "ensurable" error (e.g., 404 for a Spotify item)
-             if (error.status === 404 && intendedEntity?.pk_namespace?.startsWith('spotify.') && !ensureMutation.isLoading) {
-                 console.log(`Details fetch failed with 404 for ${intendedEntity.pk_namespace}/${intendedEntity.pk}. Triggering ensure.`);
-                 // Trigger ensure mutation
+             console.error(`Failed to fetch entity details for ${urlPkNamespace}/${urlPk}:`, error.message);
+             if (error.status === 404 && urlPkNamespace?.startsWith('spotify.') && !ensureMutation.isLoading) {
+                 console.log(`Details fetch failed with 404 for ${urlPkNamespace}/${urlPk}. Triggering ensure.`);
+                 // We need some basic info to potentially pass to ensure.
+                 // Ideally, the suggestion data would be cached or passed, but we don't have it here if loaded via URL.
+                 // We might need a fallback or fetch minimal info first.
+                 // For now, ensure with minimal data if possible.
+                 // This part needs refinement: How do we get 'title'/'metadata' if we only have pk from URL?
+                 // Option 1: Ensure API doesn't strictly require them if entity exists.
+                 // Option 2: Make a preliminary small fetch.
+                 // Option 3: Show an error "Cannot find entity to ensure".
+                 // Let's try Option 1 assumption for now.
                  ensureMutation.mutate({
-                     pk_namespace: intendedEntity.pk_namespace,
-                     pk: intendedEntity.pk,
-                     title: intendedEntity.name,
-                     metadata: {
-                         source: 'frontend_selection_retry',
-                         imageUrl: intendedEntity.imageUrl,
-                         ...(intendedEntity.artists && { artists: formatArtists(intendedEntity.artists) }),
-                         ...(intendedEntity.albumName && { albumName: intendedEntity.albumName }),
-                     },
+                     pk_namespace: urlPkNamespace,
+                     pk: urlPk,
+                     title: `Entity ${urlPk}`, // Placeholder title
+                     metadata: { source: 'frontend_url_retry' }, // Minimal metadata
                  });
              }
-             // If onError is triggered, the query is in an error state, handled in rendering logic
+             // Clear selected tags state if details fail to load from URL
+             setSelectedTags([]);
         },
          onSuccess: (data) => {
-             console.log("Details query succeeded for selected item:", data.entity.title);
+             console.log(`Details query succeeded for URL item: ${urlPkNamespace}/${urlPk}`, data.entity.title);
+             // Sync selectedTags state with the data loaded from URL
+             if (data?.entity) {
+                 const entity = data.entity;
+                 const imageUrl = getSmallestImageUrl(entity.metadata?.images);
+                 setSelectedTags([{
+                     pk_namespace: entity.pk_namespace,
+                     pk: entity.pk,
+                     name: entity.title,
+                     type: entity.pk_namespace.split('.')[1] || 'unknown', // Extract type
+                     imageUrl: imageUrl,
+                     // We don't have artist/album easily here unless it's in metadata
+                     artists: entity.metadata?.artists,
+                     albumName: entity.metadata?.album?.name, // Assuming metadata might have album info
+                 }]);
+             }
          },
     });
 
-    // --- Event Handlers and Effects (Mostly Unchanged) ---
+     // Effect to clear selectedTags state if URL params are removed
+     useEffect(() => {
+         if (!urlPkNamespace || !urlPk) {
+             // If URL params are cleared, ensure local state reflects this
+             if (selectedTags.length > 0) {
+                 setSelectedTags([]);
+             }
+             // Optionally clear input when URL is cleared externally
+             // setInputValue('');
+             // setDebouncedInputValue('');
+         }
+     }, [urlPkNamespace, urlPk, selectedTags.length]);
+
+
+    // --- Event Handlers and Effects ---
 
     const debouncedSetQuery = useCallback(debounce(setDebouncedInputValue, 300), []);
 
     const handleInputChange = (event) => {
         const value = event.target.value;
         setInputValue(value);
-        // If user starts typing, clear any existing selection to allow new search
-        if (selectedTags.length > 0) {
-            setSelectedTags([]);
-        }
+        // Don't clear selectedTags here, URL controls the primary selection
         debouncedSetQuery(value);
         setHighlightedIndex(-1);
     };
 
+    // Navigate function to update URL params
+    const navigateToEntity = (pk_ns, pk) => {
+        console.log("Navigating to:", pk_ns, pk);
+        setSearchParams({ pk_namespace: pk_ns, pk: pk });
+        // Clear input when navigating
+        setInputValue('');
+        setDebouncedInputValue('');
+        setHighlightedIndex(-1);
+    };
+
+
+    // addTag now updates URL instead of local state directly
     const addTag = (suggestion) => {
         if (suggestion) {
-            const imageUrl = getSmallestImageUrl(suggestion.images);
-            const newTag = {
-                pk_namespace: suggestion.pk_namespace,
-                pk: suggestion.pk,
-                name: suggestion.name,
-                type: suggestion.type,
-                imageUrl: imageUrl,
-                artists: suggestion.artists,
-                albumName: suggestion.album?.name,
-            };
-            // Clear input/suggestions first
-            setInputValue('');
-            setDebouncedInputValue('');
-            setHighlightedIndex(-1);
-            // Set the selected tag - this will trigger detailsQuery enable/disable
-            setSelectedTags([newTag]);
+             // Update URL, which will trigger detailsQuery and onSuccess state update
+             navigateToEntity(suggestion.pk_namespace, suggestion.pk);
 
-            // Check if details are already cached and fresh for this item
-            const existingData = queryClient.getQueryData(['entityDetails', newTag.pk_namespace, newTag.pk]);
-            if (!existingData || queryClient.isQueryStale(['entityDetails', newTag.pk_namespace, newTag.pk])) {
-                 // If no fresh data exists, proactively trigger ensure.
-                 // The detailsQuery will still run due to selectedTags change.
-                 // Ensure might run concurrently or slightly before details.
-                 console.log("Proactively ensuring selected tag:", newTag.pk_namespace, newTag.pk);
+             // Proactive ensure can still be useful
+             const existingData = queryClient.getQueryData(['entityDetails', suggestion.pk_namespace, suggestion.pk]);
+             if (!existingData || queryClient.isQueryStale(['entityDetails', suggestion.pk_namespace, suggestion.pk])) {
+                 console.log("Proactively ensuring selected tag:", suggestion.pk_namespace, suggestion.pk);
                  ensureMutation.mutate({
-                     pk_namespace: newTag.pk_namespace, pk: newTag.pk, title: newTag.name,
+                     pk_namespace: suggestion.pk_namespace, pk: suggestion.pk, title: suggestion.name,
                      metadata: {
-                         imageUrl: newTag.imageUrl, source: 'frontend_selection',
-                         ...(newTag.artists && { artists: formatArtists(newTag.artists) }),
-                         ...(newTag.albumName && { albumName: newTag.albumName }),
-                         ...(newTag.type !== 'unknown' && { type: newTag.type }),
+                         imageUrl: getSmallestImageUrl(suggestion.images),
+                         source: 'frontend_selection',
+                         ...(suggestion.artists && { artists: formatArtists(suggestion.artists) }),
+                         ...(suggestion.album?.name && { albumName: suggestion.album.name }),
+                         ...(suggestion.type !== 'unknown' && { type: suggestion.type }),
                      },
                  });
             } else {
-                 console.log("Details already cached for selected tag, skipping proactive ensure.");
+                 console.log("Details might be cached for selected tag, skipping proactive ensure check here.");
             }
         }
     };
 
+    // removeTag clears URL params
     const removeTag = () => {
-        setSelectedTags([]);
+        setSearchParams({}); // Clear pk_namespace and pk from URL
+        // Input might need focusing or clearing depending on desired UX
+        // setInputValue('');
+        // setDebouncedInputValue('');
     };
 
     const handleKeyDown = (event) => {
         const currentSuggestions = suggestionsQuery.data || [];
-        if (currentSuggestions.length > 0) {
+        // Only handle arrows/enter if suggestions are visible (i.e., no entity selected via URL)
+        if (!urlPkNamespace && currentSuggestions.length > 0) {
             if (event.key === 'ArrowDown') {
                 event.preventDefault();
                 setHighlightedIndex(prevIndex => (prevIndex + 1) % currentSuggestions.length);
@@ -387,27 +431,34 @@ function App() {
                 event.preventDefault();
                  setHighlightedIndex(prevIndex => (prevIndex - 1 + currentSuggestions.length) % currentSuggestions.length);
                 return;
+            } else if (event.key === 'Enter') {
+                 event.preventDefault();
+                 if (highlightedIndex >= 0 && currentSuggestions[highlightedIndex]) {
+                    addTag(currentSuggestions[highlightedIndex]);
+                    // Values cleared inside addTag/navigateToEntity now
+                 }
+                return; // Prevent other keydown actions if Enter was handled
             }
         }
-        if (event.key === 'Enter') {
-            event.preventDefault();
-            if (highlightedIndex >= 0 && currentSuggestions[highlightedIndex]) {
-                addTag(currentSuggestions[highlightedIndex]);
-            }
-            // Values cleared inside addTag now
-        }
+        // Allow backspace to remove tag even if suggestions aren't showing
         if (event.key === 'Backspace' && inputValue === '' && selectedTags.length > 0) {
            removeTag();
         }
     };
 
+    // useEffect for closing suggestion box remains largely the same
     useEffect(() => {
         function handleClickOutside(event) {
             if (suggestionBoxRef.current && !suggestionBoxRef.current.contains(event.target)) {
                  const inputElement = document.getElementById('tag-input');
-                 if (!inputElement || !inputElement.contains(event.target)) {
-                   setInputValue('');
-                   setDebouncedInputValue('');
+                 // Also check if the click was on the selected tag itself
+                 const tagElement = document.querySelector('.selected-tag-display'); // Add a class for easier selection
+                 if ((!inputElement || !inputElement.contains(event.target)) && (!tagElement || !tagElement.contains(event.target))) {
+                    // Only clear input if we are in suggestion mode (no URL params)
+                    if (!urlPkNamespace) {
+                       setInputValue('');
+                       setDebouncedInputValue('');
+                    }
                    setHighlightedIndex(-1);
                 }
             }
@@ -416,9 +467,12 @@ function App() {
         return () => {
             document.removeEventListener("mousedown", handleClickOutside);
         };
-    }, [suggestionBoxRef]);
+    }, [suggestionBoxRef, urlPkNamespace]); // Add urlPkNamespace dependency
 
-    // --- Rendering Logic (Adjusted) ---
+
+    // --- Rendering Logic ---
+    // renderSuggestionDetails remains the same
+    // ... renderSuggestionDetails function (unchanged) ...
     const renderSuggestionDetails = (suggestion) => {
         const imageUrl = getSmallestImageUrl(suggestion.images);
         const imageElement = imageUrl ? (
@@ -485,29 +539,31 @@ function App() {
         }
     };
 
-    // Determine current display state based on queries/mutations
+
+    // Determine current display state based on URL and query states
      const displayState = (() => {
-         if (!intendedEntity) return 'placeholder'; // Nothing selected or loaded from URL
-         if (ensureMutation.isLoading) return 'loading'; // Ensure is actively running
-         // Details are loading *unless* ensure just failed
-         if (detailsQuery.isLoading && ensureMutation.status !== 'error') return 'loading';
-         if (ensureMutation.isError) return 'error_ensure'; // Ensure failed
-         if (detailsQuery.isError) return 'error_details'; // Details failed (and ensure didn't)
-         if (detailsQuery.isSuccess) return 'success'; // Details loaded successfully
-         return 'loading'; // Default/intermediate state
+         if (!urlPkNamespace || !urlPk) return 'placeholder'; // No entity selected via URL
+         // If ensure is running due to a 404 retry, show loading
+         if (ensureMutation.isLoading && detailsQuery.status === 'error' && detailsQuery.error?.status === 404) return 'loading';
+         if (detailsQuery.isLoading) return 'loading'; // Details are loading
+         if (ensureMutation.isError) return 'error_ensure'; // Ensure failed (and wasn't handled gracefully)
+         if (detailsQuery.isError) return 'error_details'; // Details failed (and ensure didn't run or failed silently)
+         if (detailsQuery.isSuccess) return 'success'; // Details loaded
+         return 'loading'; // Default/intermediate state while URL is set but query hasn't started/finished
      })();
 
-    // Get the tag to display (might be placeholder from URL or actual from state)
+    // Get the tag to display (now derived from selectedTags, which is populated by detailsQuery.onSuccess)
     const displayTag = selectedTags.length === 1 ? selectedTags[0] : null;
+    const showSuggestions = !urlPkNamespace && (inputValue.length > 0 || suggestionsQuery.isFetching);
 
     return (
         <div className="app-container flex flex-col items-center justify-start min-h-screen bg-gray-100 p-4 pt-10">
             {/* Input and Tag Display Area */}
             <div className="w-full max-w-lg relative mb-4">
                 <div className="flex flex-wrap items-center border border-gray-300 rounded-md p-2 bg-white shadow-sm focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500">
-                  {/* Only show tag if one is selected/intended */}
+                  {/* Display tag if successfully loaded */}
                   {displayTag && (
-                    <span key={`${displayTag.pk_namespace}-${displayTag.pk}`} className="flex items-center bg-blue-500 text-white text-sm font-medium mr-2 mb-1 px-2.5 py-0.5 rounded-full">
+                    <span key={`${displayTag.pk_namespace}-${displayTag.pk}`} className="selected-tag-display flex items-center bg-blue-500 text-white text-sm font-medium mr-2 mb-1 px-2.5 py-0.5 rounded-full">
                       {displayTag.imageUrl && (
                           <img src={displayTag.imageUrl} alt="" className="tag-preview-image w-4 h-4 mr-1.5 rounded-sm object-cover"/>
                       )}
@@ -515,73 +571,63 @@ function App() {
                       <button
                         type="button"
                         className="ml-1.5 flex-shrink-0 text-blue-100 hover:text-white focus:outline-none"
-                        onClick={removeTag}
+                        onClick={removeTag} // Use removeTag which clears URL params
                         aria-label={`Remove ${displayTag.name} (${displayTag.type})`}
                       >
                         &times;
                       </button>
                     </span>
                   )}
+                  {/* Input field is conceptually always present, but disabled and placeholder changes */}
                   <input
                     id="tag-input" type="text" value={inputValue}
                     onChange={handleInputChange} onKeyDown={handleKeyDown}
-                    // Disable input only if a tag is successfully loaded/selected (not just intended from URL)
-                    placeholder={!displayTag ? "Search Spotify, #tags..." : ""}
-                    className="flex-grow p-1 outline-none text-sm min-w-[100px]"
+                    placeholder={!displayTag ? "Search Spotify, #tags..." : ""} // Show placeholder only if no tag selected
+                    className={`flex-grow p-1 outline-none text-sm min-w-[100px] ${displayTag ? 'bg-gray-100' : ''}`} // Style disabled state
                     autoComplete="off"
-                    disabled={!!displayTag}
+                    disabled={!!displayTag} // Disable input when a tag is displayed
                   />
                 </div>
 
-                {/* Suggestions dropdown */}
-                 {(() => {
-                    const shouldRenderDropdown = (inputValue.length > 0 || suggestionsQuery.isFetching) && !displayTag;
-                    console.log("Should render dropdown:", shouldRenderDropdown, { inputValueLength: inputValue.length, isFetching: suggestionsQuery.isFetching, fetchStatus: suggestionsQuery.fetchStatus, displayTag: !!displayTag });
-                    if (!shouldRenderDropdown) return null;
-
-                    return (
+                {/* Suggestions dropdown - Show only if no URL params and input has value/is fetching */}
+                 {showSuggestions && (
                       <div ref={suggestionBoxRef} className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
                           {(() => {
-                            console.log("Dropdown content check:", { isLoading: suggestionsQuery.isLoading, isError: suggestionsQuery.isError, data: suggestionsQuery.data, isFetching: suggestionsQuery.isFetching, debouncedInputValueLength: debouncedInputValue.length });
-                            if (suggestionsQuery.isLoading && !suggestionsQuery.data?.length) { // Loading state
-                              console.log("Rendering: Loading...");
-                              return <div className="p-2 text-gray-500">Loading...</div>;
-                            } else if (suggestionsQuery.isError) { // Error state
-                              console.log("Rendering: Error", suggestionsQuery.error.message);
-                              return <div className="p-2 text-red-500">Error: {suggestionsQuery.error.message}</div>;
-                            } else if (suggestionsQuery.data && suggestionsQuery.data.length > 0) { // Success state
-                              console.log("Rendering: Success -", suggestionsQuery.data.length, "items");
-                              return (
-                                  <ul>
-                                      {suggestionsQuery.data.map((suggestion, index) => (
-                                          <li
-                                              key={`${suggestion.pk_namespace}-${suggestion.pk}`}
-                                              className={`p-2 cursor-pointer hover:bg-blue-100 ${index === highlightedIndex ? 'bg-blue-100' : ''}`}
-                                              onMouseDown={(e) => { e.preventDefault(); addTag(suggestion); }}
-                                          >
-                                             {renderSuggestionDetails(suggestion)}
-                                          </li>
-                                      ))}
-                                  </ul>
-                              );
-                            } else if (!suggestionsQuery.isFetching && debouncedInputValue.length >= 2) {
-                               console.log("Rendering: No results found");
-                               return <div className="p-2 text-gray-500">No results found.</div>;
-                            } else {
-                               console.log("Rendering: Nothing (intermediate state?)");
-                               return null;
-                            }
+                              // console.log("Dropdown content check:", { isLoading: suggestionsQuery.isLoading, isError: suggestionsQuery.isError, data: suggestionsQuery.data, isFetching: suggestionsQuery.isFetching, debouncedInputValueLength: debouncedInputValue.length });
+                              if (suggestionsQuery.isLoading && !suggestionsQuery.data?.length) {
+                                  return <div className="p-2 text-gray-500">Loading...</div>;
+                              } else if (suggestionsQuery.isError) {
+                                  return <div className="p-2 text-red-500">Error: {suggestionsQuery.error.message}</div>;
+                              } else if (suggestionsQuery.data && suggestionsQuery.data.length > 0) {
+                                  return (
+                                      <ul>
+                                          {suggestionsQuery.data.map((suggestion, index) => (
+                                              <li
+                                                  key={`${suggestion.pk_namespace}-${suggestion.pk}`}
+                                                  className={`p-2 cursor-pointer hover:bg-blue-100 ${index === highlightedIndex ? 'bg-blue-100' : ''}`}
+                                                  onMouseDown={(e) => { e.preventDefault(); addTag(suggestion); }} // Use addTag which updates URL
+                                              >
+                                                 {renderSuggestionDetails(suggestion)}
+                                              </li>
+                                          ))}
+                                      </ul>
+                                  );
+                              } else if (!suggestionsQuery.isFetching && debouncedInputValue.length >= 2) {
+                                 return <div className="p-2 text-gray-500">No results found.</div>;
+                              } else {
+                                 return null; // Nothing to show (e.g., input too short and not fetching)
+                              }
                           })()}
                       </div>
-                    );
-                 })()}
+                 )}
             </div>
 
             {/* Display Area for Entity Details */}
             <div className="mt-4 w-full max-w-2xl">
+                {/* Loading state covers initial load from URL and ensure retries */}
                 {displayState === 'loading' && (
                     <div className="p-4 border border-gray-300 rounded-md bg-white shadow-sm text-gray-500 text-center">
-                        Loading details...
+                        Loading details... {ensureMutation.isLoading ? '(Ensuring entity...)' : ''}
                     </div>
                 )}
                 {displayState === 'error_ensure' && (
@@ -589,18 +635,22 @@ function App() {
                         Error ensuring entity: {ensureMutation.error.message}
                      </div>
                  )}
-                {displayState === 'error_details' && (
+                 {/* Show details error only if ensure didn't explicitly fail */}
+                {displayState === 'error_details' && ensureMutation.status !== 'error' && (
                      <div className="p-4 border border-red-300 rounded-md bg-red-50 shadow-sm text-red-700">
                          Error loading details: {detailsQuery.error.message}
+                         {detailsQuery.error?.status === 404 && urlPkNamespace?.startsWith('spotify.') && ' (Could not find or ensure the Spotify entity)'}
                      </div>
                  )}
+                 {/* Success state */}
                  {displayState === 'success' && detailsQuery.data && (
-                    <EntityDetailsDisplay entityDetails={detailsQuery.data} />
+                    // Pass navigateToEntity to handle clicks on parent/child links
+                    <EntityDetailsDisplay entityDetails={detailsQuery.data} onNavigate={navigateToEntity} />
                  )}
-                 {/* Adjust placeholder condition - show if no tag is selected */}
-                 {!displayTag && displayState !== 'loading' && displayState !== 'error_ensure' && displayState !== 'error_details' && (
+                 {/* Placeholder: Show if no URL params and not in an error/loading state */}
+                 {displayState === 'placeholder' && (
                     <div className="p-4 border border-dashed border-gray-300 rounded-md bg-white/50 shadow-sm text-gray-500 text-center">
-                        Select an item to view details.
+                        Search for an item or select one to view details.
                     </div>
                 )}
             </div>
