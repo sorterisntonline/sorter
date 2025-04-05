@@ -46,14 +46,6 @@ pub struct EntityDetailResponse {
     children: Vec<RelatedEntityIdentifier>,
 }
 
-// Define the routes for entity CRUD operations
-pub fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/", post(create_entity).get(list_entities))
-        .route("/:pk_namespace/:pk/details", get(get_entity_details))
-        .route("/:pk_namespace/:pk", get(get_entity).put(update_entity).delete(delete_entity))
-}
-
 // --- Handler Functions ---
 
 // POST / - Create a new entity
@@ -201,7 +193,7 @@ async fn delete_entity(
 }
 
 // GET /:pk_namespace/:pk/details - Get entity details including parent and child relationships
-async fn get_entity_details(
+pub async fn get_entity_details(
     State(state): State<AppState>,
     Path((pk_namespace, pk)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, impl IntoResponse> {
@@ -284,4 +276,11 @@ async fn get_entity_details(
     };
 
     Ok((StatusCode::OK, Json(response)))
+}
+// Define the routes for entity CRUD operations
+pub fn routes() -> Router<AppState> {
+    Router::new()
+        .route("/", post(create_entity).get(list_entities))
+        //.route("/:pk_namespace/:pk/details", get(get_entity_details))
+        .route("/:pk_namespace/:pk", get(get_entity).put(update_entity).delete(delete_entity))
 }

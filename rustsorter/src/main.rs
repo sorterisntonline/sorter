@@ -22,6 +22,7 @@ use axum::{
 };
 use dotenv::dotenv;
 use crate::models::User;
+use crate::entity::get_entity_details;
 use serde_json::json;
 use tower_http::trace::TraceLayer;
 use rspotify::{ClientCredsSpotify, Credentials, Config};
@@ -86,6 +87,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let app = Router::new()
         .route("/api/health", get(health))
         .nest("/spotify", crate::spotify::routes())
+        .route("/api/entity/:pk_namespace/:pk/details", get(get_entity_details))
         .nest("/api", api_routes(app_state.clone()))
         .with_state(app_state)
         .layer(TraceLayer::new_for_http());
