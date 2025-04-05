@@ -16,8 +16,8 @@ use rspotify::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue; // For metadata
 
-use crate::entity::Entity;
 use crate::app_state::AppState; // Make sure AppState is imported
+use crate::entity::Entity;
 use sqlx::PgPool; // Import PgPool
 
 #[derive(Deserialize)]
@@ -241,7 +241,6 @@ async fn ensure_spotify_entity(
     .fetch_one(db)
     .await?; // Use ?
 
-
     // 3. If it was newly inserted, fetch full details from Spotify and update/ensure related
     if was_inserted {
         log::info!(
@@ -294,14 +293,16 @@ async fn ensure_spotify_entity(
                     .await?; // Use ?
 
                 for album in albums_page.items {
-                    if let Some(album_id) = album.id.clone() { // Clone needed for id()
+                    if let Some(album_id) = album.id.clone() {
+                        // Clone needed for id()
                         let album_pk = album_id.id().to_string();
                         let album_ns = "spotify:album".to_string();
                         let album_title = Some(album.name.clone());
                         let album_meta = Some(serde_json::to_value(&album)?); // Use ?
 
                         log::info!("Ensuring related album: {}/{}", album_ns, album_pk);
-                        upsert_entity(db, &album_ns, &album_pk, album_title, album_meta).await?; // Use helper and ?
+                        upsert_entity(db, &album_ns, &album_pk, album_title, album_meta).await?;
+                    // Use helper and ?
                     } else {
                         log::warn!(
                             "Skipping album with missing ID for artist {}",
@@ -344,11 +345,12 @@ async fn ensure_spotify_entity(
                 .await?; // Use ?
                 log::info!("Updated DB with full album details for: {}", album_id_str);
 
-
                 // Ensure tracks for this album
                 log::info!("Ensuring tracks for album: {}", album_id_str);
-                for track in full_album.tracks.items { // SimplifiedTrack
-                    if let Some(track_id) = track.id.clone() { // Clone needed
+                for track in full_album.tracks.items {
+                    // SimplifiedTrack
+                    if let Some(track_id) = track.id.clone() {
+                        // Clone needed
                         let track_pk = track_id.id().to_string();
                         let track_ns = "spotify:track".to_string();
                         let track_title = Some(track.name.clone());
@@ -358,40 +360,61 @@ async fn ensure_spotify_entity(
                         upsert_entity(db, &track_ns, &track_pk, track_title, track_meta).await?; // Use helper and ?
 
                         // Ensure artists for this track (SimplifiedArtist)
-                        for artist in track.artists { // No clone needed here if track is consumed
-                            if let Some(artist_id) = artist.id.clone() { // Clone needed
+                        for artist in track.artists {
+                            // No clone needed here if track is consumed
+                            if let Some(artist_id) = artist.id.clone() {
+                                // Clone needed
                                 let artist_pk = artist_id.id().to_string();
                                 let artist_ns = "spotify:artist".to_string();
                                 let artist_title = Some(artist.name.clone());
                                 let artist_meta = Some(serde_json::to_value(&artist)?); // Use ?
 
-                                log::info!("Ensuring related artist from track: {}/{}", artist_ns, artist_pk);
-                                upsert_entity(db, &artist_ns, &artist_pk, artist_title, artist_meta).await?; // Use helper and ?
+                                log::info!(
+                                    "Ensuring related artist from track: {}/{}",
+                                    artist_ns,
+                                    artist_pk
+                                );
+                                upsert_entity(
+                                    db,
+                                    &artist_ns,
+                                    &artist_pk,
+                                    artist_title,
+                                    artist_meta,
+                                )
+                                .await?; // Use helper and ?
                             } else {
-                                log::warn!("Skipping artist with missing ID for track {}", track_pk);
+                                log::warn!(
+                                    "Skipping artist with missing ID for track {}",
+                                    track_pk
+                                );
                             }
                         }
                     } else {
                         log::warn!("Skipping track with missing ID for album {}", album_id_str);
                     }
                 }
-                 // TODO: Handle paging for albums with > 50 tracks if necessary
+                // TODO: Handle paging for albums with > 50 tracks if necessary
             }
             "spotify:track" => {
-                 let track_id_str = &payload.pk;
-                 let track_id = TrackId::from_id(track_id_str).map_err(|e| {
-                     SpotifyApiError::BadRequest(format!("Invalid Spotify Track ID: {}", e))
-                 })?;
+                let track_id_str = &payload.pk;
+                let track_id = TrackId::from_id(track_id_str).map_err(|e| {
+                    SpotifyApiError::BadRequest(format!("Invalid Spotify Track ID: {}", e))
+                })?;
 
-                 // Fetch full track details
-                 let full_track = spotify.track(track_id.clone(), Some(Market::Country(Country::UnitedStates))).await?; // Use ?
-                 log::info!("Fetched full track details for: {}", track_id_str);
+                // Fetch full track details
+                let full_track = spotify
+                    .track(
+                        track_id.clone(),
+                        Some(Market::Country(Country::UnitedStates)),
+                    )
+                    .await?; // Use ?
+                log::info!("Fetched full track details for: {}", track_id_str);
 
-                 // Update the main entity object and the DB record
-                 entity.title = Some(full_track.name.clone());
-                 entity.metadata = Some(serde_json::to_value(&full_track)?); // Use ?
+                // Update the main entity object and the DB record
+                entity.title = Some(full_track.name.clone());
+                entity.metadata = Some(serde_json::to_value(&full_track)?); // Use ?
 
-                 sqlx::query!(
+                sqlx::query!(
                     r#"
                     UPDATE entities
                     SET title = $1, metadata = $2
@@ -406,40 +429,44 @@ async fn ensure_spotify_entity(
                 .await?; // Use ?
                 log::info!("Updated DB with full track details for: {}", track_id_str);
 
-                 // Ensure artists for this track (SimplifiedArtist from FullTrack)
-                 log::info!("Ensuring artists for track: {}", track_id_str);
-                 for artist in full_track.artists { // No clone needed here
-                     if let Some(artist_id) = artist.id.clone() { // Clone needed
-                         let artist_pk = artist_id.id().to_string();
-                         let artist_ns = "spotify:artist".to_string();
-                         let artist_title = Some(artist.name.clone());
-                         let artist_meta = Some(serde_json::to_value(&artist)?); // Use ?
+                // Ensure artists for this track (SimplifiedArtist from FullTrack)
+                log::info!("Ensuring artists for track: {}", track_id_str);
+                for artist in full_track.artists {
+                    // No clone needed here
+                    if let Some(artist_id) = artist.id.clone() {
+                        // Clone needed
+                        let artist_pk = artist_id.id().to_string();
+                        let artist_ns = "spotify:artist".to_string();
+                        let artist_title = Some(artist.name.clone());
+                        let artist_meta = Some(serde_json::to_value(&artist)?); // Use ?
 
-                         log::info!("Ensuring related artist: {}/{}", artist_ns, artist_pk);
-                         upsert_entity(db, &artist_ns, &artist_pk, artist_title, artist_meta).await?; // Use helper and ?
-                     } else {
-                         log::warn!("Skipping artist with missing ID for track {}", track_id_str);
-                     }
-                 }
+                        log::info!("Ensuring related artist: {}/{}", artist_ns, artist_pk);
+                        upsert_entity(db, &artist_ns, &artist_pk, artist_title, artist_meta)
+                            .await?; // Use helper and ?
+                    } else {
+                        log::warn!("Skipping artist with missing ID for track {}", track_id_str);
+                    }
+                }
 
-                 // Ensure the album for this track (SimplifiedAlbum from FullTrack)
-                 log::info!("Ensuring album for track: {}", track_id_str);
-                 if let Some(album) = full_track.album { // album is SimplifiedAlbum
-                    if let Some(album_id) = album.id.clone() { // Clone needed
-                         let album_pk = album_id.id().to_string();
-                         let album_ns = "spotify:album".to_string();
-                         let album_title = Some(album.name.clone());
-                         let album_meta = Some(serde_json::to_value(&album)?); // Use ?
+                // Ensure the album for this track (SimplifiedAlbum from FullTrack)
+                log::info!("Ensuring album for track: {}", track_id_str);
+                let album = full_track.album; // album is SimplifiedAlbum
+                if let Some(album_id) = album.id.clone() {
+                    // Clone needed
+                    let album_pk = album_id.id().to_string();
+                    let album_ns = "spotify:album".to_string();
+                    let album_title = Some(album.name.clone());
+                    let album_meta = Some(serde_json::to_value(&album)?); // Use ?
 
-                         log::info!("Ensuring related album: {}/{}", album_ns, album_pk);
-                         upsert_entity(db, &album_ns, &album_pk, album_title, album_meta).await?; // Use helper and ?
-                     } else {
-                         log::warn!("Album associated with track {} exists but is missing its own ID", track_id_str);
-                     }
-                 } else {
-                      log::warn!("No album information found for track {}", track_id_str);
-                 }
-
+                    log::info!("Ensuring related album: {}/{}", album_ns, album_pk);
+                    upsert_entity(db, &album_ns, &album_pk, album_title, album_meta).await?;
+                // Use helper and ?
+                } else {
+                    log::warn!(
+                        "Album associated with track {} exists but is missing its own ID",
+                        track_id_str
+                    );
+                }
             }
             _ => {
                 // This case should technically be unreachable due to the initial check,
