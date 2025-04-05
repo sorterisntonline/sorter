@@ -1,13 +1,13 @@
 use axum::{
-    extract::{Path, State, Query, Extension},
+    extract::{Extension, Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Json},
     routing::{delete, get, post, put},
     Router,
 };
+use chrono::{DateTime, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
-use chrono::{DateTime, Utc, NaiveDateTime};
 use uuid::Uuid;
 
 use crate::app_state::AppState;
@@ -56,8 +56,12 @@ pub struct DeleteRelationshipQuery {
 
 // Define the routes for entity_relationships CRUD operations
 pub fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/", post(create_relationship).get(list_relationships).delete(delete_relationship))
+    Router::new().route(
+        "/",
+        post(create_relationship)
+            .get(list_relationships)
+            .delete(delete_relationship),
+    )
     // No nested routes needed for this top-level approach
 }
 
@@ -118,12 +122,12 @@ async fn list_relationships(
         args.push(val.clone());
         arg_count += 1;
     }
-     if let Some(val) = &params.parent_pk {
+    if let Some(val) = &params.parent_pk {
         query.push_str(&format!(" AND parent_pk = ${}", arg_count));
         args.push(val.clone());
         arg_count += 1;
     }
-     if let Some(val) = &params.child_pk_namespace {
+    if let Some(val) = &params.child_pk_namespace {
         query.push_str(&format!(" AND child_pk_namespace = ${}", arg_count));
         args.push(val.clone());
         arg_count += 1;
@@ -133,7 +137,7 @@ async fn list_relationships(
         args.push(val.clone());
         arg_count += 1;
     }
-     if let Some(val) = &params.submitter_user_id {
+    if let Some(val) = &params.submitter_user_id {
         query.push_str(&format!(" AND submitter_user_id = ${}", arg_count));
         uuid_args.push(*val); // Assuming Uuid is Copy or handle appropriately
         arg_count += 1;
@@ -149,20 +153,21 @@ async fn list_relationships(
         sqlx_query = sqlx_query.bind(arg);
     }
     // Bind UUID arguments
-     for arg in &uuid_args {
+    for arg in &uuid_args {
         sqlx_query = sqlx_query.bind(arg);
     }
-
 
     match sqlx_query.fetch_all(&state.db).await {
         Ok(relationships) => Ok((StatusCode::OK, Json(relationships))),
         Err(e) => {
             log::error!("Failed to list entity relationships: {}", e);
-            Err((StatusCode::INTERNAL_SERVER_ERROR, "Failed to list relationships".to_string()))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to list relationships".to_string(),
+            ))
         }
     }
 }
-
 
 // DELETE / - Delete a specific entity relationship
 async fn delete_relationship(
@@ -170,7 +175,6 @@ async fn delete_relationship(
     Extension(user): Extension<User>, // Get user for permission checks
     Query(params): Query<DeleteRelationshipQuery>, // Use query params to identify relationship
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-
     // --- Permission Check Placeholder ---
     // TODO: Implement actual permission check.
     // E.g., fetch the relationship first, check if user.id == relationship.submitter_user_id
@@ -180,7 +184,6 @@ async fn delete_relationship(
     //     return Err((StatusCode::FORBIDDEN, "You do not have permission to delete this relationship".to_string()));
     // }
     // --- End Placeholder ---
-
 
     match sqlx::query!(
         r#"
@@ -205,10 +208,13 @@ async fn delete_relationship(
                 // Could be the relationship never existed, or the combination was wrong
                 Err((StatusCode::NOT_FOUND, "Relationship not found".to_string()))
             }
-        },
+        }
         Err(e) => {
-             log::error!("Failed to delete entity relationship: {}", e);
-             Err((StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete relationship".to_string()))
+            log::error!("Failed to delete entity relationship: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to delete relationship".to_string(),
+            ))
         }
     }
 }

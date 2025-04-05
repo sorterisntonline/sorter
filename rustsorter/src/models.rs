@@ -1,5 +1,5 @@
 use axum::{
-    extract::{FromRequest, rejection::JsonRejection},
+    extract::{rejection::JsonRejection, FromRequest},
     http::StatusCode,
     response::{IntoResponse, Response},
 };

@@ -5,11 +5,14 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
-use chrono::NaiveDateTime;
 
-use crate::{app_state::AppState, models::{ErrorResponse, Json}};
+use crate::{
+    app_state::AppState,
+    models::{ErrorResponse, Json},
+};
 
 // Represents an entity fetched from the database
 #[derive(Serialize, Debug, sqlx::FromRow)]
@@ -73,10 +76,19 @@ async fn create_entity(
             log::error!("Failed to create entity: {}", e);
             if let Some(db_err) = e.as_database_error() {
                 if db_err.is_unique_violation() {
-                    return Err(ErrorResponse::new(StatusCode::CONFLICT, format!("Entity with pk_namespace '{}' and pk '{}' already exists.", payload.pk_namespace, payload.pk)));
+                    return Err(ErrorResponse::new(
+                        StatusCode::CONFLICT,
+                        format!(
+                            "Entity with pk_namespace '{}' and pk '{}' already exists.",
+                            payload.pk_namespace, payload.pk
+                        ),
+                    ));
                 }
             }
-            Err(ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "Failed to create entity".to_string()))
+            Err(ErrorResponse::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to create entity".to_string(),
+            ))
         }
     }
 }
@@ -100,17 +112,23 @@ async fn get_entity(
     .await
     {
         Ok(Some(entity)) => Ok((StatusCode::OK, Json(entity))),
-        Ok(None) => Err(ErrorResponse::new(StatusCode::NOT_FOUND, "Entity not found".to_string())),
+        Ok(None) => Err(ErrorResponse::new(
+            StatusCode::NOT_FOUND,
+            "Entity not found".to_string(),
+        )),
         Err(e) => {
             log::error!("Failed to get entity: {}", e);
-            Err(ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "Failed to retrieve entity".to_string()))
+            Err(ErrorResponse::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to retrieve entity".to_string(),
+            ))
         }
     }
 }
 
 // GET / - List all entities (consider pagination for production)
 async fn list_entities(
-    State(state): State<AppState>
+    State(state): State<AppState>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     match sqlx::query_as!(
         Entity,
@@ -134,7 +152,10 @@ async fn update_entity(
     Json(payload): Json<EntityPayload>,
 ) -> Result<impl IntoResponse, impl IntoResponse> {
     if pk_namespace != payload.pk_namespace || pk != payload.pk {
-        return Err(ErrorResponse::new(StatusCode::BAD_REQUEST, "Path parameters must match payload primary key".to_string()));
+        return Err(ErrorResponse::new(
+            StatusCode::BAD_REQUEST,
+            "Path parameters must match payload primary key".to_string(),
+        ));
     }
 
     match sqlx::query_as!(
@@ -154,10 +175,16 @@ async fn update_entity(
     .await
     {
         Ok(Some(entity)) => Ok((StatusCode::OK, Json(entity))),
-        Ok(None) => Err(ErrorResponse::new(StatusCode::NOT_FOUND, "Entity not found".to_string())),
+        Ok(None) => Err(ErrorResponse::new(
+            StatusCode::NOT_FOUND,
+            "Entity not found".to_string(),
+        )),
         Err(e) => {
             log::error!("Failed to update entity: {}", e);
-            Err(ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "Failed to update entity".to_string()))
+            Err(ErrorResponse::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to update entity".to_string(),
+            ))
         }
     }
 }
@@ -184,10 +211,13 @@ async fn delete_entity(
             } else {
                 Err((StatusCode::NOT_FOUND, "Entity not found".to_string()))
             }
-        },
+        }
         Err(e) => {
-             log::error!("Failed to delete entity: {}", e);
-             Err((StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete entity".to_string()))
+            log::error!("Failed to delete entity: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to delete entity".to_string(),
+            ))
         }
     }
 }
@@ -213,10 +243,18 @@ pub async fn get_entity_details(
 
     let entity = match entity_result {
         Ok(Some(entity)) => entity,
-        Ok(None) => return Err(ErrorResponse::new(StatusCode::NOT_FOUND, "Entity not found".to_string())),
+        Ok(None) => {
+            return Err(ErrorResponse::new(
+                StatusCode::NOT_FOUND,
+                "Entity not found".to_string(),
+            ))
+        }
         Err(e) => {
             log::error!("Failed to fetch entity for details view: {}", e);
-            return Err(ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "Failed to retrieve entity".to_string()));
+            return Err(ErrorResponse::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to retrieve entity".to_string(),
+            ));
         }
     };
 
@@ -238,10 +276,18 @@ pub async fn get_entity_details(
     let parents = match parents_result {
         Ok(parents) => parents,
         Err(e) => {
-            log::error!("Failed to fetch parents for entity {}/{}: {}", pk_namespace, pk, e);
+            log::error!(
+                "Failed to fetch parents for entity {}/{}: {}",
+                pk_namespace,
+                pk,
+                e
+            );
             // Decide if this is a fatal error or if we can return partial data
             // For now, let's treat it as fatal for the details view
-            return Err(ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "Failed to retrieve parent relationships".to_string()));
+            return Err(ErrorResponse::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to retrieve parent relationships".to_string(),
+            ));
         }
     };
 
@@ -262,9 +308,17 @@ pub async fn get_entity_details(
 
     let children = match children_result {
         Ok(children) => children,
-         Err(e) => {
-            log::error!("Failed to fetch children for entity {}/{}: {}", pk_namespace, pk, e);
-             return Err(ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "Failed to retrieve child relationships".to_string()));
+        Err(e) => {
+            log::error!(
+                "Failed to fetch children for entity {}/{}: {}",
+                pk_namespace,
+                pk,
+                e
+            );
+            return Err(ErrorResponse::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to retrieve child relationships".to_string(),
+            ));
         }
     };
 

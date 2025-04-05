@@ -1,31 +1,25 @@
-pub mod app_state;
-pub mod models;
-pub mod pagerank;
-pub mod pair;
 pub mod api_key;
+pub mod app_state;
 pub mod auth_middleware;
 pub mod entity;
 pub mod entity_relationships;
+pub mod models;
+pub mod pagerank;
+pub mod pair;
 pub mod spotify;
 
 use std::env;
 
+use crate::entity::get_entity_details;
+use crate::models::User;
 use anyhow::Result;
 use axum::{
-    Extension,
-    Json,
-    Router,
-    http::StatusCode,
-    middleware,
-    response::IntoResponse,
-    routing::get,
+    http::StatusCode, middleware, response::IntoResponse, routing::get, Extension, Json, Router,
 };
 use dotenv::dotenv;
-use crate::models::User;
-use crate::entity::get_entity_details;
+use rspotify::{ClientCredsSpotify, Config, Credentials};
 use serde_json::json;
 use tower_http::trace::TraceLayer;
-use rspotify::{ClientCredsSpotify, Credentials, Config};
 
 async fn health() -> impl IntoResponse {
     (
@@ -57,7 +51,10 @@ async fn get_spotify_client() -> Result<ClientCredsSpotify> {
 
     let spotify = ClientCredsSpotify::with_config(creds, config);
 
-    spotify.request_token().await.map_err(|e| anyhow::anyhow!("Failed to get Spotify token: {}", e))?;
+    spotify
+        .request_token()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to get Spotify token: {}", e))?;
     log::info!("Successfully obtained Spotify token.");
 
     Ok(spotify)
@@ -87,7 +84,10 @@ async fn main() -> Result<(), anyhow::Error> {
     let app = Router::new()
         .route("/api/health", get(health))
         .nest("/spotify", crate::spotify::routes())
-        .route("/api/entity/:pk_namespace/:pk/details", get(get_entity_details))
+        .route(
+            "/api/entity/:pk_namespace/:pk/details",
+            get(get_entity_details),
+        )
         .nest("/api", api_routes(app_state.clone()))
         .with_state(app_state)
         .layer(TraceLayer::new_for_http());
@@ -105,9 +105,7 @@ async fn main() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-fn api_routes(
-    app_state: crate::app_state::AppState,
-) -> Router<crate::app_state::AppState> {
+fn api_routes(app_state: crate::app_state::AppState) -> Router<crate::app_state::AppState> {
     Router::new()
         .route("/protected", get(protected_route))
         .nest("/keys", crate::api_key::routes())
