@@ -27,6 +27,113 @@ const getSmallestImageUrl = (images) => {
     return images[images.length - 1].url;
 };
 
+// Helper function to get the *largest* image URL (or a specific size)
+const getLargestImageUrl = (images, minWidth = 300) => {
+    if (!images || images.length === 0) return null;
+    // Find the first image that meets the minimum width or default to the first (largest)
+    const suitableImage = images.find(img => img.width >= minWidth);
+    return suitableImage ? suitableImage.url : images[0].url;
+};
+
+// --- NEW COMPONENT: EntityDetailsDisplay ---
+function EntityDetailsDisplay({ entityDetails }) {
+    if (!entityDetails || !entityDetails.entity) {
+        return <div className="text-gray-500">No details available.</div>;
+    }
+
+    const { entity, parents, children } = entityDetails;
+    const { title, pk_namespace, metadata } = entity;
+    const entityType = pk_namespace.split('.')[1]; // e.g., 'album', 'artist', 'track'
+
+    // Basic info: Title and Type
+    let basicInfo = (
+        <h3 className="text-xl font-semibold mb-2">
+            {title} <span className="text-sm font-normal text-gray-500 capitalize">[{entityType}]</span>
+        </h3>
+    );
+
+    let imageElement = null;
+    if (metadata?.images && metadata.images.length > 0) {
+        const imageUrl = getLargestImageUrl(metadata.images, 300); // Get a larger image
+        if (imageUrl) {
+             imageElement = (
+                 <img
+                     src={imageUrl}
+                     alt={`Cover for ${title}`}
+                     className="w-32 h-32 md:w-48 md:h-48 object-cover rounded-md float-left mr-4 mb-2"
+                 />
+             );
+        }
+    }
+
+    let detailsList = [];
+
+    // Common details based on type
+    if (metadata?.artists && Array.isArray(metadata.artists)) {
+        detailsList.push(
+            <li key="artists"><strong>Artist(s):</strong> {formatArtists(metadata.artists)}</li>
+        );
+    }
+     if (metadata?.release_date) {
+        detailsList.push(
+            <li key="release"><strong>Released:</strong> {metadata.release_date}</li>
+        );
+    }
+     if (metadata?.label) {
+        detailsList.push(
+            <li key="label"><strong>Label:</strong> {metadata.label}</li>
+        );
+    }
+    // Add more specific details based on entityType if needed...
+
+    // Track list (for albums)
+    let trackListElement = null;
+    if (entityType === 'album' && metadata?.tracks?.items && metadata.tracks.items.length > 0) {
+        trackListElement = (
+            <div className="mt-4 clear-both"> {/* clear-both to wrap around floated image */}
+                <h4 className="text-lg font-medium mb-2">Tracks:</h4>
+                <ol className="list-decimal list-inside text-sm space-y-1">
+                    {metadata.tracks.items.map(track => (
+                        <li key={track.id}>
+                            {track.name}
+                            <span className="text-gray-500 text-xs ml-1"> ({formatArtists(track.artists)})</span>
+                        </li>
+                     ))}
+                </ol>
+            </div>
+        );
+    }
+
+    // TODO: Render parents and children nicely later
+
+    return (
+        <div className="p-4 border border-gray-300 rounded-md bg-white shadow-sm clear-both"> {/* clear-both needed if image floats */}
+            {imageElement}
+            {basicInfo}
+            {detailsList.length > 0 && (
+                 <ul className="text-sm space-y-1 mb-2 list-none"> {/* Use list-none if using custom labels like <strong> */}
+                     {detailsList}
+                 </ul>
+            )}
+            {trackListElement}
+            {/* Placeholder for Parent/Child rendering */}
+             {(parents?.length > 0 || children?.length > 0) && (
+                <div className="mt-4 pt-2 border-t border-gray-200 text-xs text-gray-600">
+                    <p>Relationships placeholder (Parents: {parents?.length || 0}, Children: {children?.length || 0})</p>
+                 </div>
+             )}
+             {/* Debug Raw Data Link (Optional) */}
+             {/* <details className="mt-4 text-xs">
+                 <summary className="cursor-pointer text-gray-500">Show Raw Data</summary>
+                 <pre className="bg-gray-50 p-2 rounded overflow-auto mt-1">
+                     {JSON.stringify(entityDetails, null, 2)}
+                 </pre>
+             </details> */}
+        </div>
+    );
+}
+// --- END NEW COMPONENT ---
+
 function App() {
     const [inputValue, setInputValue] = useState('');
     // Store more info in selectedTags, including pk_namespace and pk
@@ -329,93 +436,95 @@ function App() {
     };
 
     return (
-        <div className="app-container flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
-          <div className="w-full max-w-lg relative">
-            <div className="flex flex-wrap items-center border border-gray-300 rounded-md p-2 bg-white shadow-sm focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500">
-              {selectedTags.map((tag) => (
-                // Use pk_namespace and pk for a unique key
-                <span key={`${tag.pk_namespace}-${tag.pk}`} className="flex items-center bg-blue-500 text-white text-sm font-medium mr-2 mb-1 px-2.5 py-0.5 rounded-full">
-                  {tag.imageUrl && (
-                      <img
-                          src={tag.imageUrl}
-                          alt=""
-                          className="tag-preview-image w-4 h-4 mr-1.5 rounded-sm object-cover"
-                      />
-                  )}
-                  {tag.name} <span className='text-xs opacity-80 ml-1'>[{tag.type}]</span>
-                  <button
-                    type="button"
-                    className="ml-1.5 flex-shrink-0 text-blue-100 hover:text-white focus:outline-none"
-                    onClick={() => removeTag(tag)}
-                    aria-label={`Remove ${tag.name} (${tag.type})`}
-                  >
-                    &times;
-                  </button>
-                </span>
-              ))}
-              <input
-                id="tag-input"
-                type="text"
-                value={inputValue}
-                onChange={handleInputChange}
-                onKeyDown={handleKeyDown}
-                placeholder={selectedTags.length === 0 ? "Search Spotify, #tags..." : ""}
-                className="flex-grow p-1 outline-none text-sm min-w-[100px]" // Added min-width
-                autoComplete="off"
-              />
+        <div className="app-container flex flex-col items-center justify-start min-h-screen bg-gray-100 p-4 pt-10"> {/* Added pt-10 */}
+            <div className="w-full max-w-lg relative mb-4"> {/* Added mb-4 */}
+                <div className="flex flex-wrap items-center border border-gray-300 rounded-md p-2 bg-white shadow-sm focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500">
+                  {selectedTags.map((tag) => (
+                    // Use pk_namespace and pk for a unique key
+                    <span key={`${tag.pk_namespace}-${tag.pk}`} className="flex items-center bg-blue-500 text-white text-sm font-medium mr-2 mb-1 px-2.5 py-0.5 rounded-full">
+                      {tag.imageUrl && (
+                          <img
+                              src={tag.imageUrl}
+                              alt=""
+                              className="tag-preview-image w-4 h-4 mr-1.5 rounded-sm object-cover"
+                          />
+                      )}
+                      {tag.name} <span className='text-xs opacity-80 ml-1'>[{tag.type}]</span>
+                      <button
+                        type="button"
+                        className="ml-1.5 flex-shrink-0 text-blue-100 hover:text-white focus:outline-none"
+                        onClick={() => removeTag(tag)}
+                        aria-label={`Remove ${tag.name} (${tag.type})`}
+                      >
+                        &times;
+                      </button>
+                    </span>
+                  ))}
+                  <input
+                    id="tag-input"
+                    type="text"
+                    value={inputValue}
+                    onChange={handleInputChange}
+                    onKeyDown={handleKeyDown}
+                    placeholder={selectedTags.length === 0 ? "Search Spotify, #tags..." : ""}
+                    className="flex-grow p-1 outline-none text-sm min-w-[100px]" // Added min-width
+                    autoComplete="off"
+                  />
+                </div>
+
+                {/* Suggestions dropdown */}
+                { (isLoading || suggestions.length > 0) && (
+                    <div
+                        ref={suggestionBoxRef}
+                        className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto"
+                    >
+                       {isLoading && !suggestions.length ? ( // Show loading only if suggestions aren't loaded yet
+                           <div className="p-2 text-gray-500">Loading...</div>
+                       ) : (
+                            <ul>
+                                {suggestions.map((suggestion, index) => (
+                                    <li
+                                        key={`${suggestion.pk_namespace}-${suggestion.pk}`} // Use pk_namespace and pk for key
+                                        className={`p-2 cursor-pointer hover:bg-blue-100 ${
+                                            index === highlightedIndex ? 'bg-blue-100' : ''
+                                        }`}
+                                        onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            addTag(suggestion); // Use updated addTag
+                                        }}
+                                    >
+                                       {renderSuggestionDetails(suggestion)}
+                                    </li>
+                                ))}
+                            </ul>
+                       )}
+                    </div>
+                )}
             </div>
 
-            {/* Suggestions dropdown */}
-            { (isLoading || suggestions.length > 0) && (
-                <div
-                    ref={suggestionBoxRef}
-                    className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto"
-                >
-                   {isLoading && !suggestions.length ? ( // Show loading only if suggestions aren't loaded yet
-                       <div className="p-2 text-gray-500">Loading...</div>
-                   ) : (
-                        <ul>
-                            {suggestions.map((suggestion, index) => (
-                                <li
-                                    key={`${suggestion.pk_namespace}-${suggestion.pk}`} // Use pk_namespace and pk for key
-                                    className={`p-2 cursor-pointer hover:bg-blue-100 ${
-                                        index === highlightedIndex ? 'bg-blue-100' : ''
-                                    }`}
-                                    onMouseDown={(e) => {
-                                        e.preventDefault();
-                                        addTag(suggestion); // Use updated addTag
-                                    }}
-                                >
-                                   {renderSuggestionDetails(suggestion)}
-                                </li>
-                            ))}
-                        </ul>
-                   )}
-                </div>
-            )}
-          </div>
-
             {/* Display Area for Entity Details or Loading/Error */}
-            <div className="mt-4 w-full max-w-lg">
+            <div className="mt-4 w-full max-w-2xl"> {/* Increased max-width */}
                 {isLoading && selectedTags.length === 1 && (
-                    <div className="p-4 border border-gray-300 rounded-md bg-white shadow-sm text-gray-500">
+                    <div className="p-4 border border-gray-300 rounded-md bg-white shadow-sm text-gray-500 text-center">
                         Loading details...
                     </div>
                 )}
-                 {!isLoading && entityDetails && (
-                     <div className="p-4 border border-gray-300 rounded-md bg-white shadow-sm">
-                         <h3 className="text-lg font-semibold mb-2">Selected Entity Details:</h3>
-                         <pre className="text-xs bg-gray-50 p-2 rounded overflow-auto">
-                             {JSON.stringify(entityDetails, null, 2)}
-                         </pre>
-                     </div>
-                 )}
-                 {/* Consider showing a specific error message if entityDetails contains an error object */}
-                 {!isLoading && entityDetails?.error && (
+                {/* Use the new component */}
+                {!isLoading && entityDetails && !entityDetails.error && selectedTags.length === 1 && (
+                    <EntityDetailsDisplay entityDetails={entityDetails} />
+                )}
+                {/* Error display */}
+                {!isLoading && entityDetails?.error && (
                      <div className="p-4 border border-red-300 rounded-md bg-red-50 shadow-sm text-red-700">
                         Error: {entityDetails.error}
                      </div>
                  )}
+                {/* Placeholder when nothing is selected or multiple are selected */}
+                {!isLoading && selectedTags.length !== 1 && (
+                    <div className="p-4 border border-dashed border-gray-300 rounded-md bg-white/50 shadow-sm text-gray-500 text-center">
+                        Select a single item to view details.
+                    </div>
+                )}
             </div>
         </div>
     );
