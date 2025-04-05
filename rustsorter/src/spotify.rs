@@ -4,7 +4,7 @@ use axum::{
     Json, Router, response::{IntoResponse, Response}, http::StatusCode,
 };
 use rspotify::{
-    model::{Country, SimplifiedAlbum, Market, SearchType}, prelude::* // Import necessary enums/structs
+    model::{Country, SimplifiedAlbum, FullArtist, FullTrack, Market, SearchType}, prelude::* // Import necessary enums/structs
 };
 use serde::{Deserialize, Serialize};
 // Remove unused imports if get_spotify_client is no longer here
@@ -20,8 +20,10 @@ pub struct AlbumSearchQuery {
 }
 
 #[derive(Serialize)]
-pub struct AlbumSearchResponse {
-    pub results: Vec<SimplifiedAlbum>,
+pub struct SearchResult {
+    pub albums: Vec<SimplifiedAlbum>,
+    pub artists: Vec<FullArtist>,
+    pub tracks: Vec<FullTrack>,
 }
 
 // Define a custom error type for the handler
@@ -59,7 +61,7 @@ impl From<rspotify::ClientError> for SpotifySearchError {
 async fn search_albums(
     State(app_state): State<crate::app_state::AppState>, // Extract AppState
     Query(params): Query<AlbumSearchQuery>,
-) -> Result<Json<AlbumSearchResponse>, SpotifySearchError> // Use custom error type
+) -> Result<Json<SearchResult>, SpotifySearchError> // Use custom error type
 {
     log::info!("Searching for albums with query: {}", params.q);
 
@@ -67,11 +69,9 @@ async fn search_albums(
     let spotify = &app_state.spotify_client;
 
     // Perform the search using rspotify
-    // We search for Albums, limit to 10 results, and search in the US market
-    // Adjust Market, limit, offset, AlbumType as needed
-    let search_result = spotify.search(
+    let search_result = spotify.search_multiple(
         &params.q,
-        SearchType::Album, // Specify search type
+        [SearchType::Album, SearchType::Artist, SearchType::Track],
         Some(Market::Country(Country::UnitedStates)), // Specify market (optional but recommended)
         None, // Specify language locale (optional)
         Some(10), // Limit number of results
@@ -79,23 +79,22 @@ async fn search_albums(
     ).await?; // Propagate rspotify::ClientError (converted via From)
 
     // Process the search results
-    let albums = match search_result {
-        rspotify::model::SearchResult::Albums(album_page) => album_page.items,
+    match (search_result.albums, search_result.artists, search_result.tracks) {
+        (Some(albums), Some(artists), Some(tracks)) => {
+            Ok(Json(SearchResult { albums: albums.items, 
+                                   artists: artists.items, 
+                                   tracks: tracks.items }))
+        }
         _ => {
-            // This shouldn't happen if we specify SearchType::Album
-            log::error!("Unexpected search result type received from Spotify.");
             return Err(SpotifySearchError::InternalError("Unexpected search result type".to_string()));
         }
-    };
-
-    // Map the rspotify FullAlbum results to our AlbumSearchResult struct
-    Ok(Json(AlbumSearchResponse { results: albums }))
+    }
 }
 
 // Routes function remains the same, but handlers now use State extractor
 pub fn routes() -> Router<crate::app_state::AppState> {
     Router::new()
-        .route("/albums/search", get(search_albums))
+        .route("/search", get(search_albums))
     // Add other Spotify related routes here if needed
 }
 

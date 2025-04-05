@@ -17,109 +17,124 @@ function debounce(func, wait) {
   };
 }
 
+// Helper function to format artist names
+const formatArtists = (artists) => {
+    if (!artists || artists.length === 0) return '';
+    return artists.map(a => a.name).join(', ');
+}
+
 function App() {
     const [inputValue, setInputValue] = useState('');
-    const [selectedTags, setSelectedTags] = useState(['The Dark Side of the Moon']); // Example album tag
-    const [suggestions, setSuggestions] = useState([]); // State for album suggestions
-    const [highlightedIndex, setHighlightedIndex] = useState(-1); // State for keyboard navigation
-    const [isLoading, setIsLoading] = useState(false); // State for loading indicator
+    // Store objects in selectedTags if you need type/id later, or just names
+    const [selectedTags, setSelectedTags] = useState([
+        { type: 'album', name: 'The Dark Side of the Moon', id: 'example1' } // Example with object
+    ]);
+    const [suggestions, setSuggestions] = useState([]); // Combined list of suggestions
+    const [highlightedIndex, setHighlightedIndex] = useState(-1);
+    const [isLoading, setIsLoading] = useState(false);
 
-    const suggestionBoxRef = useRef(null); // Ref for suggestion box click outside detection
+    const suggestionBoxRef = useRef(null);
 
-    // Function to fetch suggestions from the backend
+    // Updated fetchSuggestions to handle multiple types
     const fetchSuggestions = useCallback(async (query) => {
-        if (!query || query.length < 2) { // Don't search for very short queries
+        if (!query || query.length < 2) {
             setSuggestions([]);
             return;
         }
         setIsLoading(true);
-        setHighlightedIndex(-1); // Reset highlight when fetching new suggestions
+        setHighlightedIndex(-1);
         try {
-            // Adjust the URL if your backend runs on a different port/host during development
-            const response = await fetch(`/spotify/albums/search?q=${encodeURIComponent(query)}`);
+            const response = await fetch(`/spotify/search?q=${encodeURIComponent(query)}`);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-            const data = await response.json();
-             // Assuming the backend returns { results: [{ name: 'Album Name', ... }, ...] }
-             // Or adjust based on your actual SimplifiedAlbum structure in spotify.rs if needed
-            setSuggestions(data.results || []);
+            const data = await response.json(); // Expect { albums: [], artists: [], tracks: [] }
+
+            // Combine results into a single list with type information
+            const combinedSuggestions = [];
+            if (data.albums) {
+                combinedSuggestions.push(...data.albums.map(item => ({ ...item, type: 'album' })));
+            }
+            if (data.artists) {
+                 combinedSuggestions.push(...data.artists.map(item => ({ ...item, type: 'artist' })));
+            }
+             if (data.tracks) {
+                combinedSuggestions.push(...data.tracks.map(item => ({ ...item, type: 'track' })));
+            }
+
+            // Optional: Sort or limit combined suggestions if needed
+            // combinedSuggestions.sort((a, b) => a.name.localeCompare(b.name));
+
+            setSuggestions(combinedSuggestions);
+
         } catch (error) {
             console.error("Failed to fetch suggestions:", error);
-            setSuggestions([]); // Clear suggestions on error
+            setSuggestions([]);
         } finally {
             setIsLoading(false);
         }
     }, []);
 
-    // Debounced version of the fetch function
     const debouncedFetchSuggestions = useCallback(debounce(fetchSuggestions, 300), [fetchSuggestions]);
 
     const handleInputChange = (event) => {
         const value = event.target.value;
         setInputValue(value);
-        debouncedFetchSuggestions(value); // Call debounced fetch on input change
+        debouncedFetchSuggestions(value);
     };
 
-    // Function to add a selected tag
-    const addTag = (tag) => {
-         if (tag && !selectedTags.includes(tag)) {
-            setSelectedTags([...selectedTags, tag]);
+    // Updated addTag to handle suggestion objects
+    const addTag = (suggestion) => {
+         // Prevent duplicates based on type and id
+         if (suggestion && !selectedTags.some(tag => tag.id === suggestion.id && tag.type === suggestion.type)) {
+             // Store the whole suggestion object or just parts as needed
+            setSelectedTags([...selectedTags, { id: suggestion.id, name: suggestion.name, type: suggestion.type }]);
         }
-        setInputValue(''); // Clear input
-        setSuggestions([]); // Clear suggestions
-        setHighlightedIndex(-1); // Reset highlight
+        setInputValue('');
+        setSuggestions([]);
+        setHighlightedIndex(-1);
     }
 
     const handleKeyDown = (event) => {
-        // Handle suggestion navigation
         if (suggestions.length > 0) {
             if (event.key === 'ArrowDown') {
-                event.preventDefault(); // Prevent cursor move
-                setHighlightedIndex(prevIndex =>
-                    prevIndex < suggestions.length - 1 ? prevIndex + 1 : 0 // Loop to top
-                );
-                return; // Stop further processing for arrow down
+                event.preventDefault();
+                setHighlightedIndex(prevIndex => (prevIndex + 1) % suggestions.length); // Simplified loop
+                return;
             } else if (event.key === 'ArrowUp') {
-                event.preventDefault(); // Prevent cursor move
-                 setHighlightedIndex(prevIndex =>
-                    prevIndex > 0 ? prevIndex - 1 : suggestions.length - 1 // Loop to bottom
-                );
-                return; // Stop further processing for arrow up
+                event.preventDefault();
+                 setHighlightedIndex(prevIndex => (prevIndex - 1 + suggestions.length) % suggestions.length); // Simplified loop
+                return;
             }
         }
 
-        // Handle Enter key
         if (event.key === 'Enter') {
-            event.preventDefault(); // Prevent default form submission/line break
+            event.preventDefault();
             if (highlightedIndex >= 0 && suggestions[highlightedIndex]) {
-                // If a suggestion is highlighted, add it
-                addTag(suggestions[highlightedIndex].name); // Assuming suggestion objects have a 'name' property
+                addTag(suggestions[highlightedIndex]); // Add the selected suggestion object
             } else {
-                // Do nothing if Enter is pressed without a highlighted suggestion
                 console.log("Enter pressed, but no suggestion highlighted.");
             }
-             // Clear suggestions regardless of whether a tag was added
-             setSuggestions([]);
-             setHighlightedIndex(-1);
+            setSuggestions([]);
+            setHighlightedIndex(-1);
         }
 
-        // Handle Backspace to remove the last tag (existing logic)
         if (event.key === 'Backspace' && inputValue === '' && selectedTags.length > 0) {
+           // Remove the last tag object based on its properties (e.g., id)
            removeTag(selectedTags[selectedTags.length - 1]);
         }
     };
 
+    // Updated removeTag to handle tag objects
     const removeTag = (tagToRemove) => {
-        setSelectedTags(selectedTags.filter(tag => tag !== tagToRemove));
+        // Filter based on a unique property, like id, assuming it's present
+        setSelectedTags(selectedTags.filter(tag => tag.id !== tagToRemove.id || tag.type !== tagToRemove.type));
     };
 
-    // Effect to handle clicks outside the suggestion box to close it
     useEffect(() => {
         function handleClickOutside(event) {
             if (suggestionBoxRef.current && !suggestionBoxRef.current.contains(event.target)) {
-                // Check if the click target is also the input itself
-                if (event.target.id !== 'tag-input') {
+                 if (event.target.id !== 'tag-input') {
                    setSuggestions([]);
                    setHighlightedIndex(-1);
                 }
@@ -131,45 +146,74 @@ function App() {
         };
     }, [suggestionBoxRef]);
 
+    // Helper to render item details based on type
+    const renderSuggestionDetails = (suggestion) => {
+        switch(suggestion.type) {
+            case 'album':
+                // Attempt to access artists; check if it exists and is an array
+                const albumArtists = suggestion.artists && Array.isArray(suggestion.artists) ? formatArtists(suggestion.artists) : 'Unknown Artist';
+                return (
+                    <>
+                        {suggestion.name}
+                        <span className="text-xs text-gray-500 ml-2">({albumArtists}) [Album]</span>
+                    </>
+                );
+            case 'artist':
+                return (
+                     <>
+                        {suggestion.name}
+                        <span className="text-xs text-gray-500 ml-2">[Artist]</span>
+                     </>
+                );
+            case 'track':
+                // Attempt to access artists; check if it exists and is an array
+                const trackArtists = suggestion.artists && Array.isArray(suggestion.artists) ? formatArtists(suggestion.artists) : 'Unknown Artist';
+                 return (
+                     <>
+                        {suggestion.name}
+                        <span className="text-xs text-gray-500 ml-2">({trackArtists}) [Track]</span>
+                     </>
+                 );
+            default:
+                return suggestion.name;
+        }
+    };
+
     return (
-        // Centering the content vertically and horizontally
         <div className="app-container flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
-          <h1 className="text-3xl font-bold mb-6 text-gray-800">Album Selector</h1>
-          {/* Container for the multi-tag input and suggestions */}
-          <div className="w-full max-w-lg relative"> {/* Added relative positioning */}
+          <h1 className="text-3xl font-bold mb-6 text-gray-800">Spotify Search Selector</h1>
+          <div className="w-full max-w-lg relative">
             <label htmlFor="tag-input" className="block text-sm font-medium text-gray-700 mb-1">
-              Search and select albums:
+              Search albums, artists, tracks:
             </label>
-            {/* The input area */}
             <div className="flex flex-wrap items-center border border-gray-300 rounded-md p-2 bg-white shadow-sm focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500">
-              {/* Display selected tags */}
               {selectedTags.map((tag) => (
-                <span key={tag} className="flex items-center bg-blue-500 text-white text-sm font-medium mr-2 mb-1 px-2.5 py-0.5 rounded-full">
-                  {tag} {/* Display album name */}
+                // Use tag.id for the key if available and unique
+                <span key={`${tag.type}-${tag.id || tag.name}`} className="flex items-center bg-blue-500 text-white text-sm font-medium mr-2 mb-1 px-2.5 py-0.5 rounded-full">
+                  {tag.name} <span className='text-xs opacity-80 ml-1'>[{tag.type}]</span>
                   <button
                     type="button"
                     className="ml-1.5 flex-shrink-0 text-blue-100 hover:text-white focus:outline-none"
                     onClick={() => removeTag(tag)}
-                    aria-label={`Remove ${tag}`}
+                    aria-label={`Remove ${tag.name} (${tag.type})`}
                   >
-                    &times; {/* Multiplication sign as close icon */}
+                    &times;
                   </button>
                 </span>
               ))}
-              {/* The actual input field */}
               <input
                 id="tag-input"
                 type="text"
                 value={inputValue}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
-                placeholder={selectedTags.length > 0 ? "" : "Search albums..."}
+                placeholder={selectedTags.length > 0 ? "" : "Search Spotify..."}
                 className="flex-grow p-1 outline-none text-sm"
-                autoComplete="off" // Disable browser's default autocomplete
+                autoComplete="off"
               />
             </div>
 
-            {/* Suggestions dropdown */}
+            {/* Suggestions dropdown - Updated Rendering */}
             { (isLoading || suggestions.length > 0) && (
                 <div
                     ref={suggestionBoxRef}
@@ -181,18 +225,16 @@ function App() {
                         <ul>
                             {suggestions.map((suggestion, index) => (
                                 <li
-                                    key={suggestion.id || suggestion.name} // Use a unique ID if available from backend, fallback to name
+                                    key={`${suggestion.type}-${suggestion.id}`} // Ensure unique key using type and id
                                     className={`p-2 cursor-pointer hover:bg-blue-100 ${
                                         index === highlightedIndex ? 'bg-blue-100' : ''
                                     }`}
-                                    onMouseDown={(e) => { // Use onMouseDown to fire before input's onBlur
-                                        e.preventDefault(); // Prevent input blur
-                                        addTag(suggestion.name); // Assuming suggestion has a 'name'
+                                    onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        addTag(suggestion); // Pass the whole suggestion object
                                     }}
                                 >
-                                    {/* You can display more info here, e.g., artist */}
-                                    {suggestion.name}
-                                    {/* {suggestion.artists && <span className="text-xs text-gray-500 ml-2">{suggestion.artists.map(a => a.name).join(', ')}</span>} */}
+                                   {renderSuggestionDetails(suggestion)} {/* Use helper function for rendering */}
                                 </li>
                             ))}
                         </ul>
