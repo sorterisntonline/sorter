@@ -220,16 +220,16 @@ async fn ensure_spotify_entity(
                                 match albums_result {
                                     Ok(albums_page) => {
                                         for album in albums_page.items {
-                                            // Extract/clone info *before* the potential move of album.id
-                                            let album_id_opt = album.id.clone(); // Clone Option<AlbumId>
-                                            let album_title_str = album.name.clone();
-                                            let album_meta_val = serde_json::to_value(&album)?;
+                                            // Clone the Option<AlbumId> first
+                                            let album_id_opt = album.id.clone();
 
-                                            if let Some(album_id) = album_id_opt { // Use the cloned Option
+                                            // Check the cloned Option
+                                            if let Some(album_id) = album_id_opt { 
                                                 let album_pk = album_id.id().to_string();
                                                 let album_ns = "spotify:album".to_string();
-                                                let album_title = Some(album_title_str);
-                                                let album_meta = Some(album_meta_val); // Use the pre-serialized value
+                                                // Now clone name and serialize since ID exists
+                                                let album_title = Some(album.name.clone());
+                                                let album_meta = Some(serde_json::to_value(&album)?); 
 
                                                 log::info!("Ensuring related album: {}/{}", album_ns, album_pk);
                                                 sqlx::query!(
@@ -291,18 +291,18 @@ async fn ensure_spotify_entity(
                                 // Fetch and ensure tracks (limit 50 for now)
                                 log::info!("Ensuring tracks for album: {}", album_id_str);
                                 for track in full_album.tracks.items { // SimplifiedTrack
-                                    // Extract/clone info *before* the potential move of track.id
+                                    // Clone the Option<TrackId> first
                                     let track_id_opt = track.id.clone();
-                                    let track_name_str = track.name.clone();
-                                    // Clone artists *before* serializing track or moving id
-                                    let track_artists = track.artists.clone();
-                                    let track_meta_val = serde_json::to_value(&track)?;
+                                    // Clone artists list before checking track ID
+                                    let track_artists_clone = track.artists.clone();
 
+                                    // Check the cloned Option
                                     if let Some(track_id) = track_id_opt {
                                         let track_pk = track_id.id().to_string();
                                         let track_ns = "spotify:track".to_string();
-                                        let track_title = Some(track_name_str);
-                                        let track_meta = Some(track_meta_val);
+                                        // Now clone name and serialize track since ID exists
+                                        let track_title = Some(track.name.clone());
+                                        let track_meta = Some(serde_json::to_value(&track)?);
 
                                         log::info!("Ensuring related track: {}/{}", track_ns, track_pk);
                                         sqlx::query!(/* ... INSERT ON CONFLICT DO UPDATE ... */
@@ -319,17 +319,17 @@ async fn ensure_spotify_entity(
 
                                         // Ensure artists for this track (SimplifiedArtist)
                                         // Use the cloned artists list
-                                        for artist in track_artists {
-                                            // Extract/clone info *before* the potential move of artist.id
+                                        for artist in track_artists_clone { 
+                                            // Clone the Option<ArtistId> first
                                             let artist_id_opt = artist.id.clone();
-                                            let artist_name_str = artist.name.clone();
-                                            let artist_meta_val = serde_json::to_value(&artist)?;
 
+                                            // Check the cloned Option
                                             if let Some(artist_id) = artist_id_opt {
                                                 let artist_pk = artist_id.id().to_string();
                                                 let artist_ns = "spotify:artist".to_string();
-                                                let artist_title = Some(artist_name_str);
-                                                let artist_meta = Some(artist_meta_val);
+                                                // Now clone name and serialize artist since ID exists
+                                                let artist_title = Some(artist.name.clone());
+                                                let artist_meta = Some(serde_json::to_value(&artist)?);
 
                                                 log::info!("Ensuring related artist from track: {}/{}", artist_ns, artist_pk);
                                                 sqlx::query!(/* ... INSERT ON CONFLICT DO UPDATE ... */
@@ -390,16 +390,16 @@ async fn ensure_spotify_entity(
                                 // Clone the artists list first
                                 let track_artists = full_track.artists.clone();
                                 for artist in track_artists {
-                                    // Extract/clone info *before* the potential move of artist.id
-                                    let artist_id_opt = artist.id.clone();
-                                    let artist_name_str = artist.name.clone();
-                                    let artist_meta_val = serde_json::to_value(&artist)?;
+                                    // Clone the Option<ArtistId> first
+                                    let artist_id_opt = artist.id.clone(); 
 
+                                    // Check the cloned Option
                                     if let Some(artist_id) = artist_id_opt {
                                         let artist_pk = artist_id.id().to_string();
                                         let artist_ns = "spotify:artist".to_string();
-                                        let artist_title = Some(artist_name_str);
-                                        let artist_meta = Some(artist_meta_val);
+                                        // Now clone name and serialize artist since ID exists
+                                        let artist_title = Some(artist.name.clone());
+                                        let artist_meta = Some(serde_json::to_value(&artist)?);
 
                                         log::info!("Ensuring related artist: {}/{}", artist_ns, artist_pk);
                                         sqlx::query!(/* ... INSERT ON CONFLICT DO UPDATE ... */
@@ -420,17 +420,18 @@ async fn ensure_spotify_entity(
 
                                 // Ensure the album for this track (SimplifiedAlbum from FullTrack)
                                 log::info!("Ensuring album for track: {}", track_id_str);
-                                // Process the album before potentially moving its id
-                                if let Some(album) = full_track.album { // album is SimplifiedAlbum
-                                    let album_id_opt = album.id.clone();
-                                    let album_name_str = album.name.clone();
-                                    let album_meta_val = serde_json::to_value(&album)?; // Serialize the original album struct
+                                // Check the Option<SimplifiedAlbum> first
+                                if let Some(album) = full_track.album { // album is SimplifiedAlbum (moved from full_track)
+                                    // Clone the Option<AlbumId> from the album
+                                    let album_id_opt = album.id.clone(); 
 
-                                    if let Some(album_id) = album_id_opt { // Now check the cloned Option<AlbumId>
+                                    // Check the cloned Option
+                                    if let Some(album_id) = album_id_opt { 
                                         let album_pk = album_id.id().to_string();
                                         let album_ns = "spotify:album".to_string();
-                                        let album_title = Some(album_name_str);
-                                        let album_meta = Some(album_meta_val); // Use the pre-serialized value
+                                        // Now clone name and serialize album since ID exists
+                                        let album_title = Some(album.name.clone());
+                                        let album_meta = Some(serde_json::to_value(&album)?);
 
                                         log::info!("Ensuring related album: {}/{}", album_ns, album_pk);
                                         sqlx::query!(/* ... INSERT ON CONFLICT DO UPDATE ... */
@@ -444,10 +445,12 @@ async fn ensure_spotify_entity(
                                         )
                                         .execute(&state.db)
                                         .await?;
-                                    } else {
-                                        log::warn!("Track {} seems to be missing album info or album has no ID", track_id_str);
+                                    } else { // album.id was None
+                                        log::warn!("Album associated with track {} exists but is missing its own ID", track_id_str);
                                     }
-                                } // The full_track.album Option is handled here
+                                } else { // full_track.album was None
+                                    log::warn!("Track {} seems to be missing album info entirely", track_id_str);                                 
+                                }
                             }
                              Err(e) => log::error!("Failed to fetch full track {} from Spotify: {}", track_id_str, e),
                         }
