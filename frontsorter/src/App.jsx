@@ -122,19 +122,22 @@ function App() {
         // Prevent duplicates based on pk_namespace and pk
         if (suggestion && !selectedTags.some(tag => tag.pk === suggestion.pk && tag.pk_namespace === suggestion.pk_namespace)) {
             const imageUrl = getSmallestImageUrl(suggestion.images);
+            // Store enough info to potentially call ensure later
             setSelectedTags([...selectedTags, {
-                // Store the essential info needed for display and API calls
-                pk_namespace: suggestion.pk_namespace, // Store pk_namespace
-                pk: suggestion.pk,                   // Store pk
+                pk_namespace: suggestion.pk_namespace,
+                pk: suggestion.pk,
                 name: suggestion.name,
                 type: suggestion.type,
-                imageUrl: imageUrl
+                imageUrl: imageUrl,
+                // Store original artists/album info if needed for ensure metadata?
+                // Example: For a track, store suggestion.artists, suggestion.album.name
+                artists: suggestion.artists, // Store artists if available
+                albumName: suggestion.album?.name, // Store album name if available (for tracks)
             }]);
         }
         setInputValue('');
         setSuggestions([]);
         setHighlightedIndex(-1);
-        // Don't fetch details here, let useEffect handle it
     }
 
     // Updated removeTag to filter correctly
@@ -190,36 +193,78 @@ function App() {
         };
     }, [suggestionBoxRef]);
 
-    // --- NEW useEffect to fetch details when a single tag is selected ---
+    // --- Updated useEffect to Ensure Entity then Fetch Details ---
     useEffect(() => {
-        const fetchDetails = async () => {
-            if (selectedTags.length === 1) {
-                const singleTag = selectedTags[0];
-                // Assuming backend API is mounted at /api/entity/...
-                // Adjust the URL path if needed!
-                const apiUrl = `/api/entity/${encodeURIComponent(singleTag.pk_namespace)}/${encodeURIComponent(singleTag.pk)}/details`;
-                console.log("Fetching details for:", apiUrl);
-                try {
-                    setIsLoading(true); // Indicate loading
-                    const response = await fetch(apiUrl);
-                    if (!response.ok) {
-                         throw new Error(`HTTP error! status: ${response.status} for ${apiUrl}`);
+        const processSingleTag = async () => {
+            if (selectedTags.length !== 1) {
+                setEntityDetails(null); // Clear details if not exactly one tag
+                return;
+            }
+
+            const singleTag = selectedTags[0];
+            const { pk_namespace, pk, name, type, imageUrl, artists, albumName } = singleTag;
+            const isSpotifyEntity = pk_namespace.startsWith('spotify.');
+
+            setIsLoading(true); // Start loading indicator
+            setEntityDetails(null); // Clear previous details
+
+            try {
+                // Step 1: Ensure the entity exists in our DB if it's from Spotify
+                if (isSpotifyEntity) {
+                    console.log(`Ensuring Spotify entity: ${pk_namespace}/${pk}`);
+                    // Prepare metadata for the ensure payload
+                    const ensureMetadata = {
+                        imageUrl: imageUrl,
+                        source: 'frontend_selection',
+                        // Add more relevant info if available
+                        ...(artists && { artists: formatArtists(artists) }),
+                        ...(albumName && { albumName: albumName }),
+                    };
+
+                    const ensureResponse = await fetch(`/spotify/ensure`, { // Assuming mounted route from spotify.rs
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            pk_namespace: pk_namespace,
+                            pk: pk,
+                            title: name,
+                            metadata: ensureMetadata, // Send some basic metadata
+                        }),
+                    });
+
+                    if (!ensureResponse.ok) {
+                        // Log the error but maybe try fetching details anyway? Or handle specific errors.
+                        const errorText = await ensureResponse.text();
+                        console.error(`Failed to ensure entity ${pk_namespace}/${pk}: ${ensureResponse.status} ${errorText}`);
+                        // Optional: throw new Error(`Ensure failed: ${ensureResponse.status}`);
+                        // If ensure fails critically, we might not want to proceed.
+                        // For now, we'll log and continue to fetch details.
+                    } else {
+                         console.log(`Ensure successful or entity already existed for: ${pk_namespace}/${pk}`);
+                         // Optionally use the returned entity from ensure if needed, but details fetch re-fetches
                     }
-                    const data = await response.json();
-                    setEntityDetails(data);
-                } catch (error) {
-                    console.error("Failed to fetch entity details:", error);
-                    setEntityDetails({ error: error.message }); // Store error state
-                } finally {
-                     setIsLoading(false);
                 }
-            } else {
-                // Clear details if more or less than one tag is selected
-                setEntityDetails(null);
+
+                // Step 2: Fetch detailed information (including relationships)
+                const detailsApiUrl = `/api/entity/${encodeURIComponent(pk_namespace)}/${encodeURIComponent(pk)}/details`;
+                console.log("Fetching details from:", detailsApiUrl);
+                const detailsResponse = await fetch(detailsApiUrl);
+
+                if (!detailsResponse.ok) {
+                    throw new Error(`HTTP error! status: ${detailsResponse.status} for ${detailsApiUrl}`);
+                }
+                const data = await detailsResponse.json();
+                setEntityDetails(data);
+
+            } catch (error) {
+                console.error("Failed processing single tag:", error);
+                setEntityDetails({ error: `Failed to load details: ${error.message}` }); // Store error state
+            } finally {
+                setIsLoading(false); // Stop loading indicator
             }
         };
 
-        fetchDetails();
+        processSingleTag();
     }, [selectedTags]); // Re-run whenever selectedTags changes
 
     // Updated renderSuggestionDetails to potentially handle 'sorter.tag' type
@@ -350,20 +395,28 @@ function App() {
             )}
           </div>
 
-            {/* --- NEW: Display Area for Entity Details --- */}
-            {entityDetails && (
-                 <div className="mt-4 p-4 border border-gray-300 rounded-md bg-white shadow-sm w-full max-w-lg">
-                    <h3 className="text-lg font-semibold mb-2">Selected Entity Details:</h3>
-                     <pre className="text-xs bg-gray-50 p-2 rounded overflow-auto">
-                         {JSON.stringify(entityDetails, null, 2)}
-                     </pre>
-                 </div>
-            )}
-            {/* Show loading indicator specifically for details fetch */}
-            {isLoading && selectedTags.length === 1 && !entityDetails && (
-                 <div className="mt-4 text-gray-500">Loading details...</div>
-            )}
-
+            {/* Display Area for Entity Details or Loading/Error */}
+            <div className="mt-4 w-full max-w-lg">
+                {isLoading && selectedTags.length === 1 && (
+                    <div className="p-4 border border-gray-300 rounded-md bg-white shadow-sm text-gray-500">
+                        Loading details...
+                    </div>
+                )}
+                 {!isLoading && entityDetails && (
+                     <div className="p-4 border border-gray-300 rounded-md bg-white shadow-sm">
+                         <h3 className="text-lg font-semibold mb-2">Selected Entity Details:</h3>
+                         <pre className="text-xs bg-gray-50 p-2 rounded overflow-auto">
+                             {JSON.stringify(entityDetails, null, 2)}
+                         </pre>
+                     </div>
+                 )}
+                 {/* Consider showing a specific error message if entityDetails contains an error object */}
+                 {!isLoading && entityDetails?.error && (
+                     <div className="p-4 border border-red-300 rounded-md bg-red-50 shadow-sm text-red-700">
+                        Error: {entityDetails.error}
+                     </div>
+                 )}
+            </div>
         </div>
     );
 }
