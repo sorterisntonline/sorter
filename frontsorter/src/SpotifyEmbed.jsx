@@ -1,126 +1,103 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
-// Simple queue to hold initialization functions if API isn't ready
-let waitingInitializers = [];
-let isApiLoaded = !!window.SpotifyIframeApi; // Check initial state
-
-// Define the global ready function ONCE
-if (!window.onSpotifyIframeApiReady) {
-    window.onSpotifyIframeApiReady = (IFrameAPI) => {
-        console.log("Global onSpotifyIframeApiReady called.");
-        isApiLoaded = true;
-        // Process any waiting initializers
-        waitingInitializers.forEach(initFunc => initFunc(IFrameAPI));
-        waitingInitializers = []; // Clear the queue
-    };
-}
-
-const SpotifyEmbed = ({ spotifyUri, height = 352 }) => {
+const SpotifyEmbed = ({ spotifyUri, height = 352 }) => { // Default height suggested by Spotify
     const embedContainerRef = useRef(null);
     const embedControllerRef = useRef(null);
+    const [isApiReady, setIsApiReady] = useState(!!window.SpotifyIframeApi); // Check if loaded initially
 
     useEffect(() => {
-        const containerElement = embedContainerRef.current; // Capture ref value
+        // Function to initialize the embed controller
+        const initializeController = () => {
+            if (window.SpotifyIframeApi && embedContainerRef.current && spotifyUri) {
+                console.log("Spotify API ready, creating controller for:", spotifyUri);
+                const options = {
+                    uri: spotifyUri,
+                    height: height, // Use prop for height
+                    width: '100%',  // Make it responsive width-wise
+                };
+                const callback = (controller) => {
+                    console.log("Embed controller created:", controller);
+                    embedControllerRef.current = controller;
+                    // Optional: Add event listeners here if needed (e.g., controller.addListener('ready', () => ...))
+                };
 
-        // Function to perform the actual controller creation
-        const createEmbedController = (IFrameAPI) => {
-            // Double-check container existence in case of fast unmount
-            if (!containerElement || !spotifyUri) {
-                console.warn("Skipping controller creation: container or URI missing.");
-                return;
-            }
-
-            console.log("Attempting to create controller for:", spotifyUri, "in element:", containerElement);
-
-            // Clean up previous controller if any
-            if (embedControllerRef.current) {
-                console.log("Destroying previous embed controller.");
-                try {
+                // Clean up previous controller if any
+                if (embedControllerRef.current) {
+                    console.log("Destroying previous embed controller.");
                     embedControllerRef.current.destroy();
-                } catch (e) {
-                    console.error("Error destroying previous controller:", e);
+                    embedControllerRef.current = null;
+                    // Clear the container manually if needed, as destroy might not remove the iframe immediately
+                    if (embedContainerRef.current) {
+                        embedContainerRef.current.innerHTML = '';
+                    }
                 }
-                embedControllerRef.current = null;
-                // Clear the container manually
-                 containerElement.innerHTML = '';
 
+                 // Need slight delay sometimes for destroy to finish DOM cleanup before creating new one
+                 setTimeout(() => {
+                    if (embedContainerRef.current) { // Check if still mounted
+                        window.SpotifyIframeApi.createController(embedContainerRef.current, options, callback);
+                    }
+                 }, 50);
+
+            } else {
+                console.log("API not ready or container/URI missing for initialization.");
             }
-
-            const options = {
-                uri: spotifyUri,
-                height: height,
-                width: '100%',
-            };
-
-            const callback = (controller) => {
-                console.log("Embed controller CREATED:", controller);
-                // Check if component is still mounted conceptually
-                if (embedContainerRef.current) {
-                     embedControllerRef.current = controller;
-                } else {
-                    console.warn("Component unmounted before controller callback finished, destroying new controller.");
-                    controller.destroy();
-                }
-            };
-
-             // Use a small timeout to ensure DOM is ready after potential innerHTML clear
-             setTimeout(() => {
-                // Final check before creating
-                if (embedContainerRef.current === containerElement && spotifyUri) {
-                    console.log("Calling IFrameAPI.createController...");
-                     IFrameAPI.createController(containerElement, options, callback);
-                } else {
-                    console.warn("Aborted createController due to changed element or URI.");
-                }
-             }, 50); // Keep the small delay
         };
 
-        // --- Initialization Logic ---
-        if (isApiLoaded && window.SpotifyIframeApi) {
-            // API is ready, initialize directly
-            console.log("API already loaded, initializing controller.");
-            createEmbedController(window.SpotifyIframeApi);
+        // If API is ready, initialize immediately
+        if (isApiReady) {
+            initializeController();
         } else {
-            // API not ready, add initializer to queue
-            console.log("API not loaded, adding initializer to queue.");
-            const initializer = (IFrameAPI) => createEmbedController(IFrameAPI);
-            waitingInitializers.push(initializer);
-
-             // Return a function to remove this specific initializer if the component unmounts before API is ready
-             return () => {
-                 console.log("Cleaning up: Removing initializer from queue.");
-                 waitingInitializers = waitingInitializers.filter(init => init !== initializer);
-                 // Also destroy controller if it managed to get created
-                 if (embedControllerRef.current) {
-                     console.log("Cleaning up: Destroying controller on unmount (API load race).");
-                     try {
-                         embedControllerRef.current.destroy();
-                     } catch (e) { console.error("Error destroying controller during cleanup:", e); }
-                     embedControllerRef.current = null;
-                 }
-             };
+            // If API wasn't ready, set up the callback and check again
+            // This handles cases where the component mounts before the script loads fully
+            console.log("Spotify API not ready yet, setting up ready callback.");
+            window.onSpotifyIframeApiReady = (IFrameAPI) => {
+                console.log("onSpotifyIframeApiReady called.");
+                setIsApiReady(true);
+                 // Store API reference if needed, though window.SpotifyIframeApi should persist
+                 // Now initialize
+                 initializeController();
+            };
+            // Double-check in case it became ready between initial check and setting callback
+            if (window.SpotifyIframeApi) {
+                setIsApiReady(true);
+                initializeController();
+            }
         }
 
-        // Cleanup for when the component unmounts OR spotifyUri/height changes
+        // Cleanup function to destroy controller on component unmount or URI change
         return () => {
             if (embedControllerRef.current) {
-                console.log("Cleaning up: Destroying controller for:", spotifyUri);
-                 try {
-                    embedControllerRef.current.destroy();
-                } catch (e) { console.error("Error destroying controller during cleanup:", e); }
+                console.log("Cleaning up embed controller for:", spotifyUri);
+                embedControllerRef.current.destroy();
                 embedControllerRef.current = null;
             }
-            // No need to remove from queue here, that's handled if API wasn't ready
+            // Important: Remove the global callback reference if this component unmounts
+            // to avoid conflicts if another instance mounts later or it triggers incorrectly.
+            if (window.onSpotifyIframeApiReady && !isApiReady) {
+                 // Only clear if we set it and it hasn't fired yet.
+                 // If it fired, isApiReady is true and we don't want to clear it for other potential components.
+                 // A more robust solution might use a shared context or singleton pattern for API readiness.
+                 // window.onSpotifyIframeApiReady = null; // Be cautious with this global cleanup
+            }
         };
-    // Rerun effect only if spotifyUri or height changes
-    }, [spotifyUri, height]);
+    // Rerun effect if spotifyUri or height changes, or when API becomes ready
+    }, [spotifyUri, isApiReady, height]);
+
+    // Optional: If URI changes, load the new URI into the existing controller
+    useEffect(() => {
+        if (embedControllerRef.current && spotifyUri) {
+            console.log("Loading new URI into existing controller:", spotifyUri);
+            embedControllerRef.current.loadUri(spotifyUri);
+        }
+        // No cleanup needed here, the main effect handles controller recreation/destruction
+    }, [spotifyUri]);
+
 
     return (
-        // Use a key derived from the URI to help React differentiate elements if URI changes fast
-        <div ref={embedContainerRef} id={`spotify-embed-container-${spotifyUri?.replace(/[^a-zA-Z0-9]/g, '')}`} key={spotifyUri}>
-            {/* Keep a simple loading indicator maybe, but the logic doesn't depend on isApiReady state anymore */}
-            {/* You might want to show loading based on whether embedControllerRef.current exists */}
-            {!embedControllerRef.current && <div>Loading Spotify Player...</div>}
+        <div ref={embedContainerRef} id={`spotify-embed-${spotifyUri}`}>
+            {/* Placeholder while loading? */}
+             {!isApiReady && <div>Loading Spotify Player...</div>}
         </div>
     );
 };
