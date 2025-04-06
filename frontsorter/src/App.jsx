@@ -136,20 +136,45 @@ const fetchEntityDetailsFn = async (pk_namespace, pk) => {
 
 
 // --- EntityDetailsDisplay Component (Unchanged) ---
-function EntityDetailsDisplay({ entityDetails, onNavigate }) {
+function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isEnsuring }) {
     if (!entityDetails || !entityDetails.entity) {
         return <div className="text-gray-500">No details available.</div>;
     }
 
     const { entity, parents, children } = entityDetails;
-    const { title, pk_namespace, metadata } = entity;
+    const { title, pk_namespace, pk, metadata } = entity;
     const entityType = pk_namespace.split('.')[1]; // e.g., 'album', 'artist', 'track'
+
+    // Handler for manual ensure button
+    const handleManualEnsure = () => {
+        if (onEnsureManually && !isEnsuring) {
+            console.log(`Manually ensuring ${pk_namespace}/${pk}`);
+            onEnsureManually({
+                pk_namespace,
+                pk,
+                title,
+                metadata // Pass existing metadata
+            });
+        }
+    };
 
     // Basic info: Title and Type
     let basicInfo = (
-        <h3 className="text-xl font-semibold mb-2">
-            {title} <span className="text-sm font-normal text-gray-500 capitalize">[{entityType}]</span>
-        </h3>
+         <h3 className="text-xl font-semibold mb-2 flex items-center gap-2"> {/* Use flex for button alignment */}
+             <span>{title}</span>
+             <span className="text-sm font-normal text-gray-500 capitalize">[{entityType}]</span>
+             {/* Manual Ensure Button */}
+             {pk_namespace?.startsWith('spotify.') && onEnsureManually && (
+                 <button
+                     onClick={handleManualEnsure}
+                     disabled={isEnsuring}
+                     className={`text-xs px-2 py-0.5 rounded border ${isEnsuring ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-300'}`}
+                     title={`Manually trigger backend sync for ${title}`}
+                 >
+                     {isEnsuring ? 'Syncing...' : 'Sync'}
+                 </button>
+             )}
+         </h3>
     );
 
     let imageElement = null;
@@ -674,7 +699,13 @@ function App() {
                  {/* Success state */}
                  {displayState === 'success' && detailsQuery.data && (
                     // Pass navigateToEntity to handle clicks on parent/child links
-                    <EntityDetailsDisplay entityDetails={detailsQuery.data} onNavigate={navigateToEntity} />
+                    // Pass ensureMutation details for manual trigger
+                    <EntityDetailsDisplay
+                        entityDetails={detailsQuery.data}
+                        onNavigate={navigateToEntity}
+                        onEnsureManually={ensureMutation.mutate} // Pass the mutate function
+                        isEnsuring={ensureMutation.isLoading}   // Pass the loading state
+                    />
                  )}
                  {/* Placeholder: Show if no URL params and not in an error/loading state */}
                  {displayState === 'placeholder' && (

@@ -244,7 +244,7 @@ pub async fn get_entity_details(
         }
         Err(e) => {
             log::error!("Failed to fetch entity for details view: {}", e);
-            return Err(ErrorResponse::new   (
+            return Err(ErrorResponse::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to retrieve entity".to_string(),
             ));
