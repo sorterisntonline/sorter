@@ -1,8 +1,6 @@
 # sorter
 rust and react based pair-wise staunchly democratic social media application
 
-![sorter frontend screenshot](frontend_1.png)
-
 ## project info
 
 ### contributors
@@ -21,8 +19,10 @@ rust and react based pair-wise staunchly democratic social media application
 
 ``bash
 cargo install sqlx-cli
-./database/run-postgres.sh
 
+cd database && ./run-postgres.sh
+
+# new terminal
 cd rustsorter && sqlx migrate --source ../migrations 
 
 RUST_LOG=debug cargo run
