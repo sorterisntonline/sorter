@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 // Consider using a dedicated debounce hook library like 'use-debounce' for cleaner implementation
 // import { useDebounce } from 'use-debounce';
 import './App.css'
+import SpotifyEmbed from './SpotifyEmbed'; // Import the new component
 
 // Debounce function (simple implementation) - Keep for input debounce
 function debounce(func, wait) {
@@ -577,6 +578,13 @@ function App() {
     // A flag to know if *any* entity is supposed to be loaded (even if loading/error)
     const hasActiveEntity = !!urlPkNamespace && !!urlPk;
 
+    // --- Prepare data for rendering ---
+    const entityData = displayState === 'success' ? detailsQuery.data : null;
+    const isSpotifyEntity = entityData?.entity?.pk_namespace?.startsWith('spotify.');
+    const spotifyUri = isSpotifyEntity
+        ? `spotify:${entityData.entity.pk_namespace.split('.')[1]}:${entityData.entity.pk}`
+        : null;
+
     return (
         <div className="app-container flex flex-col items-center justify-start min-h-screen bg-gray-100 p-4 pt-10">
             {/* Input and Tag Display Area */}
@@ -651,31 +659,95 @@ function App() {
                  )}
             </div>
 
-            {/* Display Area for Entity Details */}
+            {/* Display Area for Entity Details / Embed */}
             <div className="mt-4 w-full max-w-2xl">
-                {/* Loading state covers initial load from URL and ensure retries */}
-                {displayState === 'loading' && (
-                    <div className="p-4 border border-gray-300 rounded-md bg-white shadow-sm text-gray-500 text-center">
-                        Loading details... {ensureMutation.isLoading ? '(Ensuring entity...)' : ''}
+                 {/* Loading state covers initial load from URL and ensure retries */}
+                 {displayState === 'loading' && (
+                     <div className="p-4 border border-gray-300 rounded-md bg-white shadow-sm text-gray-500 text-center">
+                         Loading details... {ensureMutation.isLoading ? '(Ensuring entity...)' : ''}
+                     </div>
+                 )}
+                 {/* Error States */}
+                 {displayState === 'error_ensure' && (
+                      <div className="p-4 border border-red-300 rounded-md bg-red-50 shadow-sm text-red-700">
+                         Error ensuring entity: {ensureMutation.error?.message || 'Unknown error'}
+                      </div>
+                  )}
+                  {/* Show details error only if ensure didn't explicitly fail */}
+                 {displayState === 'error_details' && ensureMutation.status !== 'error' && (
+                      <div className="p-4 border border-red-300 rounded-md bg-red-50 shadow-sm text-red-700">
+                          Error loading details: {detailsQuery.error?.message || 'Unknown error'}
+                          {detailsQuery.error?.status === 404 && urlPkNamespace?.startsWith('spotify.') && ' (Could not find or ensure the Spotify entity)'}
+                      </div>
+                  )}
+
+                 {/* Success state - Render Embed or Details */}
+                 {displayState === 'success' && entityData && (
+                    <div className="flex flex-col gap-4"> {/* Added wrapper to maintain spacing like EntityDetailsDisplay */}
+                         {/* Render Parents (Always render if available) */}
+                         {entityData.parents && entityData.parents.length > 0 && (
+                             <div className="pt-2 border-gray-200"> {/* Removed mt-4 as parent div has it */}
+                                 <ul className="text-xs text-gray-600 list-disc list-inside space-y-1">
+                                     {entityData.parents.map((parent) => {
+                                         const parentType = parent.pk_namespace.split('.')[1];
+                                         return (
+                                             <li key={`${parent.pk_namespace}-${parent.pk}`}>
+                                                 <a href={`/?pk_namespace=${parent.pk_namespace}&pk=${parent.pk}`}
+                                                     onClick={(e) => { e.preventDefault(); navigateToEntity(parent.pk_namespace, parent.pk); }}
+                                                     className="text-blue-600 hover:underline cursor-pointer">
+                                                         {parent.title} <span className="text-gray-500 capitalize">[{parentType}]</span>
+                                                 </a>
+                                             </li>
+                                         );
+                                     })}
+                                 </ul>
+                             </div>
+                         )}
+
+                        {/* CONDITIONAL RENDER: Spotify Embed or Fallback Details */}
+                        <div className="p-4 border border-gray-300 rounded-md bg-white shadow-sm clear-both">
+                             {isSpotifyEntity && spotifyUri ? (
+                                 <SpotifyEmbed spotifyUri={spotifyUri} height={entityData.entity.pk_namespace.split('.')[1] === 'track' ? 80 : 352} /> // Smaller height for tracks
+                             ) : (
+                                 // Fallback to existing display for non-spotify or if data is somehow wrong
+                                <EntityDetailsDisplay entityDetails={entityData} onNavigate={navigateToEntity} />
+                             )}
+                         </div>
+
+                        {/* Render Children (Always render if available) */}
+                        {entityData.children && entityData.children.length > 0 && (
+                             <div className="pt-2 border-gray-200"> {/* Removed mt-3 as parent div gap handles it */}
+                                {(() => {
+                                    const groupedChildren = {};
+                                    entityData.children.forEach(child => {
+                                        const childType = child.pk_namespace.split('.')[1] || 'unknown';
+                                        if (!groupedChildren[childType]) groupedChildren[childType] = [];
+                                        groupedChildren[childType].push(child);
+                                    });
+                                    const sortedChildTypes = Object.keys(groupedChildren).sort();
+
+                                    return sortedChildTypes.map(childType => (
+                                        <div key={childType} className="mb-2">
+                                             <h5 className="text-xs font-semibold mt-1 capitalize text-gray-600">[{childType}]</h5>
+                                             <ul className="text-xs text-gray-600 list-disc list-inside space-y-1 pl-4">
+                                                 {groupedChildren[childType].map((child) => (
+                                                     <li key={`${child.pk_namespace}-${child.pk}`}>
+                                                         <a href={`/?pk_namespace=${child.pk_namespace}&pk=${child.pk}`}
+                                                            onClick={(e) => { e.preventDefault(); navigateToEntity(child.pk_namespace, child.pk); }}
+                                                            className="text-blue-600 hover:underline cursor-pointer">
+                                                              {child.title}
+                                                         </a>
+                                                     </li>
+                                                 ))}
+                                             </ul>
+                                         </div>
+                                     ));
+                                })()}
+                             </div>
+                         )}
                     </div>
-                )}
-                {displayState === 'error_ensure' && (
-                     <div className="p-4 border border-red-300 rounded-md bg-red-50 shadow-sm text-red-700">
-                        Error ensuring entity: {ensureMutation.error.message}
-                     </div>
                  )}
-                 {/* Show details error only if ensure didn't explicitly fail */}
-                {displayState === 'error_details' && ensureMutation.status !== 'error' && (
-                     <div className="p-4 border border-red-300 rounded-md bg-red-50 shadow-sm text-red-700">
-                         Error loading details: {detailsQuery.error.message}
-                         {detailsQuery.error?.status === 404 && urlPkNamespace?.startsWith('spotify.') && ' (Could not find or ensure the Spotify entity)'}
-                     </div>
-                 )}
-                 {/* Success state */}
-                 {displayState === 'success' && detailsQuery.data && (
-                    // Pass navigateToEntity to handle clicks on parent/child links
-                    <EntityDetailsDisplay entityDetails={detailsQuery.data} onNavigate={navigateToEntity} />
-                 )}
+
                  {/* Placeholder: Show if no URL params and not in an error/loading state */}
                  {displayState === 'placeholder' && (
                     <div className="p-4 border border-dashed border-gray-300 rounded-md bg-white/50 shadow-sm text-gray-500 text-center">
