@@ -17,7 +17,7 @@ rust and react based pair-wise staunchly democratic social media application
 
 # installation instructions
 
-``bash
+```bash
 cargo install sqlx-cli
 
 cd database && ./run-postgres.sh
@@ -26,4 +26,4 @@ cd database && ./run-postgres.sh
 cd rustsorter && sqlx migrate --source ../migrations 
 
 RUST_LOG=debug cargo run
-``
+```
