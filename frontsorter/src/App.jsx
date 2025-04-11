@@ -20,14 +20,6 @@ const getSmallestImageUrl = (images) => {
     return images[images.length - 1].url;
 };
 
-// Helper function to get the *largest* image URL (or a specific size)
-const getLargestImageUrl = (images, minWidth = 300) => {
-    if (!images || images.length === 0) return null;
-    // Find the first image that meets the minimum width or default to the first (largest)
-    const suitableImage = images.find(img => img.width >= minWidth);
-    return suitableImage ? suitableImage.url : images[0].url;
-};
-
 // --- API Fetching Functions ---
 
 // Function to fetch search suggestions
@@ -90,12 +82,8 @@ const ensureEntityFn = async ({ pk_namespace, pk, title, metadata }) => {
     }
 
     console.log(`Ensure successful or entity already existed for: ${pk_namespace}/${pk}`);
-    // Optionally return data from ensure if backend provides it
-    try {
-        return await response.json(); // Return potential entity data from ensure
-    } catch (_e) { // Mark as unused
-        return { success: true }; // Return simple success if no JSON body
-    }
+
+    return await response.json(); // Return potential entity data from ensure
 };
 
 // Function to fetch entity details
@@ -771,29 +759,7 @@ function MainView() {
     );
 }
 
-// Placeholder VotePage component
-function VotePage() {
-    const [searchParams] = useSearchParams();
-    const parentNs = searchParams.get('parent_ns');
-    const parentPk = searchParams.get('parent_pk');
-    const childType = searchParams.get('type');
-
-    // TODO: Fetch children based on parentNs, parentPk, childType
-    // TODO: Implement voting UI and logic
-
-    return (
-        <div className="p-4">
-            <h2 className="text-xl font-bold mb-4">Vote Page</h2>
-            <p>Parent: {parentNs}/{parentPk}</p>
-            <p>Voting on type: {childType}</p>
-            <p className="mt-4 italic text-gray-500">(Voting UI will go here)</p>
-             <Link to={`/?pk_namespace=${encodeURIComponent(parentNs)}&pk=${encodeURIComponent(parentPk)}`} className="text-blue-600 hover:underline mt-4 inline-block">
-                 &larr; Back to Parent
-             </Link>
-        </div>
-    );
-}
-
+import { VotePage } from './VotePage';
 function App() {
     return (
         <Routes>
