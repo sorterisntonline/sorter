@@ -496,8 +496,8 @@ async fn ensure_spotify_entity(
                     let track_pk = track_id.id().to_string();
                     let track_ns = "spotify.track".to_string();
                     let track_title = Some(track.name.clone());
-                    // Tracks inherit album art, but we don't store it directly on the track entity
-                    let track_pic_url = None::<String>;
+                    // Tracks inherit album art. Use the album's URL fetched earlier.
+                    let track_pic_url = entity.profile_picture_url.clone(); // Changed from None
                     let track_meta = Some(serde_json::to_value(&track)?);
 
                     log::info!("Ensuring related track (in tx): {}/{}", track_ns, track_pk);
@@ -506,7 +506,7 @@ async fn ensure_spotify_entity(
                         &track_ns,
                         &track_pk,
                         track_title,
-                        track_pic_url, // Pass None for image URL
+                        track_pic_url, // Pass the album's image URL
                         track_meta,
                     )
                     .await?;

@@ -271,14 +271,14 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
                             const item2 = childrenOfType[index2];
 
                             // Use smallest images for preview
-                            const item1ImageUrl = getSmallestImageUrl(item1.metadata?.images);
-                            const item2ImageUrl = getSmallestImageUrl(item2.metadata?.images);
+                            const item1ImageUrl = item1.profile_picture_url;
+                            const item2ImageUrl = item2.profile_picture_url;
 
                             // Construct the link for the vote button
                             const voteLink = `/vote?parent_ns=${encodeURIComponent(entity.pk_namespace)}&parent_pk=${encodeURIComponent(entity.pk)}&type=${encodeURIComponent(childType)}`;
 
                             itemPairElement = (
-                                <div className="my-3 p-3 border border-dashed border-blue-300 rounded-md bg-blue-50 flex items-center justify-around gap-2">
+                                <div className="cursor-pointer my-3 p-3 border border-dashed border-blue-300 rounded-md bg-blue-50 flex items-center justify-around gap-2">
                                     {/* Item 1 Preview */}
                                     <div className="text-center flex flex-col items-center w-1/3">
                                         {item1ImageUrl && <img src={item1ImageUrl} alt={item1.title} className="w-12 h-12 object-cover rounded mb-1 shadow-sm"/>}
@@ -286,14 +286,6 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
                                         <span className="text-xs text-gray-700 truncate w-full px-1">{item1.title}</span>
                                     </div>
 
-                                    {/* Vote Button */}
-                                    <Link
-                                        to={voteLink}
-                                        className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded text-sm flex-shrink-0 transition-colors duration-150 ease-in-out shadow hover:shadow-md"
-                                        title={`Compare ${childType}s for ${entity.title}`} // Add a helpful title
-                                    >
-                                        Vote {childType}s {/* Make button text dynamic */}
-                                    </Link>
 
                                     {/* Item 2 Preview */}
                                     <div className="text-center flex flex-col items-center w-1/3">
@@ -316,12 +308,14 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
                                 <ul className="text-xs text-gray-600 list-disc list-inside space-y-1 pl-4"> {/* Indent child list */}
                                     {childrenOfType.map((child) => ( // Use childrenOfType here
                                         <div 
-                                            className="border border-gray-200 p-2 cursor-pointer hover:bg-gray-50 text-blue-600 hover:underline flex items-center gap-2"
+                                            className="border border-gray-200 cursor-pointer hover:bg-gray-50 text-blue-600 hover:underline flex items-center gap-2"
                                             key={`${child.pk_namespace}-${child.pk}`}
                                             onClick={(e) => handleLinkClick(e, child.pk_namespace, child.pk)}
                                         >
-                                            {getSmallestImageUrl(child.metadata?.images) && (
-                                                <img src={getSmallestImageUrl(child.metadata.images)} alt="" className="w-5 h-5 object-cover rounded-sm inline-block" />
+                                            {child.profile_picture_url ? (
+                                                <img src={child.profile_picture_url} alt="" className="w-8 h-8 object-cover inline-block" />
+                                            ) : (
+                                                <div className="w-8 h-8 bg-gray-200 inline-flex items-center justify-center text-gray-400 text-xl">?</div>
                                             )}
                                             {child.title}
                                         </div>
