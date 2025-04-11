@@ -1,4 +1,6 @@
-on't backfill in a fullArtist with a partialartist...
+make image_url for entities
+don't backfill in a fullArtist with a partialartist...
 add a "vote here" button, vote pair page, wire up voting, wire up ranking
 genre/decade tag system. composite query system. #hiphop #albums #1990s.
+
 
