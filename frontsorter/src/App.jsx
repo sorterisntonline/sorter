@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 // Import react-router-dom hook
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, Link, Routes, Route } from 'react-router-dom';
 // Import react-query hooks
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 // Import use-debounce hook
@@ -295,7 +295,7 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
                             const voteLink = `/vote?parent_ns=${encodeURIComponent(entity.pk_namespace)}&parent_pk=${encodeURIComponent(entity.pk)}&type=${encodeURIComponent(childType)}`;
 
                             itemPairElement = (
-                                <div className="cursor-pointer my-3 p-3 border border-dashed border-blue-300 rounded-md bg-blue-50 flex items-center justify-around gap-2 relative group">
+                                <Link to={voteLink} className="cursor-pointer my-3 p-3 border border-dashed border-blue-300 rounded-md bg-blue-50 flex items-center justify-around gap-2 relative group no-underline">
                                     {/* Item 1 Preview */}
                                     <div className="text-center flex flex-col items-center w-1/3">
                                         {item1ImageUrl && <img src={item1ImageUrl} alt={item1.title} className="w-12 h-12 object-cover rounded mb-1 shadow-sm"/>}
@@ -304,7 +304,7 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
                                     </div>
 
                                     {/* Overlay VOTE text on hover */}
-                                    <div className="absolute inset-0 bg-blue-200 bg-opacity-100 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-md">
+                                    <div className="absolute inset-0 bg-blue-200 bg-opacity-80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-md">
                                         <span className="text-white text-4xl font-bold">VOTE</span>
                                     </div>
 
@@ -314,7 +314,7 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
                                         {!item2ImageUrl && <div className="w-12 h-12 bg-gray-200 rounded mb-1 flex items-center justify-center text-gray-400 text-xl shadow-sm">?</div>}
                                         <span className="text-xs text-gray-700 truncate w-full px-1">{item2.title}</span>
                                     </div>
-                                </div>
+                                </Link>
                             );
                         }
                         // --- END: Add Item Pair Preview ---
@@ -347,7 +347,7 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
 
 
 // --- App Component ---
-function App() {
+function MainView() {
     const [inputValue, setInputValue] = useState('');
     // Selected tags now derived primarily from URL/details query result
     const [selectedTags, setSelectedTags] = useState([]);
@@ -770,5 +770,39 @@ function App() {
         </div>
     );
 }
+
+// Placeholder VotePage component
+function VotePage() {
+    const [searchParams] = useSearchParams();
+    const parentNs = searchParams.get('parent_ns');
+    const parentPk = searchParams.get('parent_pk');
+    const childType = searchParams.get('type');
+
+    // TODO: Fetch children based on parentNs, parentPk, childType
+    // TODO: Implement voting UI and logic
+
+    return (
+        <div className="p-4">
+            <h2 className="text-xl font-bold mb-4">Vote Page</h2>
+            <p>Parent: {parentNs}/{parentPk}</p>
+            <p>Voting on type: {childType}</p>
+            <p className="mt-4 italic text-gray-500">(Voting UI will go here)</p>
+             <Link to={`/?pk_namespace=${encodeURIComponent(parentNs)}&pk=${encodeURIComponent(parentPk)}`} className="text-blue-600 hover:underline mt-4 inline-block">
+                 &larr; Back to Parent
+             </Link>
+        </div>
+    );
+}
+
+function App() {
+    return (
+        <Routes>
+            <Route path="/" element={<MainView />} />
+            <Route path="/vote" element={<VotePage />} />
+            {/* Add other routes here if needed */}
+        </Routes>
+    );
+}
+
 
 export default App
