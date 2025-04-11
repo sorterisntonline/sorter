@@ -125,7 +125,7 @@ where
     E: Executor<'e, Database = sqlx::Postgres>, // Add trait bound
 {
     log::debug!(
-        "Upserting entity: {}/{} with title: {:?}",
+        "Upserting entity (DO NOTHING): {}/{} with title: {:?}",
         pk_namespace,
         pk,
         title
@@ -134,8 +134,7 @@ where
         r#"
         INSERT INTO entities (pk_namespace, pk, title, metadata)
         VALUES ($1, $2, $3, $4)
-        ON CONFLICT (pk_namespace, pk) DO UPDATE
-        SET title = excluded.title, metadata = excluded.metadata
+        ON CONFLICT (pk_namespace, pk) DO NOTHING
         "#,
         pk_namespace,
         pk,
