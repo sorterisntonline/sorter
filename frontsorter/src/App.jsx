@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 // Import react-router-dom hook
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 // Import react-query hooks
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 // Import use-debounce hook
@@ -252,24 +252,84 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
             </div>
             {/* Render Children - Grouped by Type */}
             {sortedChildTypes.length > 0 && (
-                <div className="mt-3 pt-2  border-gray-200"> 
-                    {sortedChildTypes.map(childType => (
-                        <div key={childType} className="mb-2"> 
-                            <h5 className="text-xs font-semibold mt-1 capitalize text-gray-600">[{childType}]</h5>
-                            {/* PUT ITEM PAIR HERE */}
-                            <ul className="text-xs text-gray-600 list-disc list-inside space-y-1 pl-4"> {/* Indent child list */}
-                                {groupedChildren[childType].map((child) => (
-                                    <li className="border border-gray-200 p-2 cursor-pointer" key={`${child.pk_namespace}-${child.pk}`}>
-                                        <a href={`/?pk_namespace=${child.pk_namespace}&pk=${child.pk}`}
-                                           onClick={(e) => handleLinkClick(e, child.pk_namespace, child.pk)}
-                                           className="text-blue-600 hover:underline cursor-pointer">
-                                             {child.title}
-                                        </a>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                    ))}
+                <div className="mt-3 pt-2  border-gray-200">
+                    {sortedChildTypes.map(childType => {
+                        const childrenOfType = groupedChildren[childType];
+                        let itemPairElement = null;
+
+                        // --- BEGIN: Add Item Pair Preview ---
+                        if (childrenOfType && childrenOfType.length >= 2) {
+                            // Select two random distinct indices
+                            let index1 = Math.floor(Math.random() * childrenOfType.length);
+                            let index2 = Math.floor(Math.random() * childrenOfType.length);
+                            // Ensure distinct indices if possible and length > 1
+                            while (index1 === index2 && childrenOfType.length > 1) {
+                                index2 = Math.floor(Math.random() * childrenOfType.length);
+                            }
+
+                            const item1 = childrenOfType[index1];
+                            const item2 = childrenOfType[index2];
+
+                            // Use smallest images for preview
+                            const item1ImageUrl = getSmallestImageUrl(item1.metadata?.images);
+                            const item2ImageUrl = getSmallestImageUrl(item2.metadata?.images);
+
+                            // Construct the link for the vote button
+                            const voteLink = `/vote?parent_ns=${encodeURIComponent(entity.pk_namespace)}&parent_pk=${encodeURIComponent(entity.pk)}&type=${encodeURIComponent(childType)}`;
+
+                            itemPairElement = (
+                                <div className="my-3 p-3 border border-dashed border-blue-300 rounded-md bg-blue-50 flex items-center justify-around gap-2">
+                                    {/* Item 1 Preview */}
+                                    <div className="text-center flex flex-col items-center w-1/3">
+                                        {item1ImageUrl && <img src={item1ImageUrl} alt={item1.title} className="w-12 h-12 object-cover rounded mb-1 shadow-sm"/>}
+                                        {!item1ImageUrl && <div className="w-12 h-12 bg-gray-200 rounded mb-1 flex items-center justify-center text-gray-400 text-xl shadow-sm">?</div>}
+                                        <span className="text-xs text-gray-700 truncate w-full px-1">{item1.title}</span>
+                                    </div>
+
+                                    {/* Vote Button */}
+                                    <Link
+                                        to={voteLink}
+                                        className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded text-sm flex-shrink-0 transition-colors duration-150 ease-in-out shadow hover:shadow-md"
+                                        title={`Compare ${childType}s for ${entity.title}`} // Add a helpful title
+                                    >
+                                        Vote {childType}s {/* Make button text dynamic */}
+                                    </Link>
+
+                                    {/* Item 2 Preview */}
+                                    <div className="text-center flex flex-col items-center w-1/3">
+                                        {item2ImageUrl && <img src={item2ImageUrl} alt={item2.title} className="w-12 h-12 object-cover rounded mb-1 shadow-sm"/>}
+                                        {!item2ImageUrl && <div className="w-12 h-12 bg-gray-200 rounded mb-1 flex items-center justify-center text-gray-400 text-xl shadow-sm">?</div>}
+                                        <span className="text-xs text-gray-700 truncate w-full px-1">{item2.title}</span>
+                                    </div>
+                                </div>
+                            );
+                        }
+                        // --- END: Add Item Pair Preview ---
+
+
+                        return (
+                            <div key={childType} className="mb-2">
+                                <h5 className="text-xs font-semibold mt-1 capitalize text-gray-600">[{childType}]</h5>
+                                {/* Render the item pair preview and button */}
+                                {itemPairElement}
+                                {/* Render the full list */}
+                                <ul className="text-xs text-gray-600 list-disc list-inside space-y-1 pl-4"> {/* Indent child list */}
+                                    {childrenOfType.map((child) => ( // Use childrenOfType here
+                                        <div 
+                                            className="border border-gray-200 p-2 cursor-pointer hover:bg-gray-50 text-blue-600 hover:underline flex items-center gap-2"
+                                            key={`${child.pk_namespace}-${child.pk}`}
+                                            onClick={(e) => handleLinkClick(e, child.pk_namespace, child.pk)}
+                                        >
+                                            {getSmallestImageUrl(child.metadata?.images) && (
+                                                <img src={getSmallestImageUrl(child.metadata.images)} alt="" className="w-5 h-5 object-cover rounded-sm inline-block" />
+                                            )}
+                                            {child.title}
+                                        </div>
+                                    ))}
+                                </ul>
+                            </div>
+                        );
+                    })}
                 </div>
             )}
         </div>
