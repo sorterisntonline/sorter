@@ -597,19 +597,20 @@ async fn ensure_spotify_entity(
             // We will store the album's picture URL on the *album* entity when it's ensured.
             // So, for the track entity itself, the profile_picture_url remains NULL.
             entity.title = Some(full_track.name.clone());
-            entity.profile_picture_url = None; // Explicitly set to None for track
+            entity.profile_picture_url = get_first_image_url(&full_track.album.images);
             entity.metadata = Some(serde_json::to_value(&full_track)?);
+            println!("entity.profile_picture_url: {:?}", entity.profile_picture_url);
 
             // Update the track entity (title and metadata, but not profile_picture_url)
             sqlx::query!(
                 r#"
                     UPDATE entities
-                    SET title = $1, metadata = $2 -- Don't update profile_picture_url
-                    WHERE pk_namespace = $3 AND pk = $4
+                    SET title = $1, metadata = $2, profile_picture_url = $3
+                    WHERE pk_namespace = $4 AND pk = $5
                     "#,
                 entity.title,
-                // entity.profile_picture_url intentionally omitted
                 entity.metadata,
+                entity.profile_picture_url,
                 payload.pk_namespace,
                 payload.pk
             )

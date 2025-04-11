@@ -147,7 +147,7 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
 
     // Basic info: Title and Type
     let basicInfo = (
-         <h3 className="text-xl font-semibold mb-2 flex items-center gap-2"> {/* Use flex for button alignment */}
+         <h3 className="text-xl font-semibold mb-2 flex items-center gap-2">
              <span>{title}</span>
              <span className="text-sm font-normal text-gray-500 capitalize">[{entityType}]</span>
              {/* Manual Ensure Button */}
@@ -165,8 +165,8 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
     );
 
     let imageElement = null;
-    if (metadata?.images && metadata.images.length > 0) {
-        const imageUrl = getLargestImageUrl(metadata.images, 300); // Get a larger image
+    if (entity.profile_picture_url) {
+        const imageUrl = entity.profile_picture_url;
         if (imageUrl) {
              imageElement = (
                  <img
@@ -278,7 +278,7 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
                             const voteLink = `/vote?parent_ns=${encodeURIComponent(entity.pk_namespace)}&parent_pk=${encodeURIComponent(entity.pk)}&type=${encodeURIComponent(childType)}`;
 
                             itemPairElement = (
-                                <div className="cursor-pointer my-3 p-3 border border-dashed border-blue-300 rounded-md bg-blue-50 flex items-center justify-around gap-2">
+                                <div className="cursor-pointer my-3 p-3 border border-dashed border-blue-300 rounded-md bg-blue-50 flex items-center justify-around gap-2 relative group">
                                     {/* Item 1 Preview */}
                                     <div className="text-center flex flex-col items-center w-1/3">
                                         {item1ImageUrl && <img src={item1ImageUrl} alt={item1.title} className="w-12 h-12 object-cover rounded mb-1 shadow-sm"/>}
@@ -286,6 +286,10 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
                                         <span className="text-xs text-gray-700 truncate w-full px-1">{item1.title}</span>
                                     </div>
 
+                                    {/* Overlay VOTE text on hover */}
+                                    <div className="absolute inset-0 bg-blue-500 bg-opacity-50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-md">
+                                        <span className="text-white text-4xl font-bold">VOTE</span>
+                                    </div>
 
                                     {/* Item 2 Preview */}
                                     <div className="text-center flex flex-col items-center w-1/3">
