@@ -8,8 +8,20 @@ use axum::{
 };
 use rspotify::{
     model::{
-        AlbumId, AlbumType, ArtistId, Country, FullArtist, FullTrack, Id, Market, SearchType,
-        SimplifiedAlbum, TrackId,
+        AlbumId,
+        AlbumType,
+        ArtistId,
+        Country,
+        FullAlbum,
+        FullArtist,
+        FullTrack,
+        Id,    // Added FullAlbum
+        Image, // Added Image
+        Market,
+        SearchType,
+        SimplifiedAlbum,
+        SimplifiedArtist, // Added SimplifiedArtist
+        TrackId,
     },
     prelude::*, // Import necessary enums/structs
 };
@@ -113,32 +125,40 @@ impl From<serde_json::Error> for SpotifyApiError {
     }
 }
 
+// Helper function to get the first image URL from a slice of images
+fn get_first_image_url(images: &[Image]) -> Option<String> {
+    images.first().map(|img| img.url.clone())
+}
+
 // Helper function to insert or update an entity in the database
 async fn upsert_entity<'e, E>(
     executor: E, // Changed parameter name and type
     pk_namespace: &str,
     pk: &str,
     title: Option<String>,
+    profile_picture_url: Option<String>, // Added parameter
     metadata: Option<JsonValue>,
 ) -> Result<(), sqlx::Error>
 where
     E: Executor<'e, Database = sqlx::Postgres>, // Add trait bound
 {
     log::debug!(
-        "Upserting entity (DO NOTHING): {}/{} with title: {:?}",
+        "Upserting entity (DO NOTHING): {}/{} with title: {:?}, pic_url: {:?}", // Logged new field
         pk_namespace,
         pk,
-        title
+        title,
+        profile_picture_url // Logged new field
     );
     sqlx::query!(
         r#"
-        INSERT INTO entities (pk_namespace, pk, title, metadata)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO entities (pk_namespace, pk, title, profile_picture_url, metadata)
+        VALUES ($1, $2, $3, $4, $5) -- Added profile_picture_url
         ON CONFLICT (pk_namespace, pk) DO NOTHING
         "#,
         pk_namespace,
         pk,
         title,
+        profile_picture_url, // Added parameter
         metadata
     )
     .execute(executor) // Use the executor
@@ -246,15 +266,17 @@ async fn ensure_spotify_entity(
     let mut tx = db_pool.begin().await?;
 
     // 1. Initial Insert Attempt (ON CONFLICT DO NOTHING)
+    // We insert NULL for profile_picture_url initially, it gets updated later if needed.
     let insert_result = sqlx::query!(
         r#"
-        INSERT INTO entities (pk_namespace, pk, title, metadata)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO entities (pk_namespace, pk, title, profile_picture_url, metadata)
+        VALUES ($1, $2, $3, NULL, $4) -- Insert NULL for profile_picture_url here
         ON CONFLICT (pk_namespace, pk) DO NOTHING
         "#,
         payload.pk_namespace,
         payload.pk,
         payload.title,
+        // profile_picture_url is intentionally omitted here, set to NULL
         payload.metadata
     )
     .execute(&mut *tx)
@@ -277,7 +299,7 @@ async fn ensure_spotify_entity(
     let mut entity = sqlx::query_as!(
         Entity,
         r#"
-        SELECT pk_namespace, pk, title, metadata, created_at
+        SELECT pk_namespace, pk, title, profile_picture_url, metadata, created_at -- Select the new field
         FROM entities
         WHERE pk_namespace = $1 AND pk = $2
         "#,
@@ -305,15 +327,17 @@ async fn ensure_spotify_entity(
             log::info!("Fetched full artist details for: {}", artist_id_str);
 
             entity.title = Some(full_artist.name.clone());
+            entity.profile_picture_url = get_first_image_url(&full_artist.images); // Extract image URL
             entity.metadata = Some(serde_json::to_value(&full_artist)?);
 
             sqlx::query!(
                 r#"
                     UPDATE entities
-                    SET title = $1, metadata = $2
-                    WHERE pk_namespace = $3 AND pk = $4
+                    SET title = $1, profile_picture_url = $2, metadata = $3 -- Update profile_picture_url
+                    WHERE pk_namespace = $4 AND pk = $5
                     "#,
                 entity.title,
+                entity.profile_picture_url, // Pass the extracted URL
                 entity.metadata,
                 payload.pk_namespace,
                 payload.pk
@@ -331,7 +355,7 @@ async fn ensure_spotify_entity(
                     artist_id.clone(),
                     vec![AlbumType::Album],
                     Some(Market::Country(Country::UnitedStates)),
-                    Some(5),
+                    Some(5), // Limit to 5 albums
                     None,
                 )
                 .await?;
@@ -341,10 +365,19 @@ async fn ensure_spotify_entity(
                     let album_pk = album_id.id().to_string();
                     let album_ns = "spotify.album".to_string();
                     let album_title = Some(album.name.clone());
+                    let album_pic_url = get_first_image_url(&album.images); // Extract image URL for related album
                     let album_meta = Some(serde_json::to_value(&album)?);
 
                     log::info!("Ensuring related album (in tx): {}/{}", album_ns, album_pk);
-                    upsert_entity(&mut *tx, &album_ns, &album_pk, album_title, album_meta).await?;
+                    upsert_entity(
+                        &mut *tx,
+                        &album_ns,
+                        &album_pk,
+                        album_title,
+                        album_pic_url, // Pass image URL
+                        album_meta,
+                    )
+                    .await?;
 
                     // Add relationship: Artist -> Album
                     log::info!(
@@ -377,7 +410,7 @@ async fn ensure_spotify_entity(
                 SpotifyApiError::BadRequest(format!("Invalid Spotify Album ID: {}", e))
             })?;
 
-            let full_album = spotify
+            let full_album: FullAlbum = spotify // Type annotation needed
                 .album(
                     album_id.clone(),
                     Some(Market::Country(Country::UnitedStates)),
@@ -386,15 +419,17 @@ async fn ensure_spotify_entity(
             log::info!("Fetched full album details for: {}", album_id_str);
 
             entity.title = Some(full_album.name.clone());
+            entity.profile_picture_url = get_first_image_url(&full_album.images); // Extract image URL
             entity.metadata = Some(serde_json::to_value(&full_album)?);
 
             sqlx::query!(
                 r#"
                     UPDATE entities
-                    SET title = $1, metadata = $2
-                    WHERE pk_namespace = $3 AND pk = $4
+                    SET title = $1, profile_picture_url = $2, metadata = $3 -- Update profile_picture_url
+                    WHERE pk_namespace = $4 AND pk = $5
                     "#,
                 entity.title,
+                entity.profile_picture_url, // Pass the extracted URL
                 entity.metadata,
                 payload.pk_namespace,
                 payload.pk
@@ -409,12 +444,13 @@ async fn ensure_spotify_entity(
             // Ensure Album's Artists and relationship Artist -> Album
             log::info!("Ensuring artists for album (in tx): {}", album_id_str);
             for artist in full_album.artists.iter() {
-                // Use iter() instead of into_iter() if full_album is needed later
+                // Use iter() here
                 if let Some(artist_id) = artist.id.clone() {
                     let artist_pk = artist_id.id().to_string();
                     let artist_ns = "spotify.artist".to_string();
                     let artist_title = Some(artist.name.clone());
-                    // Fetching full artist metadata here might be too much, use simplified
+                    // SimplifiedArtist doesn't have images, so we pass None
+                    let artist_pic_url = None::<String>;
                     let artist_meta = Some(serde_json::to_value(artist)?);
 
                     log::info!(
@@ -422,8 +458,15 @@ async fn ensure_spotify_entity(
                         artist_ns,
                         artist_pk
                     );
-                    upsert_entity(&mut *tx, &artist_ns, &artist_pk, artist_title, artist_meta)
-                        .await?;
+                    upsert_entity(
+                        &mut *tx,
+                        &artist_ns,
+                        &artist_pk,
+                        artist_title,
+                        artist_pic_url, // Pass None for image URL
+                        artist_meta,
+                    )
+                    .await?;
 
                     // Add relationship: Artist -> Album
                     log::info!(
@@ -453,10 +496,20 @@ async fn ensure_spotify_entity(
                     let track_pk = track_id.id().to_string();
                     let track_ns = "spotify.track".to_string();
                     let track_title = Some(track.name.clone());
+                    // Tracks inherit album art, but we don't store it directly on the track entity
+                    let track_pic_url = None::<String>;
                     let track_meta = Some(serde_json::to_value(&track)?);
 
                     log::info!("Ensuring related track (in tx): {}/{}", track_ns, track_pk);
-                    upsert_entity(&mut *tx, &track_ns, &track_pk, track_title, track_meta).await?;
+                    upsert_entity(
+                        &mut *tx,
+                        &track_ns,
+                        &track_pk,
+                        track_title,
+                        track_pic_url, // Pass None for image URL
+                        track_meta,
+                    )
+                    .await?;
 
                     // Add relationship: Album -> Track
                     log::info!(
@@ -476,11 +529,14 @@ async fn ensure_spotify_entity(
                     )
                     .await?;
 
+                    // Ensure Artists for Track and relationship Artist -> Track
                     for artist in track.artists {
+                        // Consuming track here is okay
                         if let Some(artist_id) = artist.id.clone() {
                             let artist_pk = artist_id.id().to_string();
                             let artist_ns = "spotify.artist".to_string();
                             let artist_title = Some(artist.name.clone());
+                            let artist_pic_url = None::<String>; // No image on SimplifiedArtist
                             let artist_meta = Some(serde_json::to_value(&artist)?);
 
                             log::info!(
@@ -493,6 +549,7 @@ async fn ensure_spotify_entity(
                                 &artist_ns,
                                 &artist_pk,
                                 artist_title,
+                                artist_pic_url, // Pass None
                                 artist_meta,
                             )
                             .await?;
@@ -536,16 +593,22 @@ async fn ensure_spotify_entity(
                 .await?;
             log::info!("Fetched full track details for: {}", track_id_str);
 
+            // Tracks don't have their own profile picture, they use the album's.
+            // We will store the album's picture URL on the *album* entity when it's ensured.
+            // So, for the track entity itself, the profile_picture_url remains NULL.
             entity.title = Some(full_track.name.clone());
+            entity.profile_picture_url = None; // Explicitly set to None for track
             entity.metadata = Some(serde_json::to_value(&full_track)?);
 
+            // Update the track entity (title and metadata, but not profile_picture_url)
             sqlx::query!(
                 r#"
                     UPDATE entities
-                    SET title = $1, metadata = $2
+                    SET title = $1, metadata = $2 -- Don't update profile_picture_url
                     WHERE pk_namespace = $3 AND pk = $4
                     "#,
                 entity.title,
+                // entity.profile_picture_url intentionally omitted
                 entity.metadata,
                 payload.pk_namespace,
                 payload.pk
@@ -557,6 +620,7 @@ async fn ensure_spotify_entity(
                 track_id_str
             );
 
+            // Ensure Artists for Track and relationship Artist -> Track
             log::info!("Ensuring artists for track (in tx): {}", track_id_str);
             for artist in full_track.artists.iter() {
                 // Use iter()
@@ -564,7 +628,7 @@ async fn ensure_spotify_entity(
                     let artist_pk = artist_id.id().to_string();
                     let artist_ns = "spotify.artist".to_string();
                     let artist_title = Some(artist.name.clone());
-                    // Use simplified artist metadata from track object
+                    let artist_pic_url = None::<String>; // No image on SimplifiedArtist
                     let artist_meta = Some(serde_json::to_value(artist)?);
 
                     log::info!(
@@ -572,8 +636,15 @@ async fn ensure_spotify_entity(
                         artist_ns,
                         artist_pk
                     );
-                    upsert_entity(&mut *tx, &artist_ns, &artist_pk, artist_title, artist_meta)
-                        .await?;
+                    upsert_entity(
+                        &mut *tx,
+                        &artist_ns,
+                        &artist_pk,
+                        artist_title,
+                        artist_pic_url, // Pass None
+                        artist_meta,
+                    )
+                    .await?;
 
                     // Add relationship: Artist -> Track
                     log::info!(
@@ -597,16 +668,27 @@ async fn ensure_spotify_entity(
                 }
             }
 
+            // Ensure Album for Track and relationship Album -> Track
             log::info!("Ensuring album for track (in tx): {}", track_id_str);
-            let album = full_track.album; // No need for clone if we consume it here
+            // Need to clone album as full_track might be used later (though it isn't currently)
+            let album = full_track.album.clone();
             if let Some(album_id) = album.id.clone() {
                 let album_pk = album_id.id().to_string();
                 let album_ns = "spotify.album".to_string();
                 let album_title = Some(album.name.clone());
+                let album_pic_url = get_first_image_url(&album.images); // Extract image URL for related album
                 let album_meta = Some(serde_json::to_value(&album)?);
 
                 log::info!("Ensuring related album (in tx): {}/{}", album_ns, album_pk);
-                upsert_entity(&mut *tx, &album_ns, &album_pk, album_title, album_meta).await?;
+                upsert_entity(
+                    &mut *tx,
+                    &album_ns,
+                    &album_pk,
+                    album_title,
+                    album_pic_url, // Pass image URL
+                    album_meta,
+                )
+                .await?;
 
                 // Add relationship: Album -> Track
                 log::info!(

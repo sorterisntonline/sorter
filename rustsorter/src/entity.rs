@@ -20,6 +20,7 @@ pub struct Entity {
     pub pk_namespace: String,
     pub pk: String,
     pub title: Option<String>,
+    pub profile_picture_url: Option<String>,
     #[sqlx(json)]
     pub metadata: Option<JsonValue>,
     pub created_at: Option<NaiveDateTime>,
@@ -32,6 +33,7 @@ pub struct EntityPayload {
     pk: String,
     title: Option<String>,
     metadata: Option<JsonValue>,
+    profile_picture_url: Option<String>,
 }
 
 // Updated struct to hold full Entity for parents/children
@@ -52,14 +54,15 @@ async fn create_entity(
     match sqlx::query_as!(
         Entity,
         r#"
-        INSERT INTO entities (pk_namespace, pk, title, metadata)
-        VALUES ($1, $2, $3, $4)
-        RETURNING pk_namespace, pk, title, metadata, created_at
+        INSERT INTO entities (pk_namespace, pk, title, metadata, profile_picture_url)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING pk_namespace, pk, title, metadata, profile_picture_url, created_at
         "#,
         payload.pk_namespace,
         payload.pk,
         payload.title,
-        payload.metadata
+        payload.metadata,
+        payload.profile_picture_url
     )
     .fetch_one(&state.db)
     .await
@@ -94,7 +97,7 @@ async fn get_entity(
     match sqlx::query_as!(
         Entity,
         r#"
-        SELECT pk_namespace, pk, title, metadata, created_at
+        SELECT pk_namespace, pk, title, metadata, profile_picture_url, created_at
         FROM entities
         WHERE pk_namespace = $1 AND pk = $2
         "#,
@@ -125,7 +128,7 @@ async fn list_entities(
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     match sqlx::query_as!(
         Entity,
-        r#"SELECT pk_namespace, pk, title, metadata, created_at FROM entities ORDER BY created_at DESC"#
+        r#"SELECT pk_namespace, pk, title, metadata, profile_picture_url, created_at FROM entities ORDER BY created_at DESC"#
     )
     .fetch_all(&state.db)
     .await
@@ -155,14 +158,15 @@ async fn update_entity(
         Entity,
         r#"
         UPDATE entities
-        SET title = $3, metadata = $4
+        SET title = $3, metadata = $4, profile_picture_url = $5
         WHERE pk_namespace = $1 AND pk = $2
-        RETURNING pk_namespace, pk, title, metadata, created_at
+        RETURNING pk_namespace, pk, title, metadata, profile_picture_url, created_at
         "#,
         pk_namespace,
         pk,
         payload.title,
-        payload.metadata
+        payload.metadata,
+        payload.profile_picture_url
     )
     .fetch_optional(&state.db)
     .await
@@ -224,7 +228,7 @@ pub async fn get_entity_details(
     let entity_result = sqlx::query_as!(
         Entity,
         r#"
-        SELECT pk_namespace, pk, title, metadata, created_at
+        SELECT pk_namespace, pk, title, metadata, profile_picture_url, created_at
         FROM entities
         WHERE pk_namespace = $1 AND pk = $2
         "#,
@@ -255,7 +259,7 @@ pub async fn get_entity_details(
     let parents_result = sqlx::query_as!(
         Entity,
         r#"
-        SELECT e.pk_namespace, e.pk, e.title, e.metadata, e.created_at
+        SELECT e.pk_namespace, e.pk, e.title, e.metadata, e.profile_picture_url, e.created_at
         FROM entity_relationships er
         JOIN entities e ON er.parent_pk_namespace = e.pk_namespace AND er.parent_pk = e.pk
         WHERE er.child_pk_namespace = $1 AND er.child_pk = $2
@@ -289,7 +293,7 @@ pub async fn get_entity_details(
     let children_result = sqlx::query_as!(
         Entity,
         r#"
-        SELECT e.pk_namespace, e.pk, e.title, e.metadata, e.created_at
+        SELECT e.pk_namespace, e.pk, e.title, e.metadata, e.profile_picture_url, e.created_at
         FROM entity_relationships er
         JOIN entities e ON er.child_pk_namespace = e.pk_namespace AND er.child_pk = e.pk
         WHERE er.parent_pk_namespace = $1 AND er.parent_pk = $2
