@@ -1,24 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 // Import react-router-dom hook
 import { useSearchParams } from 'react-router-dom';
 // Import react-query hooks
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-// Consider using a dedicated debounce hook library like 'use-debounce' for cleaner implementation
-// import { useDebounce } from 'use-debounce';
+// Import use-debounce hook
+import { useDebounce } from 'use-debounce';
 import './App.css'
-
-// Debounce function (simple implementation) - Keep for input debounce
-function debounce(func, wait) {
-  let timeout;
-  return function executedFunction(...args) {
-    const later = () => {
-      clearTimeout(timeout);
-      func(...args);
-    };
-    clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
-  };
-}
 
 // Helper function to format artist names
 const formatArtists = (artists) => {
@@ -106,7 +93,7 @@ const ensureEntityFn = async ({ pk_namespace, pk, title, metadata }) => {
     // Optionally return data from ensure if backend provides it
     try {
         return await response.json(); // Return potential entity data from ensure
-    } catch (e) {
+    } catch (_e) { // Mark as unused
         return { success: true }; // Return simple success if no JSON body
     }
 };
@@ -265,17 +252,18 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
             </div>
             {/* Render Children - Grouped by Type */}
             {sortedChildTypes.length > 0 && (
-                <div className="mt-3 pt-2  border-gray-200"> {/* Adjusted margin/padding */}
+                <div className="mt-3 pt-2  border-gray-200"> 
                     {sortedChildTypes.map(childType => (
-                        <div key={childType} className="mb-2"> {/* Add margin between type groups */}
+                        <div key={childType} className="mb-2"> 
                             <h5 className="text-xs font-semibold mt-1 capitalize text-gray-600">[{childType}]</h5>
+                            {/* PUT ITEM PAIR HERE */}
                             <ul className="text-xs text-gray-600 list-disc list-inside space-y-1 pl-4"> {/* Indent child list */}
                                 {groupedChildren[childType].map((child) => (
-                                    <li key={`${child.pk_namespace}-${child.pk}`}>
+                                    <li className="border border-gray-200 p-2 cursor-pointer" key={`${child.pk_namespace}-${child.pk}`}>
                                         <a href={`/?pk_namespace=${child.pk_namespace}&pk=${child.pk}`}
                                            onClick={(e) => handleLinkClick(e, child.pk_namespace, child.pk)}
                                            className="text-blue-600 hover:underline cursor-pointer">
-                                             {child.title} {/* Removed explicit type here as it's under the group heading */}
+                                             {child.title}
                                         </a>
                                     </li>
                                 ))}
@@ -293,12 +281,13 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
 // --- App Component ---
 function App() {
     const [inputValue, setInputValue] = useState('');
-    const [debouncedInputValue, setDebouncedInputValue] = useState('');
     // Selected tags now derived primarily from URL/details query result
     const [selectedTags, setSelectedTags] = useState([]);
     const [highlightedIndex, setHighlightedIndex] = useState(-1);
     const suggestionBoxRef = useRef(null);
     const queryClient = useQueryClient();
+    // Use the useDebounce hook
+    const [debouncedInputValue] = useDebounce(inputValue, 300);
     // --- Search Params ---
     const [searchParams, setSearchParams] = useSearchParams();
     const urlPkNamespace = searchParams.get('pk_namespace');
@@ -404,13 +393,9 @@ function App() {
 
     // --- Event Handlers and Effects ---
 
-    const debouncedSetQuery = useCallback(debounce(setDebouncedInputValue, 300), []);
-
     const handleInputChange = (event) => {
         const value = event.target.value;
         setInputValue(value);
-        // Trigger suggestion fetch based on input
-        debouncedSetQuery(value);
         setHighlightedIndex(-1); // Reset highlight on input change
     };
 
@@ -418,9 +403,9 @@ function App() {
     const navigateToEntity = (pk_ns, pk) => {
         console.log("Navigating to:", pk_ns, pk);
         setSearchParams({ pk_namespace: pk_ns, pk: pk });
-        // Clear input and debounced value *after* setting params
+        // Clear input *after* setting params
         setInputValue('');
-        setDebouncedInputValue(''); // Stop suggestions query
+        // No need to manually clear debouncedInputValue
         setHighlightedIndex(-1);
     };
 
@@ -502,7 +487,7 @@ function App() {
              {
                  // Clear the input and hide suggestions
                  setInputValue('');
-                 setDebouncedInputValue('');
+                 // No need to manually clear debouncedInputValue, it derives from inputValue
                  setHighlightedIndex(-1);
              }
          }
