@@ -121,8 +121,25 @@ const fetchEntityDetailsFn = async (pk_namespace, pk) => {
     return data;
 };
 
+// --- Child List Item Component ---
+function ChildListItem({ child, onItemClick }) {
+    return (
+        <div
+            className="border border-gray-200 cursor-pointer hover:bg-gray-50 text-blue-600 hover:underline flex items-center gap-2"
+            // key is now applied in the map function where ChildListItem is used
+            onClick={(e) => onItemClick(e, child.pk_namespace, child.pk)}
+        >
+            {child.profile_picture_url ? (
+                <img src={child.profile_picture_url} alt={child.title || 'Child item image'} className="w-8 h-8 object-cover inline-block flex-shrink-0" />
+            ) : (
+                <div className="w-8 h-8 bg-gray-200 inline-flex items-center justify-center text-gray-400 text-xl flex-shrink-0">?</div>
+            )}
+            <span className="truncate">{child.title}</span> {/* Added truncate for potentially long titles */}
+        </div>
+    );
+}
 
-// --- EntityDetailsDisplay Component (Unchanged) ---
+// --- EntityDetailsDisplay Component (Main component for displaying entity details) ---
 function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isEnsuring }) {
     if (!entityDetails || !entityDetails.entity) {
         return <div className="text-gray-500">No details available.</div>;
@@ -287,7 +304,7 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
                                     </div>
 
                                     {/* Overlay VOTE text on hover */}
-                                    <div className="absolute inset-0 bg-blue-500 bg-opacity-50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-md">
+                                    <div className="absolute inset-0 bg-blue-200 bg-opacity-100 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-md">
                                         <span className="text-white text-4xl font-bold">VOTE</span>
                                     </div>
 
@@ -309,22 +326,15 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
                                 {/* Render the item pair preview and button */}
                                 {itemPairElement}
                                 {/* Render the full list */}
-                                <ul className="text-xs text-gray-600 list-disc list-inside space-y-1 pl-4"> {/* Indent child list */}
+                                <div className="text-xs text-gray-600 list-disc list-inside space-y-1 pl-4"> {/* Indent child list */}
                                     {childrenOfType.map((child) => ( // Use childrenOfType here
-                                        <div 
-                                            className="border border-gray-200 cursor-pointer hover:bg-gray-50 text-blue-600 hover:underline flex items-center gap-2"
-                                            key={`${child.pk_namespace}-${child.pk}`}
-                                            onClick={(e) => handleLinkClick(e, child.pk_namespace, child.pk)}
-                                        >
-                                            {child.profile_picture_url ? (
-                                                <img src={child.profile_picture_url} alt="" className="w-8 h-8 object-cover inline-block" />
-                                            ) : (
-                                                <div className="w-8 h-8 bg-gray-200 inline-flex items-center justify-center text-gray-400 text-xl">?</div>
-                                            )}
-                                            {child.title}
-                                        </div>
+                                        <ChildListItem
+                                            key={`${child.pk_namespace}-${child.pk}`} // Key goes on the outermost element in the map
+                                            child={child}
+                                            onItemClick={handleLinkClick} // Pass the handler
+                                        />
                                     ))}
-                                </ul>
+                                </div>
                             </div>
                         );
                     })}

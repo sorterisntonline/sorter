@@ -1,6 +1,4 @@
-make image_url for entities
-don't backfill in a fullArtist with a partialartist...
-add a "vote here" button, vote pair page, wire up voting, wire up ranking
+control which items are shown by icons on each song. so you can control which pair
+vote pair page, wire up voting, wire up ranking
 genre/decade tag system. composite query system. #hiphop #albums #1990s.
-
 
