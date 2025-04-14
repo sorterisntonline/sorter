@@ -14,7 +14,7 @@ use axum::{
 use std::fmt;
 use tokio; // For spawning the update task
 
-use crate::models::User; // Assuming AppState is in models
+use crate::models::{ErrorResponse, User}; // Assuming AppState is in models
 use crate::app_state::AppState;
 
 // --- Constants ---
@@ -111,21 +111,30 @@ impl fmt::Display for ApiKeyError {
 }
 
 // Implement Axum's IntoResponse for ApiKeyError
-impl IntoResponse for ApiKeyError {
-    fn into_response(self) -> Response {
-        let (status, error_message) = match &self {
+impl From<ApiKeyError> for ErrorResponse {
+    fn from(error: ApiKeyError) -> Self {
+        let (status, error_message) = match &error {
             ApiKeyError::DatabaseError(_) | ApiKeyError::HashingError(_) | ApiKeyError::InternalError(_) | ApiKeyError::VerificationError(_) => {
-                 log::error!("Internal API Key Error: {}", self);
+                 log::error!("Internal API Key Error: {}", error);
                  (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())
             },
             ApiKeyError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
             ApiKeyError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
-            ApiKeyError::Unauthorized | ApiKeyError::InvalidKeyFormat => (StatusCode::UNAUTHORIZED, self.to_string()),
+            ApiKeyError::Unauthorized | ApiKeyError::InvalidKeyFormat => (StatusCode::UNAUTHORIZED, error.to_string()),
             ApiKeyError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
         };
+        
          // Log user-facing errors as warnings
         if status != StatusCode::INTERNAL_SERVER_ERROR { log::warn!("API Key Response: status={}, message='{}'", status, error_message); }
-        (status, axum::Json(serde_json::json!({ "error": error_message }))).into_response()
+
+        Self::new(status, error_message)
+    }
+}
+
+// temporary impl for ApiKeyError to return ErrorResponse until FRI-373 is fixed
+impl IntoResponse for ApiKeyError {
+    fn into_response(self) -> Response {
+        ErrorResponse::from(self).into_response()
     }
 }
 

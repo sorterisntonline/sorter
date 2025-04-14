@@ -44,7 +44,7 @@ pub fn routes() -> Router<AppState> {
 async fn create_entity(
     State(state): State<AppState>,
     Json(payload): Json<EntityPayload>,
-) -> Result<impl IntoResponse, impl IntoResponse> {
+) -> Result<impl IntoResponse, ErrorResponse> {
     match sqlx::query_as!(
         Entity,
         r#"
@@ -77,7 +77,7 @@ async fn create_entity(
 async fn get_entity(
     State(state): State<AppState>,
     Path((pk_namespace, pk)): Path<(String, String)>,
-) -> Result<impl IntoResponse, impl IntoResponse> {
+) -> Result<impl IntoResponse, ErrorResponse> {
     match sqlx::query_as!(
         Entity,
         r#"
@@ -103,7 +103,7 @@ async fn get_entity(
 // GET / - List all entities (consider pagination for production)
 async fn list_entities(
     State(state): State<AppState>
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, ErrorResponse> {
     match sqlx::query_as!(
         Entity,
         r#"SELECT pk_namespace, pk, title, metadata, created_at FROM entities ORDER BY created_at DESC"#
@@ -114,7 +114,7 @@ async fn list_entities(
         Ok(entities) => Ok((StatusCode::OK, Json(entities))),
         Err(e) => {
              log::error!("Failed to list entities: {}", e);
-             Err((StatusCode::INTERNAL_SERVER_ERROR, "Failed to list entities".to_string()))
+             Err(ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "Failed to list entities".to_string()))
         }
     }
 }
@@ -124,7 +124,7 @@ async fn update_entity(
     State(state): State<AppState>,
     Path((pk_namespace, pk)): Path<(String, String)>,
     Json(payload): Json<EntityPayload>,
-) -> Result<impl IntoResponse, impl IntoResponse> {
+) -> Result<impl IntoResponse, ErrorResponse> {
     if pk_namespace != payload.pk_namespace || pk != payload.pk {
         return Err(ErrorResponse::new(StatusCode::BAD_REQUEST, "Path parameters must match payload primary key".to_string()));
     }
@@ -158,7 +158,7 @@ async fn update_entity(
 async fn delete_entity(
     State(state): State<AppState>,
     Path((pk_namespace, pk)): Path<(String, String)>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, ErrorResponse> {
     match sqlx::query!(
         r#"
         DELETE FROM entities
@@ -174,12 +174,12 @@ async fn delete_entity(
             if result.rows_affected() > 0 {
                 Ok(StatusCode::NO_CONTENT)
             } else {
-                Err((StatusCode::NOT_FOUND, "Entity not found".to_string()))
+                Err(ErrorResponse::new(StatusCode::NOT_FOUND, "Entity not found".to_string()))
             }
         },
         Err(e) => {
              log::error!("Failed to delete entity: {}", e);
-             Err((StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete entity".to_string()))
+             Err(ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete entity".to_string()))
         }
     }
 }

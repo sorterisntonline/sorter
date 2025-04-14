@@ -1,16 +1,18 @@
-use crate::{
-    models::User, // Assuming AppState is in models
-    api_key::{self, ApiKeyDb, ApiKeyError}, // Import necessary items from api_key module
-};
 use std::fmt;
-use tokio; // For spawning background task
-use crate::app_state::AppState;
+
 use axum::{
-    extract::{Request, State}, // Use Axum's Request and State extractors
-    middleware::{self, Next}, // Use Axum's middleware utilities
+    extract::{Request, State},  // Use Axum's Request and State extractors
+    http::{StatusCode, header}, // Use Axum's http types
+    middleware::{self, Next},   // Use Axum's middleware utilities
     response::{IntoResponse, Response}, // Use Axum's response types
-    http::{header, StatusCode}, // Use Axum's http types
 };
+use tokio; // For spawning background task
+
+use crate::{
+    api_key::{self, ApiKeyDb, ApiKeyError}, // Import necessary items from api_key module
+    models::User,                           // Assuming AppState is in models
+};
+use crate::{app_state::AppState, models::ErrorResponse};
 
 // Custom AuthError type
 #[derive(Debug)]
@@ -28,29 +30,41 @@ impl fmt::Display for AuthError {
             AuthError::NoCredentials => write!(f, "No authentication credentials provided"),
             AuthError::InvalidHeader => write!(f, "Invalid Authorization header format"),
             // Display the underlying ApiKeyError message for more context
-            AuthError::ApiKeyVerificationFailed(e) => write!(f, "API key verification failed: {}", e),
+            AuthError::ApiKeyVerificationFailed(e) => {
+                write!(f, "API key verification failed: {}", e)
+            }
             AuthError::InternalError(e) => write!(f, "Internal server error: {}", e),
         }
     }
 }
 
-// Map AuthError to HTTP responses
-impl IntoResponse for AuthError {
-    fn into_response(self) -> Response {
-        match self {
+impl From<AuthError> for ErrorResponse {
+    fn from(error: AuthError) -> Self {
+        let (status_code, error_message) = match error {
             AuthError::NoCredentials | AuthError::InvalidHeader => {
-                (StatusCode::UNAUTHORIZED, axum::Json(serde_json::json!({ "error": self.to_string() }))).into_response()
+                (StatusCode::UNAUTHORIZED, error.to_string())
             }
-            // Use the status code from the wrapped ApiKeyError if possible
             AuthError::ApiKeyVerificationFailed(api_key_err) => {
-                 log::warn!("API Key Auth Failed: {}", api_key_err);
-                 api_key_err.into_response() // Delegate to ApiKeyError's IntoResponse impl
+                log::warn!("API Key Auth Failed: {}", api_key_err);
+                return api_key_err.into();
             }
             AuthError::InternalError(_) => {
-                log::error!("Authentication internal error: {}", self);
-                (StatusCode::INTERNAL_SERVER_ERROR, axum::Json(serde_json::json!({ "error": "An internal error occurred during authentication" }))).into_response()
+                log::error!("Authentication internal error: {}", error);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "An internal error occurred during authentication".to_owned(),
+                )
             }
-        }
+        };
+
+        Self::new(status_code, error_message)
+    }
+}
+
+// temporary impl for ApiKeyError to return ErrorResponse until FRI-373 is fixed
+impl IntoResponse for AuthError {
+    fn into_response(self) -> Response {
+        ErrorResponse::from(self).into_response()
     }
 }
 
@@ -58,13 +72,15 @@ impl IntoResponse for AuthError {
 
 pub async fn auth(
     State(app_state): State<AppState>, // State is now the first argument
-    mut request: Request, // Request becomes the second argument
-    next: Next, // Next becomes the third argument
-) -> Result<Response, AuthError> { // Return Result<Response, AuthError>
+    mut request: Request,              // Request becomes the second argument
+    next: Next,                        // Next becomes the third argument
+) -> Result<Response, AuthError> {
+    // Return Result<Response, AuthError>
     let db_pool = app_state.db; // Use the passed state directly
 
     // --- Extract Token ---
-    let auth_header = request.headers()
+    let auth_header = request
+        .headers()
         .get(header::AUTHORIZATION)
         .and_then(|header| header.to_str().ok());
 
@@ -85,13 +101,18 @@ pub async fn auth(
                 Ok(next.run(request).await) // Call the next layer
             }
             Err(e) => {
-                log::error!("Failed to fetch static key user '{}': {}", ADMIN_USERNAME, e);
-                Err(AuthError::InternalError(anyhow::anyhow!("Static user lookup failed")))
+                log::error!(
+                    "Failed to fetch static key user '{}': {}",
+                    ADMIN_USERNAME,
+                    e
+                );
+                Err(AuthError::InternalError(anyhow::anyhow!(
+                    "Static user lookup failed"
+                )))
             }
         };
     }
     // --- End Static Key Check ---
-
 
     // --- Normal API Key Verification ---
     match api_key::verify_api_key(&db_pool, token).await {
