@@ -111,7 +111,6 @@ fn _pair<'a>(
     } else if !sorted.is_empty() {
         match (pinned_left, pinned_right) {
             (Some(pinned_left), Some(pinned_right)) => {
-                // both pinned
                 let pinned_left_item = unsorted.iter().find(|x| x._id == pinned_left);
                 let pinned_right_item = unsorted.iter().find(|x| x._id == pinned_right);
 
@@ -120,19 +119,16 @@ fn _pair<'a>(
                         return vec![pinned_left_item.clone(), pinned_right_item.clone()];
                     }
                     (Some(_), None) => {
-                        // left is pinned, right is not
                         let left = pinned_left_item.unwrap();
                         let right = sorted.choose(&mut rand::thread_rng()).unwrap();
                         return vec![left.clone(), right.clone().into()];
                     }
                     (None, Some(_)) => {
-                        // left is not pinned, right is
                         let left = sorted.choose(&mut rand::thread_rng()).unwrap();
                         let right = pinned_right_item.unwrap();
                         return vec![left.clone().into(), right.clone()];
                     }
                     (None, None) => {
-                        // look for them in sorted
                         let left = sorted.iter().find(|x| x.id == pinned_left);
                         let right = sorted.iter().find(|x| x.id == pinned_right);
 
@@ -152,7 +148,6 @@ fn _pair<'a>(
 
                 match sorted_pinned {
                     Some(pinned) => {
-                        // pinned is sorted
                         let left = pinned;
                         let mut sorted = sorted.clone();
                         sorted.sort_by(|a, b| {
@@ -174,7 +169,6 @@ fn _pair<'a>(
                         return vec![left.clone().into(), right.clone().into()];
                     }
                     None => {
-                        // pinned is unsorted
                         let pinned = unsorted
                             .iter()
                             .find(|x| x._id == pinned_left)
@@ -186,12 +180,10 @@ fn _pair<'a>(
                 }
             }
             (None, Some(pinned_right)) => {
-                // no pinned left
                 let sorted_pinned = sorted.iter().find(|x| x.id == pinned_right);
 
                 match sorted_pinned {
                     Some(pinned) => {
-                        // pinned is sorted
                         let left = pinned;
                         let mut sorted = sorted.clone();
                         sorted.sort_by(|a, b| {
@@ -213,7 +205,6 @@ fn _pair<'a>(
                         return vec![left.clone().into(), pinned.clone().into()];
                     }
                     None => {
-                        // pinned is unsorted
                         let pinned = unsorted
                             .iter()
                             .find(|x| x._id == pinned_right)
@@ -225,7 +216,6 @@ fn _pair<'a>(
                 }
             }
             (None, None) => {
-                // no pinned
                 if !unsorted.is_empty() {
                     let left = sorted.choose(&mut rand::thread_rng()).unwrap();
                     let mut sorted = sorted.clone();
@@ -238,7 +228,6 @@ fn _pair<'a>(
                     let right = unsorted.choose(&mut rand::thread_rng()).unwrap();
                     return vec![left.clone().into(), right.clone()];
                 } else {
-                    // go down ranked list, find any n, n+1 pair that isnt voted on already
                     let mut voted_pairs = HashSet::new();
                     for vote in votes {
                         voted_pairs.insert((vote.left_item_id, vote.right_item_id));
@@ -246,7 +235,6 @@ fn _pair<'a>(
 
                     let pairs = sorted.windows(2).collect::<Vec<_>>();
 
-                    // find first pair that has not been voted on
                     for pair in pairs {
                         if !voted_pairs.contains(&(pair[0].id, pair[1].id))
                             && !voted_pairs.contains(&(pair[1].id, pair[0].id))
@@ -255,7 +243,6 @@ fn _pair<'a>(
                         }
                     }
 
-                    // if all pairs have been voted on, return a random pair
                     let pair = sorted.choose(&mut rand::thread_rng()).unwrap();
                     let mut sorted = sorted.clone();
                     sorted.sort_by(|a, b| {

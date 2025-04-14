@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use graph::prelude::*;
 
-// just to make this compile
 struct _Vote {
     left_item_id: i32,
     right_item_id: i32,
@@ -81,7 +80,6 @@ fn _page_rank_iteration(
 }
 
 fn _page_rank(graph: &DirectedCsrGraph<i32, (), i32>) -> Vec<f32> {
-    // https://docs.rs/graph/latest/src/graph/page_rank.rs.html#1-198
     let node_count = graph.node_count();
     let init_score = 1_f32;
 
@@ -100,7 +98,6 @@ fn _page_rank(graph: &DirectedCsrGraph<i32, (), i32>) -> Vec<f32> {
 
     let mut scores = vec![init_score; node_count as usize];
 
-    // Run exactly 100 iterations
     for _ in 0..100 {
         _page_rank_iteration(graph, &mut scores, &out_degrees, max_out_degree);
     }
