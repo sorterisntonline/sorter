@@ -12,16 +12,7 @@
       "command": "open -g -a Docker && sleep 5 && ./run-postgres.sh",
       "label": "postgres",
       "options": {
-        "cwd": "borter/database"
-      },
-      "problemMatcher": [],
-      "type": "shell"
-    },
-    {
-      "command": "./run.sh",
-      "label": "borter",
-      "options": {
-        "cwd": "borter"
+        "cwd": "database"
       },
       "problemMatcher": [],
       "type": "shell"
