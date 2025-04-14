@@ -231,7 +231,12 @@ fn parse_key_identifier(full_key: &str) -> Result<String, ApiKeyError> {
 pub async fn get_user_by_auth0_sub(pool: &PgPool, auth0_sub: &str) -> Result<User, ApiKeyError> {
     sqlx::query_as!(
         User,
-        "SELECT auth0_sub, username, id  FROM users WHERE auth0_sub = $1",
+        "
+SELECT auth0_sub,
+    username,
+    id
+FROM users
+WHERE auth0_sub = $1",
         auth0_sub
     )
     .fetch_one(pool)
@@ -254,9 +259,18 @@ pub async fn verify_api_key(
 
     let key_candidate = sqlx::query_as!(
         ApiKeyDb,
-        "SELECT id, auth0_sub, name, key_identifier, hashed_key, created_at, last_used_at, active
-         FROM api_keys
-         WHERE key_identifier = $1 AND active = TRUE",
+        "
+SELECT id,
+    auth0_sub,
+    name,
+    key_identifier,
+    hashed_key,
+    created_at,
+    last_used_at,
+    active
+FROM api_keys
+WHERE key_identifier = $1
+    AND active = TRUE",
         &identifier
     )
     .fetch_optional(pool)
@@ -300,7 +314,10 @@ pub async fn verify_api_key(
 
 pub async fn update_last_used(pool: &PgPool, key_id: i32) -> Result<()> {
     sqlx::query!(
-        "UPDATE api_keys SET last_used_at = $1 WHERE id = $2",
+        "
+UPDATE api_keys
+SET last_used_at = $1
+WHERE id = $2",
         Utc::now().naive_utc(),
         key_id
     )
@@ -321,9 +338,18 @@ async fn list_keys(
 
     let keys = sqlx::query_as!(
         ApiKeyDb,
-        "SELECT id, auth0_sub, name, key_identifier, hashed_key, created_at, last_used_at, active
-         FROM api_keys
-         WHERE auth0_sub = $1 ORDER BY created_at DESC",
+        "
+SELECT id,
+    auth0_sub,
+    name,
+    key_identifier,
+    hashed_key,
+    created_at,
+    last_used_at,
+    active
+FROM api_keys
+WHERE auth0_sub = $1
+ORDER BY created_at DESC",
         user.auth0_sub
     )
     .fetch_all(&state.db)
@@ -364,8 +390,16 @@ async fn create_key(
     log::debug!("Generated identifier: {}, preview: {}", identifier, preview);
 
     sqlx::query!(
-        "INSERT INTO api_keys (auth0_sub, name, key_identifier, hashed_key, active, created_at)
-         VALUES ($1, $2, $3, $4, TRUE, $5)",
+        "
+INSERT INTO api_keys (
+        auth0_sub,
+        name,
+        key_identifier,
+        hashed_key,
+        active,
+        created_at
+    )
+VALUES ($1, $2, $3, $4, TRUE, $5)",
         user.auth0_sub,
         payload.name,
         &identifier,
@@ -399,8 +433,12 @@ async fn revoke_key(
     log::debug!("Handler: revoke_key called for name: {}", payload.name);
 
     let execution_result = sqlx::query!(
-        "UPDATE api_keys SET active = FALSE, last_used_at = $1 WHERE auth0_sub = $2 AND name = $3 \
-         AND active = TRUE",
+        "
+UPDATE api_keys
+SET active = FALSE,
+    last_used_at = $1
+WHERE auth0_sub = $2
+    AND name = $3 AND active = TRUE",
         Utc::now().naive_utc(),
         user.auth0_sub,
         payload.name
@@ -520,8 +558,16 @@ WHERE auth0_sub = $2
     );
 
     sqlx::query!(
-        "INSERT INTO api_keys (auth0_sub, name, key_identifier, hashed_key, active, created_at)
-         VALUES ($1, $2, $3, $4, TRUE, $5)",
+        "
+INSERT INTO api_keys (
+        auth0_sub,
+        name,
+        key_identifier,
+        hashed_key,
+        active,
+        created_at
+    )
+VALUES ($1, $2, $3, $4, TRUE, $5)",
         user.auth0_sub,
         payload.name,
         &new_identifier,

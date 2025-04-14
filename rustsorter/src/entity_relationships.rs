@@ -112,8 +112,15 @@ async fn list_relationships(
     State(state): State<AppState>,
     Query(params): Query<ListRelationshipsQuery>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let mut query = "SELECT parent_pk_namespace, parent_pk, child_pk_namespace, child_pk, \
-                     submitter_user_id, created_at FROM entity_relationships WHERE 1=1"
+    let mut query = "
+SELECT parent_pk_namespace,
+    parent_pk,
+    child_pk_namespace,
+    child_pk,
+    submitter_user_id,
+    created_at
+FROM entity_relationships
+WHERE 1 = 1"
         .to_string();
 
     let mut args: Vec<String> = Vec::new();
@@ -177,13 +184,12 @@ async fn delete_relationship(
     // TODO: Implement actual permission check.
 
     match sqlx::query!(
-        r#"
-        DELETE FROM entity_relationships
-        WHERE parent_pk_namespace = $1
-          AND parent_pk = $2
-          AND child_pk_namespace = $3
-          AND child_pk = $4
-        "#,
+        "
+DELETE FROM entity_relationships
+WHERE parent_pk_namespace = $1
+    AND parent_pk = $2
+    AND child_pk_namespace = $3
+    AND child_pk = $4",
         params.parent_pk_namespace,
         params.parent_pk,
         params.child_pk_namespace,

@@ -47,11 +47,14 @@ async fn create_entity(
 ) -> Result<impl IntoResponse, ErrorResponse> {
     match sqlx::query_as!(
         Entity,
-        r#"
-        INSERT INTO entities (pk_namespace, pk, title, metadata)
-        VALUES ($1, $2, $3, $4)
-        RETURNING pk_namespace, pk, title, metadata, created_at
-        "#,
+        "
+INSERT INTO entities (pk_namespace, pk, title, metadata)
+VALUES ($1, $2, $3, $4)
+RETURNING pk_namespace,
+    pk,
+    title,
+    metadata,
+    created_at",
         payload.pk_namespace,
         payload.pk,
         payload.title,
@@ -88,11 +91,15 @@ async fn get_entity(
 ) -> Result<impl IntoResponse, ErrorResponse> {
     match sqlx::query_as!(
         Entity,
-        r#"
-        SELECT pk_namespace, pk, title, metadata, created_at
-        FROM entities
-        WHERE pk_namespace = $1 AND pk = $2
-        "#,
+        "
+SELECT pk_namespace,
+    pk,
+    title,
+    metadata,
+    created_at
+FROM entities
+WHERE pk_namespace = $1
+    AND pk = $2",
         pk_namespace,
         pk
     )
@@ -154,12 +161,17 @@ async fn update_entity(
 
     match sqlx::query_as!(
         Entity,
-        r#"
-        UPDATE entities
-        SET title = $3, metadata = $4
-        WHERE pk_namespace = $1 AND pk = $2
-        RETURNING pk_namespace, pk, title, metadata, created_at
-        "#,
+        "
+UPDATE entities
+SET title = $3,
+    metadata = $4
+WHERE pk_namespace = $1
+    AND pk = $2
+RETURNING pk_namespace,
+    pk,
+    title,
+    metadata,
+    created_at",
         pk_namespace,
         pk,
         payload.title,
@@ -188,10 +200,10 @@ async fn delete_entity(
     Path((pk_namespace, pk)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, ErrorResponse> {
     match sqlx::query!(
-        r#"
-        DELETE FROM entities
-        WHERE pk_namespace = $1 AND pk = $2
-        "#,
+        "
+DELETE FROM entities
+WHERE pk_namespace = $1
+    AND pk = $2",
         pk_namespace,
         pk
     )
