@@ -4,7 +4,6 @@
     {
       "label": "forter",
       "path": "forter",
-      "problemMatcher": [],
       "script": "dev",
       "type": "npm"
     },
@@ -14,12 +13,25 @@
       "options": {
         "cwd": "database"
       },
-      "problemMatcher": [],
       "type": "shell"
     },
     {
       "command": "run",
       "label": "rustsorter",
+      "options": {
+        "cwd": "rustsorter"
+      },
+      "type": "cargo"
+    },
+    {
+      "args": [
+        "fmt",
+        "--",
+        "--config",
+        "error_on_line_overflow=true,error_on_unformatted=true"
+      ],
+      "command": "+nightly",
+      "label": "rustfmt",
       "options": {
         "cwd": "rustsorter"
       },
