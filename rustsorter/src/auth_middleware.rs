@@ -3,15 +3,12 @@ use std::fmt;
 use axum::{
     extract::{Request, State},  // Use Axum's Request and State extractors
     http::{StatusCode, header}, // Use Axum's http types
-    middleware::{self, Next},   // Use Axum's middleware utilities
+    middleware::Next,           // Use Axum's middleware utilities
     response::{IntoResponse, Response}, // Use Axum's response types
 };
 use tokio; // For spawning background task
 
-use crate::{
-    api_key::{self, ApiKeyDb, ApiKeyError}, // Import necessary items from api_key module
-    models::User,                           // Assuming AppState is in models
-};
+use crate::api_key::{self, ApiKeyError}; // Assuming AppState is in models
 use crate::{app_state::AppState, models::ErrorResponse};
 
 // Custom AuthError type

@@ -3,16 +3,15 @@ use sqlx::{FromRow, PgPool, Transaction, Postgres};
 use chrono::{NaiveDateTime, Utc};
 use rand::{distributions::Alphanumeric, Rng};
 use bcrypt::{hash, verify, DEFAULT_COST};
-use anyhow::{Result, Context, anyhow}; // Use anyhow consistently
+use anyhow::{Result, Context}; // Use anyhow consistently
 use axum::{
-    extract::{State, Path, Json, Extension}, // Axum extractors
+    extract::{State, Json, Extension}, // Axum extractors
     response::{IntoResponse, Response}, // Axum response types
     routing::{get, post}, // Axum routing methods
     http::StatusCode, // HTTP status codes
     Router, // Axum router
 };
 use std::fmt;
-use tokio; // For spawning the update task
 
 use crate::models::{ErrorResponse, User}; // Assuming AppState is in models
 use crate::app_state::AppState;

@@ -1,13 +1,12 @@
 use axum::{
-    extract::{Path, State, Query, Extension},
+    extract::{State, Query, Extension},
     http::StatusCode,
     response::{IntoResponse, Json},
-    routing::{delete, get, post, put},
+    routing::post,
     Router,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::Value as JsonValue;
-use chrono::{DateTime, Utc, NaiveDateTime};
+use chrono::NaiveDateTime;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
@@ -136,7 +135,6 @@ async fn list_relationships(
      if let Some(val) = &params.submitter_user_id {
         query.push_str(&format!(" AND submitter_user_id = ${}", arg_count));
         uuid_args.push(*val); // Assuming Uuid is Copy or handle appropriately
-        arg_count += 1;
     }
 
     query.push_str(" ORDER BY created_at DESC"); // Add ordering
@@ -167,7 +165,7 @@ async fn list_relationships(
 // DELETE / - Delete a specific entity relationship
 async fn delete_relationship(
     State(state): State<AppState>,
-    Extension(user): Extension<User>, // Get user for permission checks
+    Extension(_user): Extension<User>, // Get user for permission checks
     Query(params): Query<DeleteRelationshipQuery>, // Use query params to identify relationship
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
 

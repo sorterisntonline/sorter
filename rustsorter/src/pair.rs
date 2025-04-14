@@ -1,16 +1,14 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
-use graph::wcc::UnionFind;
-use graph_builder::{DirectedCsrGraph, Graph, index::Idx};
 use rand::seq::{IteratorRandom, SliceRandom};
 
 #[derive(Debug, Clone)]
 struct Item {
-    id: i32,
-    title: String,
-    body: Option<String>,
-    url: Option<String>,
-    slug: String,
+    _id: i32,
+    _title: String,
+    _body: Option<String>,
+    _url: Option<String>,
+    _slug: String,
 }
 
 #[derive(Debug, Clone)]
@@ -18,122 +16,120 @@ struct SortedItem {
     id: i32,
     title: String,
     slug: String,
-    elo: f32,
+    _elo: f32,
 }
 
-impl Into<Item> for SortedItem {
-    fn into(self) -> Item {
+impl From<SortedItem> for Item {
+    fn from(val: SortedItem) -> Self {
         Item {
-            id: self.id,
-            title: self.title,
-            body: None,
-            url: None,
-            slug: self.slug,
+            _id: val.id,
+            _title: val.title,
+            _body: None,
+            _url: None,
+            _slug: val.slug,
         }
     }
 }
 
 #[derive(Debug, Clone)]
-struct Skip {
+struct _Skip {
     item_id: i32,
 }
 
 #[derive(Debug, Clone)]
-struct Vote {
+struct _Vote {
     left_item_id: i32,
     right_item_id: i32,
-    magnitude: i32,
+    _magnitude: i32,
 }
-pub fn pair<'a>(
-    sorted: &'a Vec<SortedItem>,
-    unsorted: &'a Vec<Item>,
-    skips: &'a Vec<Skip>,
-    votes: &'a Vec<Vote>,
+
+fn _pair<'a>(
+    sorted: &'a [SortedItem],
+    unsorted: &'a [Item],
+    skips: &'a [_Skip],
+    votes: &'a [_Vote],
     pinned_left: Option<i32>,
     pinned_right: Option<i32>,
 ) -> Vec<Item> {
-    let mut sorted = sorted.clone();
-    let mut unsorted = unsorted.clone();
+    let mut sorted = sorted.to_owned();
+    let mut unsorted = unsorted.to_owned();
 
     let skipped_items = skips.iter().map(|x| x.item_id).collect::<HashSet<i32>>();
 
     sorted.retain(|x| !skipped_items.contains(&x.id));
-    unsorted.retain(|x| !skipped_items.contains(&x.id));
+    unsorted.retain(|x| !skipped_items.contains(&x._id));
 
-    if sorted.len() == 0 {
+    if sorted.is_empty() {
         if unsorted.len() < 2 {
-            return vec![];
+            vec![]
         } else {
             match (pinned_left, pinned_right) {
                 (Some(pinned_left), Some(pinned_right)) => {
                     let pinned_left_item = unsorted
                         .iter()
-                        .find(|x| x.id == pinned_left)
+                        .find(|x| x._id == pinned_left)
                         .expect("pinned item not found");
 
                     let sample = unsorted
                         .iter()
-                        .filter(|x| (x.id != pinned_left) && (x.id != pinned_right))
+                        .filter(|x| (x._id != pinned_left) && (x._id != pinned_right))
                         .choose_multiple(&mut rand::thread_rng(), 1);
 
-                    return vec![pinned_left_item.clone().into(), sample[0].clone()];
+                    vec![pinned_left_item.clone(), sample[0].clone()]
                 }
                 (None, Some(pinned_right)) => {
                     let pinned_right_item = unsorted
                         .iter()
-                        .find(|x| x.id == pinned_right)
+                        .find(|x| x._id == pinned_right)
                         .expect("pinned item not found");
 
                     let sample = unsorted
                         .iter()
-                        .filter(|x| x.id != pinned_right)
+                        .filter(|x| x._id != pinned_right)
                         .choose_multiple(&mut rand::thread_rng(), 1);
 
-                    return vec![pinned_right_item.clone().into(), sample[0].clone()];
+                    vec![pinned_right_item.clone(), sample[0].clone()]
                 }
                 (Some(pinned_left), None) => {
                     let pinned_left_item = unsorted
                         .iter()
-                        .find(|x| x.id == pinned_left)
+                        .find(|x| x._id == pinned_left)
                         .expect("pinned item not found");
 
                     let sample = unsorted
                         .iter()
-                        .filter(|x| x.id != pinned_left)
+                        .filter(|x| x._id != pinned_left)
                         .choose_multiple(&mut rand::thread_rng(), 1);
-                    return vec![pinned_left_item.clone().into(), sample[0].clone()];
+                    vec![pinned_left_item.clone(), sample[0].clone()]
                 }
                 (None, None) => {
                     let sample = unsorted.iter().choose_multiple(&mut rand::thread_rng(), 2);
-                    return sample.into_iter().map(|x| x.clone().into()).collect();
+                    sample.into_iter().cloned().collect()
                 }
             }
         }
-    } else if sorted.len() >= 1 {
+    } else if !sorted.is_empty() {
         match (pinned_left, pinned_right) {
             (Some(pinned_left), Some(pinned_right)) => {
                 // both pinned
-                let pinned_left_item = unsorted.iter().find(|x| x.id == pinned_left);
-                let pinned_right_item = unsorted.iter().find(|x| x.id == pinned_right);
+                let pinned_left_item = unsorted.iter().find(|x| x._id == pinned_left);
+                let pinned_right_item = unsorted.iter().find(|x| x._id == pinned_right);
 
                 match (pinned_left_item, pinned_right_item) {
                     (Some(pinned_left_item), Some(pinned_right_item)) => {
-                        return vec![
-                            pinned_left_item.clone().into(),
-                            pinned_right_item.clone().into(),
-                        ];
+                        return vec![pinned_left_item.clone(), pinned_right_item.clone()];
                     }
                     (Some(_), None) => {
                         // left is pinned, right is not
                         let left = pinned_left_item.unwrap();
                         let right = sorted.choose(&mut rand::thread_rng()).unwrap();
-                        return vec![left.clone().into(), right.clone().into()];
+                        return vec![left.clone(), right.clone().into()];
                     }
                     (None, Some(_)) => {
                         // left is not pinned, right is
                         let left = sorted.choose(&mut rand::thread_rng()).unwrap();
                         let right = pinned_right_item.unwrap();
-                        return vec![left.clone().into(), right.clone().into()];
+                        return vec![left.clone().into(), right.clone()];
                     }
                     (None, None) => {
                         // look for them in sorted
@@ -160,14 +156,14 @@ pub fn pair<'a>(
                         let left = pinned;
                         let mut sorted = sorted.clone();
                         sorted.sort_by(|a, b| {
-                            let a = f32::abs(a.elo - left.elo);
-                            let b = f32::abs(b.elo - left.elo);
+                            let a = f32::abs(a._elo - left._elo);
+                            let b = f32::abs(b._elo - left._elo);
                             a.partial_cmp(&b).unwrap()
                         });
 
-                        if unsorted.len() > 0 {
+                        if !unsorted.is_empty() {
                             let right = unsorted.choose(&mut rand::thread_rng()).unwrap();
-                            return vec![left.clone().into(), right.clone().into()];
+                            return vec![left.clone().into(), right.clone()];
                         }
                         let right = sorted
                             .iter()
@@ -181,11 +177,11 @@ pub fn pair<'a>(
                         // pinned is unsorted
                         let pinned = unsorted
                             .iter()
-                            .find(|x| x.id == pinned_left)
+                            .find(|x| x._id == pinned_left)
                             .expect("pinned item not found 3");
 
                         let right = sorted.choose(&mut rand::thread_rng()).unwrap();
-                        return vec![pinned.clone().into(), right.clone().into()];
+                        return vec![pinned.clone(), right.clone().into()];
                     }
                 }
             }
@@ -199,14 +195,14 @@ pub fn pair<'a>(
                         let left = pinned;
                         let mut sorted = sorted.clone();
                         sorted.sort_by(|a, b| {
-                            let a = f32::abs(a.elo - left.elo);
-                            let b = f32::abs(b.elo - left.elo);
+                            let a = f32::abs(a._elo - left._elo);
+                            let b = f32::abs(b._elo - left._elo);
                             a.partial_cmp(&b).unwrap()
                         });
 
-                        if unsorted.len() > 0 {
+                        if !unsorted.is_empty() {
                             let left = unsorted.choose(&mut rand::thread_rng()).unwrap();
-                            return vec![left.clone().into(), pinned.clone().into()];
+                            return vec![left.clone(), pinned.clone().into()];
                         }
                         let left = sorted
                             .iter()
@@ -220,27 +216,27 @@ pub fn pair<'a>(
                         // pinned is unsorted
                         let pinned = unsorted
                             .iter()
-                            .find(|x| x.id == pinned_right)
+                            .find(|x| x._id == pinned_right)
                             .expect("pinned item not found 4");
 
                         let left = sorted.choose(&mut rand::thread_rng()).unwrap();
-                        return vec![left.clone().into(), pinned.clone().into()];
+                        return vec![left.clone().into(), pinned.clone()];
                     }
                 }
             }
             (None, None) => {
                 // no pinned
-                if unsorted.len() > 0 {
+                if !unsorted.is_empty() {
                     let left = sorted.choose(&mut rand::thread_rng()).unwrap();
                     let mut sorted = sorted.clone();
                     sorted.sort_by(|a, b| {
-                        let a = f32::abs(a.elo - left.elo);
-                        let b = f32::abs(b.elo - left.elo);
+                        let a = f32::abs(a._elo - left._elo);
+                        let b = f32::abs(b._elo - left._elo);
                         a.partial_cmp(&b).unwrap()
                     });
 
                     let right = unsorted.choose(&mut rand::thread_rng()).unwrap();
-                    return vec![left.clone().into(), right.clone().into()];
+                    return vec![left.clone().into(), right.clone()];
                 } else {
                     // go down ranked list, find any n, n+1 pair that isnt voted on already
                     let mut voted_pairs = HashSet::new();
@@ -263,8 +259,8 @@ pub fn pair<'a>(
                     let pair = sorted.choose(&mut rand::thread_rng()).unwrap();
                     let mut sorted = sorted.clone();
                     sorted.sort_by(|a, b| {
-                        let a = f32::abs(a.elo - pair.elo);
-                        let b = f32::abs(b.elo - pair.elo);
+                        let a = f32::abs(a._elo - pair._elo);
+                        let b = f32::abs(b._elo - pair._elo);
                         a.partial_cmp(&b).unwrap()
                     });
 
