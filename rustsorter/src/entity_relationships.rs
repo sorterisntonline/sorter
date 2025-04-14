@@ -9,7 +9,10 @@ use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{app_state::AppState, models::User};
+use crate::{
+    app_state::AppState,
+    models::{ErrorResponse, User},
+};
 
 #[derive(Serialize, Debug, sqlx::FromRow)]
 pub struct EntityRelationship {
@@ -59,7 +62,7 @@ async fn create_relationship(
     State(state): State<AppState>,
     Extension(user): Extension<User>,
     Json(payload): Json<CreateRelationshipPayload>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, ErrorResponse> {
     // TODO: Add validation: Check if parent and child entities actually exist?
 
     match sqlx::query_as!(
@@ -94,13 +97,13 @@ RETURNING parent_pk_namespace,
             if e.as_database_error()
                 .is_some_and(|e| e.is_unique_violation())
             {
-                return Err((
+                return Err(ErrorResponse::new(
                     StatusCode::CONFLICT,
                     "This relationship already exists.".to_string(),
                 ));
             }
             // TODO: Handle foreign key violations if parent/child entities don't exist
-            Err((
+            Err(ErrorResponse::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to create relationship".to_string(),
             ))
@@ -111,7 +114,7 @@ RETURNING parent_pk_namespace,
 async fn list_relationships(
     State(state): State<AppState>,
     Query(params): Query<ListRelationshipsQuery>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, ErrorResponse> {
     let mut query = "
 SELECT parent_pk_namespace,
     parent_pk,
@@ -168,7 +171,7 @@ WHERE 1 = 1"
         Ok(relationships) => Ok((StatusCode::OK, Json(relationships))),
         Err(e) => {
             log::error!("Failed to list entity relationships: {}", e);
-            Err((
+            Err(ErrorResponse::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to list relationships".to_string(),
             ))
@@ -180,7 +183,7 @@ async fn delete_relationship(
     State(state): State<AppState>,
     Extension(_user): Extension<User>,
     Query(params): Query<DeleteRelationshipQuery>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, ErrorResponse> {
     // TODO: Implement actual permission check.
 
     match sqlx::query!(
@@ -202,12 +205,15 @@ WHERE parent_pk_namespace = $1
             if result.rows_affected() > 0 {
                 Ok(StatusCode::NO_CONTENT)
             } else {
-                Err((StatusCode::NOT_FOUND, "Relationship not found".to_string()))
+                Err(ErrorResponse::new(
+                    StatusCode::NOT_FOUND,
+                    "Relationship not found".to_string(),
+                ))
             }
         }
         Err(e) => {
             log::error!("Failed to delete entity relationship: {}", e);
-            Err((
+            Err(ErrorResponse::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to delete relationship".to_string(),
             ))
