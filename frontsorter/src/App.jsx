@@ -5,6 +5,9 @@ import { useSearchParams, Link, Routes, Route } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 // Import use-debounce hook
 import { useDebounce } from 'use-debounce';
+// Import CSSTransition for animations (Step 9)
+import { CSSTransition, SwitchTransition } from 'react-transition-group';
+import { VotePage } from './VotePage';
 import './App.css'
 
 // Helper function to format artist names
@@ -109,25 +112,24 @@ const fetchEntityDetailsFn = async (pk_namespace, pk) => {
     return data;
 };
 
-// --- Child List Item Component ---
+// --- Child List Item Component (Step 6) ---
 function ChildListItem({ child, onItemClick }) {
     return (
         <div
-            className="border border-gray-200 cursor-pointer hover:bg-gray-50 text-blue-600 hover:underline flex items-center gap-2"
-            // key is now applied in the map function where ChildListItem is used
+            className="flex items-center gap-2 px-2 py-1 rounded-smd cursor-pointer hover:bg-gray-50 hover:text-brand-600"
             onClick={(e) => onItemClick(e, child.pk_namespace, child.pk)}
         >
             {child.profile_picture_url ? (
-                <img src={child.profile_picture_url} alt={child.title || 'Child item image'} className="w-8 h-8 object-cover inline-block flex-shrink-0" />
+                <img src={child.profile_picture_url} alt={child.title || 'Child item image'} className="w-7 h-7 rounded-smd object-cover flex-shrink-0" />
             ) : (
-                <div className="w-8 h-8 bg-gray-200 inline-flex items-center justify-center text-gray-400 text-xl flex-shrink-0">?</div>
+                <div className="w-7 h-7 bg-gray-200 inline-flex items-center justify-center text-gray-400 text-xl flex-shrink-0 rounded-smd">?</div>
             )}
-            <span className="truncate">{child.title}</span> {/* Added truncate for potentially long titles */}
+            <span className="truncate flex-1">{child.title}</span>
         </div>
     );
 }
 
-// --- EntityDetailsDisplay Component (Main component for displaying entity details) ---
+// --- EntityDetailsDisplay Component (Step 5 & 7) ---
 function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isEnsuring }) {
     if (!entityDetails || !entityDetails.entity) {
         return <div className="text-gray-500">No details available.</div>;
@@ -152,15 +154,15 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
 
     // Basic info: Title and Type
     let basicInfo = (
-         <h3 className="text-xl font-semibold mb-2 flex items-center gap-2">
+         <h3 className="text-2xl font-semibold flex items-center gap-2 mb-2">
              <span>{title}</span>
-             <span className="text-sm font-normal text-gray-500 capitalize">[{entityType}]</span>
+             <span className="text-sm font-normal text-gray-500">[{entityType}]</span>
              {/* Manual Ensure Button */}
              {pk_namespace?.startsWith('spotify.') && onEnsureManually && (
                  <button
                      onClick={handleManualEnsure}
                      disabled={isEnsuring}
-                     className={`text-xs px-2 py-0.5 rounded border ${isEnsuring ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-300'}`}
+                     className={`text-xs px-2 py-0.5 rounded ${isEnsuring ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-brand-100 text-brand-700 hover:bg-brand-200'}`}
                      title={`Manually trigger backend sync for ${title}`}
                  >
                      {isEnsuring ? 'Syncing...' : 'Sync'}
@@ -177,10 +179,12 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
                  <img
                      src={imageUrl}
                      alt={`Cover for ${title}`}
-                     className="w-32 h-32 md:w-48 md:h-48 object-cover rounded-md float-left mr-4 mb-2"
+                     className="w-40 h-40 object-cover rounded-smd shadow"
                  />
              );
         }
+    } else {
+        imageElement = <div className="w-40 h-40 bg-gray-200 rounded-smd shadow flex items-center justify-center text-gray-400 text-4xl flex-shrink-0">?</div>;
     }
 
     let detailsList = [];
@@ -213,7 +217,7 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
     const groupedChildren = {};
     if (children && children.length > 0) {
         children.forEach(child => {
-            const childType = child.pk_namespace.split('.')[1] || 'unknown';
+            const childType = child.pk_namespace;
             if (!groupedChildren[childType]) {
                 groupedChildren[childType] = [];
             }
@@ -225,44 +229,45 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
     // --- End Grouping ---
 
     return (
-        <div className="flex flex-col gap-4">
+        <div className="bg-white shadow-card border border-gray-100 rounded-smd p-5 flex flex-col gap-5">
             {/* Render Parents */}
             {parents && parents.length > 0 && (
-                <div className="mt-4 pt-2  border-gray-200">
-                    <ul className="text-xs text-gray-600 list-disc list-inside space-y-1">
-                        {parents.map((parent) => {
-                            const parentType = parent.pk_namespace.split('.')[1];
-                            // Use button/anchor styled as link and call handleLinkClick onClick
-                            return (
-                                <li key={`${parent.pk_namespace}-${parent.pk}`}>
-                                    <a href={`/?pk_namespace=${parent.pk_namespace}&pk=${parent.pk}`}
-                                        onClick={(e) => handleLinkClick(e, parent.pk_namespace, parent.pk)}
-                                        className="text-blue-600 hover:underline cursor-pointer">
-                                            {parent.title} <span className="text-gray-500 capitalize">[{parentType}]</span>
-                                    </a>
-                                </li>
-                            );
-                        })}
-                    </ul>
+                <div className="text-xs text-gray-600">
+                    <span className="font-medium text-gray-700">Part of: </span>
+                    {parents.map((parent, index) => {
+                        const parentType = parent.pk_namespace.split('.')[1];
+                        return (
+                            <span key={`${parent.pk_namespace}-${parent.pk}`}>
+                                <a href={`/?pk_namespace=${parent.pk_namespace}&pk=${parent.pk}`}
+                                    onClick={(e) => handleLinkClick(e, parent.pk_namespace, parent.pk)}
+                                    className="text-brand-600 hover:underline cursor-pointer">
+                                        {parent.title} <span className="text-gray-500 capitalize">[{parentType}]</span>
+                                </a>
+                                {index < parents.length - 1 && ', '}
+                            </span>
+                        );
+                    })}
                 </div>
             )}
-            <div className="p-4 border border-gray-300 rounded-md bg-white shadow-sm clear-both"> {/* clear-both needed if image floats */}
+            <div className="flex gap-4">
                 {imageElement}
-                {basicInfo}
-                {detailsList.length > 0 && (
-                     <ul className="text-sm space-y-1 mb-2 list-none"> {/* Use list-none if using custom labels like <strong> */}
-                         {detailsList}
-                     </ul>
-                )}
+                <div className="flex-1">
+                    {basicInfo}
+                    {detailsList.length > 0 && (
+                         <ul className="mt-2 space-y-1 text-sm text-gray-700 list-none">
+                             {detailsList}
+                         </ul>
+                    )}
+                </div>
             </div>
             {/* Render Children - Grouped by Type */}
             {sortedChildTypes.length > 0 && (
-                <div className="mt-3 pt-2  border-gray-200">
+                <div className="mt-2 pt-3 border-t border-gray-100">
                     {sortedChildTypes.map(childType => {
                         const childrenOfType = groupedChildren[childType];
                         let itemPairElement = null;
 
-                        // --- BEGIN: Add Item Pair Preview ---
+                        // --- BEGIN: Item Pair Preview (Step 7) ---
                         if (childrenOfType && childrenOfType.length >= 2) {
                             // Select two random distinct indices
                             let index1 = Math.floor(Math.random() * childrenOfType.length);
@@ -274,32 +279,30 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
 
                             const item1 = childrenOfType[index1];
                             const item2 = childrenOfType[index2];
-
-                            // Use smallest images for preview
                             const item1ImageUrl = item1.profile_picture_url;
                             const item2ImageUrl = item2.profile_picture_url;
-
-                            // Construct the link for the vote button
-                            const voteLink = `/vote?parent_ns=${encodeURIComponent(entity.pk_namespace)}&parent_pk=${encodeURIComponent(entity.pk)}&type=${encodeURIComponent(childType)}`;
+                            const voteLink = `/vote?parent_ns=${encodeURIComponent(entity.pk_namespace)}`
+                            + `&parent_pk=${encodeURIComponent(entity.pk)}`
+                            + `&type=${encodeURIComponent(childType)}`;
 
                             itemPairElement = (
-                                <Link to={voteLink} className="cursor-pointer my-3 p-3 border border-dashed border-blue-300 rounded-md bg-blue-50 flex items-center justify-around gap-2 relative group no-underline">
+                                <Link to={voteLink} className="cursor-pointer my-3 p-3 border border-brand-200 rounded-smd bg-brand-50/40 flex items-center justify-around gap-2 relative group no-underline transition transform hover:-translate-y-0.5">
                                     {/* Item 1 Preview */}
                                     <div className="text-center flex flex-col items-center w-1/3">
-                                        {item1ImageUrl && <img src={item1ImageUrl} alt={item1.title} className="w-12 h-12 object-cover rounded mb-1 shadow-sm"/>}
-                                        {!item1ImageUrl && <div className="w-12 h-12 bg-gray-200 rounded mb-1 flex items-center justify-center text-gray-400 text-xl shadow-sm">?</div>}
+                                        {item1ImageUrl && <img src={item1ImageUrl} alt={item1.title} className="w-12 h-12 object-cover rounded-smd mb-1 shadow"/>}
+                                        {!item1ImageUrl && <div className="w-12 h-12 bg-gray-200 rounded-smd mb-1 flex items-center justify-center text-gray-400 text-xl shadow">?</div>}
                                         <span className="text-xs text-gray-700 truncate w-full px-1">{item1.title}</span>
                                     </div>
 
                                     {/* Overlay VOTE text on hover */}
-                                    <div className="absolute inset-0 bg-blue-200 bg-opacity-80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-md">
-                                        <span className="text-white text-4xl font-bold">VOTE</span>
+                                    <div className="absolute inset-0 flex items-center justify-center bg-brand-600/80 opacity-0 group-hover:opacity-100 transition-opacity rounded-smd">
+                                        <span className="text-white text-3xl tracking-wide font-bold">VOTE</span>
                                     </div>
 
                                     {/* Item 2 Preview */}
                                     <div className="text-center flex flex-col items-center w-1/3">
-                                        {item2ImageUrl && <img src={item2ImageUrl} alt={item2.title} className="w-12 h-12 object-cover rounded mb-1 shadow-sm"/>}
-                                        {!item2ImageUrl && <div className="w-12 h-12 bg-gray-200 rounded mb-1 flex items-center justify-center text-gray-400 text-xl shadow-sm">?</div>}
+                                        {item2ImageUrl && <img src={item2ImageUrl} alt={item2.title} className="w-12 h-12 object-cover rounded-smd mb-1 shadow"/>}
+                                        {!item2ImageUrl && <div className="w-12 h-12 bg-gray-200 rounded-smd mb-1 flex items-center justify-center text-gray-400 text-xl shadow">?</div>}
                                         <span className="text-xs text-gray-700 truncate w-full px-1">{item2.title}</span>
                                     </div>
                                 </Link>
@@ -309,17 +312,17 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
 
 
                         return (
-                            <div key={childType} className="mb-2">
-                                <h5 className="text-xs font-semibold mt-1 capitalize text-gray-600">[{childType}]</h5>
-                                {/* Render the item pair preview and button */}
+                            <div key={childType} className="mb-3">
+                                <h5 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+                                    {childType.replace(/^spotify\./, '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                </h5>
                                 {itemPairElement}
-                                {/* Render the full list */}
-                                <div className="text-xs text-gray-600 list-disc list-inside space-y-1 pl-4"> {/* Indent child list */}
-                                    {childrenOfType.map((child) => ( // Use childrenOfType here
+                                <div className="text-sm text-gray-700 space-y-0.5">
+                                    {childrenOfType.map((child) => (
                                         <ChildListItem
-                                            key={`${child.pk_namespace}-${child.pk}`} // Key goes on the outermost element in the map
+                                            key={`${child.pk_namespace}-${child.pk}`}
                                             child={child}
-                                            onItemClick={handleLinkClick} // Pass the handler
+                                            onItemClick={handleLinkClick}
                                         />
                                     ))}
                                 </div>
@@ -348,6 +351,8 @@ function MainView() {
     const [searchParams, setSearchParams] = useSearchParams();
     const urlPkNamespace = searchParams.get('pk_namespace');
     const urlPk = searchParams.get('pk');
+
+    const entityDetailsNodeRef = useRef(null); // Ref for CSSTransition (Step 9)
 
     // --- React Query Hooks ---
 
@@ -555,8 +560,6 @@ function MainView() {
 
 
     // --- Rendering Logic ---
-    // renderSuggestionDetails remains the same
-    // ... renderSuggestionDetails function (unchanged) ...
     const renderSuggestionDetails = (suggestion) => {
         const imageUrl = getSmallestImageUrl(suggestion.images);
         const imageElement = imageUrl ? (
@@ -644,44 +647,40 @@ function MainView() {
     const hasActiveEntity = !!urlPkNamespace && !!urlPk;
 
     return (
-        <div className="app-container flex flex-col items-center justify-start min-h-screen bg-gray-100 p-4 pt-10">
+        <div className="min-h-screen bg-brand-50/60 flex flex-col items-center pt-14 px-4">
             {/* Input and Tag Display Area */}
             <div className="w-full max-w-lg relative mb-4">
-                <div className="flex flex-wrap items-center border border-gray-300 rounded-md p-2 bg-white shadow-sm focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500">
+                <div className="flex flex-wrap items-center bg-white shadow-card border border-gray-200 rounded-smd px-3 py-2 focus-within:ring-2 focus-within:ring-brand-400 gap-2">
                   {/* Display tag if successfully loaded */}
                   {displayTag && (
-                    <span key={`${displayTag.pk_namespace}-${displayTag.pk}`} className="selected-tag-display flex items-center bg-blue-500 text-white text-sm font-medium mr-2 mb-1 px-2.5 py-0.5 rounded-full">
+                    <span key={`${displayTag.pk_namespace}-${displayTag.pk}`} className="selected-tag-display flex items-center bg-brand-500/90 text-white text-sm font-medium px-2.5 py-0.5 rounded-full gap-1">
                       {displayTag.imageUrl && (
-                          <img src={displayTag.imageUrl} alt="" className="tag-preview-image w-4 h-4 mr-1.5 rounded-sm object-cover"/>
+                          <img src={displayTag.imageUrl} alt="" className="tag-preview-image w-4 h-4 rounded-sm object-cover"/>
                       )}
                       {displayTag.name} <span className='text-xs opacity-80 ml-1'>[{displayTag.type}]</span>
                       <button
                         type="button"
-                        className="ml-1.5 flex-shrink-0 text-blue-100 hover:text-white focus:outline-none"
-                        onClick={removeTag} // Use removeTag which clears URL params
+                        className="text-white/70 hover:text-white focus:outline-none"
+                        onClick={removeTag}
                         aria-label={`Remove ${displayTag.name} (${displayTag.type})`}
                       >
                         &times;
                       </button>
                     </span>
                   )}
-                  {/* Input field is always rendered */}
+                  {/* Input field */}
                   <input
                     id="tag-input" type="text" value={inputValue}
                     onChange={handleInputChange} onKeyDown={handleKeyDown}
-                    // Placeholder logic remains the same
                     placeholder={!hasActiveEntity ? "Search Spotify, #tags..." : "Search another..."}
-                    // Input is conceptually always enabled, just looks different maybe
-                    className={`flex-grow p-1 outline-none text-sm min-w-[100px] ${hasActiveEntity ? 'pl-1' : ''}`} // Adjust padding if needed when tag is shown
+                    className={`flex-grow p-0 outline-none text-sm min-w-[100px] ${hasActiveEntity ? 'pl-1' : ''}`}
                     autoComplete="off"
-                    // No longer disable the input field
-                    // disabled={!!displayTag}
                   />
                 </div>
 
-                {/* Suggestions dropdown - Render based on the corrected showSuggestions flag */}
+                {/* Suggestions dropdown - (Step 4) */}
                  {showSuggestions && (
-                      <div ref={suggestionBoxRef} className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                      <div ref={suggestionBoxRef} className="absolute z-20 w-full mt-1 bg-white/95 backdrop-blur border border-gray-200 shadow-card rounded-smd max-h-60 overflow-y-auto">
                           {(() => {
                               // Loading state: Show if fetching and no data yet OR if debounced value changed but fetch hasn't started/returned
                               const isLoadingSuggestions = suggestionsQuery.isFetching && !suggestionsQuery.data?.length;
@@ -697,8 +696,8 @@ function MainView() {
                                           {suggestionsQuery.data.map((suggestion, index) => (
                                               <li
                                                   key={`${suggestion.pk_namespace}-${suggestion.pk}`}
-                                                  className={`p-2 cursor-pointer hover:bg-blue-100 ${index === highlightedIndex ? 'bg-blue-100' : ''}`}
-                                                  onMouseDown={(e) => { e.preventDefault(); addTag(suggestion); }} // Use addTag which updates URL
+                                                  className={`px-3 py-2 flex items-center gap-2 cursor-pointer ${index === highlightedIndex ? 'bg-brand-50' : 'hover:bg-gray-50'}`}
+                                                  onMouseDown={(e) => { e.preventDefault(); addTag(suggestion); }}
                                               >
                                                  {renderSuggestionDetails(suggestion)}
                                               </li>
@@ -717,49 +716,61 @@ function MainView() {
                  )}
             </div>
 
-            {/* Display Area for Entity Details */}
+            {/* Display Area for Entity Details (Step 9: Wrapped in SwitchTransition/CSSTransition) */}
             <div className="mt-4 w-full max-w-2xl">
-                {/* Loading state covers initial load from URL and ensure retries */}
-                {displayState === 'loading' && (
-                    <div className="p-4 border border-gray-300 rounded-md bg-white shadow-sm text-gray-500 text-center">
-                        Loading details... {ensureMutation.isLoading ? '(Ensuring entity...)' : ''}
-                    </div>
-                )}
-                {displayState === 'error_ensure' && (
-                     <div className="p-4 border border-red-300 rounded-md bg-red-50 shadow-sm text-red-700">
-                        Error ensuring entity: {ensureMutation.error.message}
-                     </div>
-                 )}
-                 {/* Show details error only if ensure didn't explicitly fail */}
-                {displayState === 'error_details' && ensureMutation.status !== 'error' && (
-                     <div className="p-4 border border-red-300 rounded-md bg-red-50 shadow-sm text-red-700">
-                         Error loading details: {detailsQuery.error.message}
-                         {detailsQuery.error?.status === 404 && urlPkNamespace?.startsWith('spotify.') && ' (Could not find or ensure the Spotify entity)'}
-                     </div>
-                 )}
-                 {/* Success state */}
-                 {displayState === 'success' && detailsQuery.data && (
-                    // Pass navigateToEntity to handle clicks on parent/child links
-                    // Pass ensureMutation details for manual trigger
-                    <EntityDetailsDisplay
-                        entityDetails={detailsQuery.data}
-                        onNavigate={navigateToEntity}
-                        onEnsureManually={ensureMutation.mutate} // Pass the mutate function
-                        isEnsuring={ensureMutation.isLoading}   // Pass the loading state
-                    />
-                 )}
-                 {/* Placeholder: Show if no URL params and not in an error/loading state */}
-                 {displayState === 'placeholder' && (
-                    <div className="p-4 border border-dashed border-gray-300 rounded-md bg-white/50 shadow-sm text-gray-500 text-center">
-                        Search for an item or select one to view details.
-                    </div>
-                )}
+                 {/* Use SwitchTransition for smoother change between states */}
+                 <SwitchTransition mode="out-in">
+                     <CSSTransition
+                         // Use a combination of state variables as the key to trigger transitions
+                         key={`${displayState}-${urlPkNamespace}-${urlPk}`}
+                         nodeRef={entityDetailsNodeRef} // Use nodeRef for findDOMNode compatibility
+                         timeout={180} // Match CSS transition duration
+                         classNames="fade" // Match CSS class names (Step 9)
+                         unmountOnExit // Remove element when exited
+                     >
+                         {/* Wrap the content in a div with the ref */}
+                         <div ref={entityDetailsNodeRef}>
+                             {/* Loading state */}
+                             {displayState === 'loading' && (
+                                 <div className="p-5 border border-gray-200 rounded-smd bg-white shadow-card text-gray-500 text-center">
+                                     Loading details... {ensureMutation.isLoading ? '(Ensuring entity...)' : ''}
+                                 </div>
+                             )}
+                             {/* Error states */}
+                             {displayState === 'error_ensure' && (
+                                 <div className="p-5 border border-red-300 rounded-smd bg-red-50 shadow-card text-red-700">
+                                     Error ensuring entity: {ensureMutation.error?.message || 'Unknown error'}
+                                 </div>
+                             )}
+                             {displayState === 'error_details' && ensureMutation.status !== 'error' && (
+                                 <div className="p-5 border border-red-300 rounded-smd bg-red-50 shadow-card text-red-700">
+                                     Error loading details: {detailsQuery.error?.message || 'Unknown error'}
+                                     {detailsQuery.error?.status === 404 && urlPkNamespace?.startsWith('spotify.') && ' (Could not find or ensure the Spotify entity)'}
+                                 </div>
+                             )}
+                             {/* Success state */}
+                             {displayState === 'success' && detailsQuery.data && (
+                                 <EntityDetailsDisplay
+                                     entityDetails={detailsQuery.data}
+                                     onNavigate={navigateToEntity}
+                                     onEnsureManually={ensureMutation.mutate}
+                                     isEnsuring={ensureMutation.isLoading}
+                                 />
+                             )}
+                             {/* Placeholder state */}
+                             {displayState === 'placeholder' && (
+                                 <div className="p-5 border border-dashed border-gray-300 rounded-smd bg-white/50 shadow-sm text-gray-500 text-center">
+                                     Search for an item or select one to view details.
+                                 </div>
+                             )}
+                         </div>
+                     </CSSTransition>
+                 </SwitchTransition>
             </div>
         </div>
     );
 }
 
-import { VotePage } from './VotePage';
 function App() {
     return (
         <Routes>
@@ -769,6 +780,5 @@ function App() {
         </Routes>
     );
 }
-
 
 export default App
