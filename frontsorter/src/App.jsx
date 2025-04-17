@@ -116,13 +116,13 @@ const fetchEntityDetailsFn = async (pk_namespace, pk) => {
 function ChildListItem({ child, onItemClick }) {
     return (
         <div
-            className="flex items-center gap-2 px-2 py-1 rounded-smd cursor-pointer hover:bg-gray-50 hover:text-brand-600"
+            className="flex items-center gap-2 px-2 py-1.5 rounded-smd cursor-pointer hover:bg-gray-100 hover:text-brand-600 transition-colors duration-100 ease-in-out"
             onClick={(e) => onItemClick(e, child.pk_namespace, child.pk)}
         >
             {child.profile_picture_url ? (
                 <img src={child.profile_picture_url} alt={child.title || 'Child item image'} className="w-7 h-7 rounded-smd object-cover flex-shrink-0" />
             ) : (
-                <div className="w-7 h-7 bg-gray-200 inline-flex items-center justify-center text-gray-400 text-xl flex-shrink-0 rounded-smd">?</div>
+                <div className="w-7 h-7 bg-gray-100 border border-gray-200 inline-flex items-center justify-center text-gray-400 text-lg flex-shrink-0 rounded-smd">?</div>
             )}
             <span className="truncate flex-1">{child.title}</span>
         </div>
@@ -192,17 +192,17 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
     // Common details based on type
     if (metadata?.artists && Array.isArray(metadata.artists)) {
         detailsList.push(
-            <li key="artists"><strong>Artist(s):</strong> {formatArtists(metadata.artists)}</li>
+            <li key="artists"><span className="font-medium text-gray-600">Artist(s):</span> {formatArtists(metadata.artists)}</li>
         );
     }
      if (metadata?.release_date) {
         detailsList.push(
-            <li key="release"><strong>Released:</strong> {metadata.release_date}</li>
+            <li key="release"><span className="font-medium text-gray-600">Released:</span> {metadata.release_date}</li>
         );
     }
      if (metadata?.label) {
         detailsList.push(
-            <li key="label"><strong>Label:</strong> {metadata.label}</li>
+            <li key="label"><span className="font-medium text-gray-600">Label:</span> {metadata.label}</li>
         );
     }
     // Add more specific details based on entityType if needed...
@@ -233,7 +233,7 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
             {/* Render Parents */}
             {parents && parents.length > 0 && (
                 <div className="text-xs text-gray-600">
-                    <span className="font-medium text-gray-700">Part of: </span>
+                    <span className="font-semibold text-gray-700 mr-1">Part of:</span>
                     {parents.map((parent, index) => {
                         const parentType = parent.pk_namespace.split('.')[1];
                         return (
@@ -249,12 +249,12 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
                     })}
                 </div>
             )}
-            <div className="flex gap-4">
-                {imageElement}
+            <div className="flex gap-5">
+                {imageElement || <div className="w-40 h-40 bg-gray-100 border border-gray-200 rounded-smd shadow flex items-center justify-center text-gray-400 text-4xl flex-shrink-0">?</div>}
                 <div className="flex-1">
                     {basicInfo}
                     {detailsList.length > 0 && (
-                         <ul className="mt-2 space-y-1 text-sm text-gray-700 list-none">
+                         <ul className="mt-2 space-y-1.5 text-sm text-gray-700 list-none">
                              {detailsList}
                          </ul>
                     )}
@@ -262,7 +262,7 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
             </div>
             {/* Render Children - Grouped by Type */}
             {sortedChildTypes.length > 0 && (
-                <div className="mt-2 pt-3 border-t border-gray-100">
+                <div className="mt-4 pt-4 border-t border-gray-100">
                     {sortedChildTypes.map(childType => {
                         const childrenOfType = groupedChildren[childType];
                         let itemPairElement = null;
@@ -283,7 +283,11 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
                             const item2ImageUrl = item2.profile_picture_url;
                             const voteLink = `/vote?parent_ns=${encodeURIComponent(entity.pk_namespace)}`
                             + `&parent_pk=${encodeURIComponent(entity.pk)}`
-                            + `&type=${encodeURIComponent(childType)}`;
+                            + `&type=${encodeURIComponent(childType)}`
+                            + `&left_ns=${encodeURIComponent(item1.pk_namespace)}`
+                            + `&left_pk=${encodeURIComponent(item1.pk)}`
+                            + `&right_ns=${encodeURIComponent(item2.pk_namespace)}`
+                            + `&right_pk=${encodeURIComponent(item2.pk)}`;
 
                             itemPairElement = (
                                 <Link to={voteLink} className="cursor-pointer my-3 p-3 border border-brand-200 rounded-smd bg-brand-50/40 flex items-center justify-around gap-2 relative group no-underline transition transform hover:-translate-y-0.5">
@@ -312,12 +316,12 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
 
 
                         return (
-                            <div key={childType} className="mb-3">
-                                <h5 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+                            <div key={childType} className="mb-4">
+                                <h5 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">
                                     {childType.replace(/^spotify\./, '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                                 </h5>
                                 {itemPairElement}
-                                <div className="text-sm text-gray-700 space-y-0.5">
+                                <div className="text-sm text-gray-700 space-y-1">
                                     {childrenOfType.map((child) => (
                                         <ChildListItem
                                             key={`${child.pk_namespace}-${child.pk}`}
