@@ -8,6 +8,7 @@ import { useDebounce } from 'use-debounce';
 // Import CSSTransition for animations (Step 9)
 import { CSSTransition, SwitchTransition } from 'react-transition-group';
 import { VotePage } from './VotePage';
+import SpotifyPlayer from './SpotifyPlayer'; // Import the new component
 import './App.css'
 
 // Helper function to format artist names
@@ -138,6 +139,7 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
     const { entity, parents, children } = entityDetails;
     const { title, pk_namespace, pk, metadata } = entity;
     const entityType = pk_namespace.split('.')[1]; // e.g., 'album', 'artist', 'track'
+    const spotifyUri = `spotify:${entityType}:${pk}`; // Construct Spotify URI
 
     // Handler for manual ensure button
     const handleManualEnsure = () => {
@@ -228,6 +230,10 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
     const sortedChildTypes = Object.keys(groupedChildren).sort();
     // --- End Grouping ---
 
+    // Conditionally render the Spotify Player for tracks
+    const trackPlayer = entityType === 'track'
+        ? <SpotifyPlayer uri={spotifyUri} /> : null;
+
     return (
         <div className="bg-white shadow-card border border-gray-100 rounded-smd p-5 flex flex-col gap-5">
             {/* Render Parents */}
@@ -253,6 +259,7 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
                 {imageElement || <div className="w-40 h-40 bg-gray-100 border border-gray-200 rounded-smd shadow flex items-center justify-center text-gray-400 text-4xl flex-shrink-0">?</div>}
                 <div className="flex-1">
                     {basicInfo}
+                    {trackPlayer}
                     {detailsList.length > 0 && (
                          <ul className="mt-2 space-y-1.5 text-sm text-gray-700 list-none">
                              {detailsList}
