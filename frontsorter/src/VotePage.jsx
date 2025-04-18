@@ -44,7 +44,7 @@ function VoteItemDisplay({ item, isDisabled }) { // Removed isSelected, pk is un
     // Link wrapper will handle navigation
     return (
         <div
-            className={`flex flex-col items-center p-3 border rounded-lg shadow-md transition-all duration-200 ease-in-out w-40 ${isDisabled ? 'opacity-50' : 'bg-white'}`}
+            className={`flex flex-col items-center p-3 transition-all duration-200 ease-in-out w-40 ${isDisabled ? 'opacity-50' : 'bg-white'}`}
         >
             {imageUrl ? (
                 <img src={imageUrl} alt={`Cover for ${title}`} className="w-28 h-28 object-cover rounded-md mb-2 shadow" />
@@ -141,7 +141,7 @@ function VotePage() {
 
                 {/* Only display items and slider if both queries are successful */}
                 {isSuccess && leftItem && rightItem && (
-                    <div className="flex flex-col items-center justify-center gap-6 bg-white p-6 rounded-lg shadow-lg border border-gray-100">
+                    <div className="flex flex-col items-center justify-center gap-6 bg-white p-6">
                         <div className="flex w-full items-center justify-between gap-4">
                             {/* Left Item - Wrapped in Link */}
                             <Link to={`/?pk_namespace=${encodeURIComponent(left_ns)}&pk=${encodeURIComponent(left_pk)}`} className="no-underline hover:opacity-80 transition-opacity">
@@ -151,9 +151,10 @@ function VotePage() {
                             {/* Slider */}
                             <div className="flex-grow px-4">
                                 <input
+                                    id="slider"
                                     type="range"
-                                    min="0"
-                                    max="100"
+                                    min="-50"
+                                    max="50"
                                     value={sliderValue}
                                     onChange={handleSliderChange}
                                     className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-brand-500"
