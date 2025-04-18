@@ -1,6 +1,7 @@
 import { useSearchParams, Link } from 'react-router-dom';
 // Import react-query hooks
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react'; // Import useState
 
 // Helper function to get the smallest image URL (can be moved to a utils file)
 const getSmallestImageUrl = (images) => {
@@ -32,25 +33,25 @@ const fetchEntityFn = async (pk_namespace, pk) => {
 };
 
 
-// --- Vote Item Component ---
-function VoteItemDisplay({ item, onItemSelect, isSelected, isDisabled }) {
-    if (!item) return null; // Should not happen if query is successful
+// --- Vote Item Component (Now just displays, no voting click) ---
+function VoteItemDisplay({ item, isDisabled }) { // Removed isSelected, pk is unused now
+    if (!item) return null;
 
-    const { title, pk_namespace, pk, metadata } = item;
-    const imageUrl = item.profile_picture_url || getSmallestImageUrl(metadata?.images); // Use profile_picture_url first if available
+    const { title, pk_namespace, metadata } = item;
+    const imageUrl = item.profile_picture_url || getSmallestImageUrl(metadata?.images);
     const entityType = pk_namespace.split('.')[1] || 'item';
 
+    // Link wrapper will handle navigation
     return (
         <div
-            className={`flex flex-col items-center p-4 border rounded-lg shadow-md cursor-pointer transition-all duration-200 ease-in-out w-full sm:w-52 ${isSelected ? 'border-brand-500 ring-2 ring-brand-300 bg-brand-50/50' : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-lg'} ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-            onClick={() => !isDisabled && onItemSelect && onItemSelect(pk_namespace, pk)}
+            className={`flex flex-col items-center p-3 border rounded-lg shadow-md transition-all duration-200 ease-in-out w-40 ${isDisabled ? 'opacity-50' : 'bg-white'}`}
         >
             {imageUrl ? (
-                <img src={imageUrl} alt={`Cover for ${title}`} className="w-32 h-32 object-cover rounded-md mb-3 shadow" />
+                <img src={imageUrl} alt={`Cover for ${title}`} className="w-28 h-28 object-cover rounded-md mb-2 shadow" />
             ) : (
-                <div className="w-32 h-32 bg-gray-200 rounded-md mb-3 shadow flex items-center justify-center text-gray-400 text-4xl">?</div>
+                <div className="w-28 h-28 bg-gray-200 rounded-md mb-2 shadow flex items-center justify-center text-gray-400 text-3xl">?</div>
             )}
-            <h4 className="text-sm font-semibold text-center truncate w-full" title={title}>{title}</h4>
+            <h4 className="text-xs font-semibold text-center truncate w-full" title={title}>{title}</h4>
             <p className="text-xs text-gray-500 capitalize">[{entityType}]</p>
         </div>
     );
@@ -62,66 +63,66 @@ function VotePage() {
     const [searchParams] = useSearchParams();
     const parentNs = searchParams.get('parent_ns');
     const parentPk = searchParams.get('parent_pk');
-    // const childType = searchParams.get('type'); // Type being voted on (e.g., spotify.track) - Currently unused
+    // const childType = searchParams.get('type'); // Currently unused
     const left_ns = searchParams.get('left_ns');
     const left_pk = searchParams.get('left_pk');
     const right_ns = searchParams.get('right_ns');
     const right_pk = searchParams.get('right_pk');
 
+    // State for the slider value (0-100, default 50)
+    const [sliderValue, setSliderValue] = useState(50);
+
     const queryOptions = {
         staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-        retry: 1, // Retry once on error
+        retry: 1,
     };
 
-    // React Query to fetch details for the LEFT item
-    const leftQuery = useQuery({
-        queryKey: ['entity', left_ns, left_pk], // Use standard entity key
-        queryFn: () => fetchEntityFn(left_ns, left_pk),
-        enabled: !!left_ns && !!left_pk, // Only run query if params are present
-        ...queryOptions,
-    });
+    // --- Data Fetching --- (No changes here)
+    const leftQuery = useQuery({ queryKey: ['entity', left_ns, left_pk], queryFn: () => fetchEntityFn(left_ns, left_pk), enabled: !!left_ns && !!left_pk, ...queryOptions });
+    const rightQuery = useQuery({ queryKey: ['entity', right_ns, right_pk], queryFn: () => fetchEntityFn(right_ns, right_pk), enabled: !!right_ns && !!right_pk, ...queryOptions });
 
-    // React Query to fetch details for the RIGHT item
-    const rightQuery = useQuery({
-        queryKey: ['entity', right_ns, right_pk], // Use standard entity key
-        queryFn: () => fetchEntityFn(right_ns, right_pk),
-        enabled: !!right_ns && !!right_pk, // Only run query if params are present
-        ...queryOptions,
-    });
-
-    // TODO: Implement voting logic (useMutation?)
-    const handleVote = (winner_ns, winner_pk, loser_ns, loser_pk) => {
-        console.log("Vote cast for:", winner_ns, winner_pk);
-        console.log("Loser:", loser_ns, loser_pk);
-        // Here you would call a mutation to record the vote
-        // e.g., voteMutation.mutate({ winner_ns, winner_pk, loser_ns, loser_pk, parentNs, parentPk });
-        alert(`Voted for ${winner_pk}! (Implementation pending)`);
-        // TODO: Potentially navigate away or fetch next pair after voting
+    // --- Event Handlers ---
+    const handleSliderChange = (event) => {
+        setSliderValue(event.target.value);
     };
 
-    // Combine loading/error states
+    // Updated handleVote to take slider value
+    const handleVoteSubmit = () => {
+        if (!leftQuery.data || !rightQuery.data) return; // Ensure data is loaded
+
+        console.log("Vote Submitted:");
+        console.log("  Parent:", parentNs, parentPk);
+        console.log("  Left Item:", left_ns, left_pk);
+        console.log("  Right Item:", right_ns, right_pk);
+        console.log("  Slider Value:", sliderValue); // 0 = Left, 100 = Right, 50 = Neutral
+
+        // TODO: Call mutation to submit vote data { parentNs, parentPk, left_ns, left_pk, right_ns, right_pk, value: sliderValue }
+        alert(`Vote submitted with value: ${sliderValue} (Implementation pending)`);
+
+        // TODO: Potentially navigate away or fetch next pair
+    };
+
+    // --- Render Logic --- (No changes needed for state calculation)
     const isLoading = leftQuery.isLoading || rightQuery.isLoading;
     const isError = leftQuery.isError || rightQuery.isError;
-    // Combine potential errors (show first one)
     const error = leftQuery.error || rightQuery.error;
-    // Check if *both* queries have succeeded to display data
     const isSuccess = leftQuery.isSuccess && rightQuery.isSuccess;
-
     const leftItem = leftQuery.data;
     const rightItem = rightQuery.data;
 
-    // Parent link (if parent info is available)
+    // --- Parent Link --- (No changes needed)
     const parentLink = parentNs && parentPk ? (
         <Link to={`/?pk_namespace=${encodeURIComponent(parentNs)}&pk=${encodeURIComponent(parentPk)}`} className="text-brand-600 hover:underline text-sm">
             &larr; Back to Parent
         </Link>
     ) : null;
 
+    // --- Main Return ---
     return (
         <div className="min-h-screen bg-brand-50/60 flex flex-col items-center pt-10 pb-10 px-4">
             <div className="w-full max-w-3xl">
                 <div className="mb-6 flex justify-between items-center">
-                    <h2 className="text-2xl font-bold text-gray-800">Which one is better?</h2>
+                    <h2 className="text-2xl font-bold text-gray-800">How much better?</h2>
                     {parentLink}
                 </div>
 
@@ -129,44 +130,60 @@ function VotePage() {
                     <div className="text-center text-gray-500 py-10">Loading pair...</div>
                 )}
 
-                {/* Display error if either query fails */}
                 {isError && (
                     <div className="text-center text-red-600 bg-red-50 border border-red-200 p-4 rounded-md shadow-sm">
                         <p>Error loading voting pair:</p>
-                        {/* Display specific error messages */}
                         {leftQuery.isError && <p className="text-sm mt-1">Left item error: {leftQuery.error?.message || 'Unknown error'}</p>}
                         {rightQuery.isError && <p className="text-sm mt-1">Right item error: {rightQuery.error?.message || 'Unknown error'}</p>}
                         {error?.status === 404 && <p className="text-sm mt-1">Could not find one or both items.</p>}
                     </div>
                 )}
 
-                {/* Only display items if both queries are successful */}
+                {/* Only display items and slider if both queries are successful */}
                 {isSuccess && leftItem && rightItem && (
-                    <div className="flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-10">
-                        {/* Left Item */}
-                        <VoteItemDisplay
-                            item={leftItem}
-                            onItemSelect={() => handleVote(left_ns, left_pk, right_ns, right_pk)}
-                        />
+                    <div className="flex flex-col items-center justify-center gap-6 bg-white p-6 rounded-lg shadow-lg border border-gray-100">
+                        <div className="flex w-full items-center justify-between gap-4">
+                            {/* Left Item - Wrapped in Link */}
+                            <Link to={`/?pk_namespace=${encodeURIComponent(left_ns)}&pk=${encodeURIComponent(left_pk)}`} className="no-underline hover:opacity-80 transition-opacity">
+                                <VoteItemDisplay item={leftItem} />
+                            </Link>
 
-                        {/* VS Separator */}
-                        <div className="text-3xl font-extrabold text-gray-400 my-4 sm:my-0">VS</div>
+                            {/* Slider */}
+                            <div className="flex-grow px-4">
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="100"
+                                    value={sliderValue}
+                                    onChange={handleSliderChange}
+                                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-brand-500"
+                                />
+                                <div className="text-center mt-2 text-sm font-medium text-gray-700">{sliderValue}</div>
+                            </div>
 
-                        {/* Right Item */}
-                        <VoteItemDisplay
-                            item={rightItem}
-                            onItemSelect={() => handleVote(right_ns, right_pk, left_ns, left_pk)}
-                        />
+                            {/* Right Item - Wrapped in Link */}
+                            <Link to={`/?pk_namespace=${encodeURIComponent(right_ns)}&pk=${encodeURIComponent(right_pk)}`} className="no-underline hover:opacity-80 transition-opacity">
+                                <VoteItemDisplay item={rightItem} />
+                            </Link>
+                        </div>
+
+                        {/* Submit Button */}
+                        <button
+                            onClick={handleVoteSubmit}
+                            className="mt-6 px-6 py-2 bg-brand-600 font-semibold rounded-md shadow hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 transition-colors"
+                        >
+                            Submit Vote
+                        </button>
                     </div>
                 )}
 
-                {/* Debug Info (Optional) - Updated to show status of both queries */}
+                {/* Optional Debug Info */}
                 {/* <div className="mt-8 p-3 bg-gray-50 border border-gray-200 rounded text-xs text-gray-600">
                     <p>Parent: {parentNs}/{parentPk}</p>
                     <p>Left: {left_ns}/{left_pk} (Status: {leftQuery.status})</p>
                     <p>Right: {right_ns}/{right_pk} (Status: {rightQuery.status})</p>
+                    <p>Slider: {sliderValue}</p>
                 </div> */}
-
             </div>
         </div>
     );
