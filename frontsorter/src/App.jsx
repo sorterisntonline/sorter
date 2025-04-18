@@ -164,7 +164,7 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
                  <button
                      onClick={handleManualEnsure}
                      disabled={isEnsuring}
-                     className={`text-xs px-2 py-0.5 rounded ${isEnsuring ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-brand-100 text-brand-700 hover:bg-brand-200'}`}
+                     className={`text-xs cursor-pointer px-2 py-0.5 rounded ${isEnsuring ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-brand-100 text-brand-700 hover:bg-brand-200'}`}
                      title={`Manually trigger backend sync for ${title}`}
                  >
                      {isEnsuring ? 'Syncing...' : 'Sync'}
@@ -188,26 +188,6 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
     } else {
         imageElement = <div className="w-40 h-40 bg-gray-200 rounded-smd shadow flex items-center justify-center text-gray-400 text-4xl flex-shrink-0">?</div>;
     }
-
-    let detailsList = [];
-
-    // Common details based on type
-    if (metadata?.artists && Array.isArray(metadata.artists)) {
-        detailsList.push(
-            <li key="artists"><span className="font-medium text-gray-600">Artist(s):</span> {formatArtists(metadata.artists)}</li>
-        );
-    }
-     if (metadata?.release_date) {
-        detailsList.push(
-            <li key="release"><span className="font-medium text-gray-600">Released:</span> {metadata.release_date}</li>
-        );
-    }
-     if (metadata?.label) {
-        detailsList.push(
-            <li key="label"><span className="font-medium text-gray-600">Label:</span> {metadata.label}</li>
-        );
-    }
-    // Add more specific details based on entityType if needed...
 
     // Handler for clicking parent/child links
     const handleLinkClick = (e, pk_ns, pk) => {
@@ -260,11 +240,6 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
                 <div className="flex-1">
                     {basicInfo}
                     {trackPlayer}
-                    {detailsList.length > 0 && (
-                         <ul className="mt-2 space-y-1.5 text-sm text-gray-700 list-none">
-                             {detailsList}
-                         </ul>
-                    )}
                 </div>
             </div>
             {/* Render Children - Grouped by Type */}
