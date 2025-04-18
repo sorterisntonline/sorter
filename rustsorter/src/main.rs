@@ -110,8 +110,8 @@ fn api_routes(app_state: crate::app_state::AppState) -> Router<crate::app_state:
         .route("/protected", get(protected_route))
         .nest("/keys", crate::api_key::routes())
         .nest("/entity", crate::entity::routes())
-        .layer(middleware::from_fn_with_state(
-            app_state,
-            crate::auth_middleware::auth,
-        ))
+        //.layer(middleware::from_fn_with_state(
+            //app_state,
+            //crate::auth_middleware::auth,
+        //))
 }

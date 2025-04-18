@@ -9,24 +9,25 @@ const getSmallestImageUrl = (images) => {
     return images[images.length - 1].url;
 };
 
-// --- API Fetching Function ---
-const fetchVotePairDetailsFn = async (left_ns, left_pk, right_ns, right_pk) => {
+// --- API Fetching Function for a SINGLE entity ---
+const fetchEntityFn = async (pk_namespace, pk) => {
     // Basic validation
-    if (!left_ns || !left_pk || !right_ns || !right_pk) {
-        throw new Error("Missing identifiers for voting pair.");
+    if (!pk_namespace || !pk) {
+        throw new Error("Missing identifiers for entity fetch.");
     }
-    const apiUrl = `/api/vote_pair_details?left_ns=${encodeURIComponent(left_ns)}&left_pk=${encodeURIComponent(left_pk)}&right_ns=${encodeURIComponent(right_ns)}&right_pk=${encodeURIComponent(right_pk)}`;
-    console.log("Fetching vote pair details from:", apiUrl);
+    // Uses the existing endpoint from entity.rs
+    const apiUrl = `/api/entity/${encodeURIComponent(pk_namespace)}/${encodeURIComponent(pk)}`;
+    console.log("Fetching entity details from:", apiUrl);
     const response = await fetch(apiUrl);
 
     if (!response.ok) {
         const errorText = await response.text();
         const error = new Error(`HTTP error! status: ${response.status} for ${apiUrl}. ${errorText}`);
-        error.status = response.status;
+        error.status = response.status; // Attach status code
         throw error;
     }
     const data = await response.json();
-    // Expect data format: { left: { entity details... }, right: { entity details... } }
+    // Expect data format: { pk_namespace, pk, title, profile_picture_url, metadata, created_at }
     return data;
 };
 
@@ -67,13 +68,25 @@ function VotePage() {
     const right_ns = searchParams.get('right_ns');
     const right_pk = searchParams.get('right_pk');
 
-    // React Query to fetch details for the pair
-    const votePairQuery = useQuery({
-        queryKey: ['votePairDetails', left_ns, left_pk, right_ns, right_pk],
-        queryFn: () => fetchVotePairDetailsFn(left_ns, left_pk, right_ns, right_pk),
-        enabled: !!left_ns && !!left_pk && !!right_ns && !!right_pk, // Only run query if all params are present
+    const queryOptions = {
         staleTime: 5 * 60 * 1000, // Cache for 5 minutes
         retry: 1, // Retry once on error
+    };
+
+    // React Query to fetch details for the LEFT item
+    const leftQuery = useQuery({
+        queryKey: ['entity', left_ns, left_pk], // Use standard entity key
+        queryFn: () => fetchEntityFn(left_ns, left_pk),
+        enabled: !!left_ns && !!left_pk, // Only run query if params are present
+        ...queryOptions,
+    });
+
+    // React Query to fetch details for the RIGHT item
+    const rightQuery = useQuery({
+        queryKey: ['entity', right_ns, right_pk], // Use standard entity key
+        queryFn: () => fetchEntityFn(right_ns, right_pk),
+        enabled: !!right_ns && !!right_pk, // Only run query if params are present
+        ...queryOptions,
     });
 
     // TODO: Implement voting logic (useMutation?)
@@ -86,13 +99,16 @@ function VotePage() {
         // TODO: Potentially navigate away or fetch next pair after voting
     };
 
-    const isLoading = votePairQuery.isLoading;
-    const isError = votePairQuery.isError;
-    const error = votePairQuery.error;
-    const data = votePairQuery.data;
+    // Combine loading/error states
+    const isLoading = leftQuery.isLoading || rightQuery.isLoading;
+    const isError = leftQuery.isError || rightQuery.isError;
+    // Combine potential errors (show first one)
+    const error = leftQuery.error || rightQuery.error;
+    // Check if *both* queries have succeeded to display data
+    const isSuccess = leftQuery.isSuccess && rightQuery.isSuccess;
 
-    const leftItem = data?.left;
-    const rightItem = data?.right;
+    const leftItem = leftQuery.data;
+    const rightItem = rightQuery.data;
 
     // Parent link (if parent info is available)
     const parentLink = parentNs && parentPk ? (
@@ -113,15 +129,19 @@ function VotePage() {
                     <div className="text-center text-gray-500 py-10">Loading pair...</div>
                 )}
 
+                {/* Display error if either query fails */}
                 {isError && (
                     <div className="text-center text-red-600 bg-red-50 border border-red-200 p-4 rounded-md shadow-sm">
                         <p>Error loading voting pair:</p>
-                        <p className="text-sm mt-1">{error?.message || 'Unknown error'}</p>
+                        {/* Display specific error messages */}
+                        {leftQuery.isError && <p className="text-sm mt-1">Left item error: {leftQuery.error?.message || 'Unknown error'}</p>}
+                        {rightQuery.isError && <p className="text-sm mt-1">Right item error: {rightQuery.error?.message || 'Unknown error'}</p>}
                         {error?.status === 404 && <p className="text-sm mt-1">Could not find one or both items.</p>}
                     </div>
                 )}
 
-                {data && leftItem && rightItem && (
+                {/* Only display items if both queries are successful */}
+                {isSuccess && leftItem && rightItem && (
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-10">
                         {/* Left Item */}
                         <VoteItemDisplay
@@ -140,13 +160,11 @@ function VotePage() {
                     </div>
                 )}
 
-                {/* Debug Info (Optional) */}
+                {/* Debug Info (Optional) - Updated to show status of both queries */}
                 {/* <div className="mt-8 p-3 bg-gray-50 border border-gray-200 rounded text-xs text-gray-600">
                     <p>Parent: {parentNs}/{parentPk}</p>
-                    <p>Type: {childType}</p>
-                    <p>Left: {left_ns}/{left_pk}</p>
-                    <p>Right: {right_ns}/{right_pk}</p>
-                    <p>Query Status: {votePairQuery.status}</p>
+                    <p>Left: {left_ns}/{left_pk} (Status: {leftQuery.status})</p>
+                    <p>Right: {right_ns}/{right_pk} (Status: {rightQuery.status})</p>
                 </div> */}
 
             </div>
