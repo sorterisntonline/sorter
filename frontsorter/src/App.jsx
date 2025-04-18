@@ -154,8 +154,8 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
         }
     };
 
-    // Basic info: Title, Type and Sync Button - always shown
-    const basicInfo = (
+    // Basic info: Title and Type
+    let basicInfo = (
          <h3 className="text-2xl font-semibold flex items-center gap-2 mb-2">
              <span>{title}</span>
              <span className="text-sm font-normal text-gray-500">[{entityType}]</span>
@@ -173,46 +173,41 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
          </h3>
     );
 
-    // Image element - only for non-tracks
     let imageElement = null;
-    if (entityType !== 'track') {
-        if (entity.profile_picture_url) {
-            const imageUrl = entity.profile_picture_url;
-            if (imageUrl) {
-                 imageElement = (
-                     <img
-                         src={imageUrl}
-                         alt={`Cover for ${title}`}
-                         className="w-40 h-40 object-cover rounded-smd shadow"
-                     />
-                 );
-            }
-        } else {
-            imageElement = <div className="w-40 h-40 bg-gray-200 rounded-smd shadow flex items-center justify-center text-gray-400 text-4xl flex-shrink-0">?</div>;
+    if (entity.profile_picture_url) {
+        const imageUrl = entity.profile_picture_url;
+        if (imageUrl) {
+             imageElement = (
+                 <img
+                     src={imageUrl}
+                     alt={`Cover for ${title}`}
+                     className="w-40 h-40 object-cover rounded-smd shadow"
+                 />
+             );
         }
+    } else {
+        imageElement = <div className="w-40 h-40 bg-gray-200 rounded-smd shadow flex items-center justify-center text-gray-400 text-4xl flex-shrink-0">?</div>;
     }
 
-    // Details list - only for non-tracks
     let detailsList = [];
-    if (entityType !== 'track') {
-        if (metadata?.artists && Array.isArray(metadata.artists)) {
-            detailsList.push(
-                <li key="artists"><span className="font-medium text-gray-600">Artist(s):</span> {formatArtists(metadata.artists)}</li>
-            );
-        }
-         if (metadata?.release_date) {
-            detailsList.push(
-                <li key="release"><span className="font-medium text-gray-600">Released:</span> {metadata.release_date}</li>
-            );
-        }
-         if (metadata?.label) {
-            detailsList.push(
-                <li key="label"><span className="font-medium text-gray-600">Label:</span> {metadata.label}</li>
-            );
-        }
-        // Add more specific details based on entityType if needed...
-    }
 
+    // Common details based on type
+    if (metadata?.artists && Array.isArray(metadata.artists)) {
+        detailsList.push(
+            <li key="artists"><span className="font-medium text-gray-600">Artist(s):</span> {formatArtists(metadata.artists)}</li>
+        );
+    }
+     if (metadata?.release_date) {
+        detailsList.push(
+            <li key="release"><span className="font-medium text-gray-600">Released:</span> {metadata.release_date}</li>
+        );
+    }
+     if (metadata?.label) {
+        detailsList.push(
+            <li key="label"><span className="font-medium text-gray-600">Label:</span> {metadata.label}</li>
+        );
+    }
+    // Add more specific details based on entityType if needed...
 
     // Handler for clicking parent/child links
     const handleLinkClick = (e, pk_ns, pk) => {
@@ -241,7 +236,7 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
 
     return (
         <div className="bg-white shadow-card border border-gray-100 rounded-smd p-5 flex flex-col gap-5">
-            {/* Render Parents - always shown */}
+            {/* Render Parents */}
             {parents && parents.length > 0 && (
                 <div className="text-xs text-gray-600">
                     <span className="font-semibold text-gray-700 mr-1">Part of:</span>
@@ -260,105 +255,92 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
                     })}
                 </div>
             )}
-
-            {/* Always render basic info (Title, Type, Sync Button) */}
-            {basicInfo}
-
-            {/* Conditional content based on type */}
-            {entityType === 'track' ? (
-                // For tracks, just show the player
-                trackPlayer
-            ) : (
-                // For non-tracks, show image, details, and children
-                <>
-                    <div className="flex gap-5">
-                        {imageElement || <div className="w-40 h-40 bg-gray-100 border border-gray-200 rounded-smd shadow flex items-center justify-center text-gray-400 text-4xl flex-shrink-0">?</div>}
-                        <div className="flex-1">
-                            {/* Basic info is rendered above */}
-                            {/* trackPlayer is null here because entityType is not 'track' */}
-                            {detailsList.length > 0 && (
-                                 <ul className="mt-2 space-y-1.5 text-sm text-gray-700 list-none">
-                                     {detailsList}
-                                 </ul>
-                            )}
-                        </div>
-                    </div>
-                    {/* Render Children - Grouped by Type */}
-                    {sortedChildTypes.length > 0 && (
-                        <div className="mt-4 pt-4 border-t border-gray-100">
-                            {sortedChildTypes.map(childType => {
-                                const childrenOfType = groupedChildren[childType];
-                                let itemPairElement = null;
-
-                                // --- BEGIN: Item Pair Preview (Step 7) ---
-                                if (childrenOfType && childrenOfType.length >= 2) {
-                                    // Select two random distinct indices
-                                    let index1 = Math.floor(Math.random() * childrenOfType.length);
-                                    let index2 = Math.floor(Math.random() * childrenOfType.length);
-                                    // Ensure distinct indices if possible and length > 1
-                                    while (index1 === index2 && childrenOfType.length > 1) {
-                                        index2 = Math.floor(Math.random() * childrenOfType.length);
-                                    }
-
-                                    const item1 = childrenOfType[index1];
-                                    const item2 = childrenOfType[index2];
-                                    const item1ImageUrl = item1.profile_picture_url;
-                                    const item2ImageUrl = item2.profile_picture_url;
-                                    const voteLink = `/vote?parent_ns=${encodeURIComponent(entity.pk_namespace)}`
-                                    + `&parent_pk=${encodeURIComponent(entity.pk)}`
-                                    + `&type=${encodeURIComponent(childType)}`
-                                    + `&left_ns=${encodeURIComponent(item1.pk_namespace)}`
-                                    + `&left_pk=${encodeURIComponent(item1.pk)}`
-                                    + `&right_ns=${encodeURIComponent(item2.pk_namespace)}`
-                                    + `&right_pk=${encodeURIComponent(item2.pk)}`;
-
-                                    itemPairElement = (
-                                        <Link to={voteLink} className="cursor-pointer my-3 p-3 border border-brand-200 rounded-smd bg-brand-50/40 flex items-center justify-around gap-2 relative group no-underline transition transform hover:-translate-y-0.5">
-                                            {/* Item 1 Preview */}
-                                            <div className="text-center flex flex-col items-center w-1/3">
-                                                {item1ImageUrl && <img src={item1ImageUrl} alt={item1.title} className="w-12 h-12 object-cover rounded-smd mb-1 shadow"/>}
-                                                {!item1ImageUrl && <div className="w-12 h-12 bg-gray-200 rounded-smd mb-1 flex items-center justify-center text-gray-400 text-xl shadow">?</div>}
-                                                <span className="text-xs text-gray-700 truncate w-full px-1">{item1.title}</span>
-                                            </div>
-
-                                            {/* Overlay VOTE text on hover */}
-                                            <div className="absolute inset-0 flex items-center justify-center bg-brand-600/80 opacity-0 group-hover:opacity-100 transition-opacity rounded-smd">
-                                                <span className="text-white text-3xl tracking-wide font-bold">VOTE</span>
-                                            </div>
-
-                                            {/* Item 2 Preview */}
-                                            <div className="text-center flex flex-col items-center w-1/3">
-                                                {item2ImageUrl && <img src={item2ImageUrl} alt={item2.title} className="w-12 h-12 object-cover rounded-smd mb-1 shadow"/>}
-                                                {!item2ImageUrl && <div className="w-12 h-12 bg-gray-200 rounded-smd mb-1 flex items-center justify-center text-gray-400 text-xl shadow">?</div>}
-                                                <span className="text-xs text-gray-700 truncate w-full px-1">{item2.title}</span>
-                                            </div>
-                                        </Link>
-                                    );
-                                }
-                                // --- END: Add Item Pair Preview ---
-
-
-                                return (
-                                    <div key={childType} className="mb-4">
-                                        <h5 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">
-                                            {childType.replace(/^spotify\./, '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                                        </h5>
-                                        {itemPairElement}
-                                        <div className="text-sm text-gray-700 space-y-1">
-                                            {childrenOfType.map((child) => (
-                                                <ChildListItem
-                                                    key={`${child.pk_namespace}-${child.pk}`}
-                                                    child={child}
-                                                    onItemClick={handleLinkClick}
-                                                />
-                                            ))}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
+            <div className="flex gap-5">
+                {imageElement || <div className="w-40 h-40 bg-gray-100 border border-gray-200 rounded-smd shadow flex items-center justify-center text-gray-400 text-4xl flex-shrink-0">?</div>}
+                <div className="flex-1">
+                    {basicInfo}
+                    {trackPlayer}
+                    {detailsList.length > 0 && (
+                         <ul className="mt-2 space-y-1.5 text-sm text-gray-700 list-none">
+                             {detailsList}
+                         </ul>
                     )}
-                </>
+                </div>
+            </div>
+            {/* Render Children - Grouped by Type */}
+            {sortedChildTypes.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                    {sortedChildTypes.map(childType => {
+                        const childrenOfType = groupedChildren[childType];
+                        let itemPairElement = null;
+
+                        // --- BEGIN: Item Pair Preview (Step 7) ---
+                        if (childrenOfType && childrenOfType.length >= 2) {
+                            // Select two random distinct indices
+                            let index1 = Math.floor(Math.random() * childrenOfType.length);
+                            let index2 = Math.floor(Math.random() * childrenOfType.length);
+                            // Ensure distinct indices if possible and length > 1
+                            while (index1 === index2 && childrenOfType.length > 1) {
+                                index2 = Math.floor(Math.random() * childrenOfType.length);
+                            }
+
+                            const item1 = childrenOfType[index1];
+                            const item2 = childrenOfType[index2];
+                            const item1ImageUrl = item1.profile_picture_url;
+                            const item2ImageUrl = item2.profile_picture_url;
+                            const voteLink = `/vote?parent_ns=${encodeURIComponent(entity.pk_namespace)}`
+                            + `&parent_pk=${encodeURIComponent(entity.pk)}`
+                            + `&type=${encodeURIComponent(childType)}`
+                            + `&left_ns=${encodeURIComponent(item1.pk_namespace)}`
+                            + `&left_pk=${encodeURIComponent(item1.pk)}`
+                            + `&right_ns=${encodeURIComponent(item2.pk_namespace)}`
+                            + `&right_pk=${encodeURIComponent(item2.pk)}`;
+
+                            itemPairElement = (
+                                <Link to={voteLink} className="cursor-pointer my-3 p-3 border border-brand-200 rounded-smd bg-brand-50/40 flex items-center justify-around gap-2 relative group no-underline transition transform hover:-translate-y-0.5">
+                                    {/* Item 1 Preview */}
+                                    <div className="text-center flex flex-col items-center w-1/3">
+                                        {item1ImageUrl && <img src={item1ImageUrl} alt={item1.title} className="w-12 h-12 object-cover rounded-smd mb-1 shadow"/>}
+                                        {!item1ImageUrl && <div className="w-12 h-12 bg-gray-200 rounded-smd mb-1 flex items-center justify-center text-gray-400 text-xl shadow">?</div>}
+                                        <span className="text-xs text-gray-700 truncate w-full px-1">{item1.title}</span>
+                                    </div>
+
+                                    {/* Overlay VOTE text on hover */}
+                                    <div className="absolute inset-0 flex items-center justify-center bg-brand-600/80 opacity-0 group-hover:opacity-100 transition-opacity rounded-smd">
+                                        <span className="text-white text-3xl tracking-wide font-bold">VOTE</span>
+                                    </div>
+
+                                    {/* Item 2 Preview */}
+                                    <div className="text-center flex flex-col items-center w-1/3">
+                                        {item2ImageUrl && <img src={item2ImageUrl} alt={item2.title} className="w-12 h-12 object-cover rounded-smd mb-1 shadow"/>}
+                                        {!item2ImageUrl && <div className="w-12 h-12 bg-gray-200 rounded-smd mb-1 flex items-center justify-center text-gray-400 text-xl shadow">?</div>}
+                                        <span className="text-xs text-gray-700 truncate w-full px-1">{item2.title}</span>
+                                    </div>
+                                </Link>
+                            );
+                        }
+                        // --- END: Add Item Pair Preview ---
+
+
+                        return (
+                            <div key={childType} className="mb-4">
+                                <h5 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">
+                                    {childType.replace(/^spotify\./, '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                </h5>
+                                {itemPairElement}
+                                <div className="text-sm text-gray-700 space-y-1">
+                                    {childrenOfType.map((child) => (
+                                        <ChildListItem
+                                            key={`${child.pk_namespace}-${child.pk}`}
+                                            child={child}
+                                            onItemClick={handleLinkClick}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
             )}
         </div>
     );

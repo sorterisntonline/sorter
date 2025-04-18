@@ -52,12 +52,13 @@ function loadSpotifyScript() {
 
 
 /**
- * Renders a Spotify embed player.
+ * Renders a play button that transforms into a Spotify embed player.
  * Handles loading the Spotify iFrame API script if necessary.
  * @param {object} props - Component props.
  * @param {string} props.uri - The Spotify URI (e.g., "spotify:track:123").
  */
 function SpotifyPlayer({ uri }) {
+    const [isPlayerVisible, setIsPlayerVisible] = useState(false);
     const iframeContainerRef = useRef(null);
     const embedControllerRef = useRef(null);
     const uniqueId = useRef(`spotify-embed-${uri}-${Math.random().toString(36).substring(7)}`).current; // Unique ID for the container
@@ -92,8 +93,8 @@ function SpotifyPlayer({ uri }) {
             }
         };
 
-        // If the container exists (always try to create embed now)
-        if (iframeContainerRef.current) {
+        // If player should be visible and the container exists
+        if (isPlayerVisible && iframeContainerRef.current) {
             if (spotifyIframeApi) {
                 // API already loaded, create embed immediately
                  console.log('API was ready, creating embed.');
@@ -128,20 +129,38 @@ function SpotifyPlayer({ uri }) {
                 embedControllerRef.current = null;
             }
         };
-    // Depend only on URI now.
-    }, [uri, uniqueId]);
+    // Depend on visibility state and URI.
+    }, [isPlayerVisible, uri, uniqueId]); // uniqueId ensures stable ref if needed
+
+    const handlePlayClick = () => {
+        setIsPlayerVisible(true);
+    };
 
     return (
         <div className="spotify-player-container mt-3">
-            {/* Container for the iframe. Always rendered now. */}
-            <div
-                ref={iframeContainerRef}
-                id={uniqueId} // Use unique ID for the container
-                className="w-full h-[80px]" // Set size explicitly
-            >
-                {/* Spotify iframe will be injected here */}
-                {/* Optional: Add a loading indicator until the iframe loads */}
-            </div>
+            {!isPlayerVisible && (
+                <button
+                    onClick={handlePlayClick}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-green-600"
+                    aria-label={`Play preview for track ${uri}`}
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                        <path d="M6.3 2.841A1.5 1.5 0 0 0 4 4.11V15.89a1.5 1.5 0 0 0 2.3 1.269l9.344-5.89a1.5 1.5 0 0 0 0-2.538L6.3 2.84Z" />
+                    </svg>
+                    Play
+                </button>
+            )}
+            {/* Container for the iframe. Rendered when button is clicked. */}
+            {isPlayerVisible && (
+                <div
+                    ref={iframeContainerRef}
+                    id={uniqueId} // Use unique ID for the container
+                    className="w-full h-[80px]" // Set size explicitly
+                >
+                    {/* Spotify iframe will be injected here */}
+                    {/* Optional: Add a loading indicator until the iframe loads */}
+                </div>
+            )}
         </div>
     );
 }
