@@ -1,20 +1,24 @@
+pub mod api_key;
 pub mod app_state;
+pub mod auth_middleware;
+pub mod entity;
+pub mod entity_relationships;
 pub mod models;
 pub mod pagerank;
 pub mod pair;
+pub mod spotify;
+pub mod vote;
+
 use std::env;
 
+use crate::entity::get_entity_details;
+use crate::models::User;
+use anyhow::Result;
 use axum::{
-    Extension,
-    Json,
-    Router,
-    http::StatusCode,
-    middleware,
-    response::IntoResponse,
-    routing::get,
+    http::StatusCode, middleware, response::IntoResponse, routing::get, Extension, Json, Router,
 };
 use dotenv::dotenv;
-use rustsorter::models::User;
+use rspotify::{ClientCredsSpotify, Config, Credentials};
 use serde_json::json;
 use tower_http::trace::TraceLayer;
 
@@ -36,6 +40,25 @@ async fn protected_route(Extension(user): Extension<User>) -> impl IntoResponse 
         "authenticated_user": user.auth0_sub
         })),
     )
+}
+
+async fn get_spotify_client() -> Result<ClientCredsSpotify> {
+    let creds = Credentials::from_env().ok_or_else(|| anyhow::anyhow!("Spotify credentials (RSPOTIFY_CLIENT_ID, RSPOTIFY_CLIENT_SECRET) not found in environment"))?;
+
+    let config = Config {
+        token_refreshing: true,
+        ..Default::default()
+    };
+
+    let spotify = ClientCredsSpotify::with_config(creds, config);
+
+    spotify
+        .request_token()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to get Spotify token: {}", e))?;
+    log::info!("Successfully obtained Spotify token.");
+
+    Ok(spotify)
 }
 
 #[tokio::main]

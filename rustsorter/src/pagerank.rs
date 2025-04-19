@@ -5,6 +5,7 @@ use graph::prelude::*;
 struct _Vote {
     left_item_id: i32,
     right_item_id: i32,
+    right_item_id: i32,
     magnitude: i32,
 }
 
@@ -104,3 +105,4 @@ fn _page_rank(graph: &DirectedCsrGraph<i32, (), i32>) -> Vec<f32> {
 
     scores
 }
+

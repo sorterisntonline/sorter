@@ -6,6 +6,7 @@ use axum::{
     routing::{get, post},
 };
 use chrono::NaiveDateTime;
+use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
@@ -13,15 +14,20 @@ use crate::{
     app_state::AppState,
     models::{ErrorResponse, Json},
 };
+use crate::{
+    app_state::AppState,
+    models::{ErrorResponse, Json},
+};
 
 #[derive(Serialize, Debug, sqlx::FromRow)]
 pub struct Entity {
-    pk_namespace: String,
-    pk: String,
-    title: Option<String>,
+    pub pk_namespace: String,
+    pub pk: String,
+    pub title: Option<String>,
+    pub profile_picture_url: Option<String>,
     #[sqlx(json)]
-    metadata: Option<JsonValue>,
-    created_at: Option<NaiveDateTime>,
+    pub metadata: Option<JsonValue>,
+    pub created_at: Option<NaiveDateTime>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -58,7 +64,8 @@ RETURNING pk_namespace,
         payload.pk_namespace,
         payload.pk,
         payload.title,
-        payload.metadata
+        payload.metadata,
+        payload.profile_picture_url
     )
     .fetch_one(&state.db)
     .await
@@ -68,6 +75,13 @@ RETURNING pk_namespace,
             log::error!("Failed to create entity: {}", e);
             if let Some(db_err) = e.as_database_error() {
                 if db_err.is_unique_violation() {
+                    return Err(ErrorResponse::new(
+                        StatusCode::CONFLICT,
+                        format!(
+                            "Entity with pk_namespace '{}' and pk '{}' already exists.",
+                            payload.pk_namespace, payload.pk
+                        ),
+                    ));
                     return Err(ErrorResponse::new(
                         StatusCode::CONFLICT,
                         format!(
@@ -111,8 +125,16 @@ WHERE pk_namespace = $1
             StatusCode::NOT_FOUND,
             "Entity not found".to_string(),
         )),
+        Ok(None) => Err(ErrorResponse::new(
+            StatusCode::NOT_FOUND,
+            "Entity not found".to_string(),
+        )),
         Err(e) => {
             log::error!("Failed to get entity: {}", e);
+            Err(ErrorResponse::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to retrieve entity".to_string(),
+            ))
             Err(ErrorResponse::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to retrieve entity".to_string(),
@@ -157,6 +179,10 @@ async fn update_entity(
             StatusCode::BAD_REQUEST,
             "Path parameters must match payload primary key".to_string(),
         ));
+        return Err(ErrorResponse::new(
+            StatusCode::BAD_REQUEST,
+            "Path parameters must match payload primary key".to_string(),
+        ));
     }
 
     match sqlx::query_as!(
@@ -175,7 +201,8 @@ RETURNING pk_namespace,
         pk_namespace,
         pk,
         payload.title,
-        payload.metadata
+        payload.metadata,
+        payload.profile_picture_url
     )
     .fetch_optional(&state.db)
     .await
@@ -185,8 +212,16 @@ RETURNING pk_namespace,
             StatusCode::NOT_FOUND,
             "Entity not found".to_string(),
         )),
+        Ok(None) => Err(ErrorResponse::new(
+            StatusCode::NOT_FOUND,
+            "Entity not found".to_string(),
+        )),
         Err(e) => {
             log::error!("Failed to update entity: {}", e);
+            Err(ErrorResponse::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to update entity".to_string(),
+            ))
             Err(ErrorResponse::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to update entity".to_string(),
@@ -219,6 +254,7 @@ WHERE pk_namespace = $1
                     "Entity not found".to_string(),
                 ))
             }
+        }
         }
         Err(e) => {
             log::error!("Failed to delete entity: {}", e);

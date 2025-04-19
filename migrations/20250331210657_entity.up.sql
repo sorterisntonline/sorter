@@ -33,6 +33,7 @@ CREATE TABLE entities (
   pk_namespace TEXT NOT NULL, -- e.g. 'spotify.album', 'reddit.post', 'sorter.tag'
   pk TEXT NOT NULL,                  -- external or internal ID (e.g. Spotify URI, Reddit ID)
   title TEXT,
+  profile_picture_url TEXT, -- URL for the entity's primary image
   metadata JSONB,
   created_at TIMESTAMP DEFAULT now(),
   PRIMARY KEY (pk_namespace, pk)

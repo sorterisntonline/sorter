@@ -6,6 +6,3 @@ borter/API_DOC.md
 rustsorter/.sqlx
 *.json
 forter/src/viz/AllSortViz.tsx
-discorter/
-forter/public/sitemap.xml
-forter/

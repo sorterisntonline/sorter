@@ -136,10 +136,12 @@ WHERE 1 = 1"
         arg_count += 1;
     }
     if let Some(val) = &params.parent_pk {
+    if let Some(val) = &params.parent_pk {
         query.push_str(&format!(" AND parent_pk = ${}", arg_count));
         args.push(val.clone());
         arg_count += 1;
     }
+    if let Some(val) = &params.child_pk_namespace {
     if let Some(val) = &params.child_pk_namespace {
         query.push_str(&format!(" AND child_pk_namespace = ${}", arg_count));
         args.push(val.clone());
@@ -150,6 +152,7 @@ WHERE 1 = 1"
         args.push(val.clone());
         arg_count += 1;
     }
+    if let Some(val) = &params.submitter_user_id {
     if let Some(val) = &params.submitter_user_id {
         query.push_str(&format!(" AND submitter_user_id = ${}", arg_count));
         uuid_args.push(*val);
@@ -210,6 +213,7 @@ WHERE parent_pk_namespace = $1
                     "Relationship not found".to_string(),
                 ))
             }
+        }
         }
         Err(e) => {
             log::error!("Failed to delete entity relationship: {}", e);

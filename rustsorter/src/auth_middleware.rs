@@ -125,3 +125,4 @@ pub async fn auth(
         Err(api_key_error) => Err(AuthError::ApiKeyVerificationFailed(api_key_error)),
     }
 }
+
