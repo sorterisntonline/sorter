@@ -2805,6 +2805,7 @@ dependencies = [
  "actix-session",
  "actix-web",
  "anyhow",
+ "async-trait",
  "axum",
  "bcrypt",
  "chrono",

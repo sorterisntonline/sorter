@@ -1,17 +1,21 @@
 use std::fmt;
+use std::convert::Infallible;
 
+use async_trait::async_trait;
+use axum::extract::FromRef;
 use axum::{
-    extract::{Request, State},
+    extract::{Request, State, FromRequestParts},
     http::{StatusCode, header},
     middleware::Next,
     response::{IntoResponse, Response},
 };
+use axum::http::request::Parts;
 use tokio;
 
 use crate::{
     api_key::{self, ApiKeyError},
     app_state::AppState,
-    models::ErrorResponse,
+    models::{ErrorResponse, User},
 };
 
 #[derive(Debug)]
@@ -66,63 +70,71 @@ impl IntoResponse for AuthError {
     }
 }
 
-pub async fn auth(
-    State(app_state): State<AppState>,
-    mut request: Request,
-    next: Next,
-) -> Result<Response, AuthError> {
-    let db_pool = app_state.db;
 
-    let auth_header = request
-        .headers()
-        .get(header::AUTHORIZATION)
-        .and_then(|header| header.to_str().ok());
+#[derive(Debug, Clone)]
+pub struct OptionalUser(pub Option<User>);
 
-    let token = match auth_header {
-        Some(header) if header.starts_with("Bearer ") => &header["Bearer ".len()..],
-        _ => return Err(AuthError::NoCredentials),
-    };
+#[async_trait]
+impl<S> FromRequestParts<S> for OptionalUser
+where
+    AppState: FromRef<S>,
+    S: Send + Sync,
+{
+    type Rejection = Infallible;
 
-    const STATIC_ADMIN_KEY: &str = "STATIC_TEST_KEY_FOR_ADMIN_USER_123";
-    const ADMIN_USERNAME: &str = "admin";
-
-    if token == STATIC_ADMIN_KEY {
-        log::warn!("Using static debug API key for user: {}", ADMIN_USERNAME);
-        return match api_key::get_user_by_auth0_sub(&db_pool, ADMIN_USERNAME).await {
-            Ok(user) => {
-                request.extensions_mut().insert(user);
-                Ok(next.run(request).await)
-            }
-            Err(e) => {
-                log::error!(
-                    "Failed to fetch static key user '{}': {}",
-                    ADMIN_USERNAME,
-                    e
-                );
-                Err(AuthError::InternalError(anyhow::anyhow!(
-                    "Static user lookup failed"
-                )))
-            }
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let Ok(State(app_state)) = State::<AppState>::from_request_parts(parts, state).await else {
+            log::error!("Failed to extract AppState in OptionalUser extractor. Cannot perform authentication.");
+            return Ok(OptionalUser(None));
         };
-    }
+        let db_pool = &app_state.db;
 
-    match api_key::verify_api_key(&db_pool, token).await {
-        Ok((api_key_record, user)) => {
-            log::debug!("Authentication successful for user: {}", user.auth0_sub);
-            let key_id = api_key_record.id;
+        let auth_header = parts
+            .headers
+            .get(header::AUTHORIZATION)
+            .and_then(|h| h.to_str().ok());
 
-            request.extensions_mut().insert(user);
+        let token = match auth_header {
+            Some(h) if h.starts_with("Bearer ") => &h["Bearer ".len()..],
+            _ => return Ok(OptionalUser(None)),
+        };
 
-            let pool_clone = db_pool.clone();
-            tokio::spawn(async move {
-                if let Err(e) = api_key::update_last_used(&pool_clone, key_id).await {
-                    log::error!("Failed to update last_used_at for key_id {}: {}", key_id, e);
+        const STATIC_ADMIN_KEY: &str = "STATIC_TEST_KEY_FOR_ADMIN_USER_123";
+        const ADMIN_USERNAME: &str = "admin";
+        if token == STATIC_ADMIN_KEY {
+            log::warn!("Using static debug API key for user: {}", ADMIN_USERNAME);
+            let user_result = api_key::get_user_by_auth0_sub(db_pool, ADMIN_USERNAME).await;
+            match user_result {
+                Ok(user) => return Ok(OptionalUser(Some(user))),
+                Err(e) => {
+                    log::error!(
+                        "Static user lookup failed for '{}' in OptionalUser: {}. Treating as unauthenticated.",
+                        ADMIN_USERNAME, e
+                    );
+                    return Ok(OptionalUser(None));
                 }
-            });
-
-            Ok(next.run(request).await)
+            }
         }
-        Err(api_key_error) => Err(AuthError::ApiKeyVerificationFailed(api_key_error)),
+
+        match api_key::verify_api_key(db_pool, token).await {
+            Ok((api_key_record, user)) => {
+                let key_id = api_key_record.id;
+                let pool_clone = db_pool.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = api_key::update_last_used(&pool_clone, key_id).await {
+                        log::error!(
+                            "Failed to update last_used_at for key_id {}: {}",
+                            key_id,
+                            e
+                        );
+                    }
+                });
+                Ok(OptionalUser(Some(user)))
+            }
+            Err(api_key_error) => {
+                 log::debug!("API key verification failed in OptionalUser: {}. Treating as unauthenticated.", api_key_error);
+                 Ok(OptionalUser(None))
+            }
+        }
     }
 }
-
