@@ -6,14 +6,9 @@ use axum::{
     routing::{get, post},
 };
 use chrono::NaiveDateTime;
-use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
-use crate::{
-    app_state::AppState,
-    models::{ErrorResponse, Json},
-};
 use crate::{
     app_state::AppState,
     models::{ErrorResponse, Json},
@@ -36,6 +31,7 @@ pub struct EntityPayload {
     pk: String,
     title: Option<String>,
     metadata: Option<JsonValue>,
+    profile_picture_url: Option<String>,
 }
 
 pub fn routes() -> Router<AppState> {
@@ -76,13 +72,6 @@ RETURNING pk_namespace,
             log::error!("Failed to create entity: {}", e);
             if let Some(db_err) = e.as_database_error() {
                 if db_err.is_unique_violation() {
-                    return Err(ErrorResponse::new(
-                        StatusCode::CONFLICT,
-                        format!(
-                            "Entity with pk_namespace '{}' and pk '{}' already exists.",
-                            payload.pk_namespace, payload.pk
-                        ),
-                    ));
                     return Err(ErrorResponse::new(
                         StatusCode::CONFLICT,
                         format!(
@@ -174,10 +163,6 @@ async fn update_entity(
     Json(payload): Json<EntityPayload>,
 ) -> Result<impl IntoResponse, ErrorResponse> {
     if pk_namespace != payload.pk_namespace || pk != payload.pk {
-        return Err(ErrorResponse::new(
-            StatusCode::BAD_REQUEST,
-            "Path parameters must match payload primary key".to_string(),
-        ));
         return Err(ErrorResponse::new(
             StatusCode::BAD_REQUEST,
             "Path parameters must match payload primary key".to_string(),
