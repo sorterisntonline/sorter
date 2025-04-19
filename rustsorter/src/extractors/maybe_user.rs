@@ -24,7 +24,7 @@ where
     // Let's use `Infallible` for now as this specific extractor logic doesn't produce AuthErrors.
     type Rejection = std::convert::Infallible; // This extractor cannot fail
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         // Attempt to extract the User added by the middleware
         let user = parts.extensions.get::<User>().cloned();
 
