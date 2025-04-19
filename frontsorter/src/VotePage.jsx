@@ -1,6 +1,6 @@
 import { useSearchParams, Link } from 'react-router-dom';
 // Import react-query hooks
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { useState } from 'react'; // Import useState
 
 // Helper function to get the smallest image URL (can be moved to a utils file)
@@ -160,7 +160,6 @@ function VotePage() {
     const right_pk = searchParams.get('right_pk');
 
     const [sliderValue, setSliderValue] = useState(0); // Default to 0 (neutral)
-    const queryClient = useQueryClient(); // Get query client instance
 
     const queryOptions = {
         staleTime: 5 * 60 * 1000, // Cache for 5 minutes
@@ -218,7 +217,6 @@ function VotePage() {
 
     // --- Render Logic ---
     const isLoading = leftQuery.isLoading || rightQuery.isLoading;
-    const isError = leftQuery.isError || rightQuery.isError;
     // Combine potential errors
     const combinedError = leftQuery.error || rightQuery.error || voteMutation.error;
     const isSuccess = leftQuery.isSuccess && rightQuery.isSuccess;
@@ -227,14 +225,14 @@ function VotePage() {
 
     // --- Parent Link --- (No changes needed)
     const parentLink = parentNs && parentPk ? (
-        <Link to={`/?pk_namespace=${encodeURIComponent(parentNs)}&pk=${encodeURIComponent(parentPk)}`} className="text-brand-600 hover:underline text-sm">
+        <Link to={`/?pk_namespace=${encodeURIComponent(parentNs)}&pk=${encodeURIComponent(parentPk)}`} className="text-blue-600 hover:underline text-sm">
             &larr; Back to Parent
         </Link>
     ) : null;
 
     // --- Main Return ---
     return (
-        <div className="min-h-screen bg-brand-50/60 flex flex-col items-center pt-10 pb-10 px-4">
+        <div className="min-h-screen bg-gray-50/60 flex flex-col items-center pt-10 pb-10 px-4">
             <div className="w-full max-w-4xl"> {/* Increased max-width slightly for wider embeds */}
                 <div className="mb-6 flex justify-between items-center">
                     <h2 className="text-2xl font-bold text-gray-800">How much better?</h2>
@@ -287,7 +285,7 @@ function VotePage() {
                                 step="1" // Or adjust step as needed
                                 value={sliderValue}
                                 onChange={handleSliderChange}
-                                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-brand-500"
+                                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-blue-500"
                                 disabled={voteMutation.isPending} // Disable slider during submission
                             />
                              <div className="text-center text-sm text-gray-700 mt-1">Value: {sliderValue}</div>
@@ -297,10 +295,10 @@ function VotePage() {
                         <button
                             onClick={handleVoteSubmit}
                             disabled={voteMutation.isPending || isLoading} // Disable if loading entities or submitting
-                            className={`mt-4 px-6 py-2 rounded font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 ${
+                            className={`mt-4 px-6 py-2 text-white rounded font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
                                 voteMutation.isPending || isLoading
                                 ? 'bg-gray-400 cursor-not-allowed'
-                                : 'bg-brand-600 hover:bg-brand-700'
+                                : 'bg-blue-500 hover:bg-blue-600'
                             }`}
                         >
                             {voteMutation.isPending ? 'Submitting...' : 'Submit Vote'}
