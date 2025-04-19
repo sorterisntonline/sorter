@@ -1,13 +1,18 @@
+use std::fmt::{self, Display};
+
 use axum::{
     extract::{rejection::JsonRejection, FromRequest},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use log::{error, warn};
 use serde::Serialize;
+use serde_json::json;
+use sqlx::postgres::PgQueryResult;
 use uuid::Uuid;
 
 #[derive(FromRequest)]
-#[from_request(via(axum::Json), rejection(ErrorResponse))]
+#[from_request(via(axum::Json), rejection(Error))]
 pub struct Json<T>(pub T);
 
 impl<T: Serialize> IntoResponse for Json<T> {
@@ -16,31 +21,152 @@ impl<T: Serialize> IntoResponse for Json<T> {
     }
 }
 
-#[derive(Serialize, Debug, Clone)]
-pub struct ErrorResponse {
-    #[serde(skip)]
-    status_code: StatusCode,
-    error: String,
+pub trait MapError<T> {
+    fn map_internal(self) -> Result<T, Error>;
 }
 
-impl From<JsonRejection> for ErrorResponse {
-    fn from(rejection: JsonRejection) -> Self {
-        Self {
-            status_code: rejection.status(),
-            error: rejection.body_text(),
+impl<T, E: Into<anyhow::Error>> MapError<T> for Result<T, E> {
+    fn map_internal(self) -> Result<T, Error> {
+        self.map_err(|e| Error::Internal(e.into()))
+    }
+}
+
+pub trait MapErrorSqlx<T> {
+    fn map_conflict(self, object: &str) -> Result<T, Error>;
+
+    fn map_not_found(self, object: &str) -> Result<T, Error>;
+}
+
+impl<T> MapErrorSqlx<T> for Result<T, sqlx::Error> {
+    fn map_conflict(self, object: &str) -> Result<T, Error> {
+        self.map_err(|e| {
+            if e.as_database_error()
+                .is_some_and(|e| e.is_unique_violation())
+            {
+                Error::Conflict {
+                    object: object.into(),
+                }
+            } else {
+                Error::Internal(e.into())
+            }
+        })
+    }
+
+    fn map_not_found(self, object: &str) -> Result<T, Error> {
+        self.map_err(|e| {
+            if let sqlx::Error::RowNotFound = e {
+                Error::NotFound {
+                    object: object.into(),
+                }
+            } else {
+                Error::Internal(e.into())
+            }
+        })
+    }
+}
+
+pub trait IntoNotFound<T> {
+    fn catch_not_found(self, object: &str) -> Result<T, Error>;
+}
+
+impl IntoNotFound<PgQueryResult> for PgQueryResult {
+    fn catch_not_found(self, object: &str) -> Result<PgQueryResult, Error> {
+        if self.rows_affected() == 0 {
+            return Err(Error::NotFound {
+                object: object.into(),
+            });
+        }
+
+        Ok(self)
+    }
+}
+
+impl<T> IntoNotFound<T> for Option<T> {
+    fn catch_not_found(self, object: &str) -> Result<T, Error> {
+        self.ok_or_else(|| Error::NotFound {
+            object: object.into(),
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct CapitalizedString(String);
+
+impl From<String> for CapitalizedString {
+    fn from(s: String) -> Self {
+        CapitalizedString(s)
+    }
+}
+
+impl From<&str> for CapitalizedString {
+    fn from(s: &str) -> Self {
+        CapitalizedString(s.to_owned())
+    }
+}
+
+impl Display for CapitalizedString {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut chars = self.0.chars();
+
+        if let Some(c) = chars.next() {
+            write!(f, "{}", c.to_uppercase())?;
+        }
+
+        write!(f, "{}", chars.as_str())
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("{message}")]
+    BadRequest { message: CapitalizedString },
+    #[error("{object} already exists")]
+    Conflict { object: CapitalizedString },
+    #[error("Internal server error")]
+    Internal(#[from] anyhow::Error),
+    #[error("Invalid Authorization header format")]
+    InvalidHeader,
+    #[error("Invalid API key format")]
+    InvalidKeyFormat,
+    #[error("No authentication credentials provided")]
+    NoCredentials,
+    #[error("{0}")]
+    JsonRejection(#[from] JsonRejection),
+    #[error("{object} not found")]
+    NotFound { object: CapitalizedString },
+    #[error("Unauthorized")]
+    Unauthorized,
+}
+
+impl Error {
+    fn status_code(&self) -> StatusCode {
+        match self {
+            Self::BadRequest { .. } => StatusCode::BAD_REQUEST,
+            Self::Conflict { .. } => StatusCode::CONFLICT,
+            Self::Internal(..) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::InvalidHeader
+            | Self::InvalidKeyFormat
+            | Self::NoCredentials
+            | Self::Unauthorized => StatusCode::UNAUTHORIZED,
+            Self::JsonRejection(error) => error.status(),
+            Self::NotFound { .. } => StatusCode::NOT_FOUND,
         }
     }
 }
 
-impl ErrorResponse {
-    pub fn new(status_code: StatusCode, error: String) -> Self {
-        Self { status_code, error }
-    }
-}
-
-impl IntoResponse for ErrorResponse {
+impl IntoResponse for Error {
     fn into_response(self) -> Response {
-        (self.status_code, Json(self)).into_response()
+        if let Self::Internal(error) = &self {
+            error!(error:?; "internal error");
+        } else {
+            warn!(self:%; "user error");
+        }
+
+        (
+            self.status_code(),
+            Json(json!({ "error": self.to_string() })),
+        )
+            .into_response()
     }
 }
 
