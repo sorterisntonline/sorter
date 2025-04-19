@@ -57,4 +57,3 @@ pub async fn auth(
 
     Ok(next.run(request).await)
 }
-

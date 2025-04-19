@@ -6,4 +6,3 @@ pub struct AppState {
     pub db: PgPool,
     pub spotify_client: ClientCredsSpotify,
 }
-

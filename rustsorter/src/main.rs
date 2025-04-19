@@ -11,15 +11,22 @@ pub mod vote;
 
 use std::env;
 
-use crate::models::User;
 use anyhow::Result;
 use axum::{
-    http::StatusCode, middleware, response::IntoResponse, routing::get, Extension, Json, Router,
+    Extension,
+    Json,
+    Router,
+    http::StatusCode,
+    middleware,
+    response::IntoResponse,
+    routing::get,
 };
 use dotenv::dotenv;
 use rspotify::{ClientCredsSpotify, Config, Credentials};
 use serde_json::json;
 use tower_http::trace::TraceLayer;
+
+use crate::models::User;
 
 async fn health() -> impl IntoResponse {
     (
@@ -42,7 +49,12 @@ async fn protected_route(Extension(user): Extension<User>) -> impl IntoResponse 
 }
 
 async fn get_spotify_client() -> Result<ClientCredsSpotify> {
-    let creds = Credentials::from_env().ok_or_else(|| anyhow::anyhow!("Spotify credentials (RSPOTIFY_CLIENT_ID, RSPOTIFY_CLIENT_SECRET) not found in environment"))?;
+    let creds = Credentials::from_env().ok_or_else(|| {
+        anyhow::anyhow!(
+            "Spotify credentials (RSPOTIFY_CLIENT_ID, RSPOTIFY_CLIENT_SECRET) not found in \
+             environment"
+        )
+    })?;
 
     let config = Config {
         token_refreshing: true,

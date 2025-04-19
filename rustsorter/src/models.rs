@@ -1,7 +1,7 @@
 use std::fmt::{self, Display};
 
 use axum::{
-    extract::{rejection::JsonRejection, FromRequest},
+    extract::{FromRequest, rejection::JsonRejection},
     http::StatusCode,
     response::{IntoResponse, Response},
 };

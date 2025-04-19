@@ -60,8 +60,7 @@ impl From<ApiKeyDb> for ApiKeyResponse {
 #[derive(Serialize, Debug)]
 pub struct NewApiKeyResponse {
     pub name: String,
-    pub full_key: String, /* The plain text key (identifier + secret), ONLY sent on
-                           * creation/regeneration */
+    pub full_key: String,
     pub message: String,
 }
 
@@ -382,6 +381,6 @@ async fn regenerate_key(
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/", get(list_keys).post(create_key))
-        .route("/revoke", post(revoke_key)) // TODO
+        .route("/revoke", post(revoke_key))
         .route("/regenerate", post(regenerate_key))
 }

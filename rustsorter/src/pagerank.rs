@@ -104,4 +104,3 @@ fn _page_rank(graph: &DirectedCsrGraph<i32, (), i32>) -> Vec<f32> {
 
     scores
 }
-
