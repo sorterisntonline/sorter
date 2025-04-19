@@ -194,7 +194,6 @@ function VotePage() {
                                 onChange={handleSliderChange}
                                 className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-brand-500"
                             />
-                            <div className="text-center mt-2 text-sm font-medium text-gray-700">{sliderValue}</div>
                         </div>
 
 
