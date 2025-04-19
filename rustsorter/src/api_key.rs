@@ -1,28 +1,27 @@
-use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, PgPool, Transaction, Postgres};
+use anyhow::{anyhow, Context, Result}; // Use anyhow consistently
+use axum::{
+    extract::{Extension, Json, Path, State}, // Axum extractors
+    http::StatusCode,                        // HTTP status codes
+    response::{IntoResponse, Response},      // Axum response types
+    routing::{get, post},                    // Axum routing methods
+    Router,                                  // Axum router
+};
+use bcrypt::{hash, verify, DEFAULT_COST};
 use chrono::{NaiveDateTime, Utc};
 use rand::{distributions::Alphanumeric, Rng};
-use bcrypt::{hash, verify, DEFAULT_COST};
-use anyhow::{Result, Context, anyhow}; // Use anyhow consistently
-use axum::{
-    extract::{State, Path, Json, Extension}, // Axum extractors
-    response::{IntoResponse, Response}, // Axum response types
-    routing::{get, post}, // Axum routing methods
-    http::StatusCode, // HTTP status codes
-    Router, // Axum router
-};
+use serde::{Deserialize, Serialize};
+use sqlx::{FromRow, PgPool, Postgres, Transaction};
 use std::fmt;
 use tokio; // For spawning the update task
 
-use crate::models::User; // Assuming AppState is in models
 use crate::app_state::AppState;
+use crate::models::User; // Assuming AppState is in models
 
 // --- Constants ---
 const API_KEY_PREFIX: &str = "sort"; // Prefix without underscore for easier splitting
 const IDENTIFIER_LENGTH: usize = 16;
 const SECRET_LENGTH: usize = 32;
 const KEY_SEPARATOR: char = '_';
-
 
 // --- Struct Definitions (Adjusted NewApiKeyResponse) ---
 
@@ -90,7 +89,7 @@ pub enum ApiKeyError {
     NotFound(String),
     Unauthorized,
     BadRequest(String),
-    InvalidKeyFormat, // For parsing errors
+    InvalidKeyFormat,      // For parsing errors
     InternalError(String), // Generic internal error
 }
 
@@ -114,18 +113,36 @@ impl fmt::Display for ApiKeyError {
 impl IntoResponse for ApiKeyError {
     fn into_response(self) -> Response {
         let (status, error_message) = match &self {
-            ApiKeyError::DatabaseError(_) | ApiKeyError::HashingError(_) | ApiKeyError::InternalError(_) | ApiKeyError::VerificationError(_) => {
-                 log::error!("Internal API Key Error: {}", self);
-                 (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())
-            },
+            ApiKeyError::DatabaseError(_)
+            | ApiKeyError::HashingError(_)
+            | ApiKeyError::InternalError(_)
+            | ApiKeyError::VerificationError(_) => {
+                log::error!("Internal API Key Error: {}", self);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Internal server error".to_string(),
+                )
+            }
             ApiKeyError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
             ApiKeyError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
-            ApiKeyError::Unauthorized | ApiKeyError::InvalidKeyFormat => (StatusCode::UNAUTHORIZED, self.to_string()),
+            ApiKeyError::Unauthorized | ApiKeyError::InvalidKeyFormat => {
+                (StatusCode::UNAUTHORIZED, self.to_string())
+            }
             ApiKeyError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
         };
-         // Log user-facing errors as warnings
-        if status != StatusCode::INTERNAL_SERVER_ERROR { log::warn!("API Key Response: status={}, message='{}'", status, error_message); }
-        (status, axum::Json(serde_json::json!({ "error": error_message }))).into_response()
+        // Log user-facing errors as warnings
+        if status != StatusCode::INTERNAL_SERVER_ERROR {
+            log::warn!(
+                "API Key Response: status={}, message='{}'",
+                status,
+                error_message
+            );
+        }
+        (
+            status,
+            axum::Json(serde_json::json!({ "error": error_message })),
+        )
+            .into_response()
     }
 }
 
@@ -133,16 +150,24 @@ impl IntoResponse for ApiKeyError {
 impl From<sqlx::Error> for ApiKeyError {
     fn from(err: sqlx::Error) -> Self {
         if let sqlx::Error::Database(db_err) = &err {
-             if db_err.is_unique_violation() {
-                 // Check common unique constraints related to API keys
-                 if db_err.constraint() == Some("api_keys_auth0_sub_name_active_key_idx") {
-                    return ApiKeyError::Conflict("An active key with this name already exists.".to_string());
-                 }
-                 if db_err.constraint() == Some("api_keys_key_identifier_key") { // Assuming a UNIQUE constraint on key_identifier
-                    log::error!("Duplicate key identifier generated and attempted insert: {}", db_err);
-                    return ApiKeyError::InternalError("Failed to generate unique key identifier. Please try again.".to_string());
-                 }
-             }
+            if db_err.is_unique_violation() {
+                // Check common unique constraints related to API keys
+                if db_err.constraint() == Some("api_keys_auth0_sub_name_active_key_idx") {
+                    return ApiKeyError::Conflict(
+                        "An active key with this name already exists.".to_string(),
+                    );
+                }
+                if db_err.constraint() == Some("api_keys_key_identifier_key") {
+                    // Assuming a UNIQUE constraint on key_identifier
+                    log::error!(
+                        "Duplicate key identifier generated and attempted insert: {}",
+                        db_err
+                    );
+                    return ApiKeyError::InternalError(
+                        "Failed to generate unique key identifier. Please try again.".to_string(),
+                    );
+                }
+            }
         }
         ApiKeyError::DatabaseError(err)
     }
@@ -161,7 +186,6 @@ impl From<bcrypt::BcryptError> for ApiKeyError {
     }
 }
 
-
 // --- Key Generation and Utilities ---
 
 // Generates identifier and the full key string (e.g., "sort_identifier_secret")
@@ -177,15 +201,23 @@ pub fn generate_api_key() -> (String, String) {
         .map(char::from)
         .collect();
 
-    let full_key = format!("{}{}{}{}{}", API_KEY_PREFIX, KEY_SEPARATOR, identifier, KEY_SEPARATOR, secret);
+    let full_key = format!(
+        "{}{}{}{}{}",
+        API_KEY_PREFIX, KEY_SEPARATOR, identifier, KEY_SEPARATOR, secret
+    );
     (identifier, full_key)
 }
 
 // Creates a preview based on the identifier (e.g., "sort_abcd...")
 pub fn create_key_preview(identifier: &str) -> String {
-     // Ensure identifier isn't too short, though unlikely with length 16
+    // Ensure identifier isn't too short, though unlikely with length 16
     let preview_len = std::cmp::min(4, identifier.len());
-    format!("{}{}{}...", API_KEY_PREFIX, KEY_SEPARATOR, &identifier[..preview_len])
+    format!(
+        "{}{}{}...",
+        API_KEY_PREFIX,
+        KEY_SEPARATOR,
+        &identifier[..preview_len]
+    )
 }
 
 // Hashes the API key (full key) using bcrypt
@@ -202,7 +234,7 @@ fn parse_key_identifier(full_key: &str) -> Result<String, ApiKeyError> {
     // Split by '_' -> ["sort", "IDENTIFIER", "SECRET"]
     let parts: Vec<&str> = full_key.splitn(3, KEY_SEPARATOR).collect();
     if parts.len() != 3 || parts[0] != API_KEY_PREFIX || parts[1].len() != IDENTIFIER_LENGTH {
-         Err(ApiKeyError::InvalidKeyFormat)
+        Err(ApiKeyError::InvalidKeyFormat)
     } else {
         Ok(parts[1].to_string())
     }
@@ -220,13 +252,18 @@ pub async fn get_user_by_auth0_sub(pool: &PgPool, auth0_sub: &str) -> Result<Use
     .fetch_one(pool)
     .await
     .map_err(|e| match e {
-        sqlx::Error::RowNotFound => ApiKeyError::NotFound(format!("User '{}' not found", auth0_sub)),
+        sqlx::Error::RowNotFound => {
+            ApiKeyError::NotFound(format!("User '{}' not found", auth0_sub))
+        }
         _ => ApiKeyError::DatabaseError(e),
     })
 }
 
 // The core verification logic: find by identifier, then verify hash
-pub async fn verify_api_key(pool: &PgPool, provided_full_key: &str) -> Result<(ApiKeyDb, User), ApiKeyError> {
+pub async fn verify_api_key(
+    pool: &PgPool,
+    provided_full_key: &str,
+) -> Result<(ApiKeyDb, User), ApiKeyError> {
     log::debug!("Attempting to verify API key");
     let identifier = parse_key_identifier(provided_full_key)?;
     log::debug!("Parsed identifier: {}", identifier);
@@ -244,21 +281,31 @@ pub async fn verify_api_key(pool: &PgPool, provided_full_key: &str) -> Result<(A
 
     match key_candidate {
         Some(key) => {
-            log::debug!("Found active key record with id: {} for identifier: {}", key.id, identifier);
+            log::debug!(
+                "Found active key record with id: {} for identifier: {}",
+                key.id,
+                identifier
+            );
             // Verify the provided full key against the stored hash
-            let is_valid = verify(provided_full_key, &key.hashed_key)
-                             .map_err(ApiKeyError::from)?; // Propagate verification errors
+            let is_valid = verify(provided_full_key, &key.hashed_key).map_err(ApiKeyError::from)?; // Propagate verification errors
 
             if is_valid {
                 log::debug!("API key verification successful for key id: {}", key.id);
                 // Key is valid, fetch the associated user
                 let user = get_user_by_auth0_sub(pool, &key.auth0_sub).await?;
-                log::debug!("Found user: {} associated with key id: {}", user.auth0_sub, key.id);
+                log::debug!(
+                    "Found user: {} associated with key id: {}",
+                    user.auth0_sub,
+                    key.id
+                );
 
                 // Note: last_used_at update is handled in middleware *after* this returns Ok
                 Ok((key, user))
             } else {
-                log::warn!("API key verification failed (hash mismatch) for key id: {}", key.id);
+                log::warn!(
+                    "API key verification failed (hash mismatch) for key id: {}",
+                    key.id
+                );
                 Err(ApiKeyError::Unauthorized) // Or InvalidToken if preferred
             }
         }
@@ -286,7 +333,7 @@ pub async fn update_last_used(pool: &PgPool, key_id: i32) -> Result<()> {
 // --- API Handlers ---
 
 async fn list_keys(
-    State(state): State<AppState>, // Use Axum's State extractor
+    State(state): State<AppState>,    // Use Axum's State extractor
     Extension(user): Extension<User>, // Use Axum's Extension extractor (populated by middleware)
 ) -> Result<impl IntoResponse, ApiKeyError> {
     log::debug!("Handler: list_keys called");
@@ -304,9 +351,16 @@ async fn list_keys(
     .await?; // Propagates DB errors
 
     let response_keys: Vec<ApiKeyResponse> = keys.into_iter().map(ApiKeyResponse::from).collect();
-    log::debug!("Found {} keys for user {}", response_keys.len(), user.auth0_sub);
+    log::debug!(
+        "Found {} keys for user {}",
+        response_keys.len(),
+        user.auth0_sub
+    );
 
-    Ok((StatusCode::OK, axum::Json(serde_json::json!({ "api_keys": response_keys }))))
+    Ok((
+        StatusCode::OK,
+        axum::Json(serde_json::json!({ "api_keys": response_keys })),
+    ))
 }
 
 async fn create_key(
@@ -316,10 +370,12 @@ async fn create_key(
 ) -> Result<impl IntoResponse, ApiKeyError> {
     log::debug!("Handler: create_key called for name: {}", payload.name);
     // user is extracted directly via Extension
-     log::debug!("Authenticated user for create_key: {}", user.auth0_sub);
+    log::debug!("Authenticated user for create_key: {}", user.auth0_sub);
 
     if payload.name.trim().is_empty() || payload.name.len() > 255 {
-         return Err(ApiKeyError::BadRequest("Invalid key name provided.".to_string()));
+        return Err(ApiKeyError::BadRequest(
+            "Invalid key name provided.".to_string(),
+        ));
     }
 
     // Generate identifier and full key
@@ -342,13 +398,21 @@ async fn create_key(
     .execute(&state.db)
     .await?; // Let the From<sqlx::Error> handle unique constraint violations
 
-    log::info!("Successfully created API key named '{}' for user '{}'", payload.name, user.auth0_sub);
+    log::info!(
+        "Successfully created API key named '{}' for user '{}'",
+        payload.name,
+        user.auth0_sub
+    );
     // Return the *plain text* full key THIS ONE TIME
-    Ok((StatusCode::CREATED, axum::Json(NewApiKeyResponse {
-        name: payload.name.clone(),
-        full_key, // Return the full key
-        message: "API key created successfully. Store it securely, it will not be shown again.".to_string(),
-    })))
+    Ok((
+        StatusCode::CREATED,
+        axum::Json(NewApiKeyResponse {
+            name: payload.name.clone(),
+            full_key, // Return the full key
+            message: "API key created successfully. Store it securely, it will not be shown again."
+                .to_string(),
+        }),
+    ))
 }
 async fn revoke_key(
     State(state): State<AppState>,
@@ -372,35 +436,55 @@ async fn revoke_key(
         Ok(result) => {
             // If the update succeeded, check if any rows were affected
             if result.rows_affected() == 0 {
-                 log::warn!("Attempted to revoke non-existent or inactive key named '{}' for user '{}'", payload.name, user.auth0_sub);
-                 Err(ApiKeyError::NotFound(format!("Active API key named '{}' not found.", payload.name)))
+                log::warn!(
+                    "Attempted to revoke non-existent or inactive key named '{}' for user '{}'",
+                    payload.name,
+                    user.auth0_sub
+                );
+                Err(ApiKeyError::NotFound(format!(
+                    "Active API key named '{}' not found.",
+                    payload.name
+                )))
             } else {
-                log::info!("Successfully revoked API key named '{}' for user '{}'", payload.name, user.auth0_sub);
-                Ok(axum::Json(serde_json::json!({ "message": "API key revoked successfully." })))
+                log::info!(
+                    "Successfully revoked API key named '{}' for user '{}'",
+                    payload.name,
+                    user.auth0_sub
+                );
+                Ok(axum::Json(
+                    serde_json::json!({ "message": "API key revoked successfully." }),
+                ))
             }
         }
         Err(sqlx_err) => {
-             // Explicitly check if the error is the specific unique constraint violation
-             if let sqlx::Error::Database(db_err) = &sqlx_err {
-                 if db_err.is_unique_violation() && db_err.constraint() == Some("api_keys_user_name_name_active_key_idx") {
-                     // This specific error is unexpected during revoke. Log detailed info and return 500.
-                     log::error!(
+            // Explicitly check if the error is the specific unique constraint violation
+            if let sqlx::Error::Database(db_err) = &sqlx_err {
+                if db_err.is_unique_violation()
+                    && db_err.constraint() == Some("api_keys_user_name_name_active_key_idx")
+                {
+                    // This specific error is unexpected during revoke. Log detailed info and return 500.
+                    log::error!(
                          "Unexpected unique constraint violation ('{}') during key revocation for user '{}', name '{}'. This likely indicates a DB schema issue or inconsistent state. DB Error: {}",
                          db_err.constraint().unwrap_or("unknown"),
                          user.auth0_sub,
                          payload.name,
                          db_err
                      );
-                     // Return 500 Internal Server Error instead of the misleading 409 Conflict
-                     return Err(ApiKeyError::InternalError(format!(
+                    // Return 500 Internal Server Error instead of the misleading 409 Conflict
+                    return Err(ApiKeyError::InternalError(format!(
                          "Unexpected database error while revoking key '{}'. Please contact support or try again later.",
                          payload.name
                      )));
-                 }
-             }
-             // For any other database errors, use the existing From<sqlx::Error> conversion
-             log::error!("Database error during key revocation for user '{}', name '{}': {}", user.auth0_sub, payload.name, sqlx_err);
-             Err(sqlx_err.into()) // Convert using the From trait
+                }
+            }
+            // For any other database errors, use the existing From<sqlx::Error> conversion
+            log::error!(
+                "Database error during key revocation for user '{}', name '{}': {}",
+                user.auth0_sub,
+                payload.name,
+                sqlx_err
+            );
+            Err(sqlx_err.into()) // Convert using the From trait
         }
     }
 }
@@ -410,9 +494,10 @@ async fn regenerate_key(
     Extension(user): Extension<User>,
     Json(payload): Json<KeyNameRequest>, // Axum
 ) -> Result<impl IntoResponse, ApiKeyError> {
-
     if payload.name.trim().is_empty() || payload.name.len() > 255 {
-         return Err(ApiKeyError::BadRequest("Invalid key name provided.".to_string()));
+        return Err(ApiKeyError::BadRequest(
+            "Invalid key name provided.".to_string(),
+        ));
     }
 
     // Use a transaction
@@ -431,7 +516,12 @@ async fn regenerate_key(
     if revoke_result.rows_affected() == 0 {
         log::warn!("No active key found named '{}' for user '{}' during regeneration. Proceeding to create a new one.", payload.name, user.auth0_sub);
     } else {
-        log::debug!("Revoked {} old key(s) named '{}' for user '{}'", revoke_result.rows_affected(), payload.name, user.auth0_sub);
+        log::debug!(
+            "Revoked {} old key(s) named '{}' for user '{}'",
+            revoke_result.rows_affected(),
+            payload.name,
+            user.auth0_sub
+        );
     }
 
     // 2. Generate and insert the new key
@@ -439,7 +529,11 @@ async fn regenerate_key(
     let new_hashed_key = hash_api_key(&new_full_key)?;
     let new_preview = create_key_preview(&new_identifier);
 
-     log::debug!("Generated new identifier: {}, preview: {}", new_identifier, new_preview);
+    log::debug!(
+        "Generated new identifier: {}, preview: {}",
+        new_identifier,
+        new_preview
+    );
 
     sqlx::query!(
         "INSERT INTO api_keys (auth0_sub, name, key_identifier, hashed_key, active, created_at)
@@ -456,7 +550,11 @@ async fn regenerate_key(
     // Commit transaction
     tx.commit().await?;
 
-    log::info!("Successfully regenerated API key named '{}' for user '{}'", payload.name, user.auth0_sub);
+    log::info!(
+        "Successfully regenerated API key named '{}' for user '{}'",
+        payload.name,
+        user.auth0_sub
+    );
     // Return the *plain text* key THIS ONE TIME
     Ok(axum::Json(NewApiKeyResponse {
         name: payload.name.clone(),

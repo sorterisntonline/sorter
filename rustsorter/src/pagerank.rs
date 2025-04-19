@@ -5,7 +5,7 @@ use graph::prelude::*;
 // just to make this compile
 struct Vote {
     left_item_id: i32,
-    right_item_id: i32, 
+    right_item_id: i32,
     magnitude: i32,
 }
 
@@ -95,7 +95,7 @@ pub fn page_rank(graph: &DirectedCsrGraph<i32, (), i32>) -> Vec<f32> {
     }
 
     let mut scores = vec![init_score; node_count as usize];
-    
+
     // Run exactly 100 iterations
     for _ in 0..100 {
         page_rank_iteration(graph, &mut scores, &out_degrees, max_out_degree);

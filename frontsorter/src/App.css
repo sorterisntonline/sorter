@@ -1,0 +1,82 @@
+/* Existing CSS can remain if needed, or be removed if fully handled by Tailwind */
+@tailwind base;
+
+
+/* h3 styling is handled inline via Tailwind in EntityDetailsDisplay, but you could define it here if preferred */
+/* h3   { @apply text-2xl font-semibold; } */
+
+
+/* Step 4: micro-interactions for suggestions */
+.suggestion-preview-image {
+    transition: transform .15s;
+}
+li:hover .suggestion-preview-image {
+    transform: scale(1.1);
+}
+
+/* Step 9: Motion polish (CSSTransition classes) */
+.fade-enter {
+    opacity: 0;
+    transform: scale(.96);
+}
+.fade-enter-active {
+    opacity: 1;
+    transform: scale(1);
+    transition: opacity 180ms, transform 180ms; /* Updated duration */
+}
+.fade-exit {
+    opacity: 1;
+    transform: scale(1);
+}
+.fade-exit-active {
+    opacity: 0;
+    transform: scale(.96); /* Match enter scale */
+    transition: opacity 120ms, transform 120ms; /* Updated duration */
+}
+
+/* Add any other global styles or overrides here */
+
+#slider {
+    background-color: #e0e0e0;
+    height: 10px;
+    width: 100%;
+    border-radius: 5px;
+    appearance: none;
+    cursor: pointer;    
+
+    &::-webkit-slider-thumb {
+        background-color: #000;
+        height: 20px;
+        width: 20px;
+        border-radius: 50%;
+    }
+
+    &::-moz-range-thumb {
+        background-color: #000;
+        height: 20px;
+        width: 20px;
+        border-radius: 50%;
+    }
+
+    &::-ms-thumb {
+        background-color: #000;
+        height: 20px;
+        width: 20px;
+        border-radius: 50%;
+    }
+
+    &::-webkit-slider-runnable-track {
+        background-color: #e0e0e0;
+    }
+    
+    &::-moz-range-track {
+        background-color: #e0e0e0;
+    }
+
+    &::-ms-track {
+        background-color: #e0e0e0;
+    }
+
+    
+    
+} 

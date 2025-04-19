@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use graph::wcc::UnionFind;
-use graph_builder::{DirectedCsrGraph, Graph, index::Idx};
+use graph_builder::{index::Idx, DirectedCsrGraph, Graph};
 use rand::seq::{IteratorRandom, SliceRandom};
 
 #[derive(Debug, Clone)]

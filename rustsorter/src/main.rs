@@ -1,20 +1,24 @@
+pub mod api_key;
 pub mod app_state;
+pub mod auth_middleware;
+pub mod entity;
+pub mod entity_relationships;
 pub mod models;
 pub mod pagerank;
 pub mod pair;
+pub mod spotify;
+pub mod vote;
+
 use std::env;
 
+use crate::entity::get_entity_details;
+use crate::models::User;
+use anyhow::Result;
 use axum::{
-    Extension,
-    Json,
-    Router,
-    http::StatusCode,
-    middleware,
-    response::IntoResponse,
-    routing::get,
+    http::StatusCode, middleware, response::IntoResponse, routing::get, Extension, Json, Router,
 };
 use dotenv::dotenv;
-use rustsorter::models::User;
+use rspotify::{ClientCredsSpotify, Config, Credentials};
 use serde_json::json;
 use tower_http::trace::TraceLayer;
 
@@ -38,41 +42,60 @@ async fn protected_route(Extension(user): Extension<User>) -> impl IntoResponse 
     )
 }
 
+async fn get_spotify_client() -> Result<ClientCredsSpotify> {
+    let creds = Credentials::from_env().ok_or_else(|| anyhow::anyhow!("Spotify credentials (RSPOTIFY_CLIENT_ID, RSPOTIFY_CLIENT_SECRET) not found in environment"))?;
+
+    let config = Config {
+        token_refreshing: true,
+        ..Default::default()
+    };
+
+    let spotify = ClientCredsSpotify::with_config(creds, config);
+
+    spotify
+        .request_token()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to get Spotify token: {}", e))?;
+    log::info!("Successfully obtained Spotify token.");
+
+    Ok(spotify)
+}
+
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    // Initialize logging and dotenv
     env_logger::init();
     dotenv().ok();
 
-    // Retrieve the database URL from the environment
     let database_string = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-    // Create the database pool
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(5)
         .connect(&database_string)
         .await
         .expect("Unable to connect to database");
 
-    // Create shared app state
-    let app_state = rustsorter::app_state::AppState { db: pool.clone() }; // Use qualified type name
+    let spotify_client = get_spotify_client().await?;
+    log::info!("Spotify client initialized.");
 
-    // Start the HTTP server
-    // Define the Axum router
+    let app_state = crate::app_state::AppState {
+        db: pool.clone(),
+        spotify_client,
+    };
+
     let app = Router::new()
-        // Public Routes
-        .route("/api/health", get(health)) // Use axum::routing::get
-        // Protected API Key Management Routes need middleware
-        .nest("/api", api_routes(app_state.clone())) // Pass state when creating API routes
-        // Apply middleware and state (Outer state needed if other routes outside /api need it)
-        .with_state(app_state) // Provide state to all handlers
-        .layer(TraceLayer::new_for_http()); // Add logging middleware
+        .route("/api/health", get(health))
+        .nest("/spotify", crate::spotify::routes())
+        .route(
+            "/api/entity/:pk_namespace/:pk/details",
+            get(get_entity_details),
+        )
+        .nest("/api", api_routes(app_state.clone()))
+        .with_state(app_state)
+        .layer(TraceLayer::new_for_http());
 
-    // Define listener address
     let addr = "127.0.0.1:8081";
     log::info!("Starting server on {}", addr);
 
-    // Run the server
     axum::serve(
         tokio::net::TcpListener::bind(addr).await.unwrap(),
         app.into_make_service(),
@@ -83,16 +106,14 @@ async fn main() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-// Helper function accepts AppState and uses from_fn_with_state
-fn api_routes(
-    app_state: rustsorter::app_state::AppState,
-) -> Router<rustsorter::app_state::AppState> {
+fn api_routes(app_state: crate::app_state::AppState) -> Router<crate::app_state::AppState> {
     Router::new()
         .route("/protected", get(protected_route))
-        .nest("/keys", rustsorter::api_key::routes())
-        .nest("/entity", rustsorter::entity::routes())
-        .layer(middleware::from_fn_with_state(
-            app_state,                         // The state to pass
-            rustsorter::auth_middleware::auth, // The async function
-        ))
+        .nest("/keys", crate::api_key::routes())
+        .nest("/entity", crate::entity::routes())
+        .nest("/vote", crate::vote::routes())
+        //.layer(middleware::from_fn_with_state(
+            //app_state,
+            //crate::auth_middleware::auth,
+        //))
 }
