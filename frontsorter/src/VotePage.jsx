@@ -17,6 +17,8 @@ const fetchEntityFn = async (pk_namespace, pk) => {
         throw new Error("Missing identifiers for entity fetch.");
     }
     // Uses the existing endpoint from entity.rs
+    // Note: We don't explicitly request parents/children here,
+    // but the backend might return them by default or based on its own logic.
     const apiUrl = `/api/entity/${encodeURIComponent(pk_namespace)}/${encodeURIComponent(pk)}`;
     console.log("Fetching entity details from:", apiUrl);
     const response = await fetch(apiUrl);
@@ -28,8 +30,9 @@ const fetchEntityFn = async (pk_namespace, pk) => {
         throw error;
     }
     const data = await response.json();
-    // Expect data format: { pk_namespace, pk, title, profile_picture_url, metadata, created_at }
-    return data;
+    // Expect data format: { entity: { ... }, parents: [...], children: [...] }
+    // We only need the core entity for the VotePage display for now.
+    return data.entity;
 };
 
 // --- API Function to Submit/Update a Vote ---
