@@ -8,7 +8,7 @@ pub mod pagerank;
 pub mod pair;
 pub mod spotify;
 pub mod vote;
-
+pub mod extractors;
 use std::env;
 
 use crate::models::User;
