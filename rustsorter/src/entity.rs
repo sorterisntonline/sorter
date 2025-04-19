@@ -54,13 +54,14 @@ async fn create_entity(
     match sqlx::query_as!(
         Entity,
         "
-INSERT INTO entities (pk_namespace, pk, title, metadata)
-VALUES ($1, $2, $3, $4)
+INSERT INTO entities (pk_namespace, pk, title, metadata, profile_picture_url)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING pk_namespace,
     pk,
     title,
     metadata,
-    created_at",
+    created_at,
+    profile_picture_url",
         payload.pk_namespace,
         payload.pk,
         payload.title,
@@ -110,7 +111,8 @@ SELECT pk_namespace,
     pk,
     title,
     metadata,
-    created_at
+    created_at,
+    profile_picture_url
 FROM entities
 WHERE pk_namespace = $1
     AND pk = $2",
@@ -135,10 +137,6 @@ WHERE pk_namespace = $1
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to retrieve entity".to_string(),
             ))
-            Err(ErrorResponse::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to retrieve entity".to_string(),
-            ))
         }
     }
 }
@@ -151,7 +149,8 @@ SELECT pk_namespace,
     pk,
     title,
     metadata,
-    created_at
+    created_at,
+    profile_picture_url
 FROM entities
 ORDER BY created_at DESC"
     )
@@ -190,14 +189,16 @@ async fn update_entity(
         "
 UPDATE entities
 SET title = $3,
-    metadata = $4
+    metadata = $4,
+    profile_picture_url = $5
 WHERE pk_namespace = $1
     AND pk = $2
 RETURNING pk_namespace,
     pk,
     title,
     metadata,
-    created_at",
+    created_at,
+    profile_picture_url",
         pk_namespace,
         pk,
         payload.title,
@@ -218,10 +219,6 @@ RETURNING pk_namespace,
         )),
         Err(e) => {
             log::error!("Failed to update entity: {}", e);
-            Err(ErrorResponse::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to update entity".to_string(),
-            ))
             Err(ErrorResponse::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to update entity".to_string(),
@@ -254,7 +251,6 @@ WHERE pk_namespace = $1
                     "Entity not found".to_string(),
                 ))
             }
-        }
         }
         Err(e) => {
             log::error!("Failed to delete entity: {}", e);
