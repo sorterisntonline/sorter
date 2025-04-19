@@ -6,14 +6,9 @@ use axum::{
     routing::{get, post},
 };
 use chrono::NaiveDateTime;
-use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
-use crate::{
-    app_state::AppState,
-    models::{ErrorResponse, Json},
-};
 use crate::{
     app_state::AppState,
     models::{ErrorResponse, Json},
@@ -36,6 +31,7 @@ pub struct EntityPayload {
     pk: String,
     title: Option<String>,
     metadata: Option<JsonValue>,
+    profile_picture_url: Option<String>,
 }
 
 pub fn routes() -> Router<AppState> {
@@ -54,13 +50,14 @@ async fn create_entity(
     match sqlx::query_as!(
         Entity,
         "
-INSERT INTO entities (pk_namespace, pk, title, metadata)
-VALUES ($1, $2, $3, $4)
+INSERT INTO entities (pk_namespace, pk, title, metadata, profile_picture_url)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING pk_namespace,
     pk,
     title,
     metadata,
-    created_at",
+    created_at,
+    profile_picture_url",
         payload.pk_namespace,
         payload.pk,
         payload.title,
@@ -75,13 +72,6 @@ RETURNING pk_namespace,
             log::error!("Failed to create entity: {}", e);
             if let Some(db_err) = e.as_database_error() {
                 if db_err.is_unique_violation() {
-                    return Err(ErrorResponse::new(
-                        StatusCode::CONFLICT,
-                        format!(
-                            "Entity with pk_namespace '{}' and pk '{}' already exists.",
-                            payload.pk_namespace, payload.pk
-                        ),
-                    ));
                     return Err(ErrorResponse::new(
                         StatusCode::CONFLICT,
                         format!(
@@ -110,7 +100,8 @@ SELECT pk_namespace,
     pk,
     title,
     metadata,
-    created_at
+    created_at,
+    profile_picture_url
 FROM entities
 WHERE pk_namespace = $1
     AND pk = $2",
@@ -135,10 +126,6 @@ WHERE pk_namespace = $1
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to retrieve entity".to_string(),
             ))
-            Err(ErrorResponse::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to retrieve entity".to_string(),
-            ))
         }
     }
 }
@@ -151,7 +138,8 @@ SELECT pk_namespace,
     pk,
     title,
     metadata,
-    created_at
+    created_at,
+    profile_picture_url
 FROM entities
 ORDER BY created_at DESC"
     )
@@ -179,10 +167,6 @@ async fn update_entity(
             StatusCode::BAD_REQUEST,
             "Path parameters must match payload primary key".to_string(),
         ));
-        return Err(ErrorResponse::new(
-            StatusCode::BAD_REQUEST,
-            "Path parameters must match payload primary key".to_string(),
-        ));
     }
 
     match sqlx::query_as!(
@@ -190,14 +174,16 @@ async fn update_entity(
         "
 UPDATE entities
 SET title = $3,
-    metadata = $4
+    metadata = $4,
+    profile_picture_url = $5
 WHERE pk_namespace = $1
     AND pk = $2
 RETURNING pk_namespace,
     pk,
     title,
     metadata,
-    created_at",
+    created_at,
+    profile_picture_url",
         pk_namespace,
         pk,
         payload.title,
@@ -218,10 +204,6 @@ RETURNING pk_namespace,
         )),
         Err(e) => {
             log::error!("Failed to update entity: {}", e);
-            Err(ErrorResponse::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to update entity".to_string(),
-            ))
             Err(ErrorResponse::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to update entity".to_string(),
@@ -254,7 +236,6 @@ WHERE pk_namespace = $1
                     "Entity not found".to_string(),
                 ))
             }
-        }
         }
         Err(e) => {
             log::error!("Failed to delete entity: {}", e);

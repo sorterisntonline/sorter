@@ -5,7 +5,6 @@ use graph::prelude::*;
 struct _Vote {
     left_item_id: i32,
     right_item_id: i32,
-    right_item_id: i32,
     magnitude: i32,
 }
 
