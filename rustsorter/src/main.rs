@@ -11,7 +11,6 @@ pub mod vote;
 
 use std::env;
 
-use crate::entity::get_entity_details;
 use crate::models::User;
 use anyhow::Result;
 use axum::{
@@ -74,7 +73,10 @@ async fn main() -> Result<(), anyhow::Error> {
         .await
         .expect("Unable to connect to database");
 
-    let app_state = rustsorter::app_state::AppState { db: pool.clone() };
+    let app_state = rustsorter::app_state::AppState {
+        db: pool.clone(),
+        spotify_client: get_spotify_client().await?,
+    };
 
     let app = Router::new()
         .route("/api/health", get(health))

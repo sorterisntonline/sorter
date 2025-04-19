@@ -198,21 +198,11 @@ pub fn generate_api_key() -> (String, String) {
         "{}{}{}{}{}",
         API_KEY_PREFIX, KEY_SEPARATOR, identifier, KEY_SEPARATOR, secret
     );
-    let full_key = format!(
-        "{}{}{}{}{}",
-        API_KEY_PREFIX, KEY_SEPARATOR, identifier, KEY_SEPARATOR, secret
-    );
     (identifier, full_key)
 }
 
 pub fn create_key_preview(identifier: &str) -> String {
     let preview_len = std::cmp::min(4, identifier.len());
-    format!(
-        "{}{}{}...",
-        API_KEY_PREFIX,
-        KEY_SEPARATOR,
-        &identifier[..preview_len]
-    )
     format!(
         "{}{}{}...",
         API_KEY_PREFIX,
@@ -233,7 +223,6 @@ fn parse_key_identifier(full_key: &str) -> Result<String, ApiKeyError> {
     let parts: Vec<&str> = full_key.splitn(3, KEY_SEPARATOR).collect();
     if parts.len() != 3 || parts[0] != API_KEY_PREFIX || parts[1].len() != IDENTIFIER_LENGTH {
         Err(ApiKeyError::InvalidKeyFormat)
-        Err(ApiKeyError::InvalidKeyFormat)
     } else {
         Ok(parts[1].to_string())
     }
@@ -253,9 +242,6 @@ WHERE auth0_sub = $1",
     .fetch_one(pool)
     .await
     .map_err(|e| match e {
-        sqlx::Error::RowNotFound => {
-            ApiKeyError::NotFound(format!("User '{}' not found", auth0_sub))
-        }
         sqlx::Error::RowNotFound => {
             ApiKeyError::NotFound(format!("User '{}' not found", auth0_sub))
         }
@@ -385,10 +371,6 @@ ORDER BY created_at DESC",
         StatusCode::OK,
         axum::Json(serde_json::json!({ "api_keys": response_keys })),
     ))
-    Ok((
-        StatusCode::OK,
-        axum::Json(serde_json::json!({ "api_keys": response_keys })),
-    ))
 }
 
 async fn create_key(
@@ -401,9 +383,6 @@ async fn create_key(
     log::debug!("Authenticated user for create_key: {}", user.auth0_sub);
 
     if payload.name.trim().is_empty() || payload.name.len() > 255 {
-        return Err(ApiKeyError::BadRequest(
-            "Invalid key name provided.".to_string(),
-        ));
         return Err(ApiKeyError::BadRequest(
             "Invalid key name provided.".to_string(),
         ));
@@ -484,24 +463,7 @@ WHERE auth0_sub = $2
                     "Active API key named '{}' not found.",
                     payload.name
                 )))
-                log::warn!(
-                    "Attempted to revoke non-existent or inactive key named '{}' for user '{}'",
-                    payload.name,
-                    user.auth0_sub
-                );
-                Err(ApiKeyError::NotFound(format!(
-                    "Active API key named '{}' not found.",
-                    payload.name
-                )))
             } else {
-                log::info!(
-                    "Successfully revoked API key named '{}' for user '{}'",
-                    payload.name,
-                    user.auth0_sub
-                );
-                Ok(axum::Json(
-                    serde_json::json!({ "message": "API key revoked successfully." }),
-                ))
                 log::info!(
                     "Successfully revoked API key named '{}' for user '{}'",
                     payload.name,
@@ -552,9 +514,6 @@ async fn regenerate_key(
     Json(payload): Json<KeyNameRequest>,
 ) -> Result<impl IntoResponse, ApiKeyError> {
     if payload.name.trim().is_empty() || payload.name.len() > 255 {
-        return Err(ApiKeyError::BadRequest(
-            "Invalid key name provided.".to_string(),
-        ));
         return Err(ApiKeyError::BadRequest(
             "Invalid key name provided.".to_string(),
         ));
