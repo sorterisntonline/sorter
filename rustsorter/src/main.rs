@@ -74,21 +74,10 @@ async fn main() -> Result<(), anyhow::Error> {
         .await
         .expect("Unable to connect to database");
 
-    let spotify_client = get_spotify_client().await?;
-    log::info!("Spotify client initialized.");
-
-    let app_state = crate::app_state::AppState {
-        db: pool.clone(),
-        spotify_client,
-    };
+    let app_state = rustsorter::app_state::AppState { db: pool.clone() };
 
     let app = Router::new()
         .route("/api/health", get(health))
-        .nest("/spotify", crate::spotify::routes())
-        .route(
-            "/api/entity/:pk_namespace/:pk/details",
-            get(get_entity_details),
-        )
         .nest("/api", api_routes(app_state.clone()))
         .with_state(app_state)
         .layer(TraceLayer::new_for_http());
@@ -106,14 +95,15 @@ async fn main() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-fn api_routes(app_state: crate::app_state::AppState) -> Router<crate::app_state::AppState> {
+fn api_routes(
+    app_state: rustsorter::app_state::AppState,
+) -> Router<rustsorter::app_state::AppState> {
     Router::new()
         .route("/protected", get(protected_route))
-        .nest("/keys", crate::api_key::routes())
-        .nest("/entity", crate::entity::routes())
-        .nest("/vote", crate::vote::routes())
-        //.layer(middleware::from_fn_with_state(
-            //app_state,
-            //crate::auth_middleware::auth,
-        //))
+        .nest("/keys", rustsorter::api_key::routes())
+        .nest("/entity", rustsorter::entity::routes())
+        .layer(middleware::from_fn_with_state(
+            app_state,
+            rustsorter::auth_middleware::auth,
+        ))
 }

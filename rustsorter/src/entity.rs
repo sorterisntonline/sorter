@@ -1,10 +1,11 @@
 use axum::{
+    Router,
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
-    Router,
 };
+use chrono::NaiveDateTime;
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
@@ -13,8 +14,11 @@ use crate::{
     app_state::AppState,
     models::{ErrorResponse, Json},
 };
+use crate::{
+    app_state::AppState,
+    models::{ErrorResponse, Json},
+};
 
-// Represents an entity fetched from the database
 #[derive(Serialize, Debug, sqlx::FromRow)]
 pub struct Entity {
     pub pk_namespace: String,
@@ -26,38 +30,37 @@ pub struct Entity {
     pub created_at: Option<NaiveDateTime>,
 }
 
-// Represents the payload for creating/updating an entity
 #[derive(Deserialize, Debug)]
 pub struct EntityPayload {
     pk_namespace: String,
     pk: String,
     title: Option<String>,
     metadata: Option<JsonValue>,
-    profile_picture_url: Option<String>,
 }
 
-// Updated struct to hold full Entity for parents/children
-#[derive(Serialize, Debug)]
-pub struct EntityDetailResponse {
-    entity: Entity,
-    parents: Vec<Entity>,
-    children: Vec<Entity>,
+pub fn routes() -> Router<AppState> {
+    Router::new()
+        .route("/", post(create_entity).get(list_entities))
+        .route(
+            "/:pk_namespace/:pk",
+            get(get_entity).put(update_entity).delete(delete_entity),
+        )
 }
 
-// --- Handler Functions ---
-
-// POST / - Create a new entity
 async fn create_entity(
     State(state): State<AppState>,
     Json(payload): Json<EntityPayload>,
-) -> Result<impl IntoResponse, impl IntoResponse> {
+) -> Result<impl IntoResponse, ErrorResponse> {
     match sqlx::query_as!(
         Entity,
-        r#"
-        INSERT INTO entities (pk_namespace, pk, title, metadata, profile_picture_url)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING pk_namespace, pk, title, metadata, profile_picture_url, created_at
-        "#,
+        "
+INSERT INTO entities (pk_namespace, pk, title, metadata)
+VALUES ($1, $2, $3, $4)
+RETURNING pk_namespace,
+    pk,
+    title,
+    metadata,
+    created_at",
         payload.pk_namespace,
         payload.pk,
         payload.title,
@@ -79,6 +82,13 @@ async fn create_entity(
                             payload.pk_namespace, payload.pk
                         ),
                     ));
+                    return Err(ErrorResponse::new(
+                        StatusCode::CONFLICT,
+                        format!(
+                            "Entity with pk_namespace '{}' and pk '{}' already exists.",
+                            payload.pk_namespace, payload.pk
+                        ),
+                    ));
                 }
             }
             Err(ErrorResponse::new(
@@ -89,18 +99,21 @@ async fn create_entity(
     }
 }
 
-// GET /:pk_namespace/:pk - Get a specific entity
 async fn get_entity(
     State(state): State<AppState>,
     Path((pk_namespace, pk)): Path<(String, String)>,
-) -> Result<impl IntoResponse, impl IntoResponse> {
+) -> Result<impl IntoResponse, ErrorResponse> {
     match sqlx::query_as!(
         Entity,
-        r#"
-        SELECT pk_namespace, pk, title, metadata, profile_picture_url, created_at
-        FROM entities
-        WHERE pk_namespace = $1 AND pk = $2
-        "#,
+        "
+SELECT pk_namespace,
+    pk,
+    title,
+    metadata,
+    created_at
+FROM entities
+WHERE pk_namespace = $1
+    AND pk = $2",
         pk_namespace,
         pk
     )
@@ -112,8 +125,16 @@ async fn get_entity(
             StatusCode::NOT_FOUND,
             "Entity not found".to_string(),
         )),
+        Ok(None) => Err(ErrorResponse::new(
+            StatusCode::NOT_FOUND,
+            "Entity not found".to_string(),
+        )),
         Err(e) => {
             log::error!("Failed to get entity: {}", e);
+            Err(ErrorResponse::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to retrieve entity".to_string(),
+            ))
             Err(ErrorResponse::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to retrieve entity".to_string(),
@@ -122,32 +143,42 @@ async fn get_entity(
     }
 }
 
-// GET / - List all entities (consider pagination for production)
-async fn list_entities(
-    State(state): State<AppState>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+async fn list_entities(State(state): State<AppState>) -> Result<impl IntoResponse, ErrorResponse> {
     match sqlx::query_as!(
         Entity,
-        r#"SELECT pk_namespace, pk, title, metadata, profile_picture_url, created_at FROM entities ORDER BY created_at DESC"#
+        "
+SELECT pk_namespace,
+    pk,
+    title,
+    metadata,
+    created_at
+FROM entities
+ORDER BY created_at DESC"
     )
     .fetch_all(&state.db)
     .await
     {
         Ok(entities) => Ok((StatusCode::OK, Json(entities))),
         Err(e) => {
-             log::error!("Failed to list entities: {}", e);
-             Err((StatusCode::INTERNAL_SERVER_ERROR, "Failed to list entities".to_string()))
+            log::error!("Failed to list entities: {}", e);
+            Err(ErrorResponse::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to list entities".to_string(),
+            ))
         }
     }
 }
 
-// PUT /:pk_namespace/:pk - Update an existing entity
 async fn update_entity(
     State(state): State<AppState>,
     Path((pk_namespace, pk)): Path<(String, String)>,
     Json(payload): Json<EntityPayload>,
-) -> Result<impl IntoResponse, impl IntoResponse> {
+) -> Result<impl IntoResponse, ErrorResponse> {
     if pk_namespace != payload.pk_namespace || pk != payload.pk {
+        return Err(ErrorResponse::new(
+            StatusCode::BAD_REQUEST,
+            "Path parameters must match payload primary key".to_string(),
+        ));
         return Err(ErrorResponse::new(
             StatusCode::BAD_REQUEST,
             "Path parameters must match payload primary key".to_string(),
@@ -156,12 +187,17 @@ async fn update_entity(
 
     match sqlx::query_as!(
         Entity,
-        r#"
-        UPDATE entities
-        SET title = $3, metadata = $4, profile_picture_url = $5
-        WHERE pk_namespace = $1 AND pk = $2
-        RETURNING pk_namespace, pk, title, metadata, profile_picture_url, created_at
-        "#,
+        "
+UPDATE entities
+SET title = $3,
+    metadata = $4
+WHERE pk_namespace = $1
+    AND pk = $2
+RETURNING pk_namespace,
+    pk,
+    title,
+    metadata,
+    created_at",
         pk_namespace,
         pk,
         payload.title,
@@ -176,8 +212,16 @@ async fn update_entity(
             StatusCode::NOT_FOUND,
             "Entity not found".to_string(),
         )),
+        Ok(None) => Err(ErrorResponse::new(
+            StatusCode::NOT_FOUND,
+            "Entity not found".to_string(),
+        )),
         Err(e) => {
             log::error!("Failed to update entity: {}", e);
+            Err(ErrorResponse::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to update entity".to_string(),
+            ))
             Err(ErrorResponse::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to update entity".to_string(),
@@ -186,16 +230,15 @@ async fn update_entity(
     }
 }
 
-// DELETE /:pk_namespace/:pk - Delete an entity
 async fn delete_entity(
     State(state): State<AppState>,
     Path((pk_namespace, pk)): Path<(String, String)>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, ErrorResponse> {
     match sqlx::query!(
-        r#"
-        DELETE FROM entities
-        WHERE pk_namespace = $1 AND pk = $2
-        "#,
+        "
+DELETE FROM entities
+WHERE pk_namespace = $1
+    AND pk = $2",
         pk_namespace,
         pk
     )
@@ -206,135 +249,19 @@ async fn delete_entity(
             if result.rows_affected() > 0 {
                 Ok(StatusCode::NO_CONTENT)
             } else {
-                Err((StatusCode::NOT_FOUND, "Entity not found".to_string()))
+                Err(ErrorResponse::new(
+                    StatusCode::NOT_FOUND,
+                    "Entity not found".to_string(),
+                ))
             }
+        }
         }
         Err(e) => {
             log::error!("Failed to delete entity: {}", e);
-            Err((
+            Err(ErrorResponse::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to delete entity".to_string(),
             ))
         }
     }
-}
-
-// GET /:pk_namespace/:pk/details - Get entity details including parent and child relationships
-pub async fn get_entity_details(
-    State(state): State<AppState>,
-    Path((pk_namespace, pk)): Path<(String, String)>,
-) -> Result<impl IntoResponse, impl IntoResponse> {
-    // 1. Fetch the main entity
-    let entity_result = sqlx::query_as!(
-        Entity,
-        r#"
-        SELECT pk_namespace, pk, title, metadata, profile_picture_url, created_at
-        FROM entities
-        WHERE pk_namespace = $1 AND pk = $2
-        "#,
-        pk_namespace,
-        pk
-    )
-    .fetch_optional(&state.db)
-    .await;
-
-    let entity = match entity_result {
-        Ok(Some(entity)) => entity,
-        Ok(None) => {
-            return Err(ErrorResponse::new(
-                StatusCode::NOT_FOUND,
-                "Entity not found".to_string(),
-            ))
-        }
-        Err(e) => {
-            log::error!("Failed to fetch entity for details view: {}", e);
-            return Err(ErrorResponse::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to retrieve entity".to_string(),
-            ));
-        }
-    };
-
-    // 2. Fetch parents (entities that have this entity as a child)
-    let parents_result = sqlx::query_as!(
-        Entity,
-        r#"
-        SELECT e.pk_namespace, e.pk, e.title, e.metadata, e.profile_picture_url, e.created_at
-        FROM entity_relationships er
-        JOIN entities e ON er.parent_pk_namespace = e.pk_namespace AND er.parent_pk = e.pk
-        WHERE er.child_pk_namespace = $1 AND er.child_pk = $2
-        ORDER BY e.pk_namespace, e.pk -- Optional ordering based on entity fields
-        "#,
-        pk_namespace,
-        pk
-    )
-    .fetch_all(&state.db)
-    .await;
-
-    let parents: Vec<Entity> = match parents_result {
-        Ok(parents) => parents,
-        Err(e) => {
-            log::error!(
-                "Failed to fetch parents for entity {}/{}: {}",
-                pk_namespace,
-                pk,
-                e
-            );
-            // Decide if this is a fatal error or if we can return partial data
-            // For now, let's treat it as fatal for the details view
-            return Err(ErrorResponse::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to retrieve parent relationships".to_string(),
-            ));
-        }
-    };
-
-    // 3. Fetch children (entities that have this entity as a parent)
-    let children_result = sqlx::query_as!(
-        Entity,
-        r#"
-        SELECT e.pk_namespace, e.pk, e.title, e.metadata, e.profile_picture_url, e.created_at
-        FROM entity_relationships er
-        JOIN entities e ON er.child_pk_namespace = e.pk_namespace AND er.child_pk = e.pk
-        WHERE er.parent_pk_namespace = $1 AND er.parent_pk = $2
-        ORDER BY e.pk_namespace, e.pk -- Optional ordering based on entity fields
-        "#,
-        pk_namespace,
-        pk
-    )
-    .fetch_all(&state.db)
-    .await;
-
-    let children: Vec<Entity> = match children_result {
-        Ok(children) => children,
-        Err(e) => {
-            log::error!(
-                "Failed to fetch children for entity {}/{}: {}",
-                pk_namespace,
-                pk,
-                e
-            );
-            return Err(ErrorResponse::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to retrieve child relationships".to_string(),
-            ));
-        }
-    };
-
-    // 4. Construct the response
-    let response = EntityDetailResponse {
-        entity,
-        parents,
-        children,
-    };
-
-    Ok((StatusCode::OK, Json(response)))
-}
-
-// Define the routes for entity CRUD operations
-pub fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/", post(create_entity).get(list_entities))
-        //.route("/:pk_namespace/:pk/details", get(get_entity_details))
-        .route("/:pk_namespace/:pk", get(get_entity).put(update_entity).delete(delete_entity))
 }

@@ -2,20 +2,20 @@ use std::collections::HashMap;
 
 use graph::prelude::*;
 
-// just to make this compile
-struct Vote {
+struct _Vote {
     left_item_id: i32,
+    right_item_id: i32,
     right_item_id: i32,
     magnitude: i32,
 }
 
-pub fn build_graph(
-    filteredvotes: &Vec<Vote>,
-) -> (
-    HashMap<i32, i32>,
-    HashMap<i32, i32>,
-    DirectedCsrGraph<i32, (), i32>,
-) {
+struct _Graph {
+    item_id_to_index: HashMap<i32, i32>,
+    index_to_item_id: HashMap<i32, i32>,
+    graph: DirectedCsrGraph<i32, (), i32>,
+}
+
+fn _build_graph(filteredvotes: &[_Vote]) -> _Graph {
     let mut item_id_to_index = std::collections::HashMap::new();
     let mut index_to_item_id = std::collections::HashMap::new();
     let mut edges = vec![];
@@ -41,13 +41,17 @@ pub fn build_graph(
     let graph: DirectedCsrGraph<i32, (), i32> =
         GraphBuilder::new().edges_with_values(edges).build();
 
-    return (item_id_to_index, index_to_item_id, graph);
+    _Graph {
+        item_id_to_index,
+        index_to_item_id,
+        graph,
+    }
 }
 
-pub fn page_rank_iteration(
+fn _page_rank_iteration(
     graph: &DirectedCsrGraph<i32, (), i32>,
     scores: &mut Vec<f32>,
-    out_degrees: &Vec<i32>,
+    out_degrees: &[i32],
     max_out_degree: i32,
 ) {
     let node_count = graph.node_count();
@@ -76,8 +80,7 @@ pub fn page_rank_iteration(
     *scores = new_scores;
 }
 
-pub fn page_rank(graph: &DirectedCsrGraph<i32, (), i32>) -> Vec<f32> {
-    // https://docs.rs/graph/latest/src/graph/page_rank.rs.html#1-198
+fn _page_rank(graph: &DirectedCsrGraph<i32, (), i32>) -> Vec<f32> {
     let node_count = graph.node_count();
     let init_score = 1_f32;
 
@@ -96,10 +99,10 @@ pub fn page_rank(graph: &DirectedCsrGraph<i32, (), i32>) -> Vec<f32> {
 
     let mut scores = vec![init_score; node_count as usize];
 
-    // Run exactly 100 iterations
     for _ in 0..100 {
-        page_rank_iteration(graph, &mut scores, &out_degrees, max_out_degree);
+        _page_rank_iteration(graph, &mut scores, &out_degrees, max_out_degree);
     }
 
     scores
 }
+

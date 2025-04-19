@@ -1,0 +1,41 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "forter",
+      "path": "forter",
+      "script": "dev",
+      "type": "npm"
+    },
+    {
+      "command": "open -g -a Docker && sleep 5 && ./run-postgres.sh",
+      "label": "postgres",
+      "options": {
+        "cwd": "database"
+      },
+      "type": "shell"
+    },
+    {
+      "command": "run",
+      "label": "rustsorter",
+      "options": {
+        "cwd": "rustsorter"
+      },
+      "type": "cargo"
+    },
+    {
+      "args": [
+        "fmt",
+        "--",
+        "--config",
+        "error_on_line_overflow=true,error_on_unformatted=true"
+      ],
+      "command": "+nightly",
+      "label": "rustfmt",
+      "options": {
+        "cwd": "rustsorter"
+      },
+      "type": "cargo"
+    }
+  ]
+}
