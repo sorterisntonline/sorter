@@ -1,6 +1,6 @@
 import { useSearchParams, Link } from 'react-router-dom';
 // Import react-query hooks
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react'; // Import useState
 
 // Helper function to get the smallest image URL (can be moved to a utils file)
@@ -32,6 +32,68 @@ const fetchEntityFn = async (pk_namespace, pk) => {
     return data;
 };
 
+// --- API Function to Submit/Update a Vote ---
+const submitVoteFn = async ({
+    left_ns, left_pk, right_ns, right_pk, voter_user_id, attribute_id, magnitude
+}) => {
+    // TODO: Replace with actual logged-in user ID from context/auth state
+    const userIdToUse = voter_user_id || '00000000-0000-0000-0000-000000000000'; // Placeholder UUID
+    // TODO: Allow selecting attribute_id (defaulting to 'like' = 0)
+    const attributeIdToUse = attribute_id !== undefined ? attribute_id : 0;
+
+    const primaryKeyPath = `${encodeURIComponent(left_ns)}/${encodeURIComponent(left_pk)}/${encodeURIComponent(right_ns)}/${encodeURIComponent(right_pk)}/${encodeURIComponent(userIdToUse)}/${encodeURIComponent(attributeIdToUse)}`;
+    const updateUrl = `/api/vote/${primaryKeyPath}`;
+    const createUrl = '/api/vote/';
+
+    // Try updating first
+    const updatePayload = { magnitude };
+    let response = await fetch(updateUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatePayload),
+    });
+
+    if (response.ok) {
+        console.log("Vote updated successfully");
+        return await response.json(); // Return updated vote data
+    }
+
+    // If update failed (e.g., 404 Not Found), try creating
+    if (response.status === 404) {
+        console.log("Vote not found, attempting to create...");
+        const createPayload = {
+            left_entity_pk_namespace: left_ns,
+            left_entity_pk: left_pk,
+            right_entity_pk_namespace: right_ns,
+            right_entity_pk: right_pk,
+            voter_user_id: userIdToUse,
+            attribute_id: attributeIdToUse,
+            magnitude: magnitude,
+        };
+        response = await fetch(createUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(createPayload),
+        });
+
+        if (response.ok) {
+             console.log("Vote created successfully");
+            return await response.json(); // Return created vote data
+        }
+
+         // Handle conflict if creation also fails (e.g., race condition)
+        if (response.status === 409) {
+             console.warn("Vote likely created by another request between PUT and POST.");
+             throw new Error("Vote conflict. Please try again."); // Or handle more gracefully
+        }
+    }
+
+    // If both update and create failed for other reasons
+    const errorText = await response.text();
+    const error = new Error(`Failed to submit vote. Status: ${response.status}. ${errorText}`);
+    error.status = response.status;
+    throw error;
+};
 
 // --- Vote Item Component (Now just displays, no voting click) ---
 function VoteItemDisplay({ item, isDisabled }) { // Removed isSelected, pk is unused now
@@ -97,43 +159,68 @@ function VotePage() {
     const right_ns = searchParams.get('right_ns');
     const right_pk = searchParams.get('right_pk');
 
-    // State for the slider value (0-100, default 50)
-    const [sliderValue, setSliderValue] = useState(50);
+    const [sliderValue, setSliderValue] = useState(0); // Default to 0 (neutral)
+    const queryClient = useQueryClient(); // Get query client instance
 
     const queryOptions = {
         staleTime: 5 * 60 * 1000, // Cache for 5 minutes
         retry: 1,
     };
 
-    // --- Data Fetching --- (No changes here)
     const leftQuery = useQuery({ queryKey: ['entity', left_ns, left_pk], queryFn: () => fetchEntityFn(left_ns, left_pk), enabled: !!left_ns && !!left_pk, ...queryOptions });
     const rightQuery = useQuery({ queryKey: ['entity', right_ns, right_pk], queryFn: () => fetchEntityFn(right_ns, right_pk), enabled: !!right_ns && !!right_pk, ...queryOptions });
 
+    // --- Mutation Setup ---
+    const voteMutation = useMutation({
+        mutationFn: submitVoteFn,
+        onSuccess: (data) => {
+            console.log("Vote submission successful:", data);
+            // TODO: Invalidate relevant queries if needed (e.g., user's vote history)
+            // queryClient.invalidateQueries(['votes', ...]);
+
+            // TODO: Navigate to next pair or back to parent
+            alert(`Vote submitted with magnitude: ${data.magnitude}! (Navigation pending)`);
+            // Example: navigate back to parent if available
+            // if (parentNs && parentPk) {
+            //  navigate(`/?pk_namespace=${encodeURIComponent(parentNs)}&pk=${encodeURIComponent(parentPk)}`);
+            // }
+        },
+        onError: (error) => {
+            console.error("Vote submission failed:", error);
+            // Show user-friendly error message
+            alert(`Error submitting vote: ${error.message}`);
+        },
+    });
+
     // --- Event Handlers ---
     const handleSliderChange = (event) => {
-        setSliderValue(event.target.value);
+        setSliderValue(parseInt(event.target.value, 10)); // Ensure value is integer
     };
 
-    // Updated handleVote to take slider value
     const handleVoteSubmit = () => {
-        if (!leftQuery.data || !rightQuery.data) return; // Ensure data is loaded
+        if (!leftQuery.data || !rightQuery.data || voteMutation.isPending) return;
 
-        console.log("Vote Submitted:");
-        console.log("  Parent:", parentNs, parentPk);
-        console.log("  Left Item:", left_ns, left_pk);
-        console.log("  Right Item:", right_ns, right_pk);
-        console.log("  Slider Value:", sliderValue); // 0 = Left, 100 = Right, 50 = Neutral
+        console.log("Submitting Vote:");
+        // TODO: Get actual voter_user_id and attribute_id
+        const voteData = {
+            left_ns: left_ns,
+            left_pk: left_pk,
+            right_ns: right_ns,
+            right_pk: right_pk,
+            magnitude: sliderValue, // Use the slider value directly as magnitude
+            voter_user_id: null, // Placeholder, will be handled in submitVoteFn
+            attribute_id: 0, // Placeholder, will be handled in submitVoteFn ('like')
+        };
+        console.log("  Data:", voteData);
 
-        // TODO: Call mutation to submit vote data { parentNs, parentPk, left_ns, left_pk, right_ns, right_pk, value: sliderValue }
-        alert(`Vote submitted with value: ${sliderValue} (Implementation pending)`);
-
-        // TODO: Potentially navigate away or fetch next pair
+        voteMutation.mutate(voteData);
     };
 
-    // --- Render Logic --- (No changes needed for state calculation)
+    // --- Render Logic ---
     const isLoading = leftQuery.isLoading || rightQuery.isLoading;
     const isError = leftQuery.isError || rightQuery.isError;
-    const error = leftQuery.error || rightQuery.error;
+    // Combine potential errors
+    const combinedError = leftQuery.error || rightQuery.error || voteMutation.error;
     const isSuccess = leftQuery.isSuccess && rightQuery.isSuccess;
     const leftItem = leftQuery.data;
     const rightItem = rightQuery.data;
@@ -158,20 +245,22 @@ function VotePage() {
                     <div className="text-center text-gray-500 py-10">Loading pair...</div>
                 )}
 
-                {isError && (
-                    <div className="text-center text-red-600 bg-red-50 border border-red-200 p-4 rounded-md shadow-sm">
-                        <p>Error loading voting pair:</p>
-                        {leftQuery.isError && <p className="text-sm mt-1">Left item error: {leftQuery.error?.message || 'Unknown error'}</p>}
-                        {rightQuery.isError && <p className="text-sm mt-1">Right item error: {rightQuery.error?.message || 'Unknown error'}</p>}
-                        {error?.status === 404 && <p className="text-sm mt-1">Could not find one or both items.</p>}
+                 {/* Display combined errors (fetch or mutation) */}
+                {combinedError && !isLoading && ( // Show only if not loading initially
+                    <div className="text-center text-red-600 bg-red-50 border border-red-200 p-4 rounded-md shadow-sm mb-4">
+                        <p>Error:</p>
+                        {leftQuery.isError && <p className="text-sm mt-1">Loading left item: {leftQuery.error?.message || 'Unknown error'}</p>}
+                        {rightQuery.isError && <p className="text-sm mt-1">Loading right item: {rightQuery.error?.message || 'Unknown error'}</p>}
+                        {voteMutation.isError && <p className="text-sm mt-1">Submitting vote: {voteMutation.error?.message || 'Unknown error'}</p>}
+                        {(leftQuery.error?.status === 404 || rightQuery.error?.status === 404) && <p className="text-sm mt-1">Could not find one or both items.</p>}
                     </div>
                 )}
 
                 {/* Only display items and slider if both queries are successful */}
                 {isSuccess && leftItem && rightItem && (
-                    <div className="flex flex-col items-center justify-center gap-6 bg-white p-6"> {/* Added rounded-lg shadow */}
+                    <div className="flex flex-col items-center justify-center gap-6 bg-white p-6 rounded-lg shadow"> {/* Added rounded-lg shadow */}
                         {/* Container for the two items */}
-                        <div className="flex w-full items-start justify-around gap-4"> {/* Changed to justify-around and items-start */}
+                        <div className="flex w-full items-start justify-around gap-4">
                             {/* Left Item - Wrapped in Link */}
                             <Link to={`/?pk_namespace=${encodeURIComponent(left_ns)}&pk=${encodeURIComponent(left_pk)}`} className="no-underline hover:opacity-80 transition-opacity">
                                 <VoteItemDisplay item={leftItem} />
@@ -183,26 +272,38 @@ function VotePage() {
                             </Link>
                         </div>
 
-                        {/* Slider - Moved below items */}
-                        <div className="w-full max-w-lg px-4 pt-4"> {/* Adjusted width and padding */}
+                        {/* Slider */}
+                        <div className="w-full max-w-lg px-4 pt-4">
+                             <div className="flex justify-between text-sm text-gray-600 mb-1">
+                                <span>Strongly Left</span>
+                                <span>Neutral</span>
+                                <span>Strongly Right</span>
+                            </div>
                             <input
                                 id="slider"
                                 type="range"
-                                min="-50"
-                                max="50"
+                                min="-50" // Represents strong preference for left
+                                max="50"  // Represents strong preference for right
+                                step="1" // Or adjust step as needed
                                 value={sliderValue}
                                 onChange={handleSliderChange}
                                 className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-brand-500"
+                                disabled={voteMutation.isPending} // Disable slider during submission
                             />
+                             <div className="text-center text-sm text-gray-700 mt-1">Value: {sliderValue}</div>
                         </div>
-
 
                         {/* Submit Button */}
                         <button
                             onClick={handleVoteSubmit}
-                            className="mt-4 px-6 py-2 bg-[#e0e0e0]  hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 transition-colors" // Added text-white
+                            disabled={voteMutation.isPending || isLoading} // Disable if loading entities or submitting
+                            className={`mt-4 px-6 py-2 rounded font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 ${
+                                voteMutation.isPending || isLoading
+                                ? 'bg-gray-400 cursor-not-allowed'
+                                : 'bg-brand-600 hover:bg-brand-700'
+                            }`}
                         >
-                            Submit Vote
+                            {voteMutation.isPending ? 'Submitting...' : 'Submit Vote'}
                         </button>
                     </div>
                 )}
