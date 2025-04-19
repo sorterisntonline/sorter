@@ -20,7 +20,6 @@ use rspotify::{
         Market,
         SearchType,
         SimplifiedAlbum,
-        SimplifiedArtist, // Added SimplifiedArtist
         TrackId,
     },
     prelude::*, // Import necessary enums/structs
@@ -32,7 +31,6 @@ use crate::app_state::AppState; // Make sure AppState is imported
 use crate::entity::Entity;
 use sqlx::types::Uuid;
 use sqlx::Executor; // Import Executor
-use sqlx::PgPool; // Import PgPool // Import Uuid for the submitter_user_id
 
 #[derive(Deserialize)]
 pub struct AlbumSearchQuery {

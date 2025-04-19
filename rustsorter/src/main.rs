@@ -73,7 +73,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .await
         .expect("Unable to connect to database");
 
-    let app_state = rustsorter::app_state::AppState {
+    let app_state = crate::app_state::AppState {
         db: pool.clone(),
         spotify_client: get_spotify_client().await?,
     };
@@ -98,14 +98,12 @@ async fn main() -> Result<(), anyhow::Error> {
 }
 
 fn api_routes(
-    app_state: rustsorter::app_state::AppState,
-) -> Router<rustsorter::app_state::AppState> {
+    app_state: crate::app_state::AppState,
+) -> Router<crate::app_state::AppState> {
     Router::new()
         .route("/protected", get(protected_route))
-        .nest("/keys", rustsorter::api_key::routes())
-        .nest("/entity", rustsorter::entity::routes())
-        .layer(middleware::from_fn_with_state(
-            app_state,
-            rustsorter::auth_middleware::auth,
-        ))
+        .nest("/keys", crate::api_key::routes())
+        .nest("/entity", crate::entity::routes())
+        .nest("/entity_relationships", crate::entity_relationships::routes())
+        .nest("/spotify", crate::spotify::routes())
 }

@@ -1,6 +1,6 @@
 use axum::{
     Router,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
@@ -89,45 +89,108 @@ RETURNING pk_namespace,
     }
 }
 
+#[derive(Deserialize, Debug)]
+pub struct EntityQueryParams {
+    parents: Option<bool>,
+    children: Option<bool>,
+}
+
+#[derive(Serialize)]
+struct EntityWithParentsAndChildren {
+    entity: Entity,
+    parents: Option<Vec<Entity>>,
+    children: Option<Vec<Entity>>,
+}
+
 async fn get_entity(
     State(state): State<AppState>,
     Path((pk_namespace, pk)): Path<(String, String)>,
+    Query(params): Query<EntityQueryParams>,
 ) -> Result<impl IntoResponse, ErrorResponse> {
-    match sqlx::query_as!(
+    let include_parents = params.parents.unwrap_or(false);
+    let include_children = params.children.unwrap_or(false);
+
+    let entity = match sqlx::query_as!(
         Entity,
-        "
-SELECT pk_namespace,
-    pk,
-    title,
-    metadata,
-    created_at,
-    profile_picture_url
-FROM entities
-WHERE pk_namespace = $1
-    AND pk = $2",
+        "SELECT * FROM entities WHERE pk_namespace = $1 AND pk = $2",
         pk_namespace,
         pk
     )
     .fetch_optional(&state.db)
     .await
     {
-        Ok(Some(entity)) => Ok((StatusCode::OK, Json(entity))),
-        Ok(None) => Err(ErrorResponse::new(
-            StatusCode::NOT_FOUND,
-            "Entity not found".to_string(),
-        )),
-        Ok(None) => Err(ErrorResponse::new(
-            StatusCode::NOT_FOUND,
-            "Entity not found".to_string(),
-        )),
+        Ok(Some(entity)) => entity,
+        Ok(None) => {
+            return Err(ErrorResponse::new(
+                StatusCode::NOT_FOUND,
+                "Entity not found".to_string(),
+            ));
+        }
         Err(e) => {
-            log::error!("Failed to get entity: {}", e);
-            Err(ErrorResponse::new(
+            log::error!("Failed to fetch entity: {}", e);
+            return Err(ErrorResponse::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to retrieve entity".to_string(),
-            ))
+                "Failed to fetch entity".to_string(),
+            ));
+        }
+    };
+
+    let mut parents: Option<Vec<Entity>> = None;
+    let mut children: Option<Vec<Entity>> = None;
+
+    if include_parents {
+        match sqlx::query_as!(
+            Entity,
+            r#"
+            SELECT e.* 
+            FROM entities e
+            JOIN entity_relationships er ON e.pk_namespace = er.parent_pk_namespace AND e.pk = er.parent_pk
+            WHERE er.child_pk_namespace = $1 AND er.child_pk = $2
+            "#,
+            pk_namespace, pk
+        )
+        .fetch_all(&state.db)
+        .await {
+            Ok(p) => parents = Some(p),
+            Err(e) => {
+                 log::error!("Failed to fetch parents for entity {}/{}: {}", pk_namespace, pk, e);
+                  return Err(ErrorResponse::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to fetch entity parents".to_string(),
+                 ));
+            }
         }
     }
+
+    if include_children {
+         match sqlx::query_as!(
+            Entity,
+            r#"
+            SELECT e.* 
+            FROM entities e
+            JOIN entity_relationships er ON e.pk_namespace = er.child_pk_namespace AND e.pk = er.child_pk
+            WHERE er.parent_pk_namespace = $1 AND er.parent_pk = $2
+            "#,
+            pk_namespace, pk
+        )
+        .fetch_all(&state.db)
+        .await {
+             Ok(c) => children = Some(c),
+             Err(e) => {
+                 log::error!("Failed to fetch children for entity {}/{}: {}", pk_namespace, pk, e);
+                  return Err(ErrorResponse::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to fetch entity children".to_string(),
+                 ));
+             }
+        }
+    }
+    Ok(Json(EntityWithParentsAndChildren {
+        entity,
+        parents,
+        children,
+    }))
+
 }
 
 async fn list_entities(State(state): State<AppState>) -> Result<impl IntoResponse, ErrorResponse> {
@@ -194,10 +257,6 @@ RETURNING pk_namespace,
     .await
     {
         Ok(Some(entity)) => Ok((StatusCode::OK, Json(entity))),
-        Ok(None) => Err(ErrorResponse::new(
-            StatusCode::NOT_FOUND,
-            "Entity not found".to_string(),
-        )),
         Ok(None) => Err(ErrorResponse::new(
             StatusCode::NOT_FOUND,
             "Entity not found".to_string(),
