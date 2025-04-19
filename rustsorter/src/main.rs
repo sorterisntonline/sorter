@@ -7,6 +7,7 @@ pub mod models;
 pub mod pagerank;
 pub mod pair;
 pub mod spotify;
+pub mod vote;
 
 use std::env;
 
