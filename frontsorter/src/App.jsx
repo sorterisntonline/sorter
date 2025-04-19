@@ -32,7 +32,7 @@ const fetchSuggestionsFn = async (query) => {
         return []; // Return empty array if query is too short
     }
     // console.log("Fetching suggestions for:", query);
-    const response = await fetch(`/spotify/search?q=${encodeURIComponent(query)}`);
+    const response = await fetch(`/api/spotify/search?q=${encodeURIComponent(query)}`);
     if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -72,7 +72,7 @@ const ensureEntityFn = async ({ pk_namespace, pk, title, metadata }) => {
     }
 
     console.log(`Ensuring Spotify entity: ${pk_namespace}/${pk}`);
-    const response = await fetch(`/spotify/ensure`, {
+    const response = await fetch(`/api/spotify/ensure`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pk_namespace, pk, title, metadata }),
@@ -96,7 +96,7 @@ const fetchEntityDetailsFn = async (pk_namespace, pk) => {
         // This case should ideally be prevented by the `enabled` option of useQuery
         throw new Error("pk_namespace and pk are required to fetch details.");
     }
-    const detailsApiUrl = `/api/entity/${encodeURIComponent(pk_namespace)}/${encodeURIComponent(pk)}/details`;
+    const detailsApiUrl = `/api/entity/${encodeURIComponent(pk_namespace)}/${encodeURIComponent(pk)}?parents=true&children=true`;
     console.log("Fetching details from:", detailsApiUrl);
     const response = await fetch(detailsApiUrl);
 
