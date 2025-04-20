@@ -261,14 +261,24 @@ function ItemPairPreviewLink({ parentNamespace, parentPk, childType, item1, item
     );
 
     return (
-        <Link to={voteLink} className="cursor-pointer my-3 p-3 border border-brand-200 rounded-smd bg-brand-50/40 flex items-center justify-around gap-2 relative group no-underline transition transform hover:-translate-y-0.5">
-            {renderItemPreview(item1)}
-            {/* Overlay VOTE text on hover */}
-            <div className="absolute inset-0 flex items-center justify-center bg-brand-600/80 opacity-0 group-hover:opacity-100 transition-opacity rounded-smd">
-                <span className="text-white text-3xl tracking-wide font-bold">VOTE</span>
+        <div>
+            <div className="cursor-pointer mt-3 p-3 border border-black-200 rounded-smd bg-brand-50/40 flex items-center justify-around gap-2 relative group no-underline transition transform hover:-translate-y-0.5">
+                {renderItemPreview(item1)}
+                {/* Overlay VOTE text on hover */}
+                <div className="absolute inset-0 flex items-center justify-center bg-brand-600/80 opacity-0 group-hover:opacity-100 transition-opacity rounded-smd">
+                    <span className="text-black text-3xl tracking-wide font-bold">VOTE</span>
+                </div>
+                {renderItemPreview(item2)}
             </div>
-            {renderItemPreview(item2)}
-        </Link>
+            <div className="border border-gray-300 cursor-pointer border-dashed flex items-center justify-center gap-2 p-2">
+                <div className="text-center text-xs text-gray-500">10 votes</div>
+                <div className="text-center text-xs text-gray-500">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                </div>
+            </div>
+        </div>
     );
 }
 // --- END: Item Pair Preview Link Component ---
