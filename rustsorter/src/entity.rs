@@ -5,6 +5,7 @@ use axum::{
     response::IntoResponse,
     routing::{get, post},
     Extension,
+    debug_handler,
 };
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
@@ -45,11 +46,11 @@ pub fn routes() -> Router<AppState> {
         )
 }
 
-
+#[debug_handler]
 async fn create_entity(
     State(state): State<AppState>,
+    AuthenticatedUser(user): AuthenticatedUser,
     Json(payload): Json<EntityPayload>,
-    MaybeUser(maybe_user): MaybeUser,
 ) -> Result<impl IntoResponse, ErrorResponse> {
     match sqlx::query_as!(
         Entity,
