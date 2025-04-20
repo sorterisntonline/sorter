@@ -11,13 +11,13 @@ pub mod vote;
 pub mod extractors;
 use std::env;
 
-use crate::models::User;
 use anyhow::Result;
 use axum::{
     http::StatusCode, middleware, response::IntoResponse, routing::get, Extension, Json, Router,
 };
 use dotenv::dotenv;
 use rspotify::{ClientCredsSpotify, Config, Credentials};
+use serde::Serialize;
 use serde_json::json;
 use tower_http::trace::TraceLayer;
 
@@ -31,15 +31,22 @@ async fn health() -> impl IntoResponse {
     )
 }
 
-async fn protected_route(Extension(user): Extension<User>) -> impl IntoResponse {
-    (
-        StatusCode::OK,
-        Json(json!({
-        "message": format!("Hello, {}! This is a protected route.", user.auth0_sub),
-        "authenticated_user": user.auth0_sub
-        })),
-    )
+use crate::extractors::maybe_user::MaybeUser;
+async fn protected_route(
+    MaybeUser(maybe_user): MaybeUser,
+) -> impl IntoResponse {
+    match maybe_user {
+        None => crate::auth_middleware::AuthError::NoCredentials.into_response(),
+        Some(user) => (
+            StatusCode::OK,
+            Json(json!({
+                "message": format!("Hello, {}! This is a protected route.", user.auth0_sub),
+                "authenticated_user": user.auth0_sub
+            }))
+        ).into_response(),
+    }
 }
+
 
 async fn get_spotify_client() -> Result<ClientCredsSpotify> {
     let creds = Credentials::from_env().ok_or_else(|| anyhow::anyhow!("Spotify credentials (RSPOTIFY_CLIENT_ID, RSPOTIFY_CLIENT_SECRET) not found in environment"))?;
