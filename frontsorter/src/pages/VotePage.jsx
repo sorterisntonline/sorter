@@ -231,7 +231,7 @@ function VotePage() {
 
                  {/* Display combined errors (fetch or mutation) */}
                 {combinedError && !isLoading && ( // Show only if not loading initially
-                    <div className="text-center text-red-600 bg-red-50 border border-red-200 p-4 rounded-md shadow-sm mb-4">
+                    <div className="text-center text-red-600 bg-red-50 border border-red-200 p-4 rounded-md mb-4">
                         <p>Error:</p>
                         {leftQuery.isError && <p className="text-sm mt-1">Loading left item: {leftQuery.error?.message || 'Unknown error'}</p>}
                         {rightQuery.isError && <p className="text-sm mt-1">Loading right item: {rightQuery.error?.message || 'Unknown error'}</p>}
@@ -242,7 +242,7 @@ function VotePage() {
 
                 {/* Only display items and slider if both queries are successful */}
                 {isSuccess && leftItem && rightItem && (
-                    <div className="flex flex-col items-center justify-center gap-6 bg-white p-6 mb-8 rounded-lg shadow">
+                    <div className="flex flex-col items-center justify-center gap-6 p-6 mb-8 rounded-lg">
                         {/* Container for the two items */}
                         <div className="flex w-full items-start justify-around gap-4">
                             {/* Left Item - Wrapped in Link */}
@@ -274,7 +274,6 @@ function VotePage() {
                                 className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-blue-500"
                                 disabled={voteMutation.isPending} // Disable slider during submission
                             />
-                            <div className="text-center text-sm font-medium mt-2">{sliderValue}</div> {/* Display current slider value */}
                         </div>
 
                         {/* Submit Button */}
@@ -289,18 +288,6 @@ function VotePage() {
                         >
                             {voteMutation.isPending ? 'Submitting...' : 'Submit Vote'}
                         </button>
-                    </div>
-                )}
-
-                {/* Optional: Add a link to the history page if parent context exists */}
-                {pk_namespace && pk && (
-                    <div className="text-center mt-4">
-                        <Link
-                            to={`/history?pk_namespace=${encodeURIComponent(pk_namespace)}&pk=${encodeURIComponent(pk)}`}
-                            className="text-blue-500 hover:text-blue-700 underline"
-                        >
-                            View Vote History for Parent
-                        </Link>
                     </div>
                 )}
             </div>
