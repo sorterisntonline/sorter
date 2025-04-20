@@ -929,7 +929,7 @@ function App() {
                 <Route index element={<HomePage />} /> {/* Default page */}
                 <Route path="search" element={<SearchPage />} />
                 {/* Define a route for entity details with parameters */}
-                <Route path="entity/:pk_namespace/:pk" element={<EntityPage />} />
+                <Route path="entity" element={<EntityPage />} />
                 <Route path="vote" element={<VotePage />} /> {/* Keep existing vote page */}
                 <Route path="history" element={<VoteHistoryPage />} />
                 <Route path="profile" element={<ProfilePage />} />

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 // Import React Router hooks
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 // Import React Query hooks
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 // Import CSSTransition for potential future animations (optional here)
@@ -294,7 +294,7 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
                         return (
                             <span key={`${parent.pk_namespace}-${parent.pk}`}>
                                 {/* Use onClick with handleLinkClick */}
-                                <a href={`/entity/${parent.pk_namespace}/${parent.pk}`} // Keep href for context/SEO but rely on onClick
+                                <a href={`/entity?pk_namespace=${parent.pk_namespace}&pk=${parent.pk}`} 
                                     onClick={(e) => handleLinkClick(e, parent.pk_namespace, parent.pk)}
                                     className="text-brand-600 hover:underline cursor-pointer">
                                         {parent.title} <span className="text-gray-500 capitalize">[{parentType}]</span>
@@ -359,7 +359,11 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
 
 // --- Main Entity Page Component ---
 function EntityPage() {
-    const { pk_namespace: urlPkNamespace, pk: urlPk } = useParams(); // Get params from URL
+    const [searchParams, setSearchParams] = useSearchParams(); // Get params from URL
+    const urlPkNamespace = searchParams.get('pk_namespace');
+    const urlPk = searchParams.get('pk');
+    console.log("urlPkNamespace:", urlPkNamespace);
+    console.log("urlPk:", urlPk);
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const entityDetailsNodeRef = useRef(null); // For transition animations
@@ -431,12 +435,13 @@ function EntityPage() {
     // --- Navigation Handler ---
     const handleNavigate = (pk_ns, pk) => {
         console.log("Navigating from Entity Page to:", pk_ns, pk);
-        navigate(`/entity/${encodeURIComponent(pk_ns)}/${encodeURIComponent(pk)}`);
+        navigate(`/entity?pk_namespace=${encodeURIComponent(pk_ns)}&pk=${encodeURIComponent(pk)}`);
     };
 
     // --- Determine Display State ---
     const displayState = (() => {
         // If ensure is running due to a 404 retry, show loading
+        if (urlPkNamespace === null || urlPk === null) return 'none_selected';
         if (ensureMutation.isLoading && detailsQuery.status === 'error' && detailsQuery.error?.status === 404) return 'loading';
         if (detailsQuery.isLoading) return 'loading';
         if (ensureMutation.isError) return 'error_ensure'; // Ensure failed directly
@@ -460,6 +465,11 @@ function EntityPage() {
                      unmountOnExit
                  >
                      <div ref={entityDetailsNodeRef}>
+                        {displayState === 'none_selected' && (
+                            <div className="p-5 border border-gray-200 rounded-smd bg-white shadow-card text-gray-500 text-center">
+                                No entity selected
+                            </div>
+                        )}
                          {/* Loading state */}
                          {displayState === 'loading' && (
                              <div className="p-5 border border-gray-200 rounded-smd bg-white shadow-card text-gray-500 text-center">

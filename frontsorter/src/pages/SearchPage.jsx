@@ -139,7 +139,7 @@ function SearchPage() {
             }
 
             // Navigate to the entity page
-            navigate(`/entity/${encodeURIComponent(pk_namespace)}/${encodeURIComponent(pk)}`);
+            navigate(`/entity?pk_namespace=${encodeURIComponent(pk_namespace)}&pk=${encodeURIComponent(pk)}`);
 
             // Clear input after navigation
             setInputValue('');
