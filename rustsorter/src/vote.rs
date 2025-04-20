@@ -6,6 +6,8 @@ use axum::{
     Router,
     extract::Query,
     debug_handler,
+    response::Response,
+    body::Body,
 };
 use chrono::{DateTime, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -221,7 +223,6 @@ async fn list_votes(
     )
     .fetch_all(&state.db)
     .await.map_err(|e| {
-        log::error!("Failed to list votes: {}", e);
         ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "Failed to list votes".to_string())
     })?;
 
@@ -236,11 +237,11 @@ async fn list_votes(
     )
     .fetch_all(&state.db)
     .await.map_err(|e| {
-        log::error!("Failed to list votes: {}", e);
         ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "Failed to list votes".to_string())
     })?;
 
-    Ok((StatusCode::OK, Json(votes)))
+    let response  : Result<Response<Body>, ErrorResponse> = Ok(Json(votes).into_response());
+    response
 }
 
 // Define the routes for vote operations (now only create and read)
