@@ -121,5 +121,6 @@ fn api_routes(
         .nest("/entity", crate::entity::routes())
         .nest("/entity_relationships", crate::entity_relationships::routes())
         .nest("/spotify", crate::spotify::routes())
+        .nest("/vote", crate::vote::routes())
         .layer(middleware::from_fn_with_state(app_state, auth_middleware::try_auth))
 }

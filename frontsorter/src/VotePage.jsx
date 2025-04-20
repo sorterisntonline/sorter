@@ -35,65 +35,58 @@ const fetchEntityFn = async (pk_namespace, pk) => {
     return data.entity;
 };
 
-// --- API Function to Submit/Update a Vote ---
+// --- API Function to Submit a Vote (Append-Only) ---
 const submitVoteFn = async ({
-    left_ns, left_pk, right_ns, right_pk, voter_user_id, attribute_id, magnitude
+    left_ns, left_pk, right_ns, right_pk, attribute_id, magnitude
+    // voter_user_id is no longer needed, obtained from auth token
 }) => {
-    // TODO: Replace with actual logged-in user ID from context/auth state
-    const userIdToUse = voter_user_id || '00000000-0000-0000-0000-000000000000'; // Placeholder UUID
-    // TODO: Allow selecting attribute_id (defaulting to 'like' = 0)
-    const attributeIdToUse = attribute_id !== undefined ? attribute_id : 0;
 
-    const primaryKeyPath = `${encodeURIComponent(left_ns)}/${encodeURIComponent(left_pk)}/${encodeURIComponent(right_ns)}/${encodeURIComponent(right_pk)}/${encodeURIComponent(userIdToUse)}/${encodeURIComponent(attributeIdToUse)}`;
-    const updateUrl = `/api/vote/${primaryKeyPath}`;
-    const createUrl = '/api/vote';
+    // TODO: Allow selecting attribute_id (defaulting to 'like' = 1)
+    // NOTE: The 'like' attribute ID is 1 based on the migration, not 0.
+    const attributeIdToUse = attribute_id !== undefined ? attribute_id : 1; // Default to 1 for 'like'
 
-    // Try updating first
-    const updatePayload = { magnitude };
-    let response = await fetch(updateUrl, {
-        method: 'PUT',
+    const createUrl = '/api/vote'; // Only POST endpoint is used now
+
+    const createPayload = {
+        left_entity_pk_namespace: left_ns,
+        left_entity_pk: left_pk,
+        right_entity_pk_namespace: right_ns,
+        right_entity_pk: right_pk,
+        attribute_id: attributeIdToUse,
+        magnitude: magnitude,
+        // No voter_user_id here, backend gets it from auth
+    };
+
+    console.log("Submitting vote (POST):", createUrl, createPayload);
+
+    const response = await fetch(createUrl, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatePayload),
+        body: JSON.stringify(createPayload),
     });
 
     if (response.ok) {
-        console.log("Vote updated successfully");
-        return await response.json(); // Return updated vote data
+         console.log("Vote created successfully");
+        return await response.json(); // Return created vote data
     }
 
-    // If update failed (e.g., 404 Not Found), try creating
-    if (response.status === 404) {
-        console.log("Vote not found, attempting to create...");
-        const createPayload = {
-            left_entity_pk_namespace: left_ns,
-            left_entity_pk: left_pk,
-            right_entity_pk_namespace: right_ns,
-            right_entity_pk: right_pk,
-            voter_user_id: userIdToUse,
-            attribute_id: attributeIdToUse,
-            magnitude: magnitude,
-        };
-        response = await fetch(createUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(createPayload),
-        });
-
-        if (response.ok) {
-             console.log("Vote created successfully");
-            return await response.json(); // Return created vote data
-        }
-
-         // Handle conflict if creation also fails (e.g., race condition)
-        if (response.status === 409) {
-             console.warn("Vote likely created by another request between PUT and POST.");
-             throw new Error("Vote conflict. Please try again."); // Or handle more gracefully
-        }
+     // Handle specific errors like Conflict (409) or Bad Request (400)
+    if (response.status === 409) {
+         console.warn("Vote conflict detected.");
+         // This might happen if the exact same vote (same pair, user, attr, timestamp) was somehow submitted twice,
+         // or if the PK doesn't include timestamp and a vote already exists for the pair/user/attr.
+         throw new Error("Vote conflict. It might already exist.");
+    }
+    if (response.status === 400) {
+        const errorText = await response.text();
+        console.error("Bad request (400):", errorText);
+        throw new Error(`Invalid vote data: ${errorText}`);
     }
 
-    // If both update and create failed for other reasons
+    // Handle other errors
     const errorText = await response.text();
-    const error = new Error(`Failed to submit vote. Status: ${response.status}. ${errorText}`);
+    console.error(`Failed to submit vote. Status: ${response.status}. Body: ${errorText}`);
+    const error = new Error(`Failed to submit vote. Status: ${response.status}.`);
     error.status = response.status;
     throw error;
 };
@@ -203,15 +196,14 @@ function VotePage() {
         if (!leftQuery.data || !rightQuery.data || voteMutation.isPending) return;
 
         console.log("Submitting Vote:");
-        // TODO: Get actual voter_user_id and attribute_id
+        // TODO: Get actual attribute_id if different from default
         const voteData = {
             left_ns: left_ns,
             left_pk: left_pk,
             right_ns: right_ns,
             right_pk: right_pk,
             magnitude: sliderValue, // Use the slider value directly as magnitude
-            voter_user_id: null, // Placeholder, will be handled in submitVoteFn
-            attribute_id: 0, // Placeholder, will be handled in submitVoteFn ('like')
+            attribute_id: 1, // Placeholder, will be handled in submitVoteFn ('like') - ID is 1
         };
         console.log("  Data:", voteData);
 
