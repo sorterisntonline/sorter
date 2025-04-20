@@ -371,7 +371,7 @@ function VotePage() {
 
                 {/* Only display items and slider if both queries are successful */}
                 {isSuccess && leftItem && rightItem && (
-                    <div className="flex flex-col items-center justify-center gap-6 bg-white p-6 rounded-lg shadow mb-8"> {/* Added mb-8 */}
+                    <div className="flex flex-col items-center justify-center gap-6 bg-white p-6 mb-8">
                         {/* Container for the two items */}
                         <div className="flex w-full items-start justify-around gap-4">
                             {/* Left Item - Wrapped in Link */}

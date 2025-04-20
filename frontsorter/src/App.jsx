@@ -246,6 +246,33 @@ function RankedChildList({ parentNamespace, parentPk, childType, childrenOfType,
     );
 }
 
+// --- NEW: Item Pair Preview Link Component ---
+function ItemPairPreviewLink({ parentNamespace, parentPk, childType, item1, item2 }) {
+    if (!item1 || !item2) return null; // Don't render if items are missing
+
+    const voteLink = `/vote?parent_ns=${encodeURIComponent(parentNamespace)}&parent_pk=${encodeURIComponent(parentPk)}&type=${encodeURIComponent(childType)}&left_ns=${encodeURIComponent(item1.pk_namespace)}&left_pk=${encodeURIComponent(item1.pk)}&right_ns=${encodeURIComponent(item2.pk_namespace)}&right_pk=${encodeURIComponent(item2.pk)}`;
+
+    const renderItemPreview = (item) => (
+        <div className="text-center flex flex-col items-center w-1/3">
+            {item.profile_picture_url && <img src={item.profile_picture_url} alt={item.title} className="w-12 h-12 object-cover rounded-smd mb-1 shadow"/>}
+            {!item.profile_picture_url && <div className="w-12 h-12 bg-gray-200 rounded-smd mb-1 flex items-center justify-center text-gray-400 text-xl shadow">?</div>}
+            <span className="text-xs text-gray-700 truncate w-full px-1">{item.title}</span>
+        </div>
+    );
+
+    return (
+        <Link to={voteLink} className="cursor-pointer my-3 p-3 border border-brand-200 rounded-smd bg-brand-50/40 flex items-center justify-around gap-2 relative group no-underline transition transform hover:-translate-y-0.5">
+            {renderItemPreview(item1)}
+            {/* Overlay VOTE text on hover */}
+            <div className="absolute inset-0 flex items-center justify-center bg-brand-600/80 opacity-0 group-hover:opacity-100 transition-opacity rounded-smd">
+                <span className="text-white text-3xl tracking-wide font-bold">VOTE</span>
+            </div>
+            {renderItemPreview(item2)}
+        </Link>
+    );
+}
+// --- END: Item Pair Preview Link Component ---
+
 // --- EntityDetailsDisplay Component (Modified for Rank Query & Display) ---
 function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isEnsuring }) {
     const { entity, parents, children } = entityDetails || {};
@@ -265,8 +292,6 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
         });
         return groups;
     }, [children]);
-
-    const childTypes = Object.keys(groupedChildrenByType);
 
     // Early return MUST be after all hooks
     if (!entityDetails || !entity) {
@@ -371,52 +396,39 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
                 <div className="mt-4 pt-4 border-t border-gray-100">
                     {sortedChildTypes.map((childType) => {
                         const childrenOfType = groupedChildrenByType[childType];
-                        let itemPairElement = null;
+                        let item1, item2;
 
-                        // --- Item Pair Preview (Logic remains, uses original childrenOfType) ---
+                        // Select two random distinct items for the preview
                         if (childrenOfType && childrenOfType.length >= 2) {
                             let index1 = Math.floor(Math.random() * childrenOfType.length);
-                            let index2 = Math.floor(Math.random() * childrenOfType.length);
-                            while (index1 === index2 && childrenOfType.length > 1) {
+                            let index2;
+                            do {
                                 index2 = Math.floor(Math.random() * childrenOfType.length);
-                            }
-                            const item1 = childrenOfType[index1];
-                            const item2 = childrenOfType[index2];
-                            const voteLink = `/vote?parent_ns=${encodeURIComponent(pk_namespace)}&parent_pk=${encodeURIComponent(pk)}&type=${encodeURIComponent(childType)}&left_ns=${encodeURIComponent(item1.pk_namespace)}&left_pk=${encodeURIComponent(item1.pk)}&right_ns=${encodeURIComponent(item2.pk_namespace)}&right_pk=${encodeURIComponent(item2.pk)}`;
-                            itemPairElement = (
-                                <Link to={voteLink} className="cursor-pointer my-3 p-3 border border-brand-200 rounded-smd bg-brand-50/40 flex items-center justify-around gap-2 relative group no-underline transition transform hover:-translate-y-0.5">
-                                    {/* Item 1 Preview */}
-                                    <div className="text-center flex flex-col items-center w-1/3">
-                                        {item1.profile_picture_url && <img src={item1.profile_picture_url} alt={item1.title} className="w-12 h-12 object-cover rounded-smd mb-1 shadow"/>}
-                                        {!item1.profile_picture_url && <div className="w-12 h-12 bg-gray-200 rounded-smd mb-1 flex items-center justify-center text-gray-400 text-xl shadow">?</div>}
-                                        <span className="text-xs text-gray-700 truncate w-full px-1">{item1.title}</span>
-                                    </div>
-                                    {/* Overlay VOTE text on hover */}
-                                    <div className="absolute inset-0 flex items-center justify-center bg-brand-600/80 opacity-0 group-hover:opacity-100 transition-opacity rounded-smd">
-                                        <span className="text-white text-3xl tracking-wide font-bold">VOTE</span>
-                                    </div>
-                                    {/* Item 2 Preview */}
-                                    <div className="text-center flex flex-col items-center w-1/3">
-                                        {item2.profile_picture_url && <img src={item2.profile_picture_url} alt={item2.title} className="w-12 h-12 object-cover rounded-smd mb-1 shadow"/>}
-                                        {!item2.profile_picture_url && <div className="w-12 h-12 bg-gray-200 rounded-smd mb-1 flex items-center justify-center text-gray-400 text-xl shadow">?</div>}
-                                        <span className="text-xs text-gray-700 truncate w-full px-1">{item2.title}</span>
-                                    </div>
-                                </Link>
-                            );
+                            } while (index1 === index2);
+                            item1 = childrenOfType[index1];
+                            item2 = childrenOfType[index2];
                         }
-                        // --- END: Item Pair Preview ---
 
                         return (
                             <div key={childType} className="mb-4">
                                 <h5 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">
                                     {childType.replace(/^spotify\./, '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                                 </h5>
-                                {itemPairElement}
+                                {/* Use the new component */}
+                                {item1 && item2 && (
+                                    <ItemPairPreviewLink
+                                        parentNamespace={pk_namespace}
+                                        parentPk={pk}
+                                        childType={childType}
+                                        item1={item1}
+                                        item2={item2}
+                                    />
+                                )}
                                 <RankedChildList
                                     parentNamespace={pk_namespace}
                                     parentPk={pk}
                                     childType={childType}
-                                    childrenOfType={childrenOfType}
+                                    childrenOfType={childrenOfType} // Pass original list to RankedChildList
                                     onItemClick={handleLinkClick}
                                 />
                             </div>
