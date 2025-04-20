@@ -168,7 +168,7 @@ function RankedChildList({ parentNamespace, parentPk, childType, childrenOfType,
 // --- Item Pair Preview Link Component ---
 function ItemPairPreviewLink({ parentNamespace, parentPk, childType, item1, item2}) {
     // Link generation remains the same
-    const voteLink = `/vote?parent_ns=${encodeURIComponent(parentNamespace)}&parent_pk=${encodeURIComponent(parentPk)}&type=${encodeURIComponent(childType)}&left_ns=${encodeURIComponent(item1.pk_namespace)}&left_pk=${encodeURIComponent(item1.pk)}&right_ns=${encodeURIComponent(item2.pk_namespace)}&right_pk=${encodeURIComponent(item2.pk)}`;
+    const voteLink = `/vote?pk_namespace=${encodeURIComponent(parentNamespace)}&pk=${encodeURIComponent(parentPk)}&type=${encodeURIComponent(childType)}&left_ns=${encodeURIComponent(item1.pk_namespace)}&left_pk=${encodeURIComponent(item1.pk)}&right_ns=${encodeURIComponent(item2.pk_namespace)}&right_pk=${encodeURIComponent(item2.pk)}`;
 
     const renderItemPreview = (item) => (
         <div className="text-center flex flex-col items-center w-1/3">
