@@ -226,19 +226,22 @@ async fn list_votes(
         ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "Failed to list votes".to_string())
     })?;
 
+    log::info!("childen_of_parent: {:?}", childen_of_parent);
+
     let child_pk_namespaces = childen_of_parent.iter().map(|r| r.child_pk_namespace.clone()).collect::<Vec<String>>();
     let child_pk_namespaces_str = child_pk_namespaces.join(",");
-    let votes = sqlx::query_as!(
+    let votes = sqlx::query_as!( // TODO use sea-query for this query, use filters
         Vote,
         r#"
-        SELECT * FROM votes WHERE left_entity_pk_namespace IN ($1)
+        SELECT * FROM votes WHERE true 
         "#,
-        child_pk_namespaces_str
     )
     .fetch_all(&state.db)
     .await.map_err(|e| {
         ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "Failed to list votes".to_string())
     })?;
+
+    log::info!("votes: {:?}", votes);
 
     let response  : Result<Response<Body>, ErrorResponse> = Ok(Json(votes).into_response());
     response

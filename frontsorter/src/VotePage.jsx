@@ -1,7 +1,8 @@
 import { useSearchParams, Link } from 'react-router-dom';
 // Import react-query hooks
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react'; // Import useState
+import { useNavigate } from 'react-router-dom'; // Import useNavigate
 
 // Helper function to get the smallest image URL (can be moved to a utils file)
 const getSmallestImageUrl = (images) => {
@@ -91,6 +92,31 @@ const submitVoteFn = async ({
     throw error;
 };
 
+// --- API Function to Fetch Votes (filtered by parent) ---
+const fetchVotesFn = async (parentNs, parentPk) => {
+    // Only fetch if parent info is available
+    if (!parentNs || !parentPk) {
+        console.log("Parent info missing, skipping vote fetch.");
+        return []; // Return empty array if no parent to filter by
+    }
+
+    // Construct the URL with query parameters
+    const apiUrl = `/api/vote?parent_entity_ns=${encodeURIComponent(parentNs)}&parent_entity_pk=${encodeURIComponent(parentPk)}`;
+    console.log("Fetching previous votes from:", apiUrl);
+    const response = await fetch(apiUrl);
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Failed to fetch votes. Status: ${response.status}. Body: ${errorText}`);
+        const error = new Error(`HTTP error fetching votes! status: ${response.status}. ${errorText}`);
+        error.status = response.status; // Attach status code
+        throw error;
+    }
+    const data = await response.json();
+    // Assuming the API returns an array of Vote objects
+    return data || []; // Return data or empty array
+};
+
 // --- Vote Item Component (Now just displays, no voting click) ---
 function VoteItemDisplay({ item, isDisabled }) { // Removed isSelected, pk is unused now
     if (!item) return null;
@@ -147,6 +173,8 @@ function VoteItemDisplay({ item, isDisabled }) { // Removed isSelected, pk is un
 // --- Vote Page Component ---
 function VotePage() {
     const [searchParams] = useSearchParams();
+    const navigate = useNavigate(); // Hook for navigation
+    const queryClient = useQueryClient(); // Hook for query invalidation
     const parentNs = searchParams.get('parent_ns');
     const parentPk = searchParams.get('parent_pk');
     // const childType = searchParams.get('type'); // Currently unused
@@ -165,20 +193,30 @@ function VotePage() {
     const leftQuery = useQuery({ queryKey: ['entity', left_ns, left_pk], queryFn: () => fetchEntityFn(left_ns, left_pk), enabled: !!left_ns && !!left_pk, ...queryOptions });
     const rightQuery = useQuery({ queryKey: ['entity', right_ns, right_pk], queryFn: () => fetchEntityFn(right_ns, right_pk), enabled: !!right_ns && !!right_pk, ...queryOptions });
 
+    // --- Query for Previous Votes (filtered by parent) ---
+    const votesQuery = useQuery({
+        queryKey: ['votes', parentNs, parentPk], // Include parent in query key
+        queryFn: () => fetchVotesFn(parentNs, parentPk),
+        enabled: !!parentNs && !!parentPk, // Only run if parent info exists
+        ...queryOptions
+    });
+
     // --- Mutation Setup ---
     const voteMutation = useMutation({
         mutationFn: submitVoteFn,
         onSuccess: (data) => {
             console.log("Vote submission successful:", data);
-            // TODO: Invalidate relevant queries if needed (e.g., user's vote history)
-            // queryClient.invalidateQueries(['votes', ...]);
+            // Invalidate the votes query for the current parent to refetch
+            queryClient.invalidateQueries({ queryKey: ['votes', parentNs, parentPk] });
 
             // TODO: Navigate to next pair or back to parent
-            alert(`Vote submitted with magnitude: ${data.magnitude}! (Navigation pending)`);
-            // Example: navigate back to parent if available
-            // if (parentNs && parentPk) {
-            //  navigate(`/?pk_namespace=${encodeURIComponent(parentNs)}&pk=${encodeURIComponent(parentPk)}`);
-            // }
+            // For now, just show alert and maybe navigate back if possible
+            alert(`Vote submitted with magnitude: ${data.magnitude}!`);
+            if (parentNs && parentPk) {
+                // Optionally navigate back, or implement logic for next pair
+                // navigate(`/?pk_namespace=${encodeURIComponent(parentNs)}&pk=${encodeURIComponent(parentPk)}`);
+                 console.log("Navigation to next pair/parent not implemented yet.");
+            }
         },
         onError: (error) => {
             console.error("Vote submission failed:", error);
@@ -212,11 +250,12 @@ function VotePage() {
 
     // --- Render Logic ---
     const isLoading = leftQuery.isLoading || rightQuery.isLoading;
-    // Combine potential errors
-    const combinedError = leftQuery.error || rightQuery.error || voteMutation.error;
+    // Combine potential errors (add votesQuery error)
+    const combinedError = leftQuery.error || rightQuery.error || voteMutation.error || votesQuery.error;
     const isSuccess = leftQuery.isSuccess && rightQuery.isSuccess;
     const leftItem = leftQuery.data;
     const rightItem = rightQuery.data;
+    const previousVotes = votesQuery.data || []; // Default to empty array
 
     // --- Parent Link --- (No changes needed)
     const parentLink = parentNs && parentPk ? (
@@ -245,13 +284,14 @@ function VotePage() {
                         {leftQuery.isError && <p className="text-sm mt-1">Loading left item: {leftQuery.error?.message || 'Unknown error'}</p>}
                         {rightQuery.isError && <p className="text-sm mt-1">Loading right item: {rightQuery.error?.message || 'Unknown error'}</p>}
                         {voteMutation.isError && <p className="text-sm mt-1">Submitting vote: {voteMutation.error?.message || 'Unknown error'}</p>}
+                        {votesQuery.isError && <p className="text-sm mt-1">Loading previous votes: {votesQuery.error?.message || 'Unknown error'}</p>}
                         {(leftQuery.error?.status === 404 || rightQuery.error?.status === 404) && <p className="text-sm mt-1">Could not find one or both items.</p>}
                     </div>
                 )}
 
                 {/* Only display items and slider if both queries are successful */}
                 {isSuccess && leftItem && rightItem && (
-                    <div className="flex flex-col items-center justify-center gap-6 bg-white p-6 rounded-lg shadow"> {/* Added rounded-lg shadow */}
+                    <div className="flex flex-col items-center justify-center gap-6 bg-white p-6 rounded-lg shadow mb-8"> {/* Added mb-8 */}
                         {/* Container for the two items */}
                         <div className="flex w-full items-start justify-around gap-4">
                             {/* Left Item - Wrapped in Link */}
@@ -283,6 +323,7 @@ function VotePage() {
                                 className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-blue-500"
                                 disabled={voteMutation.isPending} // Disable slider during submission
                             />
+                             <div className="text-center mt-1 text-lg font-medium">{sliderValue}</div> {/* Display current slider value */}
                         </div>
 
                         {/* Submit Button */}
@@ -300,12 +341,46 @@ function VotePage() {
                     </div>
                 )}
 
+                {/* --- Previous Votes Section --- */}
+                 {parentNs && parentPk && ( // Only show if we have parent info to filter by
+                    <div className="w-full max-w-4xl mt-8 p-4 bg-white rounded-lg shadow">
+                        <h3 className="text-lg font-semibold mb-3 text-gray-700 border-b pb-2">Previous Votes for Parent</h3>
+                        {votesQuery.isLoading && <p className="text-gray-500">Loading votes...</p>}
+                        {/* Error handled globally above */}
+                        {votesQuery.isSuccess && previousVotes.length === 0 && (
+                            <p className="text-gray-500">No votes found for this parent yet.</p>
+                        )}
+                        {votesQuery.isSuccess && previousVotes.length > 0 && (
+                            <ul className="space-y-2 text-sm">
+                                {previousVotes.map((vote, index) => (
+                                    <li key={index} className="p-2 border rounded bg-gray-50/80">
+                                        <div className="flex justify-between items-center">
+                                            <span className="font-medium text-gray-800">
+                                                {vote.left_entity_pk_namespace.split('.').pop()}:{vote.left_entity_pk.substring(0, 8)}... vs {vote.right_entity_pk_namespace.split('.').pop()}:{vote.right_entity_pk.substring(0, 8)}...
+                                            </span>
+                                            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                                                vote.magnitude > 0 ? 'bg-green-100 text-green-800' : vote.magnitude < 0 ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'
+                                            }`}>
+                                                {vote.magnitude > 0 ? `+${vote.magnitude}` : vote.magnitude}
+                                            </span>
+                                        </div>
+                                        <div className="text-xs text-gray-500 mt-1">
+                                             Attribute ID: {vote.attribute_id} {/* Can map to name later */} | User: {vote.user_id.substring(0, 8)}... | Voted: {new Date(vote.created_at).toLocaleString()}
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+                 )}
+
                 {/* Optional Debug Info */}
                 {/* <div className="mt-8 p-3 bg-gray-50 border border-gray-200 rounded text-xs text-gray-600">
                     <p>Parent: {parentNs}/{parentPk}</p>
                     <p>Left: {left_ns}/{left_pk} (Status: {leftQuery.status})</p>
                     <p>Right: {right_ns}/{right_pk} (Status: {rightQuery.status})</p>
                     <p>Slider: {sliderValue}</p>
+                    <p>Votes Query Status: {votesQuery.status} (# {previousVotes.length})</p> // Added votes query debug
                 </div> */}
             </div>
         </div>
