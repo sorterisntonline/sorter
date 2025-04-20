@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 // Import react-router-dom hook
 import { useSearchParams, Link, Routes, Route } from 'react-router-dom';
 // Import react-query hooks
@@ -113,25 +113,63 @@ const fetchEntityDetailsFn = async (pk_namespace, pk) => {
     return data;
 };
 
-// --- Child List Item Component (Step 6) ---
-function ChildListItem({ child, onItemClick }) {
+// --- NEW: Function to fetch ranked children ---
+const fetchRankedChildrenFn = async (childrenIdentifiers) => {
+    if (!childrenIdentifiers || childrenIdentifiers.length === 0) {
+        console.log("No child identifiers provided for ranking.");
+        return []; // Return empty array if no children
+    }
+    console.log("Fetching ranks for children:", childrenIdentifiers);
+    const response = await fetch(`/api/rank`, { // Note: Path matches main.rs nesting
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(childrenIdentifiers), // Send the array of {pk_namespace, pk}
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        const error = new Error(`HTTP error fetching ranks! status: ${response.status}. ${errorText}`);
+        error.status = response.status; // Attach status code
+        console.error("Rank fetching failed:", error);
+        throw error;
+    }
+    const rankedData = await response.json();
+    console.log("Received ranked data:", rankedData);
+    return rankedData;
+};
+// --- END NEW API Function ---
+
+// --- Child List Item Component (Step 6 & Modified for Rank) ---
+function ChildListItem({ child, onItemClick, score }) { // Added score prop
+    const displayScore = score !== undefined && score !== null ? score * 10000 : null; // Example scaling for display
+
     return (
         <div
-            className="flex items-center gap-2 px-2 py-1.5 rounded-smd cursor-pointer hover:bg-gray-100 hover:text-brand-600 transition-colors duration-100 ease-in-out"
+            className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-smd cursor-pointer hover:bg-gray-100 hover:text-brand-600 transition-colors duration-100 ease-in-out group" // Added group for potential hover effects
             onClick={(e) => onItemClick(e, child.pk_namespace, child.pk)}
         >
-            {child.profile_picture_url ? (
-                <img src={child.profile_picture_url} alt={child.title || 'Child item image'} className="w-7 h-7 rounded-smd object-cover flex-shrink-0" />
-            ) : (
-                <div className="w-7 h-7 bg-gray-100 border border-gray-200 inline-flex items-center justify-center text-gray-400 text-lg flex-shrink-0 rounded-smd">?</div>
+            <div className="flex items-center gap-2 flex-1 min-w-0"> {/* Allow shrinking */}
+                {child.profile_picture_url ? (
+                    <img src={child.profile_picture_url} alt={child.title || 'Child item image'} className="w-7 h-7 rounded-smd object-cover flex-shrink-0" />
+                ) : (
+                    <div className="w-7 h-7 bg-gray-100 border border-gray-200 inline-flex items-center justify-center text-gray-400 text-lg flex-shrink-0 rounded-smd">?</div>
+                )}
+                <span className="truncate">{child.title}</span>
+            </div>
+            {/* Display Score */}
+            {displayScore !== null && (
+                 <span className="text-xs font-medium text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded-smd flex-shrink-0">
+                     {displayScore.toFixed(0)} {/* Display score */}
+                 </span>
             )}
-            <span className="truncate flex-1">{child.title}</span>
         </div>
     );
 }
 
-// --- EntityDetailsDisplay Component (Step 5 & 7) ---
+// --- EntityDetailsDisplay Component (Modified for Rank Query & Display) ---
 function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isEnsuring }) {
+    const queryClient = useQueryClient(); // Get query client instance
+
     if (!entityDetails || !entityDetails.entity) {
         return <div className="text-gray-500">No details available.</div>;
     }
@@ -140,6 +178,32 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
     const { title, pk_namespace, pk, metadata } = entity;
     const entityType = pk_namespace.split('.')[1]; // e.g., 'album', 'artist', 'track'
     const spotifyUri = `spotify:${entityType}:${pk}`; // Construct Spotify URI
+
+    // --- NEW: Rank Query ---
+    // Prepare identifiers for the rank query API call
+    const childIdentifiers = children?.map(c => ({ pk_namespace: c.pk_namespace, pk: c.pk })) || [];
+
+    const rankQuery = useQuery({
+        queryKey: ['entityRanks', pk_namespace, pk, childIdentifiers], // Key includes parent and children identifiers
+        queryFn: () => fetchRankedChildrenFn(childIdentifiers),
+        enabled: !!children && children.length > 0, // Only run if children exist
+        staleTime: 5 * 60 * 1000, // Cache ranks for 5 minutes
+        placeholderData: [], // Start with empty array to avoid errors during loading
+    });
+
+    // Create a map for quick score lookup: "ns:pk" -> score
+    const scoreMap = useMemo(() => {
+        if (!rankQuery.data || rankQuery.data.length === 0) {
+            return new Map();
+        }
+        return new Map(
+            rankQuery.data.map(item => [
+                `${item.pk_namespace}:${item.pk}`,
+                item.score
+            ])
+        );
+    }, [rankQuery.data]);
+    // --- END Rank Query ---
 
     // Handler for manual ensure button
     const handleManualEnsure = () => {
@@ -196,19 +260,40 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
     };
 
     // --- Group Children by Type ---
-    const groupedChildren = {};
-    if (children && children.length > 0) {
+    const groupedChildren = useMemo(() => {
+        const groups = {};
+        if (!children || children.length === 0) return groups;
+
         children.forEach(child => {
             const childType = child.pk_namespace;
-            if (!groupedChildren[childType]) {
-                groupedChildren[childType] = [];
+            if (!groups[childType]) {
+                groups[childType] = [];
             }
-            groupedChildren[childType].push(child);
+            groups[childType].push(child);
         });
-    }
-    // Sort types alphabetically for consistent order (optional)
+
+        // Sort children within each group based on scoreMap
+        if (scoreMap.size > 0) {
+            Object.values(groups).forEach(group => {
+                group.sort((a, b) => {
+                    const scoreA = scoreMap.get(`${a.pk_namespace}:${a.pk}`) ?? -Infinity;
+                    const scoreB = scoreMap.get(`${b.pk_namespace}:${b.pk}`) ?? -Infinity;
+                    return scoreB - scoreA; // Sort descending by score
+                });
+            });
+        } else {
+             // Fallback: Sort alphabetically by title if scores aren't available
+            Object.values(groups).forEach(group => {
+                group.sort((a, b) => a.title?.localeCompare(b.title || '') || 0);
+            });
+        }
+
+        return groups;
+    }, [children, scoreMap]); // Recalculate when children or scores change
+
+    // Sort types alphabetically for consistent display order of groups
     const sortedChildTypes = Object.keys(groupedChildren).sort();
-    // --- End Grouping ---
+    // --- End Grouping & Sorting ---
 
     // Conditionally render the Spotify Player for tracks
     const trackPlayer = entityType === 'track'
@@ -245,11 +330,19 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
             {/* Render Children - Grouped by Type */}
             {sortedChildTypes.length > 0 && (
                 <div className="mt-4 pt-4 border-t border-gray-100">
+                     {/* Display Rank Loading/Error State */}
+                     {rankQuery.isLoading && (
+                         <div className="text-xs text-gray-500 italic text-center mb-2">Loading ranks...</div>
+                     )}
+                     {rankQuery.isError && (
+                          <div className="text-xs text-red-500 italic text-center mb-2">Could not load ranks: {rankQuery.error.message}</div>
+                     )}
+
                     {sortedChildTypes.map(childType => {
                         const childrenOfType = groupedChildren[childType];
                         let itemPairElement = null;
 
-                        // --- BEGIN: Item Pair Preview (Step 7) ---
+                        // --- BEGIN: Item Pair Preview (No changes needed here) ---
                         if (childrenOfType && childrenOfType.length >= 2) {
                             // Select two random distinct indices
                             let index1 = Math.floor(Math.random() * childrenOfType.length);
@@ -265,11 +358,12 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
                             const item2ImageUrl = item2.profile_picture_url;
                             const voteLink = `/vote?parent_ns=${encodeURIComponent(entity.pk_namespace)}`
                             + `&parent_pk=${encodeURIComponent(entity.pk)}`
-                            + `&type=${encodeURIComponent(childType)}`
+                            + `&type=${encodeURIComponent(childType)}` // Keep type for potential backend use
                             + `&left_ns=${encodeURIComponent(item1.pk_namespace)}`
                             + `&left_pk=${encodeURIComponent(item1.pk)}`
                             + `&right_ns=${encodeURIComponent(item2.pk_namespace)}`
                             + `&right_pk=${encodeURIComponent(item2.pk)}`;
+
 
                             itemPairElement = (
                                 <Link to={voteLink} className="cursor-pointer my-3 p-3 border border-brand-200 rounded-smd bg-brand-50/40 flex items-center justify-around gap-2 relative group no-underline transition transform hover:-translate-y-0.5">
@@ -294,7 +388,7 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
                                 </Link>
                             );
                         }
-                        // --- END: Add Item Pair Preview ---
+                        // --- END: Item Pair Preview ---
 
 
                         return (
@@ -304,13 +398,18 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
                                 </h5>
                                 {itemPairElement}
                                 <div className="text-sm text-gray-700 space-y-1">
-                                    {childrenOfType.map((child) => (
-                                        <ChildListItem
-                                            key={`${child.pk_namespace}-${child.pk}`}
-                                            child={child}
-                                            onItemClick={handleLinkClick}
-                                        />
-                                    ))}
+                                    {childrenOfType.map((child) => {
+                                         // Get score from the map
+                                        const score = scoreMap.get(`${child.pk_namespace}:${child.pk}`);
+                                        return (
+                                            <ChildListItem
+                                                key={`${child.pk_namespace}-${child.pk}`}
+                                                child={child}
+                                                onItemClick={handleLinkClick}
+                                                score={score} // Pass score down
+                                            />
+                                        );
+                                    })}
                                 </div>
                             </div>
                         );
@@ -409,7 +508,7 @@ function MainView() {
              // Sync selectedTags state with the data loaded from URL
              if (data?.entity) {
                  const entity = data.entity;
-                 const imageUrl = getSmallestImageUrl(entity.metadata?.images);
+                 const imageUrl = entity.profile_picture_url || getSmallestImageUrl(entity.metadata?.images);
                  setSelectedTags([{
                      pk_namespace: entity.pk_namespace,
                      pk: entity.pk,
@@ -420,6 +519,16 @@ function MainView() {
                      artists: entity.metadata?.artists,
                      albumName: entity.metadata?.album?.name, // Assuming metadata might have album info
                  }]);
+             }
+             // Trigger rank prefetch/fetch when details load successfully
+             const childrenIdentifiers = data?.children?.map(c => ({ pk_namespace: c.pk_namespace, pk: c.pk })) || [];
+             if (childrenIdentifiers.length > 0) {
+                console.log("Prefetching/fetching ranks after details success.");
+                queryClient.prefetchQuery({
+                     queryKey: ['entityRanks', urlPkNamespace, urlPk, childrenIdentifiers],
+                     queryFn: () => fetchRankedChildrenFn(childrenIdentifiers),
+                     staleTime: 5 * 60 * 1000, // Match stale time
+                });
              }
          },
     });
@@ -515,6 +624,7 @@ function MainView() {
             }
         }
         // Allow backspace to remove tag IF the input is empty and a tag IS selected
+        const displayTag = selectedTags.length === 1 ? selectedTags[0] : null; // Recalculate displayTag here
         if (event.key === 'Backspace' && inputValue === '' && displayTag) {
            removeTag();
         }
@@ -556,8 +666,8 @@ function MainView() {
             />
         ) : (
              // Optional: Placeholder for items without images or sorter tags
-             <span className={`suggestion-preview-image w-6 h-6 mr-2 rounded inline-block ${suggestion.type === 'tag' ? 'bg-gray-400' : 'bg-gray-200'} align-middle`}>
-                 {suggestion.type === 'tag' && '#'} {/* Indicate tag */}
+             <span className={`suggestion-preview-image w-6 h-6 mr-2 rounded inline-block ${suggestion.type === 'tag' ? 'bg-gray-400' : 'bg-gray-200'} align-middle flex items-center justify-center text-xs text-white`}>
+                 {suggestion.type === 'tag' ? '#' : '?'} {/* Indicate tag */}
              </span>
         );
 
@@ -643,10 +753,11 @@ function MainView() {
                       {displayTag.imageUrl && (
                           <img src={displayTag.imageUrl} alt="" className="tag-preview-image w-4 h-4 rounded-sm object-cover"/>
                       )}
+                      {!displayTag.imageUrl && <span className="tag-preview-image w-4 h-4 rounded-sm bg-white/20 inline-flex items-center justify-center text-xs font-bold">?</span>}
                       {displayTag.name} <span className='text-xs opacity-80 ml-1'>[{displayTag.type}]</span>
                       <button
                         type="button"
-                        className="text-white/70 hover:text-white focus:outline-none"
+                        className="text-white/70 hover:text-white focus:outline-none ml-1"
                         onClick={removeTag}
                         aria-label={`Remove ${displayTag.name} (${displayTag.type})`}
                       >
