@@ -8,7 +8,10 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
 
-use crate::{app_state::AppState, models::Json};
+use crate::{
+    app_state::AppState,
+    models::{Error, IntoNotFound, Json, MapErrorSqlx},
+};
 
 #[derive(Serialize, Debug, sqlx::FromRow)]
 pub struct Vote {
@@ -40,8 +43,8 @@ pub struct UpdateVotePayload {
 async fn create_vote(
     State(state): State<AppState>,
     Json(payload): Json<VotePayload>,
-) -> Result<impl IntoResponse, impl IntoResponse> {
-    match sqlx::query_as!(
+) -> Result<impl IntoResponse, Error> {
+    let vote = sqlx::query_as!(
         Vote,
         "
 INSERT INTO votes (
@@ -72,33 +75,9 @@ RETURNING left_entity_pk_namespace,
     )
     .fetch_one(&state.db)
     .await
-    {
-        Ok(vote) => Ok((StatusCode::CREATED, Json(vote))),
-        Err(e) => {
-            log::error!("Failed to create vote: {}", e);
-            if let Some(db_err) = e.as_database_error() {
-                if db_err.is_unique_violation() {
-                    return Err(ErrorResponse::new(
-                        StatusCode::CONFLICT,
-                        "This vote already exists.".to_string(),
-                    ));
-                }
-                if db_err.is_foreign_key_violation() {
-                    return Err(ErrorResponse::new(
-                        StatusCode::BAD_REQUEST,
-                        format!(
-                            "Invalid reference: {}",
-                            db_err.constraint().unwrap_or("unknown foreign key")
-                        ),
-                    ));
-                }
-            }
-            Err(ErrorResponse::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to create vote".to_string(),
-            ))
-        }
-    }
+    .map_error("vote")?;
+
+    Ok((StatusCode::CREATED, Json(vote)))
 }
 
 async fn get_vote(
@@ -111,8 +90,8 @@ async fn get_vote(
         Uuid,
         i32,
     )>,
-) -> Result<impl IntoResponse, impl IntoResponse> {
-    match sqlx::query_as!(
+) -> Result<impl IntoResponse, Error> {
+    let vote = sqlx::query_as!(
         Vote,
         "
 SELECT left_entity_pk_namespace,
@@ -139,29 +118,17 @@ WHERE left_entity_pk_namespace = $1
     )
     .fetch_optional(&state.db)
     .await
-    {
-        Ok(Some(vote)) => Ok((StatusCode::OK, Json(vote))),
-        Ok(None) => Err(ErrorResponse::new(
-            StatusCode::NOT_FOUND,
-            "Vote not found".to_string(),
-        )),
-        Err(e) => {
-            log::error!("Failed to get vote: {}", e);
-            Err(ErrorResponse::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to retrieve vote".to_string(),
-            ))
-        }
-    }
+    .map_error("vote")?
+    .catch_not_found("vote")?;
+
+    Ok((StatusCode::OK, Json(vote)))
 }
 
 async fn list_votes(
     State(state): State<AppState>,
     // TODO: Add query parameters for filtering, e.g., axum::extract::Query<VoteFilterParams>
-) -> Result<impl IntoResponse, impl IntoResponse> {
-    sqlx::query_file!("sql/vote.sql");
-
-    match sqlx::query_as!(
+) -> Result<impl IntoResponse, Error> {
+    let votes = sqlx::query_as!(
         Vote,
         "
 SELECT left_entity_pk_namespace,
@@ -179,16 +146,9 @@ ORDER BY voter_user_id,
     )
     .fetch_all(&state.db)
     .await
-    {
-        Ok(votes) => Ok((StatusCode::OK, Json(votes))),
-        Err(e) => {
-            log::error!("Failed to list votes: {}", e);
-            Err(ErrorResponse::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to list votes".to_string(),
-            ))
-        }
-    }
+    .map_error("vote")?;
+
+    Ok((StatusCode::OK, Json(votes)))
 }
 
 async fn update_vote(
@@ -202,8 +162,8 @@ async fn update_vote(
         i32,
     )>,
     Json(payload): Json<UpdateVotePayload>,
-) -> Result<impl IntoResponse, impl IntoResponse> {
-    match sqlx::query_as!(
+) -> Result<impl IntoResponse, Error> {
+    let vote = sqlx::query_as!(
         Vote,
         "
         UPDATE votes
@@ -232,20 +192,10 @@ async fn update_vote(
     )
     .fetch_optional(&state.db)
     .await
-    {
-        Ok(Some(vote)) => Ok((StatusCode::OK, Json(vote))),
-        Ok(None) => Err(ErrorResponse::new(
-            StatusCode::NOT_FOUND,
-            "Vote not found".to_string(),
-        )),
-        Err(e) => {
-            log::error!("Failed to update vote: {}", e);
-            Err(ErrorResponse::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to update vote".to_string(),
-            ))
-        }
-    }
+    .map_error("vote")?
+    .catch_not_found("vote")?;
+
+    Ok((StatusCode::OK, Json(vote)))
 }
 
 async fn delete_vote(
@@ -258,8 +208,8 @@ async fn delete_vote(
         Uuid,
         i32,
     )>,
-) -> Result<impl IntoResponse, impl IntoResponse> {
-    match sqlx::query!(
+) -> Result<impl IntoResponse, Error> {
+    sqlx::query!(
         "
         DELETE FROM votes
         WHERE left_entity_pk_namespace = $1
@@ -278,25 +228,10 @@ async fn delete_vote(
     )
     .execute(&state.db)
     .await
-    {
-        Ok(result) => {
-            if result.rows_affected() > 0 {
-                Ok(StatusCode::NO_CONTENT)
-            } else {
-                Err(ErrorResponse::new(
-                    StatusCode::NOT_FOUND,
-                    "Vote not found".to_string(),
-                ))
-            }
-        }
-        Err(e) => {
-            log::error!("Failed to delete vote: {}", e);
-            Err(ErrorResponse::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to delete vote".to_string(),
-            ))
-        }
-    }
+    .map_error("vote")?
+    .catch_not_found("vote")?;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub fn routes() -> Router<AppState> {

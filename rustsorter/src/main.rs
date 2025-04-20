@@ -74,8 +74,8 @@ async fn get_spotify_client() -> Result<ClientCredsSpotify> {
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    env_logger::init();
     dotenv().ok();
+    env_logger::init();
 
     let database_string = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 

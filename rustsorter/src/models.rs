@@ -32,35 +32,22 @@ impl<T, E: Into<anyhow::Error>> MapError<T> for Result<T, E> {
 }
 
 pub trait MapErrorSqlx<T> {
-    fn map_conflict(self, object: &str) -> Result<T, Error>;
-
-    fn map_not_found(self, object: &str) -> Result<T, Error>;
+    fn map_error(self, object: &str) -> Result<T, Error>;
 }
 
 impl<T> MapErrorSqlx<T> for Result<T, sqlx::Error> {
-    fn map_conflict(self, object: &str) -> Result<T, Error> {
-        self.map_err(|e| {
-            if e.as_database_error()
-                .is_some_and(|e| e.is_unique_violation())
-            {
-                Error::Conflict {
-                    object: object.into(),
-                }
-            } else {
-                Error::Internal(e.into())
-            }
-        })
-    }
-
-    fn map_not_found(self, object: &str) -> Result<T, Error> {
-        self.map_err(|e| {
-            if let sqlx::Error::RowNotFound = e {
-                Error::NotFound {
-                    object: object.into(),
-                }
-            } else {
-                Error::Internal(e.into())
-            }
+    fn map_error(self, object: &str) -> Result<T, Error> {
+        self.map_err(|err| match err {
+            sqlx::Error::RowNotFound => Error::NotFound {
+                object: object.into(),
+            },
+            sqlx::Error::Database(e) if e.is_unique_violation() => Error::Conflict {
+                object: object.into(),
+            },
+            sqlx::Error::Database(e) if e.is_foreign_key_violation() => Error::NotFound {
+                object: object.into(),
+            },
+            _ => Error::Internal(err.into()),
         })
     }
 }

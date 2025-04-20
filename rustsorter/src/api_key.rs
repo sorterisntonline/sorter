@@ -143,7 +143,7 @@ WHERE auth0_sub = $1",
     )
     .fetch_one(pool)
     .await
-    .map_not_found(&format!("user '{auth0_sub}'"))
+    .map_error(&format!("user '{auth0_sub}'"))
 }
 
 pub async fn verify_api_key(
@@ -172,7 +172,7 @@ WHERE key_identifier = $1
     )
     .fetch_optional(pool)
     .await
-    .map_conflict("key")?
+    .map_error("key")?
     .ok_or_else(|| {
         warn!(identifier = *identifier; "no active API key found");
         Error::Unauthorized
@@ -248,7 +248,7 @@ ORDER BY created_at DESC",
     )
     .fetch_all(&state.db)
     .await
-    .map_conflict("key")?;
+    .map_error("key")?;
 
     let response_keys: Vec<ApiKeyResponse> = keys.into_iter().map(ApiKeyResponse::from).collect();
     debug!(
@@ -295,7 +295,7 @@ VALUES ($1, $2, $3, $4, TRUE, $5)",
     )
     .execute(&state.db)
     .await
-    .map_conflict("key")?;
+    .map_error("key")?;
 
     info!(
         name = *payload.name, user = *user.auth0_sub; "created API key"
@@ -334,7 +334,7 @@ WHERE auth0_sub = $2
     )
     .execute(&state.db)
     .await
-    .map_not_found(&object)?
+    .map_error(&object)?
     .catch_not_found(&object)?;
 
     info!(

@@ -90,7 +90,7 @@ RETURNING parent_pk_namespace,
     )
     .fetch_one(&state.db)
     .await
-    .map_conflict("relationship")?;
+    .map_error("relationship")?;
 
     Ok((StatusCode::CREATED, Json(relationship)))
 }

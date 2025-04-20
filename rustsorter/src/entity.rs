@@ -66,7 +66,7 @@ RETURNING pk_namespace,
     )
     .fetch_one(&state.db)
     .await
-    .map_conflict(&format!(
+    .map_error(&format!(
         "entity with pk_namespace '{}' and pk '{}'",
         payload.pk_namespace, payload.pk
     ))?;

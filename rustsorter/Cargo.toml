@@ -15,11 +15,11 @@ bcrypt = "0.15.0"
 chrono = { version = "^0", features = ["serde"] }
 dotenv = "0.15.0"
 elo = "0.3.0"
-env_logger = "0.11.2"
+env_logger = { version = "0.11", features = ["kv"] }
 futures-util = "0.3"
 graph = "0.3.1"
 graph_builder = "0.4.0"
-log = { version = "0.4", features = ["kv_std"] }
+log = { version = "0.4", features = ["kv", "kv_std"] }
 rand = "0.8.5"
 rayon = "1.9.0"
 reqwest = { version = "0.11", features = ["json"] }
