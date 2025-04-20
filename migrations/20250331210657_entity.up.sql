@@ -71,9 +71,11 @@ CREATE TABLE votes (
   user_id UUID REFERENCES users(id) NOT NULL,
   magnitude INT NOT NULL,
   attribute_id INT NOT NULL REFERENCES attributes(id),
+  created_at TIMESTAMP DEFAULT now() NOT NULL,
+  deleted_at TIMESTAMP, -- NULL if not deleted
   CHECK ((left_entity_pk_namespace, left_entity_pk) < 
        (right_entity_pk_namespace, right_entity_pk)),
-  PRIMARY KEY (left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, user_id, attribute_id)
+  PRIMARY KEY (left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, user_id, attribute_id, created_at)
 );
 
 -- === GLOBAL SLUGS (PUBLIC URLs) ===
