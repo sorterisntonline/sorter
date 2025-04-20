@@ -23,10 +23,10 @@ function Sidebar() {
           Search
         </NavLink>
         <NavLink
-          to="/entity/:not/:found"
+          to="/entity/:not/:pk"
           className={({ isActive }) => `${commonLinkClass} ${isActive ? activeLinkClass : ''}`}
         >
-          Details
+          Entity
         </NavLink>
         <NavLink
           to="/vote" // Assuming vote page might be initiated from elsewhere too
