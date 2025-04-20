@@ -33,8 +33,7 @@ struct RelevantVote {
     right_entity_pk_namespace: String,
     right_entity_pk: String,
     // Assuming magnitude is stored as -50 to +50 in DB
-    // Use f32 if your DB type is REAL/FLOAT, adjust if it's INTEGER
-    magnitude: f32,
+    magnitude: i32,
 }
 
 // Internal struct to hold graph and mappings
@@ -78,7 +77,7 @@ fn build_rank_graph(
 
         // Map magnitude from [-50, 50] to weight [0, 100] for PageRank logic
         // Ensure magnitude is clamped if it's outside the expected range
-        let db_magnitude = vote.magnitude.clamp(-50.0, 50.0);
+        let db_magnitude = (vote.magnitude as f32).clamp(-50.0, 50.0);
         let weight_left_wins = db_magnitude + 50.0; // L -> R edge weight
         let weight_right_wins = 100.0 - weight_left_wins; // R -> L edge weight
 
@@ -228,9 +227,7 @@ async fn rank_children_handler(
         Ok(v) => v,
         Err(e) => {
             log::error!("Failed to fetch votes for ranking: {}", e);
-            return Err(ErrorResponse::internal_server_error(
-                "Database error while fetching votes",
-            ));
+            return Err(ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "Database error while fetching votes".to_string()));
         }
     };
 
@@ -259,7 +256,7 @@ async fn rank_children_handler(
     // Sort by score descending
     ranked_entities.sort_unstable_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
 
-    Ok((StatusCode::OK, Json(ranked_entities)))
+    Ok(Json(ranked_entities))
 }
 
 // --- Router Setup ---
