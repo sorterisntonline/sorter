@@ -7,8 +7,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useDebounce } from 'use-debounce';
 // Import CSSTransition for animations (Step 9)
 import { CSSTransition, SwitchTransition } from 'react-transition-group';
-import { VotePage } from './VotePage';
-import SpotifyPlayer from './SpotifyPlayer'; // Import the new component
 import './App.css'
 
 // Helper function to format artist names
@@ -268,6 +266,7 @@ function ItemPairPreviewLink({ parentNamespace, parentPk, childType, item1, item
                 {renderItemPreview(item1)}
                 {renderItemPreview(item2)}
             </Link>
+            {/* commented because users rarely want to see votelist of random people, divorced from individual song.
             <div className="border border-gray-300 cursor-pointer border-dashed flex items-center justify-center gap-2 p-2 transition transform hover:-translate-y-0.5">
                 <div className="text-center text-xs text-gray-500">10 votes</div>
                 <div className="text-center text-xs text-gray-500">
@@ -276,6 +275,7 @@ function ItemPairPreviewLink({ parentNamespace, parentPk, childType, item1, item
                     </svg>
                 </div>
             </div>
+            */}
 
         </div>
     );
@@ -912,12 +912,31 @@ function MainView() {
     );
 }
 
+import Layout from './Layout';
+import HomePage from './pages/HomePage';
+import SearchPage from './pages/SearchPage';
+import EntityPage from './pages/EntityPage';
+import VotePage from './pages/VotePage';
+import VoteHistoryPage from './pages/VoteHistoryPage';
+import ProfilePage from './pages/ProfilePage';
+
+
 function App() {
     return (
         <Routes>
-            <Route path="/" element={<MainView />} />
-            <Route path="/vote" element={<VotePage />} />
-            {/* Add other routes here if needed */}
+            {/* Wrap all main pages within the Layout */}
+            <Route path="/" element={<Layout />}>
+                <Route index element={<HomePage />} /> {/* Default page */}
+                <Route path="search" element={<SearchPage />} />
+                {/* Define a route for entity details with parameters */}
+                <Route path="entity/:pk_namespace/:pk" element={<EntityPage />} />
+                <Route path="vote" element={<VotePage />} /> {/* Keep existing vote page */}
+                <Route path="history" element={<VoteHistoryPage />} />
+                <Route path="profile" element={<ProfilePage />} />
+                {/* Add a catch-all or Not Found route if desired */}
+                <Route path="*" element={<div className="p-4">Page Not Found</div>} />
+            </Route>
+            {/* Routes outside the main layout (e.g., login) could go here */}
         </Routes>
     );
 }

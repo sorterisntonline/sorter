@@ -349,7 +349,7 @@ function VotePage() {
         <div className="min-h-screen bg-gray-50/60 flex flex-col items-center pt-10 pb-10 px-4">
             <div className="w-full max-w-4xl"> {/* Increased max-width slightly for wider embeds */}
                 <div className="mb-6 flex justify-between items-center">
-                    <h2 className="text-2xl font-bold text-gray-800">How much better?</h2>
+                    <div></div>
                     {parentLink}
                 </div>
 
