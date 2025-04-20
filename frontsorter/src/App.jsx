@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 // Import react-router-dom hook
 import { useSearchParams, Link, Routes, Route } from 'react-router-dom';
 // Import react-query hooks
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query';
 // Import use-debounce hook
 import { useDebounce } from 'use-debounce';
 // Import CSSTransition for animations (Step 9)
@@ -116,14 +116,15 @@ const fetchEntityDetailsFn = async (pk_namespace, pk) => {
 // --- NEW: Function to fetch ranked children ---
 const fetchRankedChildrenFn = async (childrenIdentifiers) => {
     if (!childrenIdentifiers || childrenIdentifiers.length === 0) {
-        console.log("No child identifiers provided for ranking.");
-        return []; // Return empty array if no children
+        console.log("No child identifiers provided for ranking for this type.");
+        // Return the expected {sorted, unsorted} structure for consistency
+        return { sorted: [], unsorted: [] };
     }
-    console.log("Fetching ranks for children:", childrenIdentifiers);
-    const response = await fetch(`/api/rank`, { // Note: Path matches main.rs nesting
+    console.log("Fetching ranks for children subset:", childrenIdentifiers);
+    const response = await fetch(`/api/rank`, { // Endpoint remains the same
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(childrenIdentifiers), // Send the array of {pk_namespace, pk}
+        body: JSON.stringify(childrenIdentifiers), // Send the subset array of {pk_namespace, pk}
     });
 
     if (!response.ok) {
@@ -134,18 +135,23 @@ const fetchRankedChildrenFn = async (childrenIdentifiers) => {
         throw error;
     }
     const rankedData = await response.json();
-    console.log("Received ranked data:", rankedData);
-    return rankedData;
+    // Ensure the response has the expected structure, provide defaults if not
+    const result = {
+         sorted: rankedData?.sorted ?? [],
+         unsorted: rankedData?.unsorted ?? []
+    };
+    console.log("Received ranked data subset:", result);
+    return result; // Expects { sorted: RankedEntity[], unsorted: EntityIdentifier[] }
 };
 // --- END NEW API Function ---
 
 // --- Child List Item Component (Step 6 & Modified for Rank) ---
-function ChildListItem({ child, onItemClick, score }) { // Added score prop
+function ChildListItem({ child, onItemClick, score, isRanked }) {
     const displayScore = score !== undefined && score !== null ? score * 10000 : null; // Example scaling for display
 
     return (
         <div
-            className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-smd cursor-pointer hover:bg-gray-100 hover:text-brand-600 transition-colors duration-100 ease-in-out group" // Added group for potential hover effects
+            className={`flex items-center justify-between gap-2 px-2 py-1.5 rounded-smd cursor-pointer hover:bg-gray-100 transition-colors duration-100 ease-in-out group ${!isRanked ? 'opacity-70 hover:opacity-100' : ''}`} // Dim unranked items slightly
             onClick={(e) => onItemClick(e, child.pk_namespace, child.pk)}
         >
             <div className="flex items-center gap-2 flex-1 min-w-0"> {/* Allow shrinking */}
@@ -156,10 +162,15 @@ function ChildListItem({ child, onItemClick, score }) { // Added score prop
                 )}
                 <span className="truncate">{child.title}</span>
             </div>
-            {/* Display Score */}
-            {displayScore !== null && (
+            {/* Display Score only if ranked and score exists */}
+            {isRanked && displayScore !== null && (
                  <span className="text-xs font-medium text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded-smd flex-shrink-0">
                      {displayScore.toFixed(0)} {/* Display score */}
+                 </span>
+            )}
+            {!isRanked && (
+                 <span className="text-xs font-medium text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded-smd flex-shrink-0 italic">
+                     Unranked
                  </span>
             )}
         </div>
@@ -168,42 +179,87 @@ function ChildListItem({ child, onItemClick, score }) { // Added score prop
 
 // --- EntityDetailsDisplay Component (Modified for Rank Query & Display) ---
 function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isEnsuring }) {
-    const queryClient = useQueryClient(); // Get query client instance
+    const { entity, parents, children } = entityDetails || {};
+    const { title, pk_namespace, pk, metadata } = entity || {};
+    const entityType = pk_namespace?.split('.')[1]; // e.g., 'album', 'artist', 'track'
 
-    if (!entityDetails || !entityDetails.entity) {
+    // Group children by type (pk_namespace)
+    const groupedChildrenByType = useMemo(() => {
+        const groups = {};
+        if (!children || children.length === 0) return groups;
+        children.forEach(child => {
+            const childType = child.pk_namespace;
+            if (!groups[childType]) {
+                groups[childType] = [];
+            }
+            groups[childType].push(child);
+        });
+        return groups;
+    }, [children]);
+
+    const childTypes = Object.keys(groupedChildrenByType);
+
+    // --- NEW: Use useQueries for multiple rank fetches per type ---
+    const rankQueries = useQueries({
+        queries: childTypes.map(childType => {
+            const identifiersForType = groupedChildrenByType[childType].map(c => ({
+                pk_namespace: c.pk_namespace,
+                pk: c.pk
+            }));
+            return {
+                queryKey: ['entityRanks', pk_namespace, pk, childType], // Key includes parent and child type
+                queryFn: () => fetchRankedChildrenFn(identifiersForType),
+                enabled: !!pk_namespace && !!pk && identifiersForType.length > 0, // Enable if parent exists and children of this type exist
+                staleTime: 5 * 60 * 1000, // Cache ranks for 5 minutes
+                placeholderData: { sorted: [], unsorted: [] }, // Provide default structure
+                refetchOnWindowFocus: false, // Optional: disable refetch on focus
+            };
+        })
+    });
+
+    // --- Process results from multiple queries ---
+    const { scoreMap, unrankedIdentifiersSet, isLoadingRanks, isErrorRanks } = useMemo(() => {
+        const combinedScoreMap = new Map();
+        const combinedUnrankedSet = new Set();
+        let anyLoading = false;
+        let anyError = false;
+
+        rankQueries.forEach(queryResult => {
+            if (queryResult.isLoading) {
+                anyLoading = true;
+            }
+            if (queryResult.isError) {
+                anyError = true;
+                console.error("Rank query error:", queryResult.error);
+            }
+            if (queryResult.isSuccess && queryResult.data) {
+                // Populate score map from 'sorted' array
+                queryResult.data.sorted.forEach(item => {
+                    console.log("Ranked item:", item);
+                    combinedScoreMap.set(`${item.pk_namespace}:${item.pk}`, item.score);
+                });
+                // Populate unranked set from 'unsorted' array
+                queryResult.data.unsorted.forEach(item => {
+                    combinedUnrankedSet.add(`${item.pk_namespace}:${item.pk}`);
+                });
+            }
+        });
+
+        return {
+            scoreMap: combinedScoreMap,
+            unrankedIdentifiersSet: combinedUnrankedSet,
+            isLoadingRanks: anyLoading,
+            isErrorRanks: anyError,
+        };
+    }, [rankQueries]); // Recompute when query results change
+
+    // --- Early return MUST be after all hooks ---
+    if (!entityDetails || !entity) {
         return <div className="text-gray-500">No details available.</div>;
     }
 
-    const { entity, parents, children } = entityDetails;
-    const { title, pk_namespace, pk, metadata } = entity;
-    const entityType = pk_namespace.split('.')[1]; // e.g., 'album', 'artist', 'track'
-    const spotifyUri = `spotify:${entityType}:${pk}`; // Construct Spotify URI
-
-    // --- NEW: Rank Query ---
-    // Prepare identifiers for the rank query API call
-    const childIdentifiers = children?.map(c => ({ pk_namespace: c.pk_namespace, pk: c.pk })) || [];
-
-    const rankQuery = useQuery({
-        queryKey: ['entityRanks', pk_namespace, pk, childIdentifiers], // Key includes parent and children identifiers
-        queryFn: () => fetchRankedChildrenFn(childIdentifiers),
-        enabled: !!children && children.length > 0, // Only run if children exist
-        staleTime: 5 * 60 * 1000, // Cache ranks for 5 minutes
-        placeholderData: [], // Start with empty array to avoid errors during loading
-    });
-
-    // Create a map for quick score lookup: "ns:pk" -> score
-    const scoreMap = useMemo(() => {
-        if (!rankQuery.data || rankQuery.data.length === 0) {
-            return new Map();
-        }
-        return new Map(
-            rankQuery.data.map(item => [
-                `${item.pk_namespace}:${item.pk}`,
-                item.score
-            ])
-        );
-    }, [rankQuery.data]);
-    // --- END Rank Query ---
+    // Construct Spotify URI (moved after null check)
+    const spotifyUri = `spotify:${entityType}:${pk}`;
 
     // Handler for manual ensure button
     const handleManualEnsure = () => {
@@ -259,40 +315,8 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
         onNavigate(pk_ns, pk); // Call the navigation handler passed from App
     };
 
-    // --- Group Children by Type ---
-    const groupedChildren = useMemo(() => {
-        const groups = {};
-        if (!children || children.length === 0) return groups;
-
-        children.forEach(child => {
-            const childType = child.pk_namespace;
-            if (!groups[childType]) {
-                groups[childType] = [];
-            }
-            groups[childType].push(child);
-        });
-
-        // Sort children within each group based on scoreMap
-        if (scoreMap.size > 0) {
-            Object.values(groups).forEach(group => {
-                group.sort((a, b) => {
-                    const scoreA = scoreMap.get(`${a.pk_namespace}:${a.pk}`) ?? -Infinity;
-                    const scoreB = scoreMap.get(`${b.pk_namespace}:${b.pk}`) ?? -Infinity;
-                    return scoreB - scoreA; // Sort descending by score
-                });
-            });
-        } else {
-             // Fallback: Sort alphabetically by title if scores aren't available
-            Object.values(groups).forEach(group => {
-                group.sort((a, b) => a.title?.localeCompare(b.title || '') || 0);
-            });
-        }
-
-        return groups;
-    }, [children, scoreMap]); // Recalculate when children or scores change
-
     // Sort types alphabetically for consistent display order of groups
-    const sortedChildTypes = Object.keys(groupedChildren).sort();
+    const sortedChildTypes = Object.keys(groupedChildrenByType).sort();
     // --- End Grouping & Sorting ---
 
     // Conditionally render the Spotify Player for tracks
@@ -330,19 +354,50 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
             {/* Render Children - Grouped by Type */}
             {sortedChildTypes.length > 0 && (
                 <div className="mt-4 pt-4 border-t border-gray-100">
-                     {/* Display Rank Loading/Error State */}
-                     {rankQuery.isLoading && (
+                     {/* Display Overall Rank Loading/Error State */}
+                     {isLoadingRanks && (
                          <div className="text-xs text-gray-500 italic text-center mb-2">Loading ranks...</div>
                      )}
-                     {rankQuery.isError && (
-                          <div className="text-xs text-red-500 italic text-center mb-2">Could not load ranks: {rankQuery.error.message}</div>
+                     {isErrorRanks && !isLoadingRanks && ( // Show error only if not loading anymore
+                          <div className="text-xs text-red-500 italic text-center mb-2">Could not load some ranks.</div>
                      )}
 
-                    {sortedChildTypes.map(childType => {
-                        const childrenOfType = groupedChildren[childType];
+                    {sortedChildTypes.map((childType, typeIndex) => {
+                        const childrenOfType = groupedChildrenByType[childType];
                         let itemPairElement = null;
 
-                        // --- BEGIN: Item Pair Preview (No changes needed here) ---
+                        // --- Get rank query result specific to this type ---
+                        const typeRankQuery = rankQueries[typeIndex]; // Assumes order is preserved
+
+                         // --- Process API results for this type ---
+                         const sortedRankedChildren = typeRankQuery.data?.sorted || [];
+                         const unsortedUnrankedIdentifiers = typeRankQuery.data?.unsorted || [];
+                         const unrankedSetForType = new Set(unsortedUnrankedIdentifiers.map(item => `${item.pk_namespace}:${item.pk}`));
+
+                         // --- Create the combined list for rendering: sorted + unsorted ---
+                         // Map sortedRankedChildren to include necessary child info (title, etc.)
+                         const displaySorted = sortedRankedChildren.map(rankedItem => ({
+                             ...rankedItem,
+                             // Find the original child object to get title, image url etc.
+                             ...(childrenOfType.find(c => c.pk_namespace === rankedItem.pk_namespace && c.pk === rankedItem.pk) || {}),
+                             isRanked: true,
+                         }));
+
+                         // Filter original childrenOfType to find those marked as unranked by the API for this type
+                         const displayUnsorted = childrenOfType
+                             .filter(child => unrankedSetForType.has(`${child.pk_namespace}:${child.pk}`))
+                             .map(child => ({
+                                 ...child,
+                                 isRanked: false,
+                                 score: undefined,
+                             }));
+
+                         // Combine for rendering order: sorted first, then unsorted
+                         const childrenToRender = [...displaySorted, ...displayUnsorted];
+                         // --- End Processing API results ---
+
+
+                        // --- BEGIN: Item Pair Preview (Uses original childrenOfType) ---
                         if (childrenOfType && childrenOfType.length >= 2) {
                             // Select two random distinct indices
                             let index1 = Math.floor(Math.random() * childrenOfType.length);
@@ -398,15 +453,15 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
                                 </h5>
                                 {itemPairElement}
                                 <div className="text-sm text-gray-700 space-y-1">
-                                    {childrenOfType.map((child) => {
-                                         // Get score from the map
-                                        const score = scoreMap.get(`${child.pk_namespace}:${child.pk}`);
+                                    {/* Render the combined list */}
+                                    {childrenToRender.map((child) => {
                                         return (
                                             <ChildListItem
                                                 key={`${child.pk_namespace}-${child.pk}`}
-                                                child={child}
+                                                child={child} // Pass the combined object
                                                 onItemClick={handleLinkClick}
-                                                score={score} // Pass score down
+                                                score={child.score} // Score is present for sorted items
+                                                isRanked={child.isRanked} // Pass the flag
                                             />
                                         );
                                     })}
@@ -429,7 +484,7 @@ function MainView() {
     const [selectedTags, setSelectedTags] = useState([]);
     const [highlightedIndex, setHighlightedIndex] = useState(-1);
     const suggestionBoxRef = useRef(null);
-    const queryClient = useQueryClient();
+    const queryClient = useQueryClient(); // Keep queryClient for prefetch
     // Use the useDebounce hook
     const [debouncedInputValue] = useDebounce(inputValue, 300);
     // --- Search Params ---
@@ -520,16 +575,28 @@ function MainView() {
                      albumName: entity.metadata?.album?.name, // Assuming metadata might have album info
                  }]);
              }
-             // Trigger rank prefetch/fetch when details load successfully
-             const childrenIdentifiers = data?.children?.map(c => ({ pk_namespace: c.pk_namespace, pk: c.pk })) || [];
-             if (childrenIdentifiers.length > 0) {
-                console.log("Prefetching/fetching ranks after details success.");
-                queryClient.prefetchQuery({
-                     queryKey: ['entityRanks', urlPkNamespace, urlPk, childrenIdentifiers],
-                     queryFn: () => fetchRankedChildrenFn(childrenIdentifiers),
-                     staleTime: 5 * 60 * 1000, // Match stale time
-                });
+
+             // --- Trigger rank prefetch/fetch PER TYPE when details load ---
+             const childrenByType = {};
+             if (data?.children) {
+                 data.children.forEach(child => {
+                    const type = child.pk_namespace;
+                    if (!childrenByType[type]) childrenByType[type] = [];
+                    childrenByType[type].push({ pk_namespace: child.pk_namespace, pk: child.pk });
+                 });
              }
+
+             Object.entries(childrenByType).forEach(([childType, identifiers]) => {
+                 if (identifiers.length > 0) {
+                     console.log(`Prefetching/fetching ranks for type ${childType} after details success.`);
+                     queryClient.prefetchQuery({
+                         queryKey: ['entityRanks', urlPkNamespace, urlPk, childType], // Use type in key
+                         queryFn: () => fetchRankedChildrenFn(identifiers),
+                         staleTime: 5 * 60 * 1000, // Match stale time
+                     });
+                 }
+             });
+             // --- End rank prefetch ---
          },
     });
 
