@@ -17,7 +17,7 @@ use axum::{
 };
 use dotenv::dotenv;
 use rspotify::{ClientCredsSpotify, Config, Credentials};
-use serde::Serialize;
+use crate::extractors::maybe_user::MaybeUser;
 use serde_json::json;
 use tower_http::trace::TraceLayer;
 
@@ -30,8 +30,6 @@ async fn health() -> impl IntoResponse {
         })),
     )
 }
-
-use crate::extractors::maybe_user::MaybeUser;
 async fn protected_route(
     MaybeUser(maybe_user): MaybeUser,
 ) -> impl IntoResponse {

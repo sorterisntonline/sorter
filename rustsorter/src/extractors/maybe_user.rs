@@ -7,7 +7,6 @@ use axum::{
 };
 
 use crate::models::User; // Assuming your User model is in crate::models
-use crate::auth_middleware::AuthError; // Use the existing AuthError for consistency
 
 // A wrapper type for the optional user.
 pub struct MaybeUser(pub Option<User>);
@@ -39,6 +38,21 @@ where
     }
 }
 
-// Optional: If you needed the extractor to be able to fail and return an AuthError
-// (e.g., if it did its own token check), you would implement IntoResponse for the rejection type.
-// impl IntoResponse for AuthError { ... } // This is already done in auth_middleware.rs 
+pub struct AuthenticatedUser(pub User);
+
+#[async_trait]
+impl<S> FromRequestParts<S> for AuthenticatedUser
+where
+    S: Send + Sync,
+{
+    type Rejection = crate::auth_middleware::AuthError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let user = parts.extensions.get::<User>().cloned();
+        if let Some(user) = user {
+            Ok(AuthenticatedUser(user))
+        } else {
+            Err(crate::auth_middleware::AuthError::NoCredentials)
+        }
+    }
+}   

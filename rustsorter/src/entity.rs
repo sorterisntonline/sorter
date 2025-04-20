@@ -4,6 +4,7 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
+    Extension,
 };
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
@@ -12,6 +13,7 @@ use serde_json::Value as JsonValue;
 use crate::{
     app_state::AppState,
     models::{ErrorResponse, Json},
+    extractors::maybe_user::{AuthenticatedUser, MaybeUser},
 };
 
 #[derive(Serialize, Debug, sqlx::FromRow)]
@@ -43,9 +45,11 @@ pub fn routes() -> Router<AppState> {
         )
 }
 
+
 async fn create_entity(
     State(state): State<AppState>,
     Json(payload): Json<EntityPayload>,
+    MaybeUser(maybe_user): MaybeUser,
 ) -> Result<impl IntoResponse, ErrorResponse> {
     match sqlx::query_as!(
         Entity,
