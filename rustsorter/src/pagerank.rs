@@ -27,10 +27,10 @@ pub struct RankedEntity {
     pub score: f32,
 }
 
-// New Response structure
+// New Response structure - Changed unsorted to Vec<EntityIdentifier>
 #[derive(Serialize, Debug)]
-pub struct RankingResponse<'a> {
-    unsorted: Vec<&'a EntityIdentifier>, // Entities that were ranked, in index order
+pub struct RankingResponse {
+    unsorted: Vec<EntityIdentifier>, // Entities NOT ranked (owned)
     sorted: Vec<RankedEntity>,   // Entities that were ranked, sorted by score desc
 }
 
@@ -265,7 +265,6 @@ async fn rank_children_handler(
         };
 
         // Add to set only if they were part of the original input payload
-        // (Handles cases where votes might exist for entities not in the current request)
         if initial_entities.contains(&left_id) {
              voted_entities.insert(left_id);
         }
@@ -274,18 +273,25 @@ async fn rank_children_handler(
         }
     }
 
+    // --- Create list of UNSORTED (unranked) entities BEFORE moving payload ---
+    let unsorted_list: Vec<EntityIdentifier> = payload
+        .iter()
+        .filter(|entity| !voted_entities.contains(*entity))
+        .cloned() // Clone the entities to take ownership
+        .collect();
+
     // --- Filter the original payload to include only voted entities ---
-    // Preserve original payload order for deterministic graph indexing if needed, though HashMap iteration order isn't guaranteed anyway.
-    // Filtering payload ensures consistent indexing relative to the subset being ranked.
     let ranked_payload: Vec<EntityIdentifier> = payload
         .into_iter() // Consume original payload
         .filter(|entity| voted_entities.contains(entity))
         .collect();
 
-    // If no entities are left after filtering (e.g., only isolated nodes in payload), return empty
+    // If no entities are left after filtering (e.g., only isolated nodes in payload),
+    // return the unsorted list and an empty sorted list.
     if ranked_payload.is_empty() {
          log::warn!("No entities involved in votes found among the input payload.");
-         return Ok(Json(RankingResponse { unsorted: payload.iter().collect(), sorted: vec![] }));
+         // Return the list of entities that were not ranked
+         return Ok(Json(RankingResponse { unsorted: unsorted_list, sorted: vec![] }));
     }
 
     // Build the graph using only the entities involved in votes
@@ -297,18 +303,17 @@ async fn rank_children_handler(
     let graph = &rank_graph.graph;
     let node_count = graph.node_count(); // Node count of the smaller graph
 
-    // Check if graph is unexpectedly empty (shouldn't happen if ranked_payload wasn't empty)
+    // Check if graph is unexpectedly empty
     if node_count == 0 {
-         log::error!("Graph is empty despite non-empty ranked_payload."); // Should investigate if this occurs
-         return Ok(Json(RankingResponse { unsorted: payload.iter().collect(), sorted: vec![] }));
+         log::error!("Graph is empty despite non-empty ranked_payload.");
+         // Return the list of entities that were not ranked
+         return Ok(Json(RankingResponse { unsorted: unsorted_list, sorted: vec![] }));
     }
 
     // --- Calculate Tommy Rank scores on the smaller graph ---
     let scores = calculate_tommy_rank(graph, 100000, 1e-8);
 
-    // --- Combine identifiers with scores ---
-    // The indices (0..node_count-1) directly map to the entities in ranked_payload
-    // and the entries in rank_graph.index_to_entity_identifier
+    // --- Combine identifiers with scores for the SORTED list ---
     let mut ranked_entities_list: Vec<RankedEntity> = Vec::with_capacity(node_count);
     for index in 0..node_count {
         if let Some(identifier) = rank_graph.index_to_entity_identifier.get(&index) {
@@ -318,16 +323,12 @@ async fn rank_children_handler(
                       score,
                   });
              } else {
-                  log::error!("Score missing for index {} in smaller graph", index); // Should not happen
+                  log::error!("Score missing for index {} in smaller graph", index);
              }
         } else {
-             log::error!("Identifier missing for index {} in smaller graph", index); // Should not happen
+             log::error!("Identifier missing for index {} in smaller graph", index);
         }
     }
-
-    // all the items in payload that are not in voted_entities
-    let unsorted_list = payload.iter().filter(|entity|
-        !voted_entities.contains(entity)).collect();
 
     // Create the sorted list
     let mut sorted_list = ranked_entities_list;
@@ -335,7 +336,7 @@ async fn rank_children_handler(
 
     // Return both lists in the response structure
     Ok(Json(RankingResponse {
-        unsorted: unsorted_list,
+        unsorted: unsorted_list, // Already calculated
         sorted: sorted_list,
     }))
 }
