@@ -22,7 +22,6 @@ pub struct EntityIdentifier {
 
 #[derive(Serialize, Debug, Clone)] // Add Clone
 pub struct RankedEntity {
-    #[serde(flatten)] // Include ns and pk directly
     pub identifier: EntityIdentifier,
     pub score: f32,
 }

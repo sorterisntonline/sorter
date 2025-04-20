@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 // Import react-router-dom hook
 import { useSearchParams, Link, Routes, Route } from 'react-router-dom';
 // Import react-query hooks
-import { useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 // Import use-debounce hook
 import { useDebounce } from 'use-debounce';
 // Import CSSTransition for animations (Step 9)
@@ -177,6 +177,75 @@ function ChildListItem({ child, onItemClick, score, isRanked }) {
     );
 }
 
+// --- NEW: RankedChildList Component ---
+function RankedChildList({ parentNamespace, parentPk, childType, childrenOfType, onItemClick }) {
+    const identifiersForType = useMemo(() => childrenOfType.map(c => ({
+        pk_namespace: c.pk_namespace,
+        pk: c.pk
+    })), [childrenOfType]);
+
+    const rankQuery = useQuery({
+        queryKey: ['entityRanks', parentNamespace, parentPk, childType], // Query key specific to this list
+        queryFn: () => fetchRankedChildrenFn(identifiersForType),
+        enabled: !!parentNamespace && !!parentPk && identifiersForType.length > 0,
+        staleTime: 5 * 60 * 1000,
+        placeholderData: { sorted: [], unsorted: [] },
+        refetchOnWindowFocus: false,
+    });
+
+    // Process the API results for rendering
+    const childrenToRender = useMemo(() => {
+        const sortedRankedChildren = rankQuery.data?.sorted || [];
+        const unsortedUnrankedIdentifiers = rankQuery.data?.unsorted || [];
+        const unrankedSetForType = new Set(unsortedUnrankedIdentifiers.map(item => `${item.pk_namespace}:${item.pk}`));
+
+        // Map sortedRankedChildren to include full child info
+        const displaySorted = sortedRankedChildren.map(rankedItem => ({
+             ...rankedItem.identifier, // Includes pk_namespace, pk
+             score: rankedItem.score,
+             // Find the original child object to get title, image url etc.
+             ...(childrenOfType.find(c => c.pk_namespace === rankedItem.identifier.pk_namespace && c.pk === rankedItem.identifier.pk) || {}),
+             isRanked: true,
+        }));
+
+        // Filter original childrenOfType to find those marked as unranked
+        const displayUnsorted = childrenOfType
+            .filter(child => unrankedSetForType.has(`${child.pk_namespace}:${child.pk}`))
+            .map(child => ({
+                ...child,
+                isRanked: false,
+                score: undefined,
+            }));
+
+        // Combine: ranked first, then unranked
+        return [...displaySorted, ...displayUnsorted];
+
+    }, [rankQuery.data, childrenOfType]); // Recalculate when data or original children change
+
+    return (
+        <div className="text-sm text-gray-700 space-y-1">
+            {/* Optional: Show loading/error state specific to this list */}
+            {rankQuery.isLoading && <div className="text-xs text-gray-400 italic px-2">Loading ranks...</div>}
+            {rankQuery.isError && <div className="text-xs text-red-500 italic px-2">Error loading ranks.</div>}
+
+            {/* Render the combined list */}
+            {childrenToRender.map((child) => (
+                <ChildListItem
+                    key={`${child.pk_namespace}-${child.pk}`}
+                    child={child} // Pass the combined object with isRanked, score etc.
+                    onItemClick={onItemClick}
+                    score={child.score}
+                    isRanked={child.isRanked}
+                />
+            ))}
+            {/* Show message if list is empty after loading */}
+            {!rankQuery.isLoading && childrenToRender.length === 0 && (
+                 <div className="text-xs text-gray-400 italic px-2">No items of this type.</div>
+            )}
+        </div>
+    );
+}
+
 // --- EntityDetailsDisplay Component (Modified for Rank Query & Display) ---
 function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isEnsuring }) {
     const { entity, parents, children } = entityDetails || {};
@@ -199,61 +268,7 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
 
     const childTypes = Object.keys(groupedChildrenByType);
 
-    // --- NEW: Use useQueries for multiple rank fetches per type ---
-    const rankQueries = useQueries({
-        queries: childTypes.map(childType => {
-            const identifiersForType = groupedChildrenByType[childType].map(c => ({
-                pk_namespace: c.pk_namespace,
-                pk: c.pk
-            }));
-            return {
-                queryKey: ['entityRanks', pk_namespace, pk, childType], // Key includes parent and child type
-                queryFn: () => fetchRankedChildrenFn(identifiersForType),
-                enabled: !!pk_namespace && !!pk && identifiersForType.length > 0, // Enable if parent exists and children of this type exist
-                staleTime: 5 * 60 * 1000, // Cache ranks for 5 minutes
-                placeholderData: { sorted: [], unsorted: [] }, // Provide default structure
-                refetchOnWindowFocus: false, // Optional: disable refetch on focus
-            };
-        })
-    });
-
-    // --- Process results from multiple queries ---
-    const { scoreMap, unrankedIdentifiersSet, isLoadingRanks, isErrorRanks } = useMemo(() => {
-        const combinedScoreMap = new Map();
-        const combinedUnrankedSet = new Set();
-        let anyLoading = false;
-        let anyError = false;
-
-        rankQueries.forEach(queryResult => {
-            if (queryResult.isLoading) {
-                anyLoading = true;
-            }
-            if (queryResult.isError) {
-                anyError = true;
-                console.error("Rank query error:", queryResult.error);
-            }
-            if (queryResult.isSuccess && queryResult.data) {
-                // Populate score map from 'sorted' array
-                queryResult.data.sorted.forEach(item => {
-                    console.log("Ranked item:", item);
-                    combinedScoreMap.set(`${item.pk_namespace}:${item.pk}`, item.score);
-                });
-                // Populate unranked set from 'unsorted' array
-                queryResult.data.unsorted.forEach(item => {
-                    combinedUnrankedSet.add(`${item.pk_namespace}:${item.pk}`);
-                });
-            }
-        });
-
-        return {
-            scoreMap: combinedScoreMap,
-            unrankedIdentifiersSet: combinedUnrankedSet,
-            isLoadingRanks: anyLoading,
-            isErrorRanks: anyError,
-        };
-    }, [rankQueries]); // Recompute when query results change
-
-    // --- Early return MUST be after all hooks ---
+    // Early return MUST be after all hooks
     if (!entityDetails || !entity) {
         return <div className="text-gray-500">No details available.</div>;
     }
@@ -354,90 +369,36 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
             {/* Render Children - Grouped by Type */}
             {sortedChildTypes.length > 0 && (
                 <div className="mt-4 pt-4 border-t border-gray-100">
-                     {/* Display Overall Rank Loading/Error State */}
-                     {isLoadingRanks && (
-                         <div className="text-xs text-gray-500 italic text-center mb-2">Loading ranks...</div>
-                     )}
-                     {isErrorRanks && !isLoadingRanks && ( // Show error only if not loading anymore
-                          <div className="text-xs text-red-500 italic text-center mb-2">Could not load some ranks.</div>
-                     )}
-
-                    {sortedChildTypes.map((childType, typeIndex) => {
+                    {sortedChildTypes.map((childType) => {
                         const childrenOfType = groupedChildrenByType[childType];
                         let itemPairElement = null;
 
-                        // --- Get rank query result specific to this type ---
-                        const typeRankQuery = rankQueries[typeIndex]; // Assumes order is preserved
-
-                         // --- Process API results for this type ---
-                         const sortedRankedChildren = typeRankQuery.data?.sorted || [];
-                         const unsortedUnrankedIdentifiers = typeRankQuery.data?.unsorted || [];
-                         const unrankedSetForType = new Set(unsortedUnrankedIdentifiers.map(item => `${item.pk_namespace}:${item.pk}`));
-
-                         // --- Create the combined list for rendering: sorted + unsorted ---
-                         // Map sortedRankedChildren to include necessary child info (title, etc.)
-                         const displaySorted = sortedRankedChildren.map(rankedItem => ({
-                             ...rankedItem,
-                             // Find the original child object to get title, image url etc.
-                             ...(childrenOfType.find(c => c.pk_namespace === rankedItem.pk_namespace && c.pk === rankedItem.pk) || {}),
-                             isRanked: true,
-                         }));
-
-                         // Filter original childrenOfType to find those marked as unranked by the API for this type
-                         const displayUnsorted = childrenOfType
-                             .filter(child => unrankedSetForType.has(`${child.pk_namespace}:${child.pk}`))
-                             .map(child => ({
-                                 ...child,
-                                 isRanked: false,
-                                 score: undefined,
-                             }));
-
-                         // Combine for rendering order: sorted first, then unsorted
-                         const childrenToRender = [...displaySorted, ...displayUnsorted];
-                         // --- End Processing API results ---
-
-
-                        // --- BEGIN: Item Pair Preview (Uses original childrenOfType) ---
+                        // --- Item Pair Preview (Logic remains, uses original childrenOfType) ---
                         if (childrenOfType && childrenOfType.length >= 2) {
-                            // Select two random distinct indices
                             let index1 = Math.floor(Math.random() * childrenOfType.length);
                             let index2 = Math.floor(Math.random() * childrenOfType.length);
-                            // Ensure distinct indices if possible and length > 1
                             while (index1 === index2 && childrenOfType.length > 1) {
                                 index2 = Math.floor(Math.random() * childrenOfType.length);
                             }
-
                             const item1 = childrenOfType[index1];
                             const item2 = childrenOfType[index2];
-                            const item1ImageUrl = item1.profile_picture_url;
-                            const item2ImageUrl = item2.profile_picture_url;
-                            const voteLink = `/vote?parent_ns=${encodeURIComponent(entity.pk_namespace)}`
-                            + `&parent_pk=${encodeURIComponent(entity.pk)}`
-                            + `&type=${encodeURIComponent(childType)}` // Keep type for potential backend use
-                            + `&left_ns=${encodeURIComponent(item1.pk_namespace)}`
-                            + `&left_pk=${encodeURIComponent(item1.pk)}`
-                            + `&right_ns=${encodeURIComponent(item2.pk_namespace)}`
-                            + `&right_pk=${encodeURIComponent(item2.pk)}`;
-
-
+                            const voteLink = `/vote?parent_ns=${encodeURIComponent(pk_namespace)}&parent_pk=${encodeURIComponent(pk)}&type=${encodeURIComponent(childType)}&left_ns=${encodeURIComponent(item1.pk_namespace)}&left_pk=${encodeURIComponent(item1.pk)}&right_ns=${encodeURIComponent(item2.pk_namespace)}&right_pk=${encodeURIComponent(item2.pk)}`;
                             itemPairElement = (
                                 <Link to={voteLink} className="cursor-pointer my-3 p-3 border border-brand-200 rounded-smd bg-brand-50/40 flex items-center justify-around gap-2 relative group no-underline transition transform hover:-translate-y-0.5">
                                     {/* Item 1 Preview */}
                                     <div className="text-center flex flex-col items-center w-1/3">
-                                        {item1ImageUrl && <img src={item1ImageUrl} alt={item1.title} className="w-12 h-12 object-cover rounded-smd mb-1 shadow"/>}
-                                        {!item1ImageUrl && <div className="w-12 h-12 bg-gray-200 rounded-smd mb-1 flex items-center justify-center text-gray-400 text-xl shadow">?</div>}
+                                        {item1.profile_picture_url && <img src={item1.profile_picture_url} alt={item1.title} className="w-12 h-12 object-cover rounded-smd mb-1 shadow"/>}
+                                        {!item1.profile_picture_url && <div className="w-12 h-12 bg-gray-200 rounded-smd mb-1 flex items-center justify-center text-gray-400 text-xl shadow">?</div>}
                                         <span className="text-xs text-gray-700 truncate w-full px-1">{item1.title}</span>
                                     </div>
-
                                     {/* Overlay VOTE text on hover */}
                                     <div className="absolute inset-0 flex items-center justify-center bg-brand-600/80 opacity-0 group-hover:opacity-100 transition-opacity rounded-smd">
                                         <span className="text-white text-3xl tracking-wide font-bold">VOTE</span>
                                     </div>
-
                                     {/* Item 2 Preview */}
                                     <div className="text-center flex flex-col items-center w-1/3">
-                                        {item2ImageUrl && <img src={item2ImageUrl} alt={item2.title} className="w-12 h-12 object-cover rounded-smd mb-1 shadow"/>}
-                                        {!item2ImageUrl && <div className="w-12 h-12 bg-gray-200 rounded-smd mb-1 flex items-center justify-center text-gray-400 text-xl shadow">?</div>}
+                                        {item2.profile_picture_url && <img src={item2.profile_picture_url} alt={item2.title} className="w-12 h-12 object-cover rounded-smd mb-1 shadow"/>}
+                                        {!item2.profile_picture_url && <div className="w-12 h-12 bg-gray-200 rounded-smd mb-1 flex items-center justify-center text-gray-400 text-xl shadow">?</div>}
                                         <span className="text-xs text-gray-700 truncate w-full px-1">{item2.title}</span>
                                     </div>
                                 </Link>
@@ -445,27 +406,19 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
                         }
                         // --- END: Item Pair Preview ---
 
-
                         return (
                             <div key={childType} className="mb-4">
                                 <h5 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">
                                     {childType.replace(/^spotify\./, '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                                 </h5>
                                 {itemPairElement}
-                                <div className="text-sm text-gray-700 space-y-1">
-                                    {/* Render the combined list */}
-                                    {childrenToRender.map((child) => {
-                                        return (
-                                            <ChildListItem
-                                                key={`${child.pk_namespace}-${child.pk}`}
-                                                child={child} // Pass the combined object
-                                                onItemClick={handleLinkClick}
-                                                score={child.score} // Score is present for sorted items
-                                                isRanked={child.isRanked} // Pass the flag
-                                            />
-                                        );
-                                    })}
-                                </div>
+                                <RankedChildList
+                                    parentNamespace={pk_namespace}
+                                    parentPk={pk}
+                                    childType={childType}
+                                    childrenOfType={childrenOfType}
+                                    onItemClick={handleLinkClick}
+                                />
                             </div>
                         );
                     })}
