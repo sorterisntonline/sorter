@@ -247,10 +247,8 @@ function RankedChildList({ parentNamespace, parentPk, childType, childrenOfType,
 }
 
 // --- NEW: Item Pair Preview Link Component ---
-function ItemPairPreviewLink({ parentNamespace, parentPk, childType, item1, item2 }) {
-    if (!item1 || !item2) return null; // Don't render if items are missing
-
-    const voteLink = `/vote?parent_ns=${encodeURIComponent(parentNamespace)}&parent_pk=${encodeURIComponent(parentPk)}&type=${encodeURIComponent(childType)}&left_ns=${encodeURIComponent(item1.pk_namespace)}&left_pk=${encodeURIComponent(item1.pk)}&right_ns=${encodeURIComponent(item2.pk_namespace)}&right_pk=${encodeURIComponent(item2.pk)}`;
+function ItemPairPreviewLink({ parentNamespace, parentPk, childType, item1, item2, onClick}) {
+    const [expanded, setExpanded] = useState(false);
 
     const renderItemPreview = (item) => (
         <div className="text-center flex flex-col items-center w-1/3">
@@ -262,7 +260,9 @@ function ItemPairPreviewLink({ parentNamespace, parentPk, childType, item1, item
 
     return (
         <div>
-            <div className="cursor-pointer mt-3 p-3 border border-black-200 rounded-smd bg-brand-50/40 flex items-center justify-around gap-2 relative group no-underline transition transform hover:-translate-y-0.5">
+            <div className="cursor-pointer mt-3 p-3 border border-black-200 rounded-smd bg-brand-50/40 flex items-center justify-around gap-2 relative group no-underline transition transform hover:-translate-y-0.5"
+                onClick={() => setExpanded(!expanded)}
+            >
                 {renderItemPreview(item1)}
                 {/* Overlay VOTE text on hover */}
                 <div className="absolute inset-0 flex items-center justify-center bg-brand-600/80 opacity-0 group-hover:opacity-100 transition-opacity rounded-smd">
@@ -270,7 +270,7 @@ function ItemPairPreviewLink({ parentNamespace, parentPk, childType, item1, item
                 </div>
                 {renderItemPreview(item2)}
             </div>
-            <div className="border border-gray-300 cursor-pointer border-dashed flex items-center justify-center gap-2 p-2">
+            <div className="border border-gray-300 cursor-pointer border-dashed flex items-center justify-center gap-2 p-2 transition transform hover:-translate-y-0.5">
                 <div className="text-center text-xs text-gray-500">10 votes</div>
                 <div className="text-center text-xs text-gray-500">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -374,7 +374,7 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
         ? <SpotifyPlayer uri={spotifyUri} /> : null;
 
     return (
-        <div className="bg-white shadow-card border border-gray-100 rounded-smd p-5 flex flex-col gap-5">
+        <div className="bg-white rounded-smd p-5 flex flex-col gap-5">
             {/* Render Parents */}
             {parents && parents.length > 0 && (
                 <div className="text-xs text-gray-600">
@@ -432,6 +432,9 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
                                         childType={childType}
                                         item1={item1}
                                         item2={item2}
+                                        onClick={() => {
+                                            console.log('clicked');
+                                        }}
                                     />
                                 )}
                                 <RankedChildList
