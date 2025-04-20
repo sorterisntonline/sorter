@@ -126,6 +126,9 @@ function VoteItemDisplay({ item, isDisabled }) { // Removed isSelected, pk is un
     const isSpotifyTrack = pk_namespace.includes('spotify.track');
     const isSpotifyAlbum = pk_namespace.includes('spotify.album');
 
+
+    return <div>placeholder</div>;
+
     // Conditionally render Spotify Embed
     if (isSpotifyTrack || isSpotifyAlbum) {
         const embedType = isSpotifyTrack ? 'track' : 'album';
@@ -169,6 +172,65 @@ function VoteItemDisplay({ item, isDisabled }) { // Removed isSelected, pk is un
     );
 }
 
+// --- New Component for Displaying a Single Previous Vote ---
+function PreviousVoteItem({ vote }) {
+    if (!vote) return null; // Handle case where vote might be null/undefined
+
+    // Determine styling based on magnitude
+    const magnitudeClass = vote.magnitude > 0
+        ? 'bg-green-100 text-green-800 border border-green-200' // Added border, refined colors
+        : vote.magnitude < 0
+            ? 'bg-red-100 text-red-800 border border-red-200'   // Added border, refined colors
+            : 'bg-gray-100 text-gray-700 border border-gray-200'; // Adjusted gray
+
+    // Helper function to extract entity type
+    const getEntityType = (ns) => ns.split('.').pop() || ns;
+
+    // Extract and format necessary data
+    const leftType = getEntityType(vote.left_entity_pk_namespace);
+    const rightType = getEntityType(vote.right_entity_pk_namespace);
+    const leftPkShort = vote.left_entity_pk.substring(0, 8);
+    const rightPkShort = vote.right_entity_pk.substring(0, 8);
+    const userIdShort = vote.user_id.substring(0, 8);
+    // Use a more compact date/time format
+    const voteDate = new Date(vote.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+    const magnitudeValue = vote.magnitude > 0 ? `+${vote.magnitude}` : vote.magnitude;
+
+    return (
+        // Use white background, rounded corners, subtle shadow, and hover effect
+        <li className="p-3 border border-gray-200 rounded-md bg-white shadow-sm hover:shadow-md transition-shadow duration-150 ease-in-out">
+            <div className="flex justify-between items-center mb-1.5"> {/* Increased margin-bottom */}
+                {/* Entity Comparison with Types */}
+                <span
+                    className="font-semibold text-gray-800 text-sm truncate" // Added truncate
+                    title={`${vote.left_entity_pk_namespace}:${vote.left_entity_pk} vs ${vote.right_entity_pk_namespace}:${vote.right_entity_pk}`} // Tooltip for full info
+                >
+                    <span className="font-normal text-gray-500 text-xs capitalize">({leftType})</span> {leftPkShort}...
+                    <span className="mx-1.5 text-gray-400 font-light">vs</span> {/* Adjusted spacing and weight */}
+                    <span className="font-normal text-gray-500 text-xs capitalize">({rightType})</span> {rightPkShort}...
+                </span>
+
+                {/* Magnitude Badge - Rounded pill shape, bolder */}
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${magnitudeClass}`}>
+                    {magnitudeValue}
+                </span>
+            </div>
+            {/* Metadata line */}
+            <div className="text-xs text-gray-500 flex justify-between items-center">
+                 {/* Attribute and User Info */}
+                 <span className="truncate"> {/* Added truncate */}
+                    Attr: <span className="font-medium text-gray-600">{vote.attribute_id}</span>
+                    <span className="mx-1.5 text-gray-400">|</span> {/* Separator */}
+                    User: <span className="font-medium text-gray-600" title={vote.user_id}>{userIdShort}...</span>
+                 </span>
+                 {/* Timestamp */}
+                 <span className="flex-shrink-0 ml-2" title={new Date(vote.created_at).toISOString()}> {/* Add full ISO date title */}
+                    {voteDate}
+                 </span>
+            </div>
+        </li>
+    );
+}
 
 // --- Vote Page Component ---
 function VotePage() {
@@ -353,21 +415,8 @@ function VotePage() {
                         {votesQuery.isSuccess && previousVotes.length > 0 && (
                             <ul className="space-y-2 text-sm">
                                 {previousVotes.map((vote, index) => (
-                                    <li key={index} className="p-2 border rounded bg-gray-50/80">
-                                        <div className="flex justify-between items-center">
-                                            <span className="font-medium text-gray-800">
-                                                {vote.left_entity_pk_namespace.split('.').pop()}:{vote.left_entity_pk.substring(0, 8)}... vs {vote.right_entity_pk_namespace.split('.').pop()}:{vote.right_entity_pk.substring(0, 8)}...
-                                            </span>
-                                            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                                                vote.magnitude > 0 ? 'bg-green-100 text-green-800' : vote.magnitude < 0 ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'
-                                            }`}>
-                                                {vote.magnitude > 0 ? `+${vote.magnitude}` : vote.magnitude}
-                                            </span>
-                                        </div>
-                                        <div className="text-xs text-gray-500 mt-1">
-                                             Attribute ID: {vote.attribute_id} {/* Can map to name later */} | User: {vote.user_id.substring(0, 8)}... | Voted: {new Date(vote.created_at).toLocaleString()}
-                                        </div>
-                                    </li>
+                                    // Use the new component here
+                                    <PreviousVoteItem key={index} vote={vote} />
                                 ))}
                             </ul>
                         )}

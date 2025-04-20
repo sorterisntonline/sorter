@@ -229,7 +229,6 @@ async fn list_votes(
     log::info!("childen_of_parent: {:?}", childen_of_parent);
 
     let child_pk_namespaces = childen_of_parent.iter().map(|r| r.child_pk_namespace.clone()).collect::<Vec<String>>();
-    let child_pk_namespaces_str = child_pk_namespaces.join(",");
     let votes = sqlx::query_as!( // TODO use sea-query for this query, use filters
         Vote,
         r#"
