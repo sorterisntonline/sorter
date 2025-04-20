@@ -174,8 +174,6 @@ function VoteItemDisplay({ item, isDisabled }) { // Removed isSelected, pk is un
 
 // --- New Component for Displaying a Single Previous Vote ---
 function PreviousVoteItem({ vote }) {
-    if (!vote) return null; // Handle case where vote might be null/undefined
-
     // Determine styling based on magnitude
     const magnitudeClass = vote.magnitude > 0
         ? 'bg-green-100 text-green-800 border border-green-200' // Added border, refined colors
@@ -189,29 +187,46 @@ function PreviousVoteItem({ vote }) {
     // Extract and format necessary data
     const leftType = getEntityType(vote.left_entity_pk_namespace);
     const rightType = getEntityType(vote.right_entity_pk_namespace);
-    const leftPkShort = vote.left_entity_pk.substring(0, 8);
-    const rightPkShort = vote.right_entity_pk.substring(0, 8);
+    // const leftPkShort = vote.left_entity_pk.substring(0, 8); // No longer primary display
+    // const rightPkShort = vote.right_entity_pk.substring(0, 8); // No longer primary display
     const userIdShort = vote.user_id.substring(0, 8);
     // Use a more compact date/time format
     const voteDate = new Date(vote.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
     const magnitudeValue = vote.magnitude > 0 ? `+${vote.magnitude}` : vote.magnitude;
 
+    let queryOptions = {
+        staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+        retry: 1,
+        // Optional: Add placeholderData or initialData if useful
+    };
+    const { data: leftEntity, isLoading: leftEntityLoading, error: leftEntityError } = useQuery({ queryKey: ['entity', vote.left_entity_pk_namespace, vote.left_entity_pk], queryFn: () => fetchEntityFn(vote.left_entity_pk_namespace, vote.left_entity_pk), enabled: !!vote.left_entity_pk_namespace && !!vote.left_entity_pk, ...queryOptions });
+    const { data: rightEntity, isLoading: rightEntityLoading, error: rightEntityError } = useQuery({ queryKey: ['entity', vote.right_entity_pk_namespace, vote.right_entity_pk], queryFn: () => fetchEntityFn(vote.right_entity_pk_namespace, vote.right_entity_pk), enabled: !!vote.right_entity_pk_namespace && !!vote.right_entity_pk, ...queryOptions });
+
+    // Helper to display entity title or loading/error state
+    const renderEntityName = (entity, isLoading, error, pk) => {
+        if (isLoading) return <span className="italic text-gray-400">Loading...</span>;
+        if (error) return <span className="italic text-red-500" title={error.message}>Error</span>;
+        if (entity?.title) return <span className="font-semibold" title={pk}>{entity.title}</span>;
+        return <span className="italic text-gray-500" title={pk}>Unknown</span>; // Fallback if title is missing
+    };
+
+
     return (
         // Use white background, rounded corners, subtle shadow, and hover effect
         <li className="p-3 border border-gray-200 rounded-md bg-white shadow-sm hover:shadow-md transition-shadow duration-150 ease-in-out">
             <div className="flex justify-between items-center mb-1.5"> {/* Increased margin-bottom */}
-                {/* Entity Comparison with Types */}
+                {/* Entity Comparison with Types and Fetched Titles */}
                 <span
-                    className="font-semibold text-gray-800 text-sm truncate" // Added truncate
+                    className="font-normal text-gray-800 text-sm truncate" // Changed default weight
                     title={`${vote.left_entity_pk_namespace}:${vote.left_entity_pk} vs ${vote.right_entity_pk_namespace}:${vote.right_entity_pk}`} // Tooltip for full info
                 >
-                    <span className="font-normal text-gray-500 text-xs capitalize">({leftType})</span> {leftPkShort}...
+                    <span className="text-gray-500 text-xs capitalize">({leftType})</span> {renderEntityName(leftEntity, leftEntityLoading, leftEntityError, vote.left_entity_pk)}
                     <span className="mx-1.5 text-gray-400 font-light">vs</span> {/* Adjusted spacing and weight */}
-                    <span className="font-normal text-gray-500 text-xs capitalize">({rightType})</span> {rightPkShort}...
+                    <span className="text-gray-500 text-xs capitalize">({rightType})</span> {renderEntityName(rightEntity, rightEntityLoading, rightEntityError, vote.right_entity_pk)}
                 </span>
 
                 {/* Magnitude Badge - Rounded pill shape, bolder */}
-                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${magnitudeClass}`}>
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${magnitudeClass} flex-shrink-0 ml-2`}> {/* Added flex-shrink-0 and margin */}
                     {magnitudeValue}
                 </span>
             </div>
@@ -228,6 +243,13 @@ function PreviousVoteItem({ vote }) {
                     {voteDate}
                  </span>
             </div>
+             {/* Optional: Display entity fetch errors more explicitly if needed */}
+             {(leftEntityError || rightEntityError) && (
+                <div className="text-xs text-red-500 mt-1 border-t pt-1">
+                    {leftEntityError && <p>Error loading left item: {leftEntityError.status === 404 ? 'Not Found' : 'Fetch Failed'}</p>}
+                    {rightEntityError && <p>Error loading right item: {rightEntityError.status === 404 ? 'Not Found' : 'Fetch Failed'}</p>}
+                </div>
+            )}
         </li>
     );
 }
