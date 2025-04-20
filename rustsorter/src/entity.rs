@@ -52,6 +52,7 @@ async fn create_entity(
     AuthenticatedUser(user): AuthenticatedUser,
     Json(payload): Json<EntityPayload>,
 ) -> Result<impl IntoResponse, ErrorResponse> {
+    // TODO add user id to the entity in DB
     match sqlx::query_as!(
         Entity,
         "
@@ -139,6 +140,7 @@ async fn get_entity(
             ));
         }
     };
+    println!("Entity!!!!!!!!!!!!!: {:?}", entity);
 
     let mut parents: Option<Vec<Entity>> = None;
     let mut children: Option<Vec<Entity>> = None;
@@ -198,7 +200,11 @@ async fn get_entity(
 
 }
 
-async fn list_entities(State(state): State<AppState>) -> Result<impl IntoResponse, ErrorResponse> {
+async fn list_entities(
+    MaybeUser(maybe_user): MaybeUser,
+    State(state): State<AppState>
+) -> Result<impl IntoResponse, ErrorResponse> {
+    // TODO query only public entities if user is not authenticated
     match sqlx::query_as!(
         Entity,
         "
@@ -228,6 +234,7 @@ ORDER BY created_at DESC"
 async fn update_entity(
     State(state): State<AppState>,
     Path((pk_namespace, pk)): Path<(String, String)>,
+    AuthenticatedUser(user): AuthenticatedUser,
     Json(payload): Json<EntityPayload>,
 ) -> Result<impl IntoResponse, ErrorResponse> {
     if pk_namespace != payload.pk_namespace || pk != payload.pk {
@@ -278,6 +285,7 @@ RETURNING pk_namespace,
 
 async fn delete_entity(
     State(state): State<AppState>,
+    AuthenticatedUser(user): AuthenticatedUser,
     Path((pk_namespace, pk)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, ErrorResponse> {
     match sqlx::query!(
