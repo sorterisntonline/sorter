@@ -20,11 +20,18 @@ pub struct EntityIdentifier {
     pub pk: String,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)] // Add Clone
 pub struct RankedEntity {
     #[serde(flatten)] // Include ns and pk directly
     pub identifier: EntityIdentifier,
     pub score: f32,
+}
+
+// New Response structure
+#[derive(Serialize, Debug)]
+pub struct RankingResponse<'a> {
+    unsorted: Vec<&'a EntityIdentifier>, // Entities that were ranked, in index order
+    sorted: Vec<RankedEntity>,   // Entities that were ranked, sorted by score desc
 }
 
 // Represents a vote relevant to the input entities
@@ -91,10 +98,6 @@ fn build_rank_graph(
     }
 
     // Build the graph using usize indices
-    // Note: Ensure the graph crate supports accessing edge weights later.
-    // If duplicates edges are added (e.g., multiple votes between same pair),
-    // the builder might sum them or take the last one. Check graph crate behavior.
-    // Assuming sum/average is not needed based on Python code.
     let graph: DirectedCsrGraph<usize, (), f32> = GraphBuilder::new()
         .edges_with_values(edges)
         .build();
@@ -106,18 +109,10 @@ fn build_rank_graph(
     })
 }
 
-// --- Rank Centrality Calculation ---
+// --- Tommy Rank Calculation ---
 
-/// Calculates rank centrality based on pairwise comparisons.
-///
-/// A_ij = times j beat i. Corresponds to w_ji (weight of edge j -> i)
-/// W_ij = A_ij / (A_ij + A_ji) = w_ji / (w_ji + w_ij) = w_ji / 100.0
-/// P_ij = W_ij / w_max (for i != j) = w_ji / (100.0 * w_max)
-/// P_ii = 1 - sum(P_ik for k != i) = 1 - sum(W_ik / w_max for k!=i) = 1 - sum(w_ki / (100.0 * w_max) for k!=i)
-/// Iteration: new_scores[j] = sum_i (prev_scores[i] * P_ij)
-///           new_scores[j] = prev_scores[j] * P_jj + sum_{i != j} (prev_scores[i] * P_ij)
-///           new_scores[j] = prev_scores[j] * P_jj + sum_{i: edge j->i exists} (prev_scores[i] * w_ji / (100.0 * w_max))
-fn calculate_rank_centrality(
+/// Alternative ranking implementation based on direct weights and max out-degree normalization.
+fn calculate_tommy_rank(
     graph: &DirectedCsrGraph<usize, (), f32>,
     max_iters: usize,
     tol: f32,
@@ -127,79 +122,64 @@ fn calculate_rank_centrality(
         return Vec::new();
     }
 
-    // --- Calculate w_max and P_ii components ---
-    // w_max = max over i of sum(W[i, k] for k != i)
-    // W[i, k] = w_ki / 100.0 (where w_ki is edge k -> i)
-    // We need incoming edge weights for each node i.
-    // Build an incoming adjacency list representation temporarily.
-    let mut incoming_weights: HashMap<usize, HashMap<usize, f32>> = HashMap::new();
-    for u in 0..node_count {
-        for edge in graph.out_neighbors_with_values(u) {
-            let v = edge.target;
-            let w_uv = edge.value;
-            incoming_weights.entry(v).or_default().insert(u, w_uv);
-        }
+    // Calculate out-degrees for each node
+    let out_degs: Vec<f32> = (0..node_count)
+        .map(|u| graph.out_neighbors_with_values(u).map(|e| e.value).sum())
+        .collect();
+
+    // Find max out-degree
+    let max_out_deg = out_degs.iter().fold(0.0f32, |max, &deg| max.max(deg));
+
+    // Handle case where max_out_deg is zero (no edges or all weights zero)
+    if max_out_deg <= 1e-9 { // Use epsilon comparison
+        log::warn!("Max out-degree is zero, returning uniform scores.");
+        // Python code initializes with 1s, but uniform seems safer for zero-degree case
+        return vec![1.0 / node_count as f32; node_count];
     }
-
-    let mut w_max = 0.0f32;
-    // Stores sum(W[i, k] for k!=i) for each i
-    let mut w_row_sums = vec![0.0; node_count];
-    for i in 0..node_count {
-        let mut row_sum_w = 0.0;
-        if let Some(in_edges) = incoming_weights.get(&i) {
-            for (k, w_ki) in in_edges.iter() {
-                 // W[i, k] = w_ki / 100.0
-                 row_sum_w += w_ki / 100.0;
-            }
-        }
-        w_row_sums[i] = row_sum_w;
-        w_max = w_max.max(row_sum_w);
-    }
-
-    // Calculate P_ii for each node i
-    // P_ii = 1 - sum(W[i, k] / w_max for k!=i) = 1 - w_row_sums[i] / w_max
-    let p_diag: Vec<f32> = w_row_sums.iter().map(|&sum_w| 1.0 - sum_w / w_max).collect();
-
 
     // --- Iteration ---
-    let mut scores = vec![1.0 / node_count as f32; node_count];
+    // Initialize scores with 1.0 as per Python code
+    let mut scores = vec![1.0f32; node_count];
 
     for iter in 0..max_iters {
         let prev_scores = scores.clone(); // Copy previous scores
-        let mut new_scores = vec![0.0; node_count];
+        let mut new_scores = vec![0.0f32; node_count];
 
-        // Calculate new_scores[j] = prev_scores[j] * P_jj + sum_{i: edge j->i exists} (prev_scores[i] * w_ji / (100.0 * w_max))
-        for j in 0..node_count {
-            let p_jj = p_diag[j]; // P[j, j]
+        for i in 0..node_count {
+            let out_degree = out_degs[i];
+            // Self-loop weight calculation
+            let self_loop = max_out_deg - out_degree;
+            let total_deg = max_out_deg; // Normalization factor
 
-            // Calculate sum term using outgoing edges from j
-            let mut outgoing_sum = 0.0;
-            // edge j -> i has weight w_ji
-            for edge in graph.out_neighbors_with_values(j) {
-                let i = edge.target;
-                let w_ji = edge.value;
-                // Term is prev_scores[i] * P[i, j] where P[i,j] = W[i,j]/w_max = w_ji / (100.0 * w_max)
-                // This interpretation seems wrong based on the formula derivation above.
-                // Let's re-verify: new_scores[j] = sum_i (prev_scores[i] * P_ij)
+            let current_score = prev_scores[i];
 
-                // Let's compute new_scores column by column (j)
-                // Iterate through all potential sources i
-                // Need P_ij = w_ji / (100.0 * w_max) for i != j
-                // Need P_jj = p_diag[j]
-
-                // Revised inner loop: Iterate i, calculate P_ij, add prev_scores[i] * P_ij to new_scores[j]
-                // This seems O(N^2) again.
-
-                // Let's use the formula derived before the code block:
-                // new_scores[j] = prev_scores[j] * P_jj + sum_{i: edge j->i exists} (prev_scores[i] * w_ji / (100.0 * w_max))
-                // Seems correct. The sum is over targets `i` of outgoing edges from `j`.
-                 outgoing_sum += prev_scores[i] * w_ji / (100.0 * w_max);
-
+            // Distribute score to neighbors based on edge weights
+            for edge in graph.out_neighbors_with_values(i) {
+                let j = edge.target;
+                let w_ij = edge.value;
+                // Skip self-links in distribution loop (handled by self_loop)
+                if i == j { continue }
+                 if w_ij > 0.0 { // Ensure weight is positive before distributing
+                      new_scores[j] += current_score * (w_ij / total_deg);
+                 }
             }
 
-            new_scores[j] = prev_scores[j] * p_jj + outgoing_sum;
+            // Apply self-loop score contribution
+            if self_loop > 0.0 { // Avoid division by zero if total_deg is zero (already checked)
+                 new_scores[i] += current_score * (self_loop / total_deg);
+            } else if total_deg <= 1e-9 && current_score > 0.0 {
+                 // If node `i` has zero out-degree AND max_out_deg is zero (which means all nodes have zero out-degree),
+                 // it should retain its score? The python code implies score vanishes if not distributed.
+                 // Let's keep it simple: if total_deg is zero, score doesn't propagate.
+                 // The check `max_out_deg <= 1e-9` at the start handles the graph-wide zero-degree case.
+                 // If only *this* node `i` has out_deg=0 but others don't (so max_out_deg > 0),
+                 // the self_loop = max_out_deg, and it retains its score contribution scaled by self_loop/total_deg = 1.0.
+                 // This seems correct. The `if self_loop > 0.0` handles the case where out_degree == max_out_deg.
+                 // Let's recalculate the self loop addition slightly differently for clarity.
+                 // The code above already adds the self-loop correctly. Let's double-check the python:
+                 // new_scores[i] += current_score * (self_loop / total_deg) -> Yes, this is correct.
+            }
         }
-
 
         // Check convergence: sum(|scores - prev_scores|) < tol
         let diff: f32 = prev_scores.iter().zip(new_scores.iter()).map(|(p, n)| (p - n).abs()).sum();
@@ -207,21 +187,20 @@ fn calculate_rank_centrality(
         scores = new_scores; // Update scores
 
         if diff < tol {
-            log::info!("Rank centrality converged after {} iterations.", iter + 1);
+            log::info!("Tommy Rank converged after {} iterations.", iter + 1);
             break; // Converged
         }
 
         // Check if max iterations reached
         if iter == max_iters - 1 {
             log::warn!(
-                "Rank centrality reached max_iters ({}) without converging. Diff = {}",
+                "Tommy Rank reached max_iters ({}) without converging. Diff = {}",
                 max_iters, diff
             );
         }
     }
 
-    // The Python code implies the scores sum approximately to 1, but doesn't explicitly normalize.
-    // We will also skip explicit normalization to match.
+    // The Python code returns the scores without final normalization.
     scores
 }
 
@@ -233,9 +212,13 @@ async fn rank_children_handler(
     Json(payload): Json<Vec<EntityIdentifier>>,
 ) -> Result<impl IntoResponse, ErrorResponse> {
     if payload.is_empty() {
-        return Ok(Json(Vec::<RankedEntity>::new()));
+        return Ok(Json(RankingResponse { unsorted: vec![], sorted: vec![] }));
     }
 
+    // Create a HashSet from the input payload for efficient lookup
+    let initial_entities: HashSet<EntityIdentifier> = payload.iter().cloned().collect();
+
+    // Prepare list of "ns:pk" keys for the query (from original payload)
     let entity_keys: Vec<String> = payload
         .iter()
         .map(|e| format!("{}:{}", e.pk_namespace, e.pk))
@@ -268,42 +251,93 @@ async fn rank_children_handler(
         }
     };
 
-    // Build the graph
-    let rank_graph = match build_rank_graph(&payload, &votes) {
+    // --- Identify entities involved in votes ---
+    let mut voted_entities = HashSet::new();
+    for vote in &votes {
+        // Construct identifiers from vote parts
+        let left_id = EntityIdentifier {
+            pk_namespace: vote.left_entity_pk_namespace.clone(),
+            pk: vote.left_entity_pk.clone(),
+        };
+        let right_id = EntityIdentifier {
+            pk_namespace: vote.right_entity_pk_namespace.clone(),
+            pk: vote.right_entity_pk.clone(),
+        };
+
+        // Add to set only if they were part of the original input payload
+        // (Handles cases where votes might exist for entities not in the current request)
+        if initial_entities.contains(&left_id) {
+             voted_entities.insert(left_id);
+        }
+        if initial_entities.contains(&right_id) {
+             voted_entities.insert(right_id);
+        }
+    }
+
+    // --- Filter the original payload to include only voted entities ---
+    // Preserve original payload order for deterministic graph indexing if needed, though HashMap iteration order isn't guaranteed anyway.
+    // Filtering payload ensures consistent indexing relative to the subset being ranked.
+    let ranked_payload: Vec<EntityIdentifier> = payload
+        .into_iter() // Consume original payload
+        .filter(|entity| voted_entities.contains(entity))
+        .collect();
+
+    // If no entities are left after filtering (e.g., only isolated nodes in payload), return empty
+    if ranked_payload.is_empty() {
+         log::warn!("No entities involved in votes found among the input payload.");
+         return Ok(Json(RankingResponse { unsorted: payload.iter().collect(), sorted: vec![] }));
+    }
+
+    // Build the graph using only the entities involved in votes
+    let rank_graph = match build_rank_graph(&ranked_payload, &votes) {
          Ok(rg) => rg,
          Err(e) => return Err(e), // Propagate error from graph building
     };
 
-    // Check if graph is empty after filtering votes
-    if rank_graph.graph.node_count() == 0 {
-         log::warn!("Graph is empty after processing votes, returning empty ranking.");
-         return Ok(Json(Vec::<RankedEntity>::new()));
+    let graph = &rank_graph.graph;
+    let node_count = graph.node_count(); // Node count of the smaller graph
+
+    // Check if graph is unexpectedly empty (shouldn't happen if ranked_payload wasn't empty)
+    if node_count == 0 {
+         log::error!("Graph is empty despite non-empty ranked_payload."); // Should investigate if this occurs
+         return Ok(Json(RankingResponse { unsorted: payload.iter().collect(), sorted: vec![] }));
     }
 
+    // --- Calculate Tommy Rank scores on the smaller graph ---
+    let scores = calculate_tommy_rank(graph, 100000, 1e-8);
 
-    // Calculate Rank Centrality scores
-    // Using defaults from Python code: tol=1e-8, max_iters=100000
-    let scores = calculate_rank_centrality(&rank_graph.graph, 100000, 1e-8);
+    // --- Combine identifiers with scores ---
+    // The indices (0..node_count-1) directly map to the entities in ranked_payload
+    // and the entries in rank_graph.index_to_entity_identifier
+    let mut ranked_entities_list: Vec<RankedEntity> = Vec::with_capacity(node_count);
+    for index in 0..node_count {
+        if let Some(identifier) = rank_graph.index_to_entity_identifier.get(&index) {
+             if let Some(&score) = scores.get(index) {
+                  ranked_entities_list.push(RankedEntity {
+                      identifier: identifier.clone(),
+                      score,
+                  });
+             } else {
+                  log::error!("Score missing for index {} in smaller graph", index); // Should not happen
+             }
+        } else {
+             log::error!("Identifier missing for index {} in smaller graph", index); // Should not happen
+        }
+    }
 
-    // Combine identifiers with scores
-    let mut ranked_entities: Vec<RankedEntity> = scores
-        .into_iter()
-        .enumerate()
-        .filter_map(|(index, score)| {
-            rank_graph
-                .index_to_entity_identifier
-                .get(&index)
-                .map(|identifier| RankedEntity {
-                    identifier: identifier.clone(),
-                    score,
-                })
-        })
-        .collect();
+    // all the items in payload that are not in voted_entities
+    let unsorted_list = payload.iter().filter(|entity|
+        !voted_entities.contains(entity)).collect();
 
-    // Sort by score descending
-    ranked_entities.sort_unstable_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    // Create the sorted list
+    let mut sorted_list = ranked_entities_list;
+    sorted_list.sort_unstable_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
 
-    Ok(Json(ranked_entities))
+    // Return both lists in the response structure
+    Ok(Json(RankingResponse {
+        unsorted: unsorted_list,
+        sorted: sorted_list,
+    }))
 }
 
 // --- Router Setup ---
