@@ -65,6 +65,15 @@ async fn get_spotify_client() -> Result<ClientCredsSpotify> {
     Ok(spotify)
 }
 
+use crate::models::User;
+
+async fn get_spotify_user(db: &sqlx::PgPool) -> Result<User> {
+    let user = sqlx::query_as!(User, "SELECT * FROM users WHERE auth0_sub = 'spotify'")
+        .fetch_one(db)
+        .await?;
+    Ok(user)
+}
+
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     env_logger::init();
@@ -81,6 +90,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let app_state = crate::app_state::AppState {
         db: pool.clone(),
         spotify_client: get_spotify_client().await?,
+        spotify_user: get_spotify_user(&pool).await?,
     };
 
     let app = Router::new()

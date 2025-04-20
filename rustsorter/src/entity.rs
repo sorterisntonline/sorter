@@ -10,6 +10,7 @@ use axum::{
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
+use uuid::Uuid;
 
 use crate::{
     app_state::AppState,
@@ -19,6 +20,7 @@ use crate::{
 
 #[derive(Serialize, Debug, sqlx::FromRow)]
 pub struct Entity {
+    pub user_id: Uuid,
     pub pk_namespace: String,
     pub pk: String,
     pub title: Option<String>,
@@ -56,19 +58,21 @@ async fn create_entity(
     match sqlx::query_as!(
         Entity,
         "
-INSERT INTO entities (pk_namespace, pk, title, metadata, profile_picture_url)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO entities (pk_namespace, pk, title, metadata, profile_picture_url, user_id)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING pk_namespace,
     pk,
     title,
     metadata,
     created_at,
-    profile_picture_url",
+    profile_picture_url,
+    user_id",
         payload.pk_namespace,
         payload.pk,
         payload.title,
         payload.metadata,
-        payload.profile_picture_url
+        payload.profile_picture_url,
+        user.id
     )
     .fetch_one(&state.db)
     .await
@@ -140,7 +144,6 @@ async fn get_entity(
             ));
         }
     };
-    println!("Entity!!!!!!!!!!!!!: {:?}", entity);
 
     let mut parents: Option<Vec<Entity>> = None;
     let mut children: Option<Vec<Entity>> = None;
@@ -213,7 +216,8 @@ SELECT pk_namespace,
     title,
     metadata,
     created_at,
-    profile_picture_url
+    profile_picture_url,
+    user_id
 FROM entities
 ORDER BY created_at DESC"
     )
@@ -250,7 +254,8 @@ async fn update_entity(
 UPDATE entities
 SET title = $3,
     metadata = $4,
-    profile_picture_url = $5
+    profile_picture_url = $5,
+    user_id = $6
 WHERE pk_namespace = $1
     AND pk = $2
 RETURNING pk_namespace,
@@ -258,12 +263,14 @@ RETURNING pk_namespace,
     title,
     metadata,
     created_at,
-    profile_picture_url",
+    profile_picture_url,
+    user_id",
         pk_namespace,
         pk,
         payload.title,
         payload.metadata,
-        payload.profile_picture_url
+        payload.profile_picture_url,
+        user.id
     )
     .fetch_optional(&state.db)
     .await
@@ -288,6 +295,7 @@ async fn delete_entity(
     AuthenticatedUser(user): AuthenticatedUser,
     Path((pk_namespace, pk)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, ErrorResponse> {
+    // TODO only delete entity if user is the owner
     match sqlx::query!(
         "
 DELETE FROM entities

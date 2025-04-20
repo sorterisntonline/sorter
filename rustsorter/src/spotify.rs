@@ -136,6 +136,7 @@ async fn upsert_entity<'e, E>(
     title: Option<String>,
     profile_picture_url: Option<String>, // Added parameter
     metadata: Option<JsonValue>,
+    user_id: Uuid,
 ) -> Result<(), sqlx::Error>
 where
     E: Executor<'e, Database = sqlx::Postgres>, // Add trait bound
@@ -149,15 +150,16 @@ where
     );
     sqlx::query!(
         r#"
-        INSERT INTO entities (pk_namespace, pk, title, profile_picture_url, metadata)
-        VALUES ($1, $2, $3, $4, $5) -- Added profile_picture_url
+        INSERT INTO entities (pk_namespace, pk, title, profile_picture_url, metadata, user_id)
+        VALUES ($1, $2, $3, $4, $5, $6)
         ON CONFLICT (pk_namespace, pk) DO NOTHING
         "#,
         pk_namespace,
         pk,
         title,
         profile_picture_url, // Added parameter
-        metadata
+        metadata,
+        user_id
     )
     .execute(executor) // Use the executor
     .await?;
@@ -171,7 +173,7 @@ async fn upsert_entity_relationship<'e, E>(
     parent_pk: &str,
     child_pk_namespace: &str,
     child_pk: &str,
-    submitter_user_id: Option<Uuid>,
+    user_id: Uuid,
 ) -> Result<(), sqlx::Error>
 where
     E: Executor<'e, Database = sqlx::Postgres>, // Add trait bound
@@ -188,7 +190,7 @@ where
         INSERT INTO entity_relationships (
             parent_pk_namespace, parent_pk,
             child_pk_namespace, child_pk,
-            submitter_user_id
+            user_id
         )
         VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT (parent_pk_namespace, parent_pk, child_pk_namespace, child_pk) DO NOTHING
@@ -197,7 +199,7 @@ where
         parent_pk,
         child_pk_namespace,
         child_pk,
-        submitter_user_id
+        user_id
     )
     .execute(executor) // Use the executor
     .await?;
@@ -267,15 +269,15 @@ async fn ensure_spotify_entity(
     // We insert NULL for profile_picture_url initially, it gets updated later if needed.
     let insert_result = sqlx::query!(
         r#"
-        INSERT INTO entities (pk_namespace, pk, title, profile_picture_url, metadata)
-        VALUES ($1, $2, $3, NULL, $4) -- Insert NULL for profile_picture_url here
+        INSERT INTO entities (pk_namespace, pk, title, profile_picture_url, metadata, user_id)
+        VALUES ($1, $2, $3, NULL, $4, $5)
         ON CONFLICT (pk_namespace, pk) DO NOTHING
         "#,
         payload.pk_namespace,
         payload.pk,
         payload.title,
-        // profile_picture_url is intentionally omitted here, set to NULL
-        payload.metadata
+        payload.metadata,
+        state.spotify_user.id
     )
     .execute(&mut *tx)
     .await?;
@@ -297,7 +299,7 @@ async fn ensure_spotify_entity(
     let mut entity = sqlx::query_as!(
         Entity,
         r#"
-        SELECT pk_namespace, pk, title, profile_picture_url, metadata, created_at -- Select the new field
+        SELECT pk_namespace, pk, title, profile_picture_url, metadata, created_at, user_id
         FROM entities
         WHERE pk_namespace = $1 AND pk = $2
         "#,
@@ -374,6 +376,7 @@ async fn ensure_spotify_entity(
                         album_title,
                         album_pic_url, // Pass image URL
                         album_meta,
+                        state.spotify_user.id,
                     )
                     .await?;
 
@@ -391,7 +394,7 @@ async fn ensure_spotify_entity(
                         artist_id_str,         // parent_pk (artist)
                         &album_ns,             // child_ns (album)
                         &album_pk,             // child_pk (album)
-                        None,                  // submitter_user_id
+                        state.spotify_user.id,
                     )
                     .await?;
                 } else {
@@ -463,6 +466,7 @@ async fn ensure_spotify_entity(
                         artist_title,
                         artist_pic_url, // Pass None for image URL
                         artist_meta,
+                        state.spotify_user.id,
                     )
                     .await?;
 
@@ -480,7 +484,7 @@ async fn ensure_spotify_entity(
                         &artist_pk,            // parent_pk (artist)
                         &payload.pk_namespace, // child_ns (album)
                         album_id_str,          // child_pk (album)
-                        None,                  // submitter_user_id
+                        state.spotify_user.id,
                     )
                     .await?;
                 } else {
@@ -506,6 +510,7 @@ async fn ensure_spotify_entity(
                         track_title,
                         track_pic_url, // Pass the album's image URL
                         track_meta,
+                        state.spotify_user.id,
                     )
                     .await?;
 
@@ -523,7 +528,7 @@ async fn ensure_spotify_entity(
                         album_id_str,          // parent_pk (album)
                         &track_ns,             // child_ns (track)
                         &track_pk,             // child_pk (track)
-                        None,                  // submitter_user_id
+                        state.spotify_user.id,
                     )
                     .await?;
 
@@ -549,6 +554,7 @@ async fn ensure_spotify_entity(
                                 artist_title,
                                 artist_pic_url, // Pass None
                                 artist_meta,
+                                state.spotify_user.id,
                             )
                             .await?;
 
@@ -565,7 +571,7 @@ async fn ensure_spotify_entity(
                                 &artist_pk, // parent_pk (artist)
                                 &track_ns,  // child_ns (track)
                                 &track_pk,  // child_pk (track)
-                                None,       // submitter_user_id
+                                state.spotify_user.id,
                             )
                             .await?;
                         } else {
@@ -642,6 +648,7 @@ async fn ensure_spotify_entity(
                         artist_title,
                         artist_pic_url, // Pass None
                         artist_meta,
+                        state.spotify_user.id,
                     )
                     .await?;
 
@@ -659,7 +666,7 @@ async fn ensure_spotify_entity(
                         &artist_pk,            // parent_pk (artist)
                         &payload.pk_namespace, // child_ns (track)
                         track_id_str,          // child_pk (track)
-                        None,                  // submitter_user_id
+                        state.spotify_user.id,
                     )
                     .await?;
                 } else {
@@ -686,6 +693,7 @@ async fn ensure_spotify_entity(
                     album_title,
                     album_pic_url, // Pass image URL
                     album_meta,
+                    state.spotify_user.id,
                 )
                 .await?;
 
@@ -703,7 +711,7 @@ async fn ensure_spotify_entity(
                     &album_pk,             // parent_pk (album)
                     &payload.pk_namespace, // child_ns (track)
                     track_id_str,          // child_pk (track)
-                    None,                  // submitter_user_id
+                    state.spotify_user.id,
                 )
                 .await?;
             } else {

@@ -16,11 +16,11 @@ use crate::{
 
 #[derive(Serialize, Debug, sqlx::FromRow)]
 pub struct EntityRelationship {
+    user_id: Uuid,
     parent_pk_namespace: String,
     parent_pk: String,
     child_pk_namespace: String,
     child_pk: String,
-    submitter_user_id: Option<Uuid>,
     created_at: Option<NaiveDateTime>,
 }
 
@@ -73,14 +73,14 @@ INSERT INTO entity_relationships (
         parent_pk,
         child_pk_namespace,
         child_pk,
-        submitter_user_id
+        user_id
     )
 VALUES ($1, $2, $3, $4, $5)
 RETURNING parent_pk_namespace,
     parent_pk,
     child_pk_namespace,
     child_pk,
-    submitter_user_id,
+    user_id,
     created_at",
         payload.parent_pk_namespace,
         payload.parent_pk,
@@ -120,7 +120,7 @@ SELECT parent_pk_namespace,
     parent_pk,
     child_pk_namespace,
     child_pk,
-    submitter_user_id,
+    user_id,
     created_at
 FROM entity_relationships
 WHERE 1 = 1"

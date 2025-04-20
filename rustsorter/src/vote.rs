@@ -11,6 +11,7 @@ use sqlx::types::Uuid; // Import Uuid for voter_user_id
 use crate::{
     app_state::AppState,
     models::{ErrorResponse, Json}, // Assuming models module exists for Json and ErrorResponse
+    extractors::maybe_user::AuthenticatedUser,
 };
 
 // Represents a vote fetched from the database, matching the 'votes' table schema
@@ -20,7 +21,7 @@ pub struct Vote {
     pub left_entity_pk: String,
     pub right_entity_pk_namespace: String,
     pub right_entity_pk: String,
-    pub voter_user_id: Uuid, // Database type is UUID
+    pub user_id: Uuid, // Database type is UUID
     pub magnitude: i32,      // Database type is INT
     pub attribute_id: i32,   // Database type is INT
 }
@@ -32,7 +33,7 @@ pub struct VotePayload {
     left_entity_pk: String,
     right_entity_pk_namespace: String,
     right_entity_pk: String,
-    voter_user_id: Uuid, // Assuming this is provided; could be derived from auth later
+    user_id: Uuid, // Assuming this is provided; could be derived from auth later
     magnitude: i32,
     attribute_id: i32,
 }
@@ -48,22 +49,23 @@ pub struct UpdateVotePayload {
 // POST / - Create a new vote
 async fn create_vote(
     State(state): State<AppState>,
+    AuthenticatedUser(user): AuthenticatedUser,
     Json(payload): Json<VotePayload>,
 ) -> Result<impl IntoResponse, impl IntoResponse> {
     match sqlx::query_as!(
         Vote,
         r#"
-        INSERT INTO votes (left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, voter_user_id, magnitude, attribute_id)
+        INSERT INTO votes (left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, magnitude, attribute_id, user_id)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
-        RETURNING left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, voter_user_id, magnitude, attribute_id
+        RETURNING left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, magnitude, attribute_id, user_id
         "#,
         payload.left_entity_pk_namespace,
         payload.left_entity_pk,
         payload.right_entity_pk_namespace,
         payload.right_entity_pk,
-        payload.voter_user_id,
         payload.magnitude,
-        payload.attribute_id
+        payload.attribute_id,
+        user.id
     )
     .fetch_one(&state.db)
     .await
@@ -110,13 +112,13 @@ async fn get_vote(
     match sqlx::query_as!(
         Vote,
         r#"
-        SELECT left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, voter_user_id, magnitude, attribute_id
+        SELECT left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, user_id, magnitude, attribute_id
         FROM votes
         WHERE left_entity_pk_namespace = $1
           AND left_entity_pk = $2
           AND right_entity_pk_namespace = $3
           AND right_entity_pk = $4
-          AND voter_user_id = $5
+          AND user_id = $5
           AND attribute_id = $6
         "#,
         left_ns,
@@ -153,9 +155,9 @@ async fn list_votes(
     match sqlx::query_as!(
         Vote,
         r#"
-        SELECT left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, voter_user_id, magnitude, attribute_id
+        SELECT left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, user_id, magnitude, attribute_id
         FROM votes
-        ORDER BY voter_user_id, attribute_id, left_entity_pk_namespace, left_entity_pk  -- Example basic ordering
+        ORDER BY user_id, attribute_id, left_entity_pk_namespace, left_entity_pk  -- Example basic ordering
         "#
     )
     .fetch_all(&state.db)
@@ -194,9 +196,9 @@ async fn update_vote(
           AND left_entity_pk = $2
           AND right_entity_pk_namespace = $3
           AND right_entity_pk = $4
-          AND voter_user_id = $5
+          AND user_id = $5
           AND attribute_id = $6
-        RETURNING left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, voter_user_id, magnitude, attribute_id
+        RETURNING left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, user_id, magnitude, attribute_id
         "#,
         left_ns,
         left_pk,
@@ -243,7 +245,7 @@ async fn delete_vote(
           AND left_entity_pk = $2
           AND right_entity_pk_namespace = $3
           AND right_entity_pk = $4
-          AND voter_user_id = $5
+          AND user_id = $5
           AND attribute_id = $6
         "#,
         left_ns,

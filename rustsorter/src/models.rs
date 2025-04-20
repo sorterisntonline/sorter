@@ -5,6 +5,7 @@ use axum::{
 };
 use serde::Serialize;
 use uuid::Uuid;
+use chrono::NaiveDateTime;
 
 #[derive(FromRequest)]
 #[from_request(via(axum::Json), rejection(ErrorResponse))]
@@ -49,4 +50,7 @@ pub struct User {
     pub id: Uuid,
     pub auth0_sub: String,
     pub username: String,
+    pub avatar_url: Option<String>,
+    pub bio: Option<String>,
+    pub created_at: Option<NaiveDateTime>,
 }
