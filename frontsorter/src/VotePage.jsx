@@ -46,7 +46,7 @@ const submitVoteFn = async ({
 
     const primaryKeyPath = `${encodeURIComponent(left_ns)}/${encodeURIComponent(left_pk)}/${encodeURIComponent(right_ns)}/${encodeURIComponent(right_pk)}/${encodeURIComponent(userIdToUse)}/${encodeURIComponent(attributeIdToUse)}`;
     const updateUrl = `/api/vote/${primaryKeyPath}`;
-    const createUrl = '/api/vote/';
+    const createUrl = '/api/vote';
 
     // Try updating first
     const updatePayload = { magnitude };
@@ -291,14 +291,13 @@ function VotePage() {
                                 className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-blue-500"
                                 disabled={voteMutation.isPending} // Disable slider during submission
                             />
-                             <div className="text-center text-sm text-gray-700 mt-1">Value: {sliderValue}</div>
                         </div>
 
                         {/* Submit Button */}
                         <button
                             onClick={handleVoteSubmit}
                             disabled={voteMutation.isPending || isLoading} // Disable if loading entities or submitting
-                            className={`mt-4 px-6 py-2 text-white rounded font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                            className={`mt-4 px-6 py-2 cursor-pointer text-white rounded font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
                                 voteMutation.isPending || isLoading
                                 ? 'bg-gray-400 cursor-not-allowed'
                                 : 'bg-blue-500 hover:bg-blue-600'

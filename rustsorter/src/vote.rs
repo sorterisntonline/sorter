@@ -33,7 +33,6 @@ pub struct VotePayload {
     left_entity_pk: String,
     right_entity_pk_namespace: String,
     right_entity_pk: String,
-    user_id: Uuid, // Assuming this is provided; could be derived from auth later
     magnitude: i32,
     attribute_id: i32,
 }

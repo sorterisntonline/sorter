@@ -14,6 +14,8 @@ CREATE TABLE users (
 );
 -- For unit testing, create admin user
 INSERT INTO users (auth0_sub, username) VALUES ('admin', 'admin');
+-- For Spotify API integration
+INSERT INTO users (auth0_sub, username) VALUES ('spotify', 'spotify');
 
 -- For API authentication
 CREATE TABLE api_keys (
@@ -32,6 +34,7 @@ CREATE TABLE api_keys (
 CREATE TABLE entities (
   pk_namespace TEXT NOT NULL, -- e.g. 'spotify.album', 'reddit.post', 'sorter.tag'
   pk TEXT NOT NULL,                  -- external or internal ID (e.g. Spotify URI, Reddit ID)
+  user_id UUID REFERENCES users(id) NOT NULL,
   title TEXT,
   profile_picture_url TEXT, -- URL for the entity's primary image
   metadata JSONB,
@@ -44,9 +47,9 @@ CREATE TABLE entities (
 CREATE TABLE entity_relationships (
   parent_pk_namespace TEXT NOT NULL,
   parent_pk TEXT NOT NULL,
+  user_id UUID REFERENCES users(id) NOT NULL,
   child_pk_namespace TEXT NOT NULL,
   child_pk TEXT NOT NULL,
-  submitter_user_id UUID REFERENCES users(id),
   created_at TIMESTAMP DEFAULT now(),
   PRIMARY KEY (parent_pk_namespace, parent_pk, child_pk_namespace, child_pk)
 );
@@ -65,12 +68,12 @@ CREATE TABLE votes (
   left_entity_pk TEXT NOT NULL,
   right_entity_pk_namespace TEXT NOT NULL,
   right_entity_pk TEXT NOT NULL,
-  voter_user_id UUID REFERENCES users(id),
+  user_id UUID REFERENCES users(id) NOT NULL,
   magnitude INT NOT NULL,
   attribute_id INT NOT NULL REFERENCES attributes(id),
   CHECK ((left_entity_pk_namespace, left_entity_pk) < 
        (right_entity_pk_namespace, right_entity_pk)),
-  PRIMARY KEY (left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, voter_user_id, attribute_id)
+  PRIMARY KEY (left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, user_id, attribute_id)
 );
 
 -- === GLOBAL SLUGS (PUBLIC URLs) ===
