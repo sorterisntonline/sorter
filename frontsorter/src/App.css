@@ -40,7 +40,6 @@ li:hover .suggestion-preview-image {
     background-color: #e0e0e0;
     height: 40px;
     width: 100%;
-    border-radius: 5px;
     appearance: none;
     cursor: pointer;    
 

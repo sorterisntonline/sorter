@@ -249,6 +249,11 @@ function RankedChildList({ parentNamespace, parentPk, childType, childrenOfType,
 // --- NEW: Item Pair Preview Link Component ---
 function ItemPairPreviewLink({ parentNamespace, parentPk, childType, item1, item2, onClick}) {
     const [expanded, setExpanded] = useState(false);
+    const [sliderValue, setSliderValue] = useState(0); // State for slider value
+    const previewItem = sliderValue < 0 ? item1 : item2;
+
+    const previewItemType = previewItem.pk_namespace.split('.')[1];
+
 
     const renderItemPreview = (item) => (
         <div className="text-center flex flex-col items-center w-1/3">
@@ -260,16 +265,21 @@ function ItemPairPreviewLink({ parentNamespace, parentPk, childType, item1, item
 
     return (
         <div>
-            <div className="cursor-pointer mt-3 p-3 border border-black-200 rounded-smd bg-brand-50/40 flex items-center justify-around gap-2 relative group no-underline transition transform hover:-translate-y-0.5"
+            {expanded && (
+                <iframe src={`https://open.spotify.com/embed/${previewItemType}/${previewItem.pk}`} width="100%" height="80" frameBorder="0" allowtransparency="true" allow="encrypted-media"></iframe>
+            )}
+            <div className={`cursor-pointer p-3 border border-black-200 rounded-smd bg-brand-50/40 flex items-center justify-around gap-2 relative group no-underline transition transform hover:-translate-y-0.5 ${!expanded ? 'border-black-300' : 'border-transparent'}`}
                 onClick={() => setExpanded(!expanded)}
             >
                 {renderItemPreview(item1)}
-                {/* Overlay VOTE text on hover */}
-                <div className="absolute inset-0 flex items-center justify-center bg-brand-600/80 opacity-0 group-hover:opacity-100 transition-opacity rounded-smd">
-                    <span className="text-black text-3xl tracking-wide font-bold">VOTE</span>
-                </div>
                 {renderItemPreview(item2)}
             </div>
+            {expanded && (
+                <div>
+                    <input id="slider" type="range" min="-50" max="50" value={sliderValue} onChange={(e) => setSliderValue(e.target.value)} />
+                    <div className="text-gray-500 cursor-pointer w-full text-center border" onClick={() => setExpanded(false)}>submit</div>
+                </div>
+            )}
             <div className="border border-gray-300 cursor-pointer border-dashed flex items-center justify-center gap-2 p-2 transition transform hover:-translate-y-0.5">
                 <div className="text-center text-xs text-gray-500">10 votes</div>
                 <div className="text-center text-xs text-gray-500">
@@ -278,6 +288,7 @@ function ItemPairPreviewLink({ parentNamespace, parentPk, childType, item1, item
                     </svg>
                 </div>
             </div>
+
         </div>
     );
 }
