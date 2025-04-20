@@ -127,8 +127,6 @@ function VoteItemDisplay({ item, isDisabled }) { // Removed isSelected, pk is un
     const isSpotifyAlbum = pk_namespace.includes('spotify.album');
 
 
-    return <div>placeholder</div>;
-
     // Conditionally render Spotify Embed
     if (isSpotifyTrack || isSpotifyAlbum) {
         const embedType = isSpotifyTrack ? 'track' : 'album';
@@ -295,7 +293,6 @@ function VotePage() {
 
             // TODO: Navigate to next pair or back to parent
             // For now, just show alert and maybe navigate back if possible
-            alert(`Vote submitted with magnitude: ${data.magnitude}!`);
             if (parentNs && parentPk) {
                 // Optionally navigate back, or implement logic for next pair
                 // navigate(`/?pk_namespace=${encodeURIComponent(parentNs)}&pk=${encodeURIComponent(parentPk)}`);
@@ -305,7 +302,6 @@ function VotePage() {
         onError: (error) => {
             console.error("Vote submission failed:", error);
             // Show user-friendly error message
-            alert(`Error submitting vote: ${error.message}`);
         },
     });
 
@@ -407,7 +403,6 @@ function VotePage() {
                                 className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-blue-500"
                                 disabled={voteMutation.isPending} // Disable slider during submission
                             />
-                             <div className="text-center mt-1 text-lg font-medium">{sliderValue}</div> {/* Display current slider value */}
                         </div>
 
                         {/* Submit Button */}
