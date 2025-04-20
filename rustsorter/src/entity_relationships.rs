@@ -16,12 +16,12 @@ use crate::{
 
 #[derive(Serialize, Debug, sqlx::FromRow)]
 pub struct EntityRelationship {
-    user_id: Uuid,
-    parent_pk_namespace: String,
-    parent_pk: String,
-    child_pk_namespace: String,
-    child_pk: String,
-    created_at: Option<NaiveDateTime>,
+    pub user_id: Uuid,
+    pub parent_pk_namespace: String,
+    pub parent_pk: String,
+    pub child_pk_namespace: String,
+    pub child_pk: String,
+    pub created_at: Option<NaiveDateTime>,
 }
 
 #[derive(Deserialize, Debug)]

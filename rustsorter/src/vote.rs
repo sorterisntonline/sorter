@@ -4,14 +4,18 @@ use axum::{
     response::IntoResponse,
     routing::{get, post},
     Router,
+    extract::Query,
+    debug_handler,
 };
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid; // Import Uuid for voter_user_id
+use sea_query::{Alias, Expr, Order, PostgresQueryBuilder};
 
 use crate::{
     app_state::AppState,
-    models::{ErrorResponse, Json}, // Assuming models module exists for Json and ErrorResponse
+    models::{ErrorResponse, Json},
+    entity_relationships::EntityRelationship,
     extractors::maybe_user::AuthenticatedUser,
 };
 
@@ -25,7 +29,8 @@ pub struct Vote {
     pub user_id: Uuid,       // Database type is UUID
     pub magnitude: i32,      // Database type is INT
     pub attribute_id: i32,   // Database type is INT
-    pub created_at: DateTime<Utc>, // Added created_at timestamp
+    pub created_at: NaiveDateTime, // Added created_at timestamp
+    pub deleted_at: Option<NaiveDateTime>, // Added deleted_at timestamp
 }
 
 // Represents the payload for creating a vote
@@ -42,9 +47,9 @@ pub struct VotePayload {
 // --- Handler Functions ---
 
 // POST / - Create a new vote
+#[debug_handler]
 async fn create_vote(
     State(state): State<AppState>,
-    AuthenticatedUser(user): AuthenticatedUser,
     Json(payload): Json<VotePayload>,
 ) -> Result<impl IntoResponse, impl IntoResponse> {
     // Ensure the left/right pair is ordered correctly before insertion
@@ -73,10 +78,10 @@ async fn create_vote(
     match sqlx::query_as!(
         Vote,
         r#"
-        INSERT INTO votes (left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, magnitude, attribute_id, user_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        INSERT INTO votes (left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, magnitude, attribute_id, user_id, deleted_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)
         -- The RETURNING clause now includes created_at
-        RETURNING left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, magnitude, attribute_id, user_id, created_at as "created_at: DateTime<Utc>"
+        RETURNING left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, magnitude, attribute_id, user_id, created_at, deleted_at
         "#,
         left_ns, // Use potentially swapped values
         left_pk,
@@ -84,7 +89,7 @@ async fn create_vote(
         right_pk,
         magnitude, // Use potentially inverted magnitude
         payload.attribute_id,
-        user.id
+        state.spotify_user.id // TODO: Use authenticated user @chris
     )
     .fetch_one(&state.db)
     .await
@@ -157,7 +162,7 @@ async fn get_vote(
     match sqlx::query_as!(
         Vote,
         r#"
-        SELECT left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, user_id, magnitude, attribute_id, created_at as "created_at: DateTime<Utc>" -- Added created_at with type hint
+        SELECT left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, user_id, magnitude, attribute_id, created_at, deleted_at
         FROM votes
         WHERE left_entity_pk_namespace = $1
           AND left_entity_pk = $2
@@ -165,6 +170,7 @@ async fn get_vote(
           AND right_entity_pk = $4
           AND user_id = $5
           AND attribute_id = $6
+          AND deleted_at IS NULL
         ORDER BY created_at DESC -- If multiple votes match, return the latest
         LIMIT 1 -- Return only one (the latest)
         "#,
@@ -194,31 +200,47 @@ async fn get_vote(
 }
 
 // GET / - List votes (Consider adding query parameters for filtering in production)
+#[derive(Deserialize, Debug)]
+struct VoteFilterParams {
+    user_id: Option<Uuid>,
+    attribute_id: Option<i32>,
+    parent_entity_ns: Option<String>,
+    parent_entity_pk: Option<String>,
+}
 async fn list_votes(
+    Query(params): Query<VoteFilterParams>,
     State(state): State<AppState>,
-    // TODO: Add query parameters for filtering, e.g., axum::extract::Query<VoteFilterParams>
 ) -> Result<impl IntoResponse, impl IntoResponse> {
-    // Warning: Fetches all votes. Implement filtering/pagination for real-world use.
-    match sqlx::query_as!(
-        Vote,
+    let childen_of_parent : Vec<EntityRelationship> = sqlx::query_as!(
+        EntityRelationship,
         r#"
-        SELECT left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, user_id, magnitude, attribute_id, created_at as "created_at: DateTime<Utc>" -- Added created_at with type hint
-        FROM votes
-        ORDER BY created_at DESC -- Example ordering by creation time
-        "# // Consider adding user_id, attribute_id etc. to ORDER BY
+        SELECT * FROM entity_relationships WHERE parent_pk_namespace = $1 AND parent_pk = $2
+        "#,
+        params.parent_entity_ns,
+        params.parent_entity_pk
     )
     .fetch_all(&state.db)
-    .await
-    {
-        Ok(votes) => Ok((StatusCode::OK, Json(votes))),
-        Err(e) => {
-             log::error!("Failed to list votes: {}", e);
-              Err(ErrorResponse::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to list votes".to_string(),
-            ))
-        }
-    }
+    .await.map_err(|e| {
+        log::error!("Failed to list votes: {}", e);
+        ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "Failed to list votes".to_string())
+    })?;
+
+    let child_pk_namespaces = childen_of_parent.iter().map(|r| r.child_pk_namespace.clone()).collect::<Vec<String>>();
+    let child_pk_namespaces_str = child_pk_namespaces.join(",");
+    let votes = sqlx::query_as!(
+        Vote,
+        r#"
+        SELECT * FROM votes WHERE left_entity_pk_namespace IN ($1)
+        "#,
+        child_pk_namespaces_str
+    )
+    .fetch_all(&state.db)
+    .await.map_err(|e| {
+        log::error!("Failed to list votes: {}", e);
+        ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "Failed to list votes".to_string())
+    })?;
+
+    Ok((StatusCode::OK, Json(votes)))
 }
 
 // Define the routes for vote operations (now only create and read)
