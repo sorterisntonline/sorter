@@ -9,16 +9,12 @@ use axum::{
     response::Response,
     body::Body,
 };
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{NaiveDateTime};
 use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid; // Import Uuid for voter_user_id
-use sea_query::{Alias, Expr, Order, PostgresQueryBuilder};
 
 use crate::{
-    app_state::AppState,
-    models::{ErrorResponse, Json},
-    entity_relationships::EntityRelationship,
-    extractors::maybe_user::AuthenticatedUser,
+    app_state::AppState, entity::Entity, entity_relationships::EntityRelationship, models::{ErrorResponse, Json}
 };
 
 // Represents a vote fetched from the database, matching the 'votes' table schema
@@ -201,7 +197,7 @@ async fn get_vote(
     }
 }
 
-// GET / - List votes (Consider adding query parameters for filtering in production)
+// GET / - List votes
 #[derive(Deserialize, Debug)]
 struct VoteFilterParams {
     user_id: Option<Uuid>,
