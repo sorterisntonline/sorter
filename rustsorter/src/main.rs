@@ -13,8 +13,10 @@ use std::env;
 
 use anyhow::Result;
 use api_key::get_user_by_auth0_sub;
+use app_state::AppState;
 use axum::{Json, Router, http::StatusCode, middleware, response::IntoResponse, routing::get};
 use dotenv::dotenv;
+use models::User;
 use rspotify::{ClientCredsSpotify, Config, Credentials};
 use serde_json::json;
 use tower_http::trace::TraceLayer;
@@ -62,8 +64,6 @@ async fn get_spotify_client() -> Result<ClientCredsSpotify> {
     Ok(spotify)
 }
 
-use crate::models::User;
-
 async fn get_spotify_user(db: &sqlx::PgPool) -> Result<User> {
     let user = get_user_by_auth0_sub(db, "spotify").await?;
     Ok(user)
@@ -82,45 +82,45 @@ async fn main() -> Result<(), anyhow::Error> {
         .await
         .expect("Unable to connect to database");
 
-    let app_state = crate::app_state::AppState {
+    let app_state = AppState {
         db: pool.clone(),
         spotify_client: get_spotify_client().await?,
         spotify_user: get_spotify_user(&pool).await?,
     };
 
-    let app = Router::new()
-        .route("/api/health", get(health))
-        .nest("/api", api_routes(app_state.clone()))
-        .with_state(app_state)
-        .layer(TraceLayer::new_for_http());
+    let router = router(app_state);
 
     let addr = "127.0.0.1:8081";
     log::info!("Starting server on {}", addr);
 
-    axum::serve(
-        tokio::net::TcpListener::bind(addr).await.unwrap(),
-        app.into_make_service(),
-    )
-    .await
-    .expect("Failed to start server");
+    axum::serve(tokio::net::TcpListener::bind(addr).await.unwrap(), router)
+        .await
+        .expect("Failed to start server");
 
     Ok(())
 }
 
-fn api_routes(app_state: crate::app_state::AppState) -> Router<crate::app_state::AppState> {
-    Router::new()
+fn router(app_state: AppState) -> Router {
+    let public_routes = Router::new()
+        .route("/health", get(health))
+        .nest("/entity", entity::public_routes());
+
+    let protected_routes = Router::new()
         .route("/protected", get(protected_route))
-        .nest("/keys", crate::api_key::routes())
-        .nest("/entity", crate::entity::routes())
-        .nest(
-            "/entity_relationships",
-            crate::entity_relationships::routes(),
-        )
-        .nest("/spotify", crate::spotify::routes())
-        .nest("/vote", crate::vote::routes())
-        .nest("/rank", crate::pagerank::routes())
+        .nest("/keys", api_key::routes())
+        .nest("/entity", entity::protected_routes())
+        .nest("/entity_relationships", entity_relationships::routes())
+        .nest("/spotify", spotify::routes())
+        .nest("/vote", vote::routes())
+        .nest("/rank", pagerank::routes())
         .layer(middleware::from_fn_with_state(
-            app_state,
+            app_state.clone(),
             auth_middleware::auth,
-        ))
+        ));
+
+    Router::new()
+        .nest("/api", public_routes)
+        .nest("/api", protected_routes)
+        .with_state(app_state)
+        .layer(TraceLayer::new_for_http())
 }

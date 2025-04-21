@@ -37,13 +37,15 @@ pub struct EntityPayload {
     profile_picture_url: Option<String>,
 }
 
-pub fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/", post(create_entity).get(list_entities))
-        .route(
-            "/:pk_namespace/:pk",
-            get(get_entity).put(update_entity).delete(delete_entity),
-        )
+pub fn public_routes() -> Router<AppState> {
+    Router::new().route("/", get(list_entities))
+}
+
+pub fn protected_routes() -> Router<AppState> {
+    Router::new().route("/", post(create_entity)).route(
+        "/:pk_namespace/:pk",
+        get(get_entity).put(update_entity).delete(delete_entity),
+    )
 }
 
 async fn create_entity(
