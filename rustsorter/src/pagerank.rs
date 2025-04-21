@@ -193,19 +193,9 @@ async fn rank_children_handler(
         .map(|e| format!("{}:{}", e.pk_namespace, e.pk))
         .collect();
 
-    let votes = sqlx::query_as!(
+    let votes = sqlx::query_file_as!(
         RelevantVote,
-        r#"
-        SELECT
-            left_entity_pk_namespace, left_entity_pk,
-            right_entity_pk_namespace, right_entity_pk,
-            magnitude
-        FROM votes
-        WHERE (left_entity_pk_namespace || ':' || left_entity_pk) = ANY($1)
-          AND (right_entity_pk_namespace || ':' || right_entity_pk) = ANY($1)
-        -- Optional: Add user_id filter if needed
-        -- AND user_id = $2
-        "#,
+        "../database/sql/vote/select_partial.sql",
         &entity_keys
     )
     .fetch_all(&state.db)

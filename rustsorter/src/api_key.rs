@@ -131,22 +131,10 @@ fn parse_key_identifier(full_key: &str) -> Result<String, Error> {
 }
 
 pub async fn get_user_by_auth0_sub(pool: &PgPool, auth0_sub: &str) -> Result<User, Error> {
-    sqlx::query_as!(
-        User,
-        "
-SELECT auth0_sub,
-    username,
-    avatar_url,
-    bio,
-    created_at,
-    id
-FROM users
-WHERE auth0_sub = $1",
-        auth0_sub
-    )
-    .fetch_one(pool)
-    .await
-    .map_error(&format!("user '{auth0_sub}'"))
+    sqlx::query_file_as!(User, "../database/sql/user/select.sql", auth0_sub)
+        .fetch_one(pool)
+        .await
+        .map_error(&format!("user '{auth0_sub}'"))
 }
 
 pub async fn verify_api_key(
@@ -157,29 +145,14 @@ pub async fn verify_api_key(
     let identifier = parse_key_identifier(provided_full_key)?;
     debug!(identifier; "parsed identifier");
 
-    let key = sqlx::query_as!(
-        ApiKeyDb,
-        "
-SELECT id,
-    auth0_sub,
-    name,
-    key_identifier,
-    hashed_key,
-    created_at,
-    last_used_at,
-    active
-FROM api_keys
-WHERE key_identifier = $1
-    AND active = TRUE",
-        &identifier
-    )
-    .fetch_optional(pool)
-    .await
-    .map_error("key")?
-    .ok_or_else(|| {
-        warn!(identifier = *identifier; "no active API key found");
-        Error::Unauthorized
-    })?;
+    let key = sqlx::query_file_as!(ApiKeyDb, "../database/sql/key/select.sql", &identifier)
+        .fetch_optional(pool)
+        .await
+        .map_error("key")?
+        .ok_or_else(|| {
+            warn!(identifier = *identifier; "no active API key found");
+            Error::Unauthorized
+        })?;
 
     let key_id = key.id;
 
@@ -208,11 +181,8 @@ WHERE key_identifier = $1
 }
 
 pub async fn update_last_used(pool: &PgPool, key_id: i32) -> Result<(), Error> {
-    sqlx::query!(
-        "
-UPDATE api_keys
-SET last_used_at = $1
-WHERE id = $2",
+    sqlx::query_file!(
+        "../database/sql/key/update_last_used.sql",
         Utc::now().naive_utc(),
         key_id
     )
@@ -233,25 +203,10 @@ async fn list_keys(
 
     debug!(user = user.auth0_sub; "authenticated user for list_keys");
 
-    let keys = sqlx::query_as!(
-        ApiKeyDb,
-        "
-SELECT id,
-    auth0_sub,
-    name,
-    key_identifier,
-    hashed_key,
-    created_at,
-    last_used_at,
-    active
-FROM api_keys
-WHERE auth0_sub = $1
-ORDER BY created_at DESC",
-        user.auth0_sub
-    )
-    .fetch_all(&state.db)
-    .await
-    .map_error("key")?;
+    let keys = sqlx::query_file_as!(ApiKeyDb, "../database/sql/key/list.sql", user.auth0_sub)
+        .fetch_all(&state.db)
+        .await
+        .map_error("key")?;
 
     let response_keys: Vec<ApiKeyResponse> = keys.into_iter().map(ApiKeyResponse::from).collect();
     debug!(
@@ -279,17 +234,8 @@ async fn create_key(
 
     debug!(identifier, preview; "generated identifier and preview");
 
-    sqlx::query!(
-        "
-INSERT INTO api_keys (
-        auth0_sub,
-        name,
-        key_identifier,
-        hashed_key,
-        active,
-        created_at
-    )
-VALUES ($1, $2, $3, $4, TRUE, $5)",
+    sqlx::query_file!(
+        "../database/sql/key/insert.sql",
         user.auth0_sub,
         payload.name,
         &identifier,
@@ -324,13 +270,8 @@ async fn revoke_key(
 
     let object = format!("active API key named '{}'", payload.name);
 
-    sqlx::query!(
-        "
-UPDATE api_keys
-SET active = FALSE,
-    last_used_at = $1
-WHERE auth0_sub = $2
-    AND name = $3 AND active = TRUE",
+    sqlx::query_file!(
+        "../database/sql/key/revoke.sql",
         Utc::now().naive_utc(),
         user.auth0_sub,
         payload.name

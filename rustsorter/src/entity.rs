@@ -52,18 +52,9 @@ async fn create_entity(
     Json(payload): Json<EntityPayload>,
 ) -> Result<impl IntoResponse, Error> {
     // TODO add user id to the entity in DB
-    let entity = sqlx::query_as!(
+    let entity = sqlx::query_file_as!(
         Entity,
-        "
-INSERT INTO entities (pk_namespace, pk, title, metadata, profile_picture_url, user_id)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING pk_namespace,
-    pk,
-    title,
-    metadata,
-    created_at,
-    profile_picture_url,
-    user_id",
+        "../database/sql/entity/insert.sql",
         payload.pk_namespace,
         payload.pk,
         payload.title,
@@ -102,19 +93,9 @@ async fn get_entity(
     let include_parents = params.parents.unwrap_or(false);
     let include_children = params.children.unwrap_or(false);
 
-    let entity = sqlx::query_as!(
+    let entity = sqlx::query_file_as!(
         Entity,
-        "
-SELECT pk_namespace,
-    pk,
-    title,
-    metadata,
-    created_at,
-    profile_picture_url,
-    user_id
-FROM entities
-WHERE pk_namespace = $1
-    AND pk = $2",
+        "../database/sql/entity/select.sql",
         pk_namespace,
         pk
     )
@@ -124,15 +105,9 @@ WHERE pk_namespace = $1
     .catch_not_found("entity")?;
 
     let parents = if include_parents {
-        let parents = sqlx::query_as!(
+        let parents = sqlx::query_file_as!(
             Entity,
-            "
-SELECT e.*
-FROM entities e
-    JOIN entity_relationships er ON e.pk_namespace = er.parent_pk_namespace
-    AND e.pk = er.parent_pk
-WHERE er.child_pk_namespace = $1
-    AND er.child_pk = $2",
+            "../database/sql/entity/select_parents.sql",
             pk_namespace,
             pk
         )
@@ -145,16 +120,9 @@ WHERE er.child_pk_namespace = $1
         None
     };
     let children = if include_children {
-        let children = sqlx::query_as!(
+        let children = sqlx::query_file_as!(
             Entity,
-            "
-SELECT e.*
-FROM entities e
-    JOIN entity_relationships er ON e.pk_namespace = er.child_pk_namespace
-    AND e.pk = er.child_pk
-WHERE er.parent_pk_namespace = $1
-    AND er.parent_pk = $2
-            ",
+            "../database/sql/entity/select_children.sql",
             pk_namespace,
             pk
         )
@@ -175,22 +143,10 @@ WHERE er.parent_pk_namespace = $1
 }
 
 async fn list_entities(State(state): State<AppState>) -> Result<impl IntoResponse, Error> {
-    let entities = sqlx::query_as!(
-        Entity,
-        "
-SELECT pk_namespace,
-    pk,
-    title,
-    metadata,
-    created_at,
-    profile_picture_url,
-    user_id
-FROM entities
-ORDER BY created_at DESC"
-    )
-    .fetch_all(&state.db)
-    .await
-    .map_error("entities")?;
+    let entities = sqlx::query_file_as!(Entity, "../database/sql/entity/list.sql")
+        .fetch_all(&state.db)
+        .await
+        .map_error("entities")?;
 
     Ok((StatusCode::OK, Json(entities)))
 }
@@ -207,23 +163,9 @@ async fn update_entity(
         });
     }
 
-    let entity = sqlx::query_as!(
+    let entity = sqlx::query_file_as!(
         Entity,
-        "
-UPDATE entities
-SET title = $3,
-    metadata = $4,
-    profile_picture_url = $5,
-    user_id = $6
-WHERE pk_namespace = $1
-    AND pk = $2
-RETURNING pk_namespace,
-    pk,
-    title,
-    metadata,
-    created_at,
-    profile_picture_url,
-    user_id",
+        "../database/sql/entity/update.sql",
         pk_namespace,
         pk,
         payload.title,
@@ -244,18 +186,11 @@ async fn delete_entity(
     Path((pk_namespace, pk)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, Error> {
     // TODO only delete entity if user is the owner
-    sqlx::query!(
-        "
-DELETE FROM entities
-WHERE pk_namespace = $1
-    AND pk = $2",
-        pk_namespace,
-        pk
-    )
-    .execute(&state.db)
-    .await
-    .map_internal()?
-    .catch_not_found("entity")?;
+    sqlx::query_file!("../database/sql/entity/delete.sql", pk_namespace, pk)
+        .execute(&state.db)
+        .await
+        .map_internal()?
+        .catch_not_found("entity")?;
 
     Ok(StatusCode::NO_CONTENT)
 }

@@ -65,23 +65,9 @@ async fn create_relationship(
 ) -> Result<impl IntoResponse, Error> {
     // TODO: Add validation: Check if parent and child entities actually exist?
 
-    let relationship = sqlx::query_as!(
+    let relationship = sqlx::query_file_as!(
         EntityRelationship,
-        "
-INSERT INTO entity_relationships (
-        parent_pk_namespace,
-        parent_pk,
-        child_pk_namespace,
-        child_pk,
-        user_id
-    )
-VALUES ($1, $2, $3, $4, $5)
-RETURNING parent_pk_namespace,
-    parent_pk,
-    child_pk_namespace,
-    child_pk,
-    user_id,
-    created_at",
+        "../database/sql/entity_relationship/insert.sql",
         payload.parent_pk_namespace,
         payload.parent_pk,
         payload.child_pk_namespace,
@@ -99,6 +85,7 @@ async fn list_relationships(
     State(state): State<AppState>,
     Query(params): Query<ListRelationshipsQuery>,
 ) -> Result<impl IntoResponse, Error> {
+    // TODO: this is BAD, its prone to SQL injection
     let mut query = "
 SELECT parent_pk_namespace,
     parent_pk,
@@ -163,13 +150,8 @@ async fn delete_relationship(
 ) -> Result<impl IntoResponse, Error> {
     // TODO: Implement actual permission check.
 
-    sqlx::query!(
-        "
-DELETE FROM entity_relationships
-WHERE parent_pk_namespace = $1
-    AND parent_pk = $2
-    AND child_pk_namespace = $3
-    AND child_pk = $4",
+    sqlx::query_file!(
+        "../database/sql/entity_relationship/delete.sql",
         params.parent_pk_namespace,
         params.parent_pk,
         params.child_pk_namespace,

@@ -33,10 +33,21 @@ impl<T, E: Into<anyhow::Error>> MapError<T> for Result<T, E> {
 }
 
 pub trait MapErrorSqlx<T> {
+    fn ignore_conflict(self) -> Result<Option<T>, sqlx::Error>;
     fn map_error(self, object: &str) -> Result<T, Error>;
 }
 
 impl<T> MapErrorSqlx<T> for Result<T, sqlx::Error> {
+    fn ignore_conflict(self) -> Result<Option<T>, sqlx::Error> {
+        if let Err(sqlx::Error::Database(e)) = &self {
+            if e.is_unique_violation() {
+                return Ok(None);
+            }
+        }
+
+        self.map(Some)
+    }
+
     fn map_error(self, object: &str) -> Result<T, Error> {
         self.map_err(|err| match err {
             sqlx::Error::RowNotFound => Error::NotFound {

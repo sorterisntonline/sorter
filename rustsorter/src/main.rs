@@ -12,6 +12,7 @@ pub mod vote;
 use std::env;
 
 use anyhow::Result;
+use api_key::get_user_by_auth0_sub;
 use axum::{Json, Router, http::StatusCode, middleware, response::IntoResponse, routing::get};
 use dotenv::dotenv;
 use rspotify::{ClientCredsSpotify, Config, Credentials};
@@ -64,9 +65,7 @@ async fn get_spotify_client() -> Result<ClientCredsSpotify> {
 use crate::models::User;
 
 async fn get_spotify_user(db: &sqlx::PgPool) -> Result<User> {
-    let user = sqlx::query_as!(User, "SELECT * FROM users WHERE auth0_sub = 'spotify'")
-        .fetch_one(db)
-        .await?;
+    let user = get_user_by_auth0_sub(db, "spotify").await?;
     Ok(user)
 }
 

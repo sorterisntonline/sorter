@@ -73,15 +73,9 @@ async fn create_vote(
         )
     };
 
-    let vote = sqlx::query_as!(
+    let vote = sqlx::query_file_as!(
         Vote,
-        "
-        INSERT INTO votes (left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, \
-         right_entity_pk, magnitude, attribute_id, user_id, deleted_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)
-        RETURNING left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, \
-         right_entity_pk, magnitude, attribute_id, user_id, created_at, deleted_at
-        ",
+        "../database/sql/vote/insert.sql",
         left_ns,
         left_pk,
         right_ns,
@@ -121,28 +115,9 @@ async fn get_vote(
         (left_ns, left_pk, right_ns, right_pk)
     };
 
-    let vote = sqlx::query_as!(
+    let vote = sqlx::query_file_as!(
         Vote,
-        "
-SELECT left_entity_pk_namespace,
-    left_entity_pk,
-    right_entity_pk_namespace,
-    right_entity_pk,
-    user_id,
-    magnitude,
-    attribute_id,
-    created_at,
-    deleted_at
-FROM votes
-WHERE left_entity_pk_namespace = $1
-    AND left_entity_pk = $2
-    AND right_entity_pk_namespace = $3
-    AND right_entity_pk = $4
-    AND user_id = $5
-    AND attribute_id = $6
-    AND deleted_at IS NULL
-ORDER BY created_at DESC
-LIMIT 1",
+        "../database/sql/vote/select.sql",
         query_left_ns,
         query_left_pk,
         query_right_ns,
@@ -167,16 +142,10 @@ struct VoteFilterParams {
 }
 
 async fn list_votes(State(state): State<AppState>) -> Result<impl IntoResponse, Error> {
-    let votes = sqlx::query_as!(
-        // TODO use filters
-        Vote,
-        r#"
-        SELECT * FROM votes WHERE true
-        "#,
-    )
-    .fetch_all(&state.db)
-    .await
-    .map_error("votes")?;
+    let votes = sqlx::query_file_as!(Vote, "../database/sql/vote/list.sql",)
+        .fetch_all(&state.db)
+        .await
+        .map_error("votes")?;
 
     Ok((StatusCode::OK, Json(votes)))
 }

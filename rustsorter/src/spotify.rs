@@ -33,7 +33,7 @@ use sqlx::{Executor, types::Uuid};
 use crate::{
     app_state::AppState,
     entity::Entity,
-    models::{Error, IntoNotFound, MapError, MapErrorSqlx},
+    models::{Error, MapError, MapErrorSqlx},
 };
 
 #[derive(Deserialize)]
@@ -87,21 +87,18 @@ where
         profile_picture_url;
         "upserting entity (DO NOTHING)",
     );
-    sqlx::query!(
-        r#"
-        INSERT INTO entities (pk_namespace, pk, title, profile_picture_url, metadata, user_id)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        ON CONFLICT (pk_namespace, pk) DO NOTHING
-        "#,
+    sqlx::query_file!(
+        "../database/sql/entity/insert.sql",
         pk_namespace,
         pk,
         title,
-        profile_picture_url,
         metadata,
+        profile_picture_url,
         user_id
     )
-    .execute(executor)
+    .fetch_one(executor)
     .await
+    .ignore_conflict()
     .map_error("entity")?;
 
     Ok(())
@@ -125,23 +122,15 @@ where
         child_pk;
         "upserting relationship",
     );
-    sqlx::query!(
-        r#"
-        INSERT INTO entity_relationships (
-            parent_pk_namespace, parent_pk,
-            child_pk_namespace, child_pk,
-            user_id
-        )
-        VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (parent_pk_namespace, parent_pk, child_pk_namespace, child_pk) DO NOTHING
-        "#,
+    sqlx::query_file!(
+        "../database/sql/entity_relationship/insert.sql",
         parent_pk_namespace,
         parent_pk,
         child_pk_namespace,
         child_pk,
         user_id
     )
-    .execute(executor)
+    .fetch_one(executor)
     .await
     .map_error("entity relationship")?;
 
@@ -209,45 +198,42 @@ async fn ensure_spotify_entity(
 
     let mut tx = db_pool.begin().await.map_error("spotify entity")?;
 
-    let insert_result = sqlx::query!(
-        r#"
-        INSERT INTO entities (pk_namespace, pk, title, profile_picture_url, metadata, user_id)
-        VALUES ($1, $2, $3, NULL, $4, $5)
-        ON CONFLICT (pk_namespace, pk) DO NOTHING
-        "#,
+    let insert_result = sqlx::query_file!(
+        "../database/sql/entity/insert.sql",
         payload.pk_namespace,
         payload.pk,
         payload.title,
         payload.metadata,
-        state.spotify_user.id
+        None::<String>,
+        state.spotify_user.id,
     )
-    .execute(&mut *tx)
+    .fetch_optional(&mut *tx)
     .await
+    .ignore_conflict()
     .map_error("entity")?;
 
-    let initial_status_code = if insert_result.catch_not_found("entity").is_ok() {
-        info!(
-            namespace = payload.pk_namespace,
-            pk = payload.pk;
-            "entity inserted",
-        );
-        StatusCode::CREATED
-    } else {
-        info!(
-            namespace = payload.pk_namespace,
-            pk = payload.pk;
-            "entity already existed",
-        );
-        StatusCode::OK
-    };
+    let initial_status_code = insert_result.map_or_else(
+        || {
+            info!(
+                namespace = payload.pk_namespace,
+                pk = payload.pk;
+                "entity already existed",
+            );
+            StatusCode::OK
+        },
+        |_| {
+            info!(
+                namespace = payload.pk_namespace,
+                pk = payload.pk;
+                "entity inserted",
+            );
+            StatusCode::CREATED
+        },
+    );
 
-    let mut entity = sqlx::query_as!(
+    let mut entity = sqlx::query_file_as!(
         Entity,
-        r#"
-        SELECT pk_namespace, pk, title, profile_picture_url, metadata, created_at, user_id
-        FROM entities
-        WHERE pk_namespace = $1 AND pk = $2
-        "#,
+        "../database/sql/entity/select.sql",
         payload.pk_namespace,
         payload.pk
     )
@@ -277,19 +263,16 @@ async fn ensure_spotify_entity(
             entity.profile_picture_url = get_first_image_url(&full_artist.images);
             entity.metadata = Some(serde_json::to_value(&full_artist).map_internal()?);
 
-            sqlx::query!(
-                r#"
-                    UPDATE entities
-                    SET title = $1, profile_picture_url = $2, metadata = $3
-                    WHERE pk_namespace = $4 AND pk = $5
-                    "#,
-                entity.title,
-                entity.profile_picture_url,
-                entity.metadata,
+            sqlx::query_file!(
+                "../database/sql/entity/update.sql",
                 payload.pk_namespace,
-                payload.pk
+                payload.pk,
+                entity.title,
+                entity.metadata,
+                entity.profile_picture_url,
+                entity.user_id
             )
-            .execute(&mut *tx)
+            .fetch_one(&mut *tx)
             .await
             .map_error("entity")?;
             info!(
@@ -379,19 +362,16 @@ async fn ensure_spotify_entity(
             entity.profile_picture_url = get_first_image_url(&full_album.images);
             entity.metadata = Some(serde_json::to_value(&full_album).map_internal()?);
 
-            sqlx::query!(
-                r#"
-                    UPDATE entities
-                    SET title = $1, profile_picture_url = $2, metadata = $3
-                    WHERE pk_namespace = $4 AND pk = $5
-                    "#,
-                entity.title,
-                entity.profile_picture_url,
-                entity.metadata,
+            sqlx::query_file!(
+                "../database/sql/entity/update.sql",
                 payload.pk_namespace,
-                payload.pk
+                payload.pk,
+                entity.title,
+                entity.metadata,
+                entity.profile_picture_url,
+                entity.user_id
             )
-            .execute(&mut *tx)
+            .fetch_one(&mut *tx)
             .await
             .map_error("entity")?;
             info!(
@@ -563,19 +543,16 @@ async fn ensure_spotify_entity(
             entity.profile_picture_url = get_first_image_url(&full_track.album.images);
             entity.metadata = Some(serde_json::to_value(&full_track).map_internal()?);
 
-            sqlx::query!(
-                r#"
-                    UPDATE entities
-                    SET title = $1, metadata = $2, profile_picture_url = $3
-                    WHERE pk_namespace = $4 AND pk = $5
-                    "#,
+            sqlx::query_file!(
+                "../database/sql/entity/update.sql",
+                payload.pk_namespace,
+                payload.pk,
                 entity.title,
                 entity.metadata,
                 entity.profile_picture_url,
-                payload.pk_namespace,
-                payload.pk
+                entity.user_id
             )
-            .execute(&mut *tx)
+            .fetch_one(&mut *tx)
             .await
             .map_error("entity")?;
             info!(
