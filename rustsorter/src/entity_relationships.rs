@@ -85,60 +85,18 @@ async fn list_relationships(
     State(state): State<AppState>,
     Query(params): Query<ListRelationshipsQuery>,
 ) -> Result<impl IntoResponse, Error> {
-    // TODO: this is BAD, its prone to SQL injection
-    let mut query = "
-SELECT parent_pk_namespace,
-    parent_pk,
-    child_pk_namespace,
-    child_pk,
-    user_id,
-    created_at
-FROM entity_relationships
-WHERE 1 = 1"
-        .to_string();
-
-    let mut args: Vec<String> = Vec::new();
-    let mut uuid_args: Vec<Uuid> = Vec::new();
-    let mut arg_count = 1;
-
-    if let Some(val) = &params.parent_pk_namespace {
-        query.push_str(&format!(" AND parent_pk_namespace = ${}", arg_count));
-        args.push(val.clone());
-        arg_count += 1;
-    }
-    if let Some(val) = &params.parent_pk {
-        query.push_str(&format!(" AND parent_pk = ${}", arg_count));
-        args.push(val.clone());
-        arg_count += 1;
-    }
-    if let Some(val) = &params.child_pk_namespace {
-        query.push_str(&format!(" AND child_pk_namespace = ${}", arg_count));
-        args.push(val.clone());
-        arg_count += 1;
-    }
-    if let Some(val) = &params.child_pk {
-        query.push_str(&format!(" AND child_pk = ${}", arg_count));
-        args.push(val.clone());
-        arg_count += 1;
-    }
-    if let Some(val) = &params.submitter_user_id {
-        query.push_str(&format!(" AND submitter_user_id = ${}", arg_count));
-        uuid_args.push(*val);
-    }
-
-    query.push_str(" ORDER BY created_at DESC");
-
-    let mut sqlx_query = sqlx::query_as::<_, EntityRelationship>(&query);
-
-    for arg in &args {
-        sqlx_query = sqlx_query.bind(arg);
-    }
-
-    for arg in &uuid_args {
-        sqlx_query = sqlx_query.bind(arg);
-    }
-
-    let relationships = sqlx_query.fetch_all(&state.db).await.map_internal()?;
+    let relationships = sqlx::query_file_as!(
+        EntityRelationship,
+        "../database/sql/entity_relationship/list.sql",
+        params.parent_pk_namespace,
+        params.parent_pk,
+        params.child_pk_namespace,
+        params.child_pk,
+        params.submitter_user_id
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_internal()?;
 
     Ok((StatusCode::OK, Json(relationships)))
 }
