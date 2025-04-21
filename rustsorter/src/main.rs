@@ -12,21 +12,11 @@ pub mod vote;
 use std::env;
 
 use anyhow::Result;
-use axum::{
-    Extension,
-    Json,
-    Router,
-    http::StatusCode,
-    middleware,
-    response::IntoResponse,
-    routing::get,
-};
+use axum::{Json, Router, http::StatusCode, middleware, response::IntoResponse, routing::get};
 use dotenv::dotenv;
 use rspotify::{ClientCredsSpotify, Config, Credentials};
 use serde_json::json;
 use tower_http::trace::TraceLayer;
-
-use crate::models::User;
 
 async fn health() -> impl IntoResponse {
     (
@@ -38,12 +28,11 @@ async fn health() -> impl IntoResponse {
     )
 }
 
-async fn protected_route(Extension(user): Extension<User>) -> impl IntoResponse {
+async fn protected_route() -> impl IntoResponse {
     (
         StatusCode::OK,
         Json(json!({
-        "message": format!("Hello, {}! This is a protected route.", user.auth0_sub),
-        "authenticated_user": user.auth0_sub
+            "message": "Hello! This is a protected route.",
         })),
     )
 }

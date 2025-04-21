@@ -37,6 +37,14 @@
         "cwd": "rustsorter"
       },
       "type": "cargo"
+    },
+    {
+      "command": "build",
+      "label": "build",
+      "type": "cargo",
+      "options": {
+        "cwd": "rustsorter"
+      }
     }
   ]
 }

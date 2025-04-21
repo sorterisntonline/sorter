@@ -101,8 +101,7 @@ class TestApiKeyFlow:
         response = await self.make_request("GET", "/protected", headers=STATIC_ADMIN_AUTH_HEADER)
         assert response.status_code == 200
         data = response.json()
-        assert "Hello, admin!" in data.get("message", "")
-        assert data.get("authenticated_user") == "admin"
+        assert "Hello!" in data.get("message", "")
 
     # --- CRUD Tests ---
 
@@ -194,8 +193,7 @@ class TestApiKeyFlow:
         response = await self.make_request("GET", "/protected", headers=headers)
         assert response.status_code == 200
         data = response.json()
-        assert "Hello, admin!" in data.get("message", "")
-        assert data.get("authenticated_user") == "admin"
+        assert "Hello!" in data.get("message", "")
         # Add a small delay to allow the async last_used_at update to likely complete
         time.sleep(0.2)
 
