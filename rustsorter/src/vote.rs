@@ -1,16 +1,19 @@
 use axum::{
+    Json,
     Router,
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
 };
+use chrono::NaiveDateTime;
+use log::warn;
 use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
 
 use crate::{
     app_state::AppState,
-    models::{Error, IntoNotFound, Json, MapErrorSqlx},
+    models::{Error, IntoNotFound, MapErrorSqlx},
 };
 
 #[derive(Serialize, Debug, sqlx::FromRow)]
@@ -19,9 +22,11 @@ pub struct Vote {
     pub left_entity_pk: String,
     pub right_entity_pk_namespace: String,
     pub right_entity_pk: String,
-    pub voter_user_id: Uuid,
+    pub user_id: Uuid,
     pub magnitude: i32,
     pub attribute_id: i32,
+    pub created_at: NaiveDateTime,
+    pub deleted_at: Option<NaiveDateTime>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -30,52 +35,64 @@ pub struct VotePayload {
     left_entity_pk: String,
     right_entity_pk_namespace: String,
     right_entity_pk: String,
-    voter_user_id: Uuid,
+    _voter_user_id: Uuid,
     magnitude: i32,
     attribute_id: i32,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct UpdateVotePayload {
-    magnitude: i32,
+    _magnitude: i32,
 }
 
 async fn create_vote(
     State(state): State<AppState>,
     Json(payload): Json<VotePayload>,
 ) -> Result<impl IntoResponse, Error> {
+    let (left_ns, left_pk, right_ns, right_pk, magnitude) = if (
+        payload.left_entity_pk_namespace.clone(),
+        payload.left_entity_pk.clone(),
+    ) < (
+        payload.right_entity_pk_namespace.clone(),
+        payload.right_entity_pk.clone(),
+    ) {
+        (
+            payload.left_entity_pk_namespace,
+            payload.left_entity_pk,
+            payload.right_entity_pk_namespace,
+            payload.right_entity_pk,
+            payload.magnitude,
+        )
+    } else {
+        (
+            payload.right_entity_pk_namespace,
+            payload.right_entity_pk,
+            payload.left_entity_pk_namespace,
+            payload.left_entity_pk,
+            -payload.magnitude,
+        )
+    };
+
     let vote = sqlx::query_as!(
         Vote,
         "
-INSERT INTO votes (
-    left_entity_pk_namespace,
-    left_entity_pk,
-    right_entity_pk_namespace,
-    right_entity_pk,
-    voter_user_id,
-    magnitude,
-    attribute_id
-)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING left_entity_pk_namespace,
-    left_entity_pk,
-    right_entity_pk_namespace,
-    right_entity_pk,
-    voter_user_id,
-    magnitude,
-    attribute_id
+        INSERT INTO votes (left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, \
+         right_entity_pk, magnitude, attribute_id, user_id, deleted_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)
+        RETURNING left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, \
+         right_entity_pk, magnitude, attribute_id, user_id, created_at, deleted_at
         ",
-        payload.left_entity_pk_namespace,
-        payload.left_entity_pk,
-        payload.right_entity_pk_namespace,
-        payload.right_entity_pk,
-        payload.voter_user_id,
-        payload.magnitude,
-        payload.attribute_id
+        left_ns,
+        left_pk,
+        right_ns,
+        right_pk,
+        magnitude,
+        payload.attribute_id,
+        state.spotify_user.id
     )
     .fetch_one(&state.db)
     .await
-    .map_error("vote")?;
+    .map_error("incorrect entity pair ordering")?;
 
     Ok((StatusCode::CREATED, Json(vote)))
 }
@@ -91,6 +108,19 @@ async fn get_vote(
         i32,
     )>,
 ) -> Result<impl IntoResponse, Error> {
+    let (query_left_ns, query_left_pk, query_right_ns, query_right_pk) = if (
+        left_ns.clone(),
+        left_pk.clone(),
+    ) < (
+        right_ns.clone(),
+        right_pk.clone(),
+    ) {
+        (left_ns, left_pk, right_ns, right_pk)
+    } else {
+        warn!(left_ns, left_pk, right_ns, right_pk; "request path for get_vote received non-canonical order for pair");
+        (left_ns, left_pk, right_ns, right_pk)
+    };
+
     let vote = sqlx::query_as!(
         Vote,
         "
@@ -98,21 +128,25 @@ SELECT left_entity_pk_namespace,
     left_entity_pk,
     right_entity_pk_namespace,
     right_entity_pk,
-    voter_user_id,
+    user_id,
     magnitude,
-    attribute_id
+    attribute_id,
+    created_at,
+    deleted_at
 FROM votes
 WHERE left_entity_pk_namespace = $1
     AND left_entity_pk = $2
     AND right_entity_pk_namespace = $3
     AND right_entity_pk = $4
-    AND voter_user_id = $5
+    AND user_id = $5
     AND attribute_id = $6
-        ",
-        left_ns,
-        left_pk,
-        right_ns,
-        right_pk,
+    AND deleted_at IS NULL
+ORDER BY created_at DESC
+LIMIT 1",
+        query_left_ns,
+        query_left_pk,
+        query_right_ns,
+        query_right_pk,
         user_id,
         attr_id
     )
@@ -124,114 +158,27 @@ WHERE left_entity_pk_namespace = $1
     Ok((StatusCode::OK, Json(vote)))
 }
 
-async fn list_votes(
-    State(state): State<AppState>,
-    // TODO: Add query parameters for filtering, e.g., axum::extract::Query<VoteFilterParams>
-) -> Result<impl IntoResponse, Error> {
+#[derive(Deserialize, Debug)]
+struct VoteFilterParams {
+    _user_id: Option<Uuid>,
+    _attribute_id: Option<i32>,
+    _parent_entity_ns: Option<String>,
+    _parent_entity_pk: Option<String>,
+}
+
+async fn list_votes(State(state): State<AppState>) -> Result<impl IntoResponse, Error> {
     let votes = sqlx::query_as!(
+        // TODO use filters
         Vote,
-        "
-SELECT left_entity_pk_namespace,
-    left_entity_pk,
-    right_entity_pk_namespace,
-    right_entity_pk,
-    voter_user_id,
-    magnitude,
-    attribute_id
-FROM votes
-ORDER BY voter_user_id,
-    attribute_id,
-    left_entity_pk_namespace,
-    left_entity_pk"
+        r#"
+        SELECT * FROM votes WHERE true
+        "#,
     )
     .fetch_all(&state.db)
     .await
-    .map_error("vote")?;
+    .map_error("votes")?;
 
     Ok((StatusCode::OK, Json(votes)))
-}
-
-async fn update_vote(
-    State(state): State<AppState>,
-    Path((left_ns, left_pk, right_ns, right_pk, user_id, attr_id)): Path<(
-        String,
-        String,
-        String,
-        String,
-        Uuid,
-        i32,
-    )>,
-    Json(payload): Json<UpdateVotePayload>,
-) -> Result<impl IntoResponse, Error> {
-    let vote = sqlx::query_as!(
-        Vote,
-        "
-        UPDATE votes
-        SET magnitude = $7
-        WHERE left_entity_pk_namespace = $1
-            AND left_entity_pk = $2
-            AND right_entity_pk_namespace = $3
-            AND right_entity_pk = $4
-            AND voter_user_id = $5
-            AND attribute_id = $6
-        RETURNING left_entity_pk_namespace,
-            left_entity_pk,
-            right_entity_pk_namespace,
-            right_entity_pk,
-            voter_user_id,
-            magnitude,
-            attribute_id
-        ",
-        left_ns,
-        left_pk,
-        right_ns,
-        right_pk,
-        user_id,
-        attr_id,
-        payload.magnitude
-    )
-    .fetch_optional(&state.db)
-    .await
-    .map_error("vote")?
-    .catch_not_found("vote")?;
-
-    Ok((StatusCode::OK, Json(vote)))
-}
-
-async fn delete_vote(
-    State(state): State<AppState>,
-    Path((left_ns, left_pk, right_ns, right_pk, user_id, attr_id)): Path<(
-        String,
-        String,
-        String,
-        String,
-        Uuid,
-        i32,
-    )>,
-) -> Result<impl IntoResponse, Error> {
-    sqlx::query!(
-        "
-        DELETE FROM votes
-        WHERE left_entity_pk_namespace = $1
-          AND left_entity_pk = $2
-          AND right_entity_pk_namespace = $3
-          AND right_entity_pk = $4
-          AND voter_user_id = $5
-          AND attribute_id = $6
-        ",
-        left_ns,
-        left_pk,
-        right_ns,
-        right_pk,
-        user_id,
-        attr_id
-    )
-    .execute(&state.db)
-    .await
-    .map_error("vote")?
-    .catch_not_found("vote")?;
-
-    Ok(StatusCode::NO_CONTENT)
 }
 
 pub fn routes() -> Router<AppState> {
@@ -239,6 +186,6 @@ pub fn routes() -> Router<AppState> {
         .route("/", post(create_vote).get(list_votes))
         .route(
             "/:left_ns/:left_pk/:right_ns/:right_pk/:user_id/:attr_id",
-            get(get_vote).put(update_vote).delete(delete_vote),
+            get(get_vote),
         )
 }

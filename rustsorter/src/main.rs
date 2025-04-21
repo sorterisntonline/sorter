@@ -3,12 +3,12 @@ pub mod app_state;
 pub mod auth_middleware;
 pub mod entity;
 pub mod entity_relationships;
+pub mod extractors;
 pub mod models;
 pub mod pagerank;
 pub mod pair;
 pub mod spotify;
 pub mod vote;
-
 use std::env;
 
 use anyhow::Result;
@@ -61,6 +61,15 @@ async fn get_spotify_client() -> Result<ClientCredsSpotify> {
     Ok(spotify)
 }
 
+use crate::models::User;
+
+async fn get_spotify_user(db: &sqlx::PgPool) -> Result<User> {
+    let user = sqlx::query_as!(User, "SELECT * FROM users WHERE auth0_sub = 'spotify'")
+        .fetch_one(db)
+        .await?;
+    Ok(user)
+}
+
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     dotenv().ok();
@@ -74,9 +83,10 @@ async fn main() -> Result<(), anyhow::Error> {
         .await
         .expect("Unable to connect to database");
 
-    let app_state = rustsorter::app_state::AppState {
+    let app_state = crate::app_state::AppState {
         db: pool.clone(),
         spotify_client: get_spotify_client().await?,
+        spotify_user: get_spotify_user(&pool).await?,
     };
 
     let app = Router::new()
@@ -98,15 +108,20 @@ async fn main() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-fn api_routes(
-    app_state: rustsorter::app_state::AppState,
-) -> Router<rustsorter::app_state::AppState> {
+fn api_routes(app_state: crate::app_state::AppState) -> Router<crate::app_state::AppState> {
     Router::new()
         .route("/protected", get(protected_route))
-        .nest("/keys", rustsorter::api_key::routes())
-        .nest("/entity", rustsorter::entity::routes())
+        .nest("/keys", crate::api_key::routes())
+        .nest("/entity", crate::entity::routes())
+        .nest(
+            "/entity_relationships",
+            crate::entity_relationships::routes(),
+        )
+        .nest("/spotify", crate::spotify::routes())
+        .nest("/vote", crate::vote::routes())
+        .nest("/rank", crate::pagerank::routes())
         .layer(middleware::from_fn_with_state(
             app_state,
-            rustsorter::auth_middleware::auth,
+            auth_middleware::auth,
         ))
 }

@@ -136,6 +136,9 @@ pub async fn get_user_by_auth0_sub(pool: &PgPool, auth0_sub: &str) -> Result<Use
         "
 SELECT auth0_sub,
     username,
+    avatar_url,
+    bio,
+    created_at,
     id
 FROM users
 WHERE auth0_sub = $1",

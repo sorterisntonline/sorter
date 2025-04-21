@@ -5,6 +5,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use chrono::NaiveDateTime;
 use log::{error, warn};
 use serde::Serialize;
 use serde_json::json;
@@ -42,6 +43,12 @@ impl<T> MapErrorSqlx<T> for Result<T, sqlx::Error> {
                 object: object.into(),
             },
             sqlx::Error::Database(e) if e.is_unique_violation() => Error::Conflict {
+                object: object.into(),
+            },
+            sqlx::Error::Database(e) if e.is_check_violation() => Error::BadRequest {
+                message: object.into(),
+            },
+            sqlx::Error::Database(e) if e.is_foreign_key_violation() => Error::NotFound {
                 object: object.into(),
             },
             sqlx::Error::Database(e) if e.is_foreign_key_violation() => Error::NotFound {
@@ -162,4 +169,7 @@ pub struct User {
     pub id: Uuid,
     pub auth0_sub: String,
     pub username: String,
+    pub avatar_url: Option<String>,
+    pub bio: Option<String>,
+    pub created_at: Option<NaiveDateTime>,
 }

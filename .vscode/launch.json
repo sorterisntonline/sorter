@@ -1,17 +1,20 @@
 {
-  "version": "0.2.0",
   "configurations": [
     {
-      "type": "lldb",
-      "request": "launch",
-      "name": "rustsorter",
+      "args": [],
       "cargo": {
         "args": ["build"],
         "cwd": "${workspaceFolder}/rustsorter"
       },
-      "args": [],
       "cwd": "${workspaceFolder}/rustsorter",
-      "preLaunchTask": "build"
+      "env": {
+        "RUST_LOG_STYLE": "always"
+      },
+      "name": "rustsorter",
+      "preLaunchTask": "build",
+      "request": "launch",
+      "type": "lldb"
     }
-  ]
+  ],
+  "version": "0.2.0"
 }

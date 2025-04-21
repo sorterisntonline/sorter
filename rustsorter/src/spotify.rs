@@ -7,7 +7,7 @@ use axum::{
     response::IntoResponse,
     routing::{get, post},
 };
-use log::{info, warn};
+use log::{debug, info, warn};
 use rspotify::{
     model::{
         AlbumId,
@@ -26,7 +26,6 @@ use rspotify::{
     },
     prelude::*,
 };
-use rustsorter::models::IntoNotFound;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use sqlx::{Executor, types::Uuid};
@@ -34,7 +33,7 @@ use sqlx::{Executor, types::Uuid};
 use crate::{
     app_state::AppState,
     entity::Entity,
-    models::{Error, MapError, MapErrorSqlx},
+    models::{Error, IntoNotFound, MapError, MapErrorSqlx},
 };
 
 #[derive(Deserialize)]
@@ -76,31 +75,35 @@ async fn upsert_entity<'e, E>(
     title: Option<String>,
     profile_picture_url: Option<String>,
     metadata: Option<JsonValue>,
-) -> Result<(), sqlx::Error>
+    user_id: Uuid,
+) -> Result<(), Error>
 where
     E: Executor<'e, Database = sqlx::Postgres>,
 {
-    log::debug!(
-        "Upserting entity (DO NOTHING): {}/{} with title: {:?}, pic_url: {:?}",
+    debug!(
         pk_namespace,
         pk,
         title,
-        profile_picture_url
+        profile_picture_url;
+        "upserting entity (DO NOTHING)",
     );
     sqlx::query!(
         r#"
-        INSERT INTO entities (pk_namespace, pk, title, profile_picture_url, metadata)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO entities (pk_namespace, pk, title, profile_picture_url, metadata, user_id)
+        VALUES ($1, $2, $3, $4, $5, $6)
         ON CONFLICT (pk_namespace, pk) DO NOTHING
         "#,
         pk_namespace,
         pk,
         title,
         profile_picture_url,
-        metadata
+        metadata,
+        user_id
     )
     .execute(executor)
-    .await?;
+    .await
+    .map_error("entity")?;
+
     Ok(())
 }
 
@@ -110,24 +113,24 @@ async fn upsert_entity_relationship<'e, E>(
     parent_pk: &str,
     child_pk_namespace: &str,
     child_pk: &str,
-    submitter_user_id: Option<Uuid>,
-) -> Result<(), sqlx::Error>
+    user_id: Uuid,
+) -> Result<(), Error>
 where
     E: Executor<'e, Database = sqlx::Postgres>,
 {
-    log::debug!(
-        "Upserting relationship: {}:{} -> {}:{}",
+    debug!(
         parent_pk_namespace,
         parent_pk,
         child_pk_namespace,
-        child_pk
+        child_pk;
+        "upserting relationship",
     );
     sqlx::query!(
         r#"
         INSERT INTO entity_relationships (
             parent_pk_namespace, parent_pk,
             child_pk_namespace, child_pk,
-            submitter_user_id
+            user_id
         )
         VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT (parent_pk_namespace, parent_pk, child_pk_namespace, child_pk) DO NOTHING
@@ -136,10 +139,12 @@ where
         parent_pk,
         child_pk_namespace,
         child_pk,
-        submitter_user_id
+        user_id
     )
     .execute(executor)
-    .await?;
+    .await
+    .map_error("entity relationship")?;
+
     Ok(())
 }
 
@@ -147,7 +152,10 @@ async fn search_spotify(
     State(app_state): State<crate::app_state::AppState>,
     Query(params): Query<AlbumSearchQuery>,
 ) -> Result<Json<SearchResult>, Error> {
-    info!("Searching Spotify with query: {}", params.q);
+    info!(
+        query = params.q;
+        "searching Spotify",
+    );
     let spotify = &app_state.spotify_client;
     let search_result = spotify
         .search_multiple(
@@ -161,12 +169,11 @@ async fn search_spotify(
         .await
         .map_internal()?;
 
-    let none_message = "Unexpected Spotify search result type";
     let ((albums, artists), tracks) = search_result
         .albums
         .zip(search_result.artists)
         .zip(search_result.tracks)
-        .context(none_message)?;
+        .context("Unexpected Spotify search result type")?;
 
     Ok(Json(SearchResult {
         albums: albums.items,
@@ -204,14 +211,15 @@ async fn ensure_spotify_entity(
 
     let insert_result = sqlx::query!(
         r#"
-        INSERT INTO entities (pk_namespace, pk, title, profile_picture_url, metadata)
-        VALUES ($1, $2, $3, NULL, $4)
+        INSERT INTO entities (pk_namespace, pk, title, profile_picture_url, metadata, user_id)
+        VALUES ($1, $2, $3, NULL, $4, $5)
         ON CONFLICT (pk_namespace, pk) DO NOTHING
         "#,
         payload.pk_namespace,
         payload.pk,
         payload.title,
-        payload.metadata
+        payload.metadata,
+        state.spotify_user.id
     )
     .execute(&mut *tx)
     .await
@@ -236,7 +244,7 @@ async fn ensure_spotify_entity(
     let mut entity = sqlx::query_as!(
         Entity,
         r#"
-        SELECT pk_namespace, pk, title, profile_picture_url, metadata, created_at
+        SELECT pk_namespace, pk, title, profile_picture_url, metadata, created_at, user_id
         FROM entities
         WHERE pk_namespace = $1 AND pk = $2
         "#,
@@ -319,7 +327,7 @@ async fn ensure_spotify_entity(
                 let album_meta = Some(serde_json::to_value(&album).map_internal()?);
 
                 info!(
-                    album_ns, album_pk, artist_id_str;
+                    album_ns, album_pk;
                     "ensuring related album (in tx)",
                 );
                 upsert_entity(
@@ -329,9 +337,9 @@ async fn ensure_spotify_entity(
                     album_title,
                     album_pic_url,
                     album_meta,
+                    state.spotify_user.id,
                 )
-                .await
-                .map_error("entity")?;
+                .await?;
 
                 info!(
                     pk_namespace = payload.pk_namespace,
@@ -346,10 +354,9 @@ async fn ensure_spotify_entity(
                     artist_id_str,
                     &album_ns,
                     &album_pk,
-                    None,
+                    state.spotify_user.id,
                 )
-                .await
-                .map_error("entity relationship")?;
+                .await?;
             }
         }
         "spotify.album" => {
@@ -411,7 +418,7 @@ async fn ensure_spotify_entity(
 
                 info!(
                     artist_ns, artist_pk;
-                    "ensuring related artist from album (in tx)",
+                    "ensuring related artist (in tx)",
                 );
                 upsert_entity(
                     &mut *tx,
@@ -420,12 +427,15 @@ async fn ensure_spotify_entity(
                     artist_title,
                     artist_pic_url,
                     artist_meta,
+                    state.spotify_user.id,
                 )
-                .await
-                .map_error("entity")?;
+                .await?;
 
                 info!(
-                    pk_namespace = payload.pk_namespace, artist_ns, artist_pk, album_id_str;
+                    pk_namespace = payload.pk_namespace,
+                    artist_ns,
+                    artist_pk,
+                    album_id_str;
                     "upserting relationship (in tx)",
                 );
                 upsert_entity_relationship(
@@ -434,10 +444,9 @@ async fn ensure_spotify_entity(
                     &artist_pk,
                     &payload.pk_namespace,
                     album_id_str,
-                    None,
+                    state.spotify_user.id,
                 )
-                .await
-                .map_error("entity relationship")?;
+                .await?;
             }
 
             info!(
@@ -468,15 +477,15 @@ async fn ensure_spotify_entity(
                     track_title,
                     track_pic_url,
                     track_meta,
+                    state.spotify_user.id,
                 )
-                .await
-                .map_error("entity")?;
+                .await?;
 
                 info!(
                     pk_namespace = payload.pk_namespace,
+                    album_id_str,
                     track_ns,
-                    track_pk,
-                    album_id_str;
+                    track_pk;
                     "upserting relationship (in tx)",
                 );
                 upsert_entity_relationship(
@@ -485,18 +494,19 @@ async fn ensure_spotify_entity(
                     album_id_str,
                     &track_ns,
                     &track_pk,
-                    None,
+                    state.spotify_user.id,
                 )
-                .await
-                .map_error("entity relationship")?;
+                .await?;
 
                 for artist in track.artists {
                     let Some(artist_id) = artist.id.clone() else {
-                        warn!(album_id_str; "skipping artist with missing ID for track");
+                        warn!(
+                            track_pk;
+                            "Skipping artist with missing ID for track",
+                        );
                         continue;
                     };
-
-                    let artist_pk = artist_id.id().to_string();
+                    let artist_pk: String = artist_id.id().to_string();
                     let artist_ns = "spotify.artist".to_string();
                     let artist_title = Some(artist.name.clone());
                     let artist_pic_url = None::<String>;
@@ -504,7 +514,7 @@ async fn ensure_spotify_entity(
 
                     info!(
                         artist_ns, artist_pk;
-                        "ensuring related artist from track (in tx)",
+                        "ensuring related artist (in tx)",
                     );
                     upsert_entity(
                         &mut *tx,
@@ -513,19 +523,23 @@ async fn ensure_spotify_entity(
                         artist_title,
                         artist_pic_url,
                         artist_meta,
+                        state.spotify_user.id,
                     )
-                    .await
-                    .map_error("entity")?;
+                    .await?;
 
                     info!(
                         artist_ns, artist_pk, track_ns, track_pk;
                         "upserting relationship (in tx)",
                     );
                     upsert_entity_relationship(
-                        &mut *tx, &artist_ns, &artist_pk, &track_ns, &track_pk, None,
+                        &mut *tx,
+                        &artist_ns,
+                        &artist_pk,
+                        &track_ns,
+                        &track_pk,
+                        state.spotify_user.id,
                     )
-                    .await
-                    .map_error("entity relationship")?;
+                    .await?;
                 }
             }
         }
@@ -548,10 +562,6 @@ async fn ensure_spotify_entity(
             entity.title = Some(full_track.name.clone());
             entity.profile_picture_url = get_first_image_url(&full_track.album.images);
             entity.metadata = Some(serde_json::to_value(&full_track).map_internal()?);
-            println!(
-                "entity.profile_picture_url: {:?}",
-                entity.profile_picture_url
-            );
 
             sqlx::query!(
                 r#"
@@ -600,9 +610,9 @@ async fn ensure_spotify_entity(
                     artist_title,
                     artist_pic_url,
                     artist_meta,
+                    state.spotify_user.id,
                 )
-                .await
-                .map_error("entity")?;
+                .await?;
 
                 info!(
                     pk_namespace = payload.pk_namespace, artist_ns, artist_pk, track_id_str;
@@ -614,17 +624,15 @@ async fn ensure_spotify_entity(
                     &artist_pk,
                     &payload.pk_namespace,
                     track_id_str,
-                    None,
+                    state.spotify_user.id,
                 )
-                .await
-                .map_error("entity relationship")?;
+                .await?;
             }
 
             info!(
                 track_id_str;
                 "ensuring album for track (in tx)",
             );
-
             let album = full_track.album.clone();
             if let Some(album_id) = album.id.clone() {
                 let album_pk = album_id.id().to_string();
@@ -644,9 +652,9 @@ async fn ensure_spotify_entity(
                     album_title,
                     album_pic_url,
                     album_meta,
+                    state.spotify_user.id,
                 )
-                .await
-                .map_error("entity")?;
+                .await?;
 
                 info!(
                     pk_namespace = payload.pk_namespace,
@@ -661,10 +669,9 @@ async fn ensure_spotify_entity(
                     &album_pk,
                     &payload.pk_namespace,
                     track_id_str,
-                    None,
+                    state.spotify_user.id,
                 )
-                .await
-                .map_error("entity relationship")?;
+                .await?;
             } else {
                 warn!(
                     track_id_str;

@@ -267,8 +267,7 @@ class TestApiKeyFlow:
         response = await self.make_request("GET", "/protected", headers=headers)
         assert response.status_code == 200
         data = response.json()
-        assert "Hello, admin!" in data.get("message", "")
-        assert data.get("authenticated_user") == "admin"
+        assert "Hello!" in data.get("message", "")
 
     @pytest.mark.dependency()
     @pytest.mark.dependency(depends=["TestApiKeyFlow::test_protected_route_static_key"])

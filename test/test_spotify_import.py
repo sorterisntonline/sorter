@@ -105,7 +105,7 @@ class TestSpotifyEnsure:
         """Searches for 'ok computer' album and stores its details."""
         search_params = {"q": "ok computer"}
         search_response = await make_request(
-            "GET", "/spotify/search", headers=STATIC_ADMIN_AUTH_HEADER, params=search_params
+            "GET", "api/spotify/search", headers=STATIC_ADMIN_AUTH_HEADER, params=search_params
         )
         assert search_response.status_code == 200
         # The response body has keys: "albums", "artists", "tracks"
@@ -147,7 +147,7 @@ class TestSpotifyEnsure:
         assert TestSpotifyEnsure.ensure_payload is not None, "Ensure payload not set by previous test"
 
         ensure_response_1 = await make_request(
-            "POST", "/spotify/ensure", headers=STATIC_ADMIN_AUTH_HEADER, json_payload=TestSpotifyEnsure.ensure_payload
+            "POST", "api/spotify/ensure", headers=STATIC_ADMIN_AUTH_HEADER, json_payload=TestSpotifyEnsure.ensure_payload
         )
         assert ensure_response_1.status_code == 201 # CREATED
 
@@ -203,6 +203,7 @@ class TestSpotifyEnsure:
         ensure_data = TestSpotifyEnsure.created_entity_data
         get_data = TestSpotifyEnsure.retrieved_entity_data
 
+        get_data = get_data["entity"]
         assert get_data["pk_namespace"] == ensure_data["pk_namespace"]
         assert get_data["pk"] == ensure_data["pk"]
         assert get_data["title"] == ensure_data["title"]
@@ -217,7 +218,7 @@ class TestSpotifyEnsure:
         assert TestSpotifyEnsure.ensure_payload is not None, "Ensure payload not set"
 
         ensure_response_2 = await make_request(
-            "POST", "/spotify/ensure", headers=STATIC_ADMIN_AUTH_HEADER, json_payload=TestSpotifyEnsure.ensure_payload
+            "POST", "api/spotify/ensure", headers=STATIC_ADMIN_AUTH_HEADER, json_payload=TestSpotifyEnsure.ensure_payload
         )
         assert ensure_response_2.status_code == 200 # OK (already exists)
 
@@ -234,7 +235,7 @@ class TestSpotifyEnsure:
 
         ensure_data_2 = TestSpotifyEnsure.second_ensure_data
         get_data = TestSpotifyEnsure.retrieved_entity_data
-
+        get_data = get_data["entity"]
         assert ensure_data_2["pk_namespace"] == get_data["pk_namespace"]
         assert ensure_data_2["pk"] == get_data["pk"]
         assert ensure_data_2["title"] == get_data["title"]

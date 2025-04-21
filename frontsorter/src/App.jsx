@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 // Import react-router-dom hook
 import { useSearchParams, Link, Routes, Route } from 'react-router-dom';
 // Import react-query hooks
@@ -32,7 +32,7 @@ const fetchSuggestionsFn = async (query) => {
         return []; // Return empty array if query is too short
     }
     // console.log("Fetching suggestions for:", query);
-    const response = await fetch(`/spotify/search?q=${encodeURIComponent(query)}`);
+    const response = await fetch(`/api/spotify/search?q=${encodeURIComponent(query)}`);
     if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -72,7 +72,7 @@ const ensureEntityFn = async ({ pk_namespace, pk, title, metadata }) => {
     }
 
     console.log(`Ensuring Spotify entity: ${pk_namespace}/${pk}`);
-    const response = await fetch(`/spotify/ensure`, {
+    const response = await fetch(`/api/spotify/ensure`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pk_namespace, pk, title, metadata }),
@@ -96,7 +96,7 @@ const fetchEntityDetailsFn = async (pk_namespace, pk) => {
         // This case should ideally be prevented by the `enabled` option of useQuery
         throw new Error("pk_namespace and pk are required to fetch details.");
     }
-    const detailsApiUrl = `/api/entity/${encodeURIComponent(pk_namespace)}/${encodeURIComponent(pk)}/details`;
+    const detailsApiUrl = `/api/entity/${encodeURIComponent(pk_namespace)}/${encodeURIComponent(pk)}?parents=true&children=true`;
     console.log("Fetching details from:", detailsApiUrl);
     const response = await fetch(detailsApiUrl);
 
@@ -113,33 +113,202 @@ const fetchEntityDetailsFn = async (pk_namespace, pk) => {
     return data;
 };
 
-// --- Child List Item Component (Step 6) ---
-function ChildListItem({ child, onItemClick }) {
+// --- NEW: Function to fetch ranked children ---
+const fetchRankedChildrenFn = async (childrenIdentifiers) => {
+    if (!childrenIdentifiers || childrenIdentifiers.length === 0) {
+        console.log("No child identifiers provided for ranking for this type.");
+        // Return the expected {sorted, unsorted} structure for consistency
+        return { sorted: [], unsorted: [] };
+    }
+    console.log("Fetching ranks for children subset:", childrenIdentifiers);
+    const response = await fetch(`/api/rank`, { // Endpoint remains the same
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(childrenIdentifiers), // Send the subset array of {pk_namespace, pk}
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        const error = new Error(`HTTP error fetching ranks! status: ${response.status}. ${errorText}`);
+        error.status = response.status; // Attach status code
+        console.error("Rank fetching failed:", error);
+        throw error;
+    }
+    const rankedData = await response.json();
+    // Ensure the response has the expected structure, provide defaults if not
+    const result = {
+         sorted: rankedData?.sorted ?? [],
+         unsorted: rankedData?.unsorted ?? []
+    };
+    console.log("Received ranked data subset:", result);
+    return result; // Expects { sorted: RankedEntity[], unsorted: EntityIdentifier[] }
+};
+// --- END NEW API Function ---
+
+// --- Child List Item Component (Step 6 & Modified for Rank) ---
+function ChildListItem({ child, onItemClick, score, isRanked }) {
+    const displayScore = score !== undefined && score !== null ? score * 10000 : null; // Example scaling for display
+
     return (
         <div
-            className="flex items-center gap-2 px-2 py-1.5 rounded-smd cursor-pointer hover:bg-gray-100 hover:text-brand-600 transition-colors duration-100 ease-in-out"
+            className={`flex items-center justify-between gap-2 px-2 py-1.5 rounded-smd cursor-pointer hover:bg-gray-100 transition-colors duration-100 ease-in-out group ${!isRanked ? 'opacity-70 hover:opacity-100' : ''}`} // Dim unranked items slightly
             onClick={(e) => onItemClick(e, child.pk_namespace, child.pk)}
         >
-            {child.profile_picture_url ? (
-                <img src={child.profile_picture_url} alt={child.title || 'Child item image'} className="w-7 h-7 rounded-smd object-cover flex-shrink-0" />
-            ) : (
-                <div className="w-7 h-7 bg-gray-100 border border-gray-200 inline-flex items-center justify-center text-gray-400 text-lg flex-shrink-0 rounded-smd">?</div>
+            <div className="flex items-center gap-2 flex-1 min-w-0"> {/* Allow shrinking */}
+                {child.profile_picture_url ? (
+                    <img src={child.profile_picture_url} alt={child.title || 'Child item image'} className="w-7 h-7 rounded-smd object-cover flex-shrink-0" />
+                ) : (
+                    <div className="w-7 h-7 bg-gray-100 border border-gray-200 inline-flex items-center justify-center text-gray-400 text-lg flex-shrink-0 rounded-smd">?</div>
+                )}
+                <span className="truncate">{child.title}</span>
+            </div>
+            {/* Display Score only if ranked and score exists */}
+            {isRanked && displayScore !== null && (
+                 <span className="text-xs font-medium text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded-smd flex-shrink-0">
+                     {displayScore.toFixed(0)} {/* Display score */}
+                 </span>
             )}
-            <span className="truncate flex-1">{child.title}</span>
+            {!isRanked && (
+                 <span className="text-xs font-medium text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded-smd flex-shrink-0 italic">
+                     Unranked
+                 </span>
+            )}
         </div>
     );
 }
 
-// --- EntityDetailsDisplay Component (Step 5 & 7) ---
+// --- NEW: RankedChildList Component ---
+function RankedChildList({ parentNamespace, parentPk, childType, childrenOfType, onItemClick }) {
+    const identifiersForType = useMemo(() => childrenOfType.map(c => ({
+        pk_namespace: c.pk_namespace,
+        pk: c.pk
+    })), [childrenOfType]);
+
+    const rankQuery = useQuery({
+        queryKey: ['entityRanks', parentNamespace, parentPk, childType], // Query key specific to this list
+        queryFn: () => fetchRankedChildrenFn(identifiersForType),
+        enabled: !!parentNamespace && !!parentPk && identifiersForType.length > 0,
+        staleTime: 5 * 60 * 1000,
+        placeholderData: { sorted: [], unsorted: [] },
+        refetchOnWindowFocus: false,
+    });
+
+    // Process the API results for rendering
+    const childrenToRender = useMemo(() => {
+        const sortedRankedChildren = rankQuery.data?.sorted || [];
+        const unsortedUnrankedIdentifiers = rankQuery.data?.unsorted || [];
+        const unrankedSetForType = new Set(unsortedUnrankedIdentifiers.map(item => `${item.pk_namespace}:${item.pk}`));
+
+        // Map sortedRankedChildren to include full child info
+        const displaySorted = sortedRankedChildren.map(rankedItem => ({
+             ...rankedItem.identifier, // Includes pk_namespace, pk
+             score: rankedItem.score,
+             // Find the original child object to get title, image url etc.
+             ...(childrenOfType.find(c => c.pk_namespace === rankedItem.identifier.pk_namespace && c.pk === rankedItem.identifier.pk) || {}),
+             isRanked: true,
+        }));
+
+        // Filter original childrenOfType to find those marked as unranked
+        const displayUnsorted = childrenOfType
+            .filter(child => unrankedSetForType.has(`${child.pk_namespace}:${child.pk}`))
+            .map(child => ({
+                ...child,
+                isRanked: false,
+                score: undefined,
+            }));
+
+        // Combine: ranked first, then unranked
+        return [...displaySorted, ...displayUnsorted];
+
+    }, [rankQuery.data, childrenOfType]); // Recalculate when data or original children change
+
+    return (
+        <div className="text-sm text-gray-700 space-y-1">
+            {/* Optional: Show loading/error state specific to this list */}
+            {rankQuery.isLoading && <div className="text-xs text-gray-400 italic px-2">Loading ranks...</div>}
+            {rankQuery.isError && <div className="text-xs text-red-500 italic px-2">Error loading ranks.</div>}
+
+            {/* Render the combined list */}
+            {childrenToRender.map((child) => (
+                <ChildListItem
+                    key={`${child.pk_namespace}-${child.pk}`}
+                    child={child} // Pass the combined object with isRanked, score etc.
+                    onItemClick={onItemClick}
+                    score={child.score}
+                    isRanked={child.isRanked}
+                />
+            ))}
+            {/* Show message if list is empty after loading */}
+            {!rankQuery.isLoading && childrenToRender.length === 0 && (
+                 <div className="text-xs text-gray-400 italic px-2">No items of this type.</div>
+            )}
+        </div>
+    );
+}
+
+// --- NEW: Item Pair Preview Link Component ---
+function ItemPairPreviewLink({ parentNamespace, parentPk, childType, item1, item2}) {
+
+    const voteLink = `/vote?parent_ns=${encodeURIComponent(parentNamespace)}&parent_pk=${encodeURIComponent(parentPk)}&type=${encodeURIComponent(childType)}&left_ns=${encodeURIComponent(item1.pk_namespace)}&left_pk=${encodeURIComponent(item1.pk)}&right_ns=${encodeURIComponent(item2.pk_namespace)}&right_pk=${encodeURIComponent(item2.pk)}`;
+
+
+    const renderItemPreview = (item) => (
+        <div className="text-center flex flex-col items-center w-1/3">
+            {item.profile_picture_url && <img src={item.profile_picture_url} alt={item.title} className="w-12 h-12 object-cover rounded-smd mb-1 shadow"/>}
+            {!item.profile_picture_url && <div className="w-12 h-12 bg-gray-200 rounded-smd mb-1 flex items-center justify-center text-gray-400 text-xl shadow">?</div>}
+            <span className="text-xs text-gray-700 truncate w-full px-1">{item.title}</span>
+        </div>
+    );
+
+    return (
+        <div>
+            <Link className={`cursor-pointer p-3 border border-black-200 rounded-smd bg-brand-50/40 flex items-center justify-around gap-2 relative group no-underline transition transform hover:-translate-y-0.5`}
+            to={voteLink}
+            >
+                {renderItemPreview(item1)}
+                {renderItemPreview(item2)}
+            </Link>
+            <div className="border border-gray-300 cursor-pointer border-dashed flex items-center justify-center gap-2 p-2 transition transform hover:-translate-y-0.5">
+                <div className="text-center text-xs text-gray-500">10 votes</div>
+                <div className="text-center text-xs text-gray-500">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                </div>
+            </div>
+
+        </div>
+    );
+}
+// --- END: Item Pair Preview Link Component ---
+
+// --- EntityDetailsDisplay Component (Modified for Rank Query & Display) ---
 function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isEnsuring }) {
-    if (!entityDetails || !entityDetails.entity) {
+    const { entity, parents, children } = entityDetails || {};
+    const { title, pk_namespace, pk, metadata } = entity || {};
+    const entityType = pk_namespace?.split('.')[1]; // e.g., 'album', 'artist', 'track'
+
+    // Group children by type (pk_namespace)
+    const groupedChildrenByType = useMemo(() => {
+        const groups = {};
+        if (!children || children.length === 0) return groups;
+        children.forEach(child => {
+            const childType = child.pk_namespace;
+            if (!groups[childType]) {
+                groups[childType] = [];
+            }
+            groups[childType].push(child);
+        });
+        return groups;
+    }, [children]);
+
+    // Early return MUST be after all hooks
+    if (!entityDetails || !entity) {
         return <div className="text-gray-500">No details available.</div>;
     }
 
-    const { entity, parents, children } = entityDetails;
-    const { title, pk_namespace, pk, metadata } = entity;
-    const entityType = pk_namespace.split('.')[1]; // e.g., 'album', 'artist', 'track'
-    const spotifyUri = `spotify:${entityType}:${pk}`; // Construct Spotify URI
+    // Construct Spotify URI (moved after null check)
+    const spotifyUri = `spotify:${entityType}:${pk}`;
 
     // Handler for manual ensure button
     const handleManualEnsure = () => {
@@ -195,27 +364,16 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
         onNavigate(pk_ns, pk); // Call the navigation handler passed from App
     };
 
-    // --- Group Children by Type ---
-    const groupedChildren = {};
-    if (children && children.length > 0) {
-        children.forEach(child => {
-            const childType = child.pk_namespace;
-            if (!groupedChildren[childType]) {
-                groupedChildren[childType] = [];
-            }
-            groupedChildren[childType].push(child);
-        });
-    }
-    // Sort types alphabetically for consistent order (optional)
-    const sortedChildTypes = Object.keys(groupedChildren).sort();
-    // --- End Grouping ---
+    // Sort types alphabetically for consistent display order of groups
+    const sortedChildTypes = Object.keys(groupedChildrenByType).sort();
+    // --- End Grouping & Sorting ---
 
     // Conditionally render the Spotify Player for tracks
     const trackPlayer = entityType === 'track'
         ? <SpotifyPlayer uri={spotifyUri} /> : null;
 
     return (
-        <div className="bg-white shadow-card border border-gray-100 rounded-smd p-5 flex flex-col gap-5">
+        <div className="bg-white rounded-smd p-5 flex flex-col gap-5">
             {/* Render Parents */}
             {parents && parents.length > 0 && (
                 <div className="text-xs text-gray-600">
@@ -245,73 +403,46 @@ function EntityDetailsDisplay({ entityDetails, onNavigate, onEnsureManually, isE
             {/* Render Children - Grouped by Type */}
             {sortedChildTypes.length > 0 && (
                 <div className="mt-4 pt-4 border-t border-gray-100">
-                    {sortedChildTypes.map(childType => {
-                        const childrenOfType = groupedChildren[childType];
-                        let itemPairElement = null;
+                    {sortedChildTypes.map((childType) => {
+                        const childrenOfType = groupedChildrenByType[childType];
+                        let item1, item2;
 
-                        // --- BEGIN: Item Pair Preview (Step 7) ---
+                        // Select two random distinct items for the preview
                         if (childrenOfType && childrenOfType.length >= 2) {
-                            // Select two random distinct indices
                             let index1 = Math.floor(Math.random() * childrenOfType.length);
-                            let index2 = Math.floor(Math.random() * childrenOfType.length);
-                            // Ensure distinct indices if possible and length > 1
-                            while (index1 === index2 && childrenOfType.length > 1) {
+                            let index2;
+                            do {
                                 index2 = Math.floor(Math.random() * childrenOfType.length);
-                            }
-
-                            const item1 = childrenOfType[index1];
-                            const item2 = childrenOfType[index2];
-                            const item1ImageUrl = item1.profile_picture_url;
-                            const item2ImageUrl = item2.profile_picture_url;
-                            const voteLink = `/vote?parent_ns=${encodeURIComponent(entity.pk_namespace)}`
-                            + `&parent_pk=${encodeURIComponent(entity.pk)}`
-                            + `&type=${encodeURIComponent(childType)}`
-                            + `&left_ns=${encodeURIComponent(item1.pk_namespace)}`
-                            + `&left_pk=${encodeURIComponent(item1.pk)}`
-                            + `&right_ns=${encodeURIComponent(item2.pk_namespace)}`
-                            + `&right_pk=${encodeURIComponent(item2.pk)}`;
-
-                            itemPairElement = (
-                                <Link to={voteLink} className="cursor-pointer my-3 p-3 border border-brand-200 rounded-smd bg-brand-50/40 flex items-center justify-around gap-2 relative group no-underline transition transform hover:-translate-y-0.5">
-                                    {/* Item 1 Preview */}
-                                    <div className="text-center flex flex-col items-center w-1/3">
-                                        {item1ImageUrl && <img src={item1ImageUrl} alt={item1.title} className="w-12 h-12 object-cover rounded-smd mb-1 shadow"/>}
-                                        {!item1ImageUrl && <div className="w-12 h-12 bg-gray-200 rounded-smd mb-1 flex items-center justify-center text-gray-400 text-xl shadow">?</div>}
-                                        <span className="text-xs text-gray-700 truncate w-full px-1">{item1.title}</span>
-                                    </div>
-
-                                    {/* Overlay VOTE text on hover */}
-                                    <div className="absolute inset-0 flex items-center justify-center bg-brand-600/80 opacity-0 group-hover:opacity-100 transition-opacity rounded-smd">
-                                        <span className="text-white text-3xl tracking-wide font-bold">VOTE</span>
-                                    </div>
-
-                                    {/* Item 2 Preview */}
-                                    <div className="text-center flex flex-col items-center w-1/3">
-                                        {item2ImageUrl && <img src={item2ImageUrl} alt={item2.title} className="w-12 h-12 object-cover rounded-smd mb-1 shadow"/>}
-                                        {!item2ImageUrl && <div className="w-12 h-12 bg-gray-200 rounded-smd mb-1 flex items-center justify-center text-gray-400 text-xl shadow">?</div>}
-                                        <span className="text-xs text-gray-700 truncate w-full px-1">{item2.title}</span>
-                                    </div>
-                                </Link>
-                            );
+                            } while (index1 === index2);
+                            item1 = childrenOfType[index1];
+                            item2 = childrenOfType[index2];
                         }
-                        // --- END: Add Item Pair Preview ---
-
 
                         return (
                             <div key={childType} className="mb-4">
                                 <h5 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">
                                     {childType.replace(/^spotify\./, '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                                 </h5>
-                                {itemPairElement}
-                                <div className="text-sm text-gray-700 space-y-1">
-                                    {childrenOfType.map((child) => (
-                                        <ChildListItem
-                                            key={`${child.pk_namespace}-${child.pk}`}
-                                            child={child}
-                                            onItemClick={handleLinkClick}
-                                        />
-                                    ))}
-                                </div>
+                                {/* Use the new component */}
+                                {item1 && item2 && (
+                                    <ItemPairPreviewLink
+                                        parentNamespace={pk_namespace}
+                                        parentPk={pk}
+                                        childType={childType}
+                                        item1={item1}
+                                        item2={item2}
+                                        onClick={() => {
+                                            console.log('clicked');
+                                        }}
+                                    />
+                                )}
+                                <RankedChildList
+                                    parentNamespace={pk_namespace}
+                                    parentPk={pk}
+                                    childType={childType}
+                                    childrenOfType={childrenOfType} // Pass original list to RankedChildList
+                                    onItemClick={handleLinkClick}
+                                />
                             </div>
                         );
                     })}
@@ -330,7 +461,7 @@ function MainView() {
     const [selectedTags, setSelectedTags] = useState([]);
     const [highlightedIndex, setHighlightedIndex] = useState(-1);
     const suggestionBoxRef = useRef(null);
-    const queryClient = useQueryClient();
+    const queryClient = useQueryClient(); // Keep queryClient for prefetch
     // Use the useDebounce hook
     const [debouncedInputValue] = useDebounce(inputValue, 300);
     // --- Search Params ---
@@ -409,7 +540,7 @@ function MainView() {
              // Sync selectedTags state with the data loaded from URL
              if (data?.entity) {
                  const entity = data.entity;
-                 const imageUrl = getSmallestImageUrl(entity.metadata?.images);
+                 const imageUrl = entity.profile_picture_url || getSmallestImageUrl(entity.metadata?.images);
                  setSelectedTags([{
                      pk_namespace: entity.pk_namespace,
                      pk: entity.pk,
@@ -421,6 +552,28 @@ function MainView() {
                      albumName: entity.metadata?.album?.name, // Assuming metadata might have album info
                  }]);
              }
+
+             // --- Trigger rank prefetch/fetch PER TYPE when details load ---
+             const childrenByType = {};
+             if (data?.children) {
+                 data.children.forEach(child => {
+                    const type = child.pk_namespace;
+                    if (!childrenByType[type]) childrenByType[type] = [];
+                    childrenByType[type].push({ pk_namespace: child.pk_namespace, pk: child.pk });
+                 });
+             }
+
+             Object.entries(childrenByType).forEach(([childType, identifiers]) => {
+                 if (identifiers.length > 0) {
+                     console.log(`Prefetching/fetching ranks for type ${childType} after details success.`);
+                     queryClient.prefetchQuery({
+                         queryKey: ['entityRanks', urlPkNamespace, urlPk, childType], // Use type in key
+                         queryFn: () => fetchRankedChildrenFn(identifiers),
+                         staleTime: 5 * 60 * 1000, // Match stale time
+                     });
+                 }
+             });
+             // --- End rank prefetch ---
          },
     });
 
@@ -515,6 +668,7 @@ function MainView() {
             }
         }
         // Allow backspace to remove tag IF the input is empty and a tag IS selected
+        const displayTag = selectedTags.length === 1 ? selectedTags[0] : null; // Recalculate displayTag here
         if (event.key === 'Backspace' && inputValue === '' && displayTag) {
            removeTag();
         }
@@ -556,8 +710,8 @@ function MainView() {
             />
         ) : (
              // Optional: Placeholder for items without images or sorter tags
-             <span className={`suggestion-preview-image w-6 h-6 mr-2 rounded inline-block ${suggestion.type === 'tag' ? 'bg-gray-400' : 'bg-gray-200'} align-middle`}>
-                 {suggestion.type === 'tag' && '#'} {/* Indicate tag */}
+             <span className={`suggestion-preview-image w-6 h-6 mr-2 rounded inline-block ${suggestion.type === 'tag' ? 'bg-gray-400' : 'bg-gray-200'} align-middle flex items-center justify-center text-xs text-white`}>
+                 {suggestion.type === 'tag' ? '#' : '?'} {/* Indicate tag */}
              </span>
         );
 
@@ -643,10 +797,11 @@ function MainView() {
                       {displayTag.imageUrl && (
                           <img src={displayTag.imageUrl} alt="" className="tag-preview-image w-4 h-4 rounded-sm object-cover"/>
                       )}
+                      {!displayTag.imageUrl && <span className="tag-preview-image w-4 h-4 rounded-sm bg-white/20 inline-flex items-center justify-center text-xs font-bold">?</span>}
                       {displayTag.name} <span className='text-xs opacity-80 ml-1'>[{displayTag.type}]</span>
                       <button
                         type="button"
-                        className="text-white/70 hover:text-white focus:outline-none"
+                        className="text-white/70 hover:text-white focus:outline-none ml-1"
                         onClick={removeTag}
                         aria-label={`Remove ${displayTag.name} (${displayTag.type})`}
                       >
