@@ -12,24 +12,31 @@ const getSmallestImageUrl = (images) => {
 };
 
 // --- API Fetching Function for a PAIR ---
-const fetchPairFn = async ({ left_ns, left_pk, right_ns, right_pk }) => {
-    // Construct the URL, potentially including query parameters for a specific pair
+const fetchPairFn = async ({ queryKey }) => {
+    // Destructure parameters from the queryKey
+    const [_key, type, param1, param2, param3, param4] = queryKey; // e.g., ['pair', 'specific', ns, pk, ns, pk] or ['pair', 'children', ns, pk]
+
     let apiUrl = '/api/pair';
     const params = new URLSearchParams();
-    if (left_ns && left_pk) {
-        params.append('left_ns', left_ns);
-        params.append('left_pk', left_pk);
+
+    if (type === 'specific' && param1 && param2 && param3 && param4) {
+        params.append('left_ns', param1);
+        params.append('left_pk', param2);
+        params.append('right_ns', param3);
+        params.append('right_pk', param4);
+    } else if (type === 'children' && param1 && param2) {
+        params.append('pk_namespace', param1);
+        params.append('pk', param2);
     }
-    if (right_ns && right_pk) {
-        params.append('right_ns', right_ns);
-        params.append('right_pk', right_pk);
-    }
+    // If type is 'default' or params are missing for specific/children,
+    // we send no query parameters, letting the backend provide a default pair.
+
     const queryString = params.toString();
     if (queryString) {
         apiUrl += `?${queryString}`;
     }
 
-    console.log("Fetching pair details from:", apiUrl);
+    console.log(`Fetching pair (${type}) from:`, apiUrl);
     const response = await fetch(apiUrl);
 
     if (!response.ok) {
@@ -39,12 +46,9 @@ const fetchPairFn = async ({ left_ns, left_pk, right_ns, right_pk }) => {
         throw error;
     }
     const data = await response.json();
-    // Assume API returns { left_entity: { ... }, right_entity: { ... }, otherInfo... }
-    // Or { error: "message" } if no pair is found/available
     if (data.error) {
         throw new Error(data.error);
     }
-    // TODO: Adjust based on the actual structure returned by /api/pair
     if (!data.left_entity || !data.right_entity) {
          console.warn("API response missing left_entity or right_entity:", data);
          throw new Error("Incomplete pair data received from API.");
@@ -164,71 +168,93 @@ function VoteItemDisplay({ item, isDisabled }) { // Removed isSelected, pk is un
 
 // --- Vote Page Component ---
 function VotePage() {
-    const [searchParams, setSearchParams] = useSearchParams(); // Add setSearchParams
-    const navigate = useNavigate(); // Hook for navigation
-    const queryClient = useQueryClient(); // Hook for query invalidation
+    const [searchParams, setSearchParams] = useSearchParams();
+    const navigate = useNavigate();
+    const queryClient = useQueryClient();
+
     // Get potential pair identifiers from URL
     const url_left_ns = searchParams.get('left_ns');
     const url_left_pk = searchParams.get('left_pk');
     const url_right_ns = searchParams.get('right_ns');
     const url_right_pk = searchParams.get('right_pk');
-    // Keep parent context if available (might be needed for navigation or context)
+    // Get parent context parameters
     const parent_pk_namespace = searchParams.get('pk_namespace');
     const parent_pk = searchParams.get('pk');
 
+    const [sliderValue, setSliderValue] = useState(0);
 
-    const [sliderValue, setSliderValue] = useState(0); // Default to 0 (neutral)
+    // --- Determine Query Type and Construct Query Key ---
+    let queryType = 'default'; // Assume default if no specific params match
+    let queryKeyParams = [];
+
+    if (url_left_ns && url_left_pk && url_right_ns && url_right_pk) {
+        queryType = 'specific';
+        queryKeyParams = [url_left_ns, url_left_pk, url_right_ns, url_right_pk];
+    } else if (parent_pk_namespace && parent_pk) {
+        // Only treat as 'children' if specific params are NOT set
+        queryType = 'children';
+        queryKeyParams = [parent_pk_namespace, parent_pk];
+    }
+    // else: queryType remains 'default', queryKeyParams remains empty
+
+    const queryKey = ['pair', queryType, ...queryKeyParams];
+    // Examples:
+    // ['pair', 'specific', 'ns1', 'pk1', 'ns2', 'pk2']
+    // ['pair', 'children', 'parent_ns', 'parent_pk']
+    // ['pair', 'default']
 
     const queryOptions = {
-        staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+        staleTime: 5 * 60 * 1000,
         retry: 1,
-        // Refetch when URL params change, but maybe not on window focus if pair is fixed
-        refetchOnWindowFocus: false,
+        refetchOnWindowFocus: false, // Usually good for voting pages
     };
 
-    // Single query to fetch the pair
+    // Single query, but the key now reflects the request type
     const pairQuery = useQuery({
-        // Query key includes potential identifiers to refetch if they change
-        queryKey: ['pair', url_left_ns, url_left_pk, url_right_ns, url_right_pk],
-        // Pass identifiers to the fetch function
-        queryFn: () => fetchPairFn({
-            left_ns: url_left_ns,
-            left_pk: url_left_pk,
-            right_ns: url_right_ns,
-            right_pk: url_right_pk,
-        }),
-        // Enable the query (always enabled now, as it fetches a default pair if no params)
+        queryKey: queryKey, // Use the dynamically constructed key
+        queryFn: fetchPairFn, // fetchPairFn now uses the queryKey
         enabled: true,
         ...queryOptions,
-        // onSuccess to potentially update URL if API returned a *different* pair than requested
-        // or if it provided a default pair when none was specified.
         onSuccess: (data) => {
-            // Update URL parameters if the fetched pair differs from URL, or if URL was empty
+            // Update URL parameters to reflect the *returned* pair's specific IDs
+            // This standardizes the URL after any type of request resolves.
              const currentParams = new URLSearchParams(searchParams);
              let changed = false;
-             if (data?.left_entity && (data.left_entity.pk_namespace !== url_left_ns || data.left_entity.pk !== url_left_pk)) {
-                 currentParams.set('left_ns', data.left_entity.pk_namespace);
-                 currentParams.set('left_pk', data.left_entity.pk);
-                 changed = true;
+
+             // Always try to set left/right based on response
+             if (data?.left_entity) {
+                 if (currentParams.get('left_ns') !== data.left_entity.pk_namespace || currentParams.get('left_pk') !== data.left_entity.pk) {
+                     currentParams.set('left_ns', data.left_entity.pk_namespace);
+                     currentParams.set('left_pk', data.left_entity.pk);
+                     changed = true;
+                 }
              }
-            if (data?.right_entity && (data.right_entity.pk_namespace !== url_right_ns || data.right_entity.pk !== url_right_pk)) {
-                 currentParams.set('right_ns', data.right_entity.pk_namespace);
-                 currentParams.set('right_pk', data.right_entity.pk);
-                 changed = true;
-             }
-             // If we fetched a default pair (no params initially) ensure they are set
-            if (!url_left_ns && !url_left_pk && !url_right_ns && !url_right_pk && data?.left_entity && data?.right_entity) {
-                currentParams.set('left_ns', data.left_entity.pk_namespace);
-                currentParams.set('left_pk', data.left_entity.pk);
-                currentParams.set('right_ns', data.right_entity.pk_namespace);
-                currentParams.set('right_pk', data.right_entity.pk);
-                changed = true;
+            if (data?.right_entity) {
+                 if (currentParams.get('right_ns') !== data.right_entity.pk_namespace || currentParams.get('right_pk') !== data.right_entity.pk) {
+                    currentParams.set('right_ns', data.right_entity.pk_namespace);
+                    currentParams.set('right_pk', data.right_entity.pk);
+                    changed = true;
+                 }
             }
 
+            // If the original request was for children, we might want to remove
+            // the parent pk/namespace params now that we have specific children in the URL.
+            // Or keep them for context? Let's remove them for cleaner URLs reflecting the current view.
+            if (queryType === 'children') {
+                if (currentParams.has('pk_namespace')) {
+                    currentParams.delete('pk_namespace');
+                    changed = true;
+                }
+                if (currentParams.has('pk')) {
+                    currentParams.delete('pk');
+                    changed = true;
+                }
+            }
+
+
              if (changed) {
-                // Replace history state instead of pushing, avoids back button confusion
                 setSearchParams(currentParams, { replace: true });
-                console.log("Updated URL parameters with fetched pair identifiers.");
+                console.log("Updated URL parameters based on fetched pair.");
              }
         }
     });
@@ -239,23 +265,17 @@ function VotePage() {
         mutationFn: submitVoteFn,
         onSuccess: (data) => {
             console.log("Vote submission successful:", data);
-            // Invalidate the current pair query to force refetch of a *new* pair
-            queryClient.invalidateQueries({ queryKey: ['pair', url_left_ns, url_left_pk, url_right_ns, url_right_pk] });
-            // Maybe navigate back to parent or specific history?
-            // If parent context exists, maybe navigate back?
-            if (parent_pk_namespace && parent_pk) {
-                // navigate(`/?pk_namespace=${encodeURIComponent(parent_pk_namespace)}&pk=${encodeURIComponent(parent_pk)}`);
-                 console.log("Navigation after vote not fully implemented yet.");
-            } else {
-                // Or simply refetching the pair might load the next one.
-                 console.log("Refetching for next pair.");
-            }
+            // Invalidate the *current* query to force refetch of a *new* pair
+            // This works regardless of whether it was 'specific', 'children', or 'default' originally
+            queryClient.invalidateQueries({ queryKey: queryKey });
+
              // Reset slider after successful vote
              setSliderValue(0);
+             // TODO: Decide on navigation - refetching might be sufficient
+             console.log("Refetching for next pair.");
         },
         onError: (error) => {
             console.error("Vote submission failed:", error);
-            // Show user-friendly error message (potentially in a toast/alert)
         },
     });
 
