@@ -39,14 +39,14 @@ const fetchPairFn = async ({ left_ns, left_pk, right_ns, right_pk }) => {
         throw error;
     }
     const data = await response.json();
-    // Assume API returns { leftEntity: { ... }, rightEntity: { ... }, otherInfo... }
+    // Assume API returns { left_entity: { ... }, right_entity: { ... }, otherInfo... }
     // Or { error: "message" } if no pair is found/available
     if (data.error) {
         throw new Error(data.error);
     }
     // TODO: Adjust based on the actual structure returned by /api/pair
-    if (!data.leftEntity || !data.rightEntity) {
-         console.warn("API response missing leftEntity or rightEntity:", data);
+    if (!data.left_entity || !data.right_entity) {
+         console.warn("API response missing left_entity or right_entity:", data);
          throw new Error("Incomplete pair data received from API.");
     }
     return data;
@@ -206,22 +206,22 @@ function VotePage() {
             // Update URL parameters if the fetched pair differs from URL, or if URL was empty
              const currentParams = new URLSearchParams(searchParams);
              let changed = false;
-             if (data?.leftEntity && (data.leftEntity.pk_namespace !== url_left_ns || data.leftEntity.pk !== url_left_pk)) {
-                 currentParams.set('left_ns', data.leftEntity.pk_namespace);
-                 currentParams.set('left_pk', data.leftEntity.pk);
+             if (data?.left_entity && (data.left_entity.pk_namespace !== url_left_ns || data.left_entity.pk !== url_left_pk)) {
+                 currentParams.set('left_ns', data.left_entity.pk_namespace);
+                 currentParams.set('left_pk', data.left_entity.pk);
                  changed = true;
              }
-             if (data?.rightEntity && (data.rightEntity.pk_namespace !== url_right_ns || data.rightEntity.pk !== url_right_pk)) {
-                 currentParams.set('right_ns', data.rightEntity.pk_namespace);
-                 currentParams.set('right_pk', data.rightEntity.pk);
+            if (data?.right_entity && (data.right_entity.pk_namespace !== url_right_ns || data.right_entity.pk !== url_right_pk)) {
+                 currentParams.set('right_ns', data.right_entity.pk_namespace);
+                 currentParams.set('right_pk', data.right_entity.pk);
                  changed = true;
              }
              // If we fetched a default pair (no params initially) ensure they are set
-            if (!url_left_ns && !url_left_pk && !url_right_ns && !url_right_pk && data?.leftEntity && data?.rightEntity) {
-                currentParams.set('left_ns', data.leftEntity.pk_namespace);
-                currentParams.set('left_pk', data.leftEntity.pk);
-                currentParams.set('right_ns', data.rightEntity.pk_namespace);
-                currentParams.set('right_pk', data.rightEntity.pk);
+            if (!url_left_ns && !url_left_pk && !url_right_ns && !url_right_pk && data?.left_entity && data?.right_entity) {
+                currentParams.set('left_ns', data.left_entity.pk_namespace);
+                currentParams.set('left_pk', data.left_entity.pk);
+                currentParams.set('right_ns', data.right_entity.pk_namespace);
+                currentParams.set('right_pk', data.right_entity.pk);
                 changed = true;
             }
 
@@ -266,8 +266,8 @@ function VotePage() {
 
     const handleVoteSubmit = () => {
         // Use data directly from pairQuery
-        const leftItem = pairQuery.data?.leftEntity;
-        const rightItem = pairQuery.data?.rightEntity;
+        const leftItem = pairQuery.data?.left_entity;
+        const rightItem = pairQuery.data?.right_entity;
 
         if (!leftItem || !rightItem || voteMutation.isPending || pairQuery.isLoading) return;
 
@@ -292,8 +292,8 @@ function VotePage() {
     const combinedError = pairQuery.error || voteMutation.error;
     const isSuccess = pairQuery.isSuccess;
     // Extract items from the fetched pair data
-    const leftItem = pairQuery.data?.leftEntity;
-    const rightItem = pairQuery.data?.rightEntity;
+    const leftItem = pairQuery.data?.left_entity;
+    const rightItem = pairQuery.data?.right_entity;
 
     // --- Main Return ---
     return (
@@ -304,7 +304,7 @@ function VotePage() {
                 )}
 
                  {/* Display combined errors (fetch or mutation) */}
-                 {combinedError && !isLoading && ( // Show only if not loading initially
+                {combinedError && !isLoading && ( // Show only if not loading initially
                     <div className="text-center text-red-600 bg-red-50 border border-red-200 p-4 rounded-md mb-4">
                         <p>Error loading or submitting vote:</p>
                         {pairQuery.isError && <p className="text-sm mt-1">Loading pair: {pairQuery.error?.message || 'Unknown error'}</p>}
@@ -316,7 +316,7 @@ function VotePage() {
                 )}
 
                 {/* Only display items and slider if the pair query is successful and items exist */}
-                 {isSuccess && leftItem && rightItem && (
+                {isSuccess && leftItem && rightItem && (
                     <div className="flex flex-col items-center justify-center gap-6 p-6 mb-8 rounded-lg">
                         {/* Container for the two items */}
                         <div className="flex w-full items-start justify-around gap-4">
@@ -349,7 +349,6 @@ function VotePage() {
                                 className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-blue-500"
                                 disabled={voteMutation.isPending || isLoading} // Disable slider during submission or loading
                             />
-                             <div className="text-center mt-2 font-medium text-gray-700">{sliderValue}</div> {/* Display current slider value */}
                         </div>
 
                         {/* Submit Button */}

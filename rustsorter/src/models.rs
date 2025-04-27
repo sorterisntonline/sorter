@@ -45,6 +45,22 @@ impl IntoResponse for ErrorResponse {
     }
 }
 
+impl From<sqlx::Error> for ErrorResponse {
+    fn from(err: sqlx::Error) -> Self {
+        log::error!("Database error: {:?}", err);
+        match err {
+            sqlx::Error::RowNotFound => ErrorResponse::new(
+                StatusCode::NOT_FOUND,
+                "Requested resource not found".to_string(),
+            ),
+            _ => ErrorResponse::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "An internal database error occurred".to_string(),
+            ),
+        }
+    }
+}
+
 #[derive(sqlx::FromRow, serde::Serialize, Debug, Clone)]
 pub struct User {
     pub id: Uuid,
