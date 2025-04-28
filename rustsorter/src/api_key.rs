@@ -10,11 +10,11 @@ use chrono::{NaiveDateTime, Utc};
 use log::{debug, info, warn};
 use rand::{Rng, distributions::Alphanumeric};
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, PgPool};
+use sqlx::{FromRow, PgExecutor, PgPool};
 
 use crate::{
     app_state::AppState,
-    models::{Error, IntoNotFound, MapError, MapErrorSqlx, User},
+    models::{Error, IntoNotFound, MapErrorAnyhow, MapErrorSqlx, User},
 };
 
 const API_KEY_PREFIX: &str = "sort";
@@ -137,6 +137,43 @@ pub async fn get_user_by_auth0_sub(pool: &PgPool, auth0_sub: &str) -> Result<Use
         .map_error(&format!("user '{auth0_sub}'"))
 }
 
+async fn create_key<'e, E: PgExecutor<'e>>(
+    executor: E,
+    name: String,
+    auth0_sub: &str,
+) -> Result<NewApiKeyResponse, Error> {
+    debug!(name, auth0_sub; "create_key called");
+
+    validate_key_name(&name)?;
+
+    let (identifier, full_key) = generate_api_key();
+    let hashed_key = hash_api_key(&full_key)?;
+    let preview = create_key_preview(&identifier);
+
+    debug!(identifier, preview; "generated identifier and preview");
+
+    sqlx::query_file!(
+        "../database/sql/key/insert.sql",
+        auth0_sub,
+        name,
+        &identifier,
+        &hashed_key,
+        Utc::now().naive_utc()
+    )
+    .execute(executor)
+    .await
+    .map_error("key")?;
+
+    info!(name, auth0_sub; "created API key");
+
+    Ok(NewApiKeyResponse {
+        name,
+        full_key,
+        message: "API key created successfully. Store it securely, it will not be shown again."
+            .to_owned(),
+    })
+}
+
 pub async fn verify_api_key(
     pool: &PgPool,
     provided_full_key: &str,
@@ -195,6 +232,33 @@ pub async fn update_last_used(pool: &PgPool, key_id: i32) -> Result<(), Error> {
     Ok(())
 }
 
+async fn revoke_key<'e, E: PgExecutor<'e>>(
+    executor: E,
+    name: &str,
+    auth0_sub: &str,
+) -> Result<(), Error> {
+    debug!(name; "revoke_key called");
+
+    let object = format!("active API key named '{}'", name);
+
+    sqlx::query_file!(
+        "../database/sql/key/revoke.sql",
+        Utc::now().naive_utc(),
+        auth0_sub,
+        name
+    )
+    .execute(executor)
+    .await
+    .map_error(&object)?
+    .catch_not_found(&object)?;
+
+    info!(
+        name, auth0_sub; "revoked API key"
+    );
+
+    Ok(())
+}
+
 async fn list_keys(
     State(state): State<AppState>,
     Extension(user): Extension<User>,
@@ -219,71 +283,22 @@ async fn list_keys(
     ))
 }
 
-async fn create_key(
+async fn post_route(
     State(state): State<AppState>,
     Extension(user): Extension<User>,
     Json(payload): Json<CreateKeyRequest>,
 ) -> Result<(StatusCode, Json<NewApiKeyResponse>), Error> {
-    debug!(name = payload.name, user = user.auth0_sub; "create_key called");
+    let key = create_key(&state.db, payload.name, &user.auth0_sub).await?;
 
-    validate_key_name(&payload.name)?;
-
-    let (identifier, full_key) = generate_api_key();
-    let hashed_key = hash_api_key(&full_key)?;
-    let preview = create_key_preview(&identifier);
-
-    debug!(identifier, preview; "generated identifier and preview");
-
-    sqlx::query_file!(
-        "../database/sql/key/insert.sql",
-        user.auth0_sub,
-        payload.name,
-        &identifier,
-        &hashed_key,
-        Utc::now().naive_utc()
-    )
-    .execute(&state.db)
-    .await
-    .map_error("key")?;
-
-    info!(
-        name = *payload.name, user = *user.auth0_sub; "created API key"
-    );
-
-    Ok((
-        StatusCode::CREATED,
-        axum::Json(NewApiKeyResponse {
-            name: payload.name.clone(),
-            full_key,
-            message: "API key created successfully. Store it securely, it will not be shown again."
-                .to_string(),
-        }),
-    ))
+    Ok((StatusCode::CREATED, axum::Json(key)))
 }
 
-async fn revoke_key(
+async fn revoke_route(
     State(state): State<AppState>,
     Extension(user): Extension<User>,
     Json(payload): Json<KeyNameRequest>,
 ) -> Result<impl IntoResponse, Error> {
-    debug!(name = payload.name; "revoke_key called");
-
-    let object = format!("active API key named '{}'", payload.name);
-
-    sqlx::query_file!(
-        "../database/sql/key/revoke.sql",
-        Utc::now().naive_utc(),
-        user.auth0_sub,
-        payload.name
-    )
-    .execute(&state.db)
-    .await
-    .map_error(&object)?
-    .catch_not_found(&object)?;
-
-    info!(
-        name = payload.name, user = user.auth0_sub; "revoked API key"
-    );
+    revoke_key(&state.db, &payload.name, &user.auth0_sub).await?;
 
     Ok(axum::Json(
         serde_json::json!({ "message": "API key revoked successfully." }),
@@ -297,34 +312,15 @@ async fn regenerate_key(
 ) -> Result<impl IntoResponse, Error> {
     validate_key_name(&payload.name)?;
 
-    let _ = revoke_key(
-        State(state.clone()),
-        Extension(user.clone()),
-        Json(payload.clone()),
-    )
-    .await;
-    let (_, key) = create_key(
-        State(state),
-        Extension(user),
-        Json(CreateKeyRequest {
-            name: payload.name.clone(),
-        }),
-    )
-    .await?;
+    revoke_key(&state.db, &payload.name, &user.auth0_sub).await?;
+    let key = create_key(&state.db, payload.name, &user.auth0_sub).await?;
 
-    Ok((
-        StatusCode::OK,
-        axum::Json(NewApiKeyResponse {
-            name: key.name.clone(),
-            full_key: key.full_key.clone(),
-            message: "API key regenerated successfully. Store it securely.".to_string(),
-        }),
-    ))
+    Ok((StatusCode::OK, axum::Json(key)))
 }
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/", get(list_keys).post(create_key))
-        .route("/revoke", post(revoke_key))
+        .route("/", get(list_keys).post(post_route))
+        .route("/revoke", post(revoke_route))
         .route("/regenerate", post(regenerate_key))
 }

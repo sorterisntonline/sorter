@@ -9,8 +9,12 @@ use chrono::NaiveDateTime;
 use log::{error, warn};
 use serde::Serialize;
 use serde_json::json;
-use sqlx::postgres::PgQueryResult;
+use sqlx::{Acquire, Postgres, postgres::PgQueryResult};
 use uuid::Uuid;
+
+pub trait PgAcquire<'a>: Acquire<'a, Database = Postgres> {}
+
+impl<'a, A: Acquire<'a, Database = Postgres>> PgAcquire<'a> for A {}
 
 #[derive(FromRequest)]
 #[from_request(via(axum::Json), rejection(Error))]
@@ -23,31 +27,34 @@ impl<T: Serialize> IntoResponse for Json<T> {
 }
 
 pub trait MapError<T> {
+    fn ignore_conflict(self) -> Result<Option<T>, Error>;
+}
+
+impl<T> MapError<T> for Result<T, Error> {
+    fn ignore_conflict(self) -> Result<Option<T>, Error> {
+        if let Err(Error::Conflict { .. }) = &self {
+            return Ok(None);
+        }
+
+        self.map(Some)
+    }
+}
+
+pub trait MapErrorAnyhow<T> {
     fn map_internal(self) -> Result<T, Error>;
 }
 
-impl<T, E: Into<anyhow::Error>> MapError<T> for Result<T, E> {
+impl<T, E: Into<anyhow::Error>> MapErrorAnyhow<T> for Result<T, E> {
     fn map_internal(self) -> Result<T, Error> {
         self.map_err(|e| Error::Internal(e.into()))
     }
 }
 
 pub trait MapErrorSqlx<T> {
-    fn ignore_conflict(self) -> Result<Option<T>, sqlx::Error>;
     fn map_error(self, object: &str) -> Result<T, Error>;
 }
 
 impl<T> MapErrorSqlx<T> for Result<T, sqlx::Error> {
-    fn ignore_conflict(self) -> Result<Option<T>, sqlx::Error> {
-        if let Err(sqlx::Error::Database(e)) = &self {
-            if e.is_unique_violation() {
-                return Ok(None);
-            }
-        }
-
-        self.map(Some)
-    }
-
     fn map_error(self, object: &str) -> Result<T, Error> {
         self.map_err(|err| match err {
             sqlx::Error::RowNotFound => Error::NotFound {

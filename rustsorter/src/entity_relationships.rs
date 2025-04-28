@@ -7,11 +7,12 @@ use axum::{
 };
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
+use sqlx::PgExecutor;
 use uuid::Uuid;
 
 use crate::{
     app_state::AppState,
-    models::{Error, IntoNotFound, MapError, MapErrorSqlx, User},
+    models::{Error, IntoNotFound, MapErrorAnyhow, MapErrorSqlx, User},
 };
 
 #[derive(Serialize, Debug, sqlx::FromRow)]
@@ -26,10 +27,10 @@ pub struct EntityRelationship {
 
 #[derive(Deserialize, Debug)]
 pub struct CreateRelationshipPayload {
-    parent_pk_namespace: String,
-    parent_pk: String,
-    child_pk_namespace: String,
-    child_pk: String,
+    pub parent_pk_namespace: String,
+    pub parent_pk: String,
+    pub child_pk_namespace: String,
+    pub child_pk: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -52,33 +53,42 @@ pub struct DeleteRelationshipQuery {
 pub fn routes() -> Router<AppState> {
     Router::new().route(
         "/",
-        post(create_relationship)
+        post(post_route)
             .get(list_relationships)
             .delete(delete_relationship),
     )
 }
 
-async fn create_relationship(
-    State(state): State<AppState>,
-    Extension(user): Extension<User>,
-    Json(payload): Json<CreateRelationshipPayload>,
-) -> Result<impl IntoResponse, Error> {
-    // TODO: Add validation: Check if parent and child entities actually exist?
-
-    let relationship = sqlx::query_file_as!(
+pub async fn create_relationship<'e, E: PgExecutor<'e>>(
+    executor: E,
+    payload: CreateRelationshipPayload,
+    user_id: Uuid,
+) -> Result<EntityRelationship, Error> {
+    sqlx::query_file_as!(
         EntityRelationship,
         "../database/sql/entity_relationship/insert.sql",
         payload.parent_pk_namespace,
         payload.parent_pk,
         payload.child_pk_namespace,
         payload.child_pk,
-        user.id
+        user_id
     )
-    .fetch_one(&state.db)
+    .fetch_one(executor)
     .await
-    .map_error("relationship")?;
+    .map_error("relationship")
+}
 
-    Ok((StatusCode::CREATED, Json(relationship)))
+async fn post_route(
+    State(state): State<AppState>,
+    Extension(user): Extension<User>,
+    Json(payload): Json<CreateRelationshipPayload>,
+) -> Result<impl IntoResponse, Error> {
+    // TODO: Add validation: Check if parent and child entities actually exist?
+
+    Ok((
+        StatusCode::CREATED,
+        Json(create_relationship(&state.db, payload, user.id).await?),
+    ))
 }
 
 async fn list_relationships(

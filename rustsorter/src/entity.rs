@@ -6,17 +6,19 @@ use axum::{
     routing::{get, post},
 };
 use chrono::NaiveDateTime;
+use log::debug;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
+use sqlx::{Acquire, PgExecutor, Postgres, query_file_as};
 use uuid::Uuid;
 
 use crate::{
     app_state::AppState,
     extractors::maybe_user::AuthenticatedUser,
-    models::{Error, IntoNotFound, Json, MapError, MapErrorSqlx},
+    models::{Error, IntoNotFound, Json, MapErrorAnyhow, MapErrorSqlx, PgAcquire},
 };
 
-#[derive(Serialize, Debug, sqlx::FromRow)]
+#[derive(Serialize, Debug, sqlx::FromRow, Clone)]
 pub struct Entity {
     pub user_id: Uuid,
     pub pk_namespace: String,
@@ -30,48 +32,11 @@ pub struct Entity {
 
 #[derive(Deserialize, Debug)]
 pub struct EntityPayload {
-    pk_namespace: String,
-    pk: String,
-    title: Option<String>,
-    metadata: Option<JsonValue>,
-    profile_picture_url: Option<String>,
-}
-
-pub fn public_routes() -> Router<AppState> {
-    Router::new().route("/", get(list_entities))
-}
-
-pub fn protected_routes() -> Router<AppState> {
-    Router::new().route("/", post(create_entity)).route(
-        "/:pk_namespace/:pk",
-        get(get_entity).put(update_entity).delete(delete_entity),
-    )
-}
-
-async fn create_entity(
-    State(state): State<AppState>,
-    AuthenticatedUser(user): AuthenticatedUser,
-    Json(payload): Json<EntityPayload>,
-) -> Result<impl IntoResponse, Error> {
-    // TODO add user id to the entity in DB
-    let entity = sqlx::query_file_as!(
-        Entity,
-        "../database/sql/entity/insert.sql",
-        payload.pk_namespace,
-        payload.pk,
-        payload.title,
-        payload.metadata,
-        payload.profile_picture_url,
-        user.id
-    )
-    .fetch_one(&state.db)
-    .await
-    .map_error(&format!(
-        "entity with pk_namespace '{}' and pk '{}'",
-        payload.pk_namespace, payload.pk
-    ))?;
-
-    Ok((StatusCode::CREATED, Json(entity)))
+    pub pk_namespace: String,
+    pub pk: String,
+    pub title: Option<String>,
+    pub metadata: Option<JsonValue>,
+    pub profile_picture_url: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -81,39 +46,50 @@ pub struct EntityQueryParams {
 }
 
 #[derive(Serialize)]
-struct EntityWithParentsAndChildren {
-    entity: Entity,
+pub struct EntityWithParentsAndChildren {
+    pub entity: Entity,
     parents: Option<Vec<Entity>>,
     children: Option<Vec<Entity>>,
 }
 
-async fn get_entity(
-    State(state): State<AppState>,
-    Path((pk_namespace, pk)): Path<(String, String)>,
-    Query(params): Query<EntityQueryParams>,
-) -> Result<impl IntoResponse, Error> {
-    let include_parents = params.parents.unwrap_or(false);
-    let include_children = params.children.unwrap_or(false);
+pub fn public_routes() -> Router<AppState> {
+    Router::new().route("/", get(list_entities))
+}
 
-    let entity = sqlx::query_file_as!(
+pub fn protected_routes() -> Router<AppState> {
+    Router::new().route("/", post(post_route)).route(
+        "/:pk_namespace/:pk",
+        get(get_route).put(put_route).delete(delete_entity),
+    )
+}
+
+pub async fn get_entity<'a, A: Acquire<'a, Database = Postgres>>(
+    acquire: A,
+    include_parents: bool,
+    include_children: bool,
+    pk_namespace: &str,
+    pk: &str,
+) -> Result<EntityWithParentsAndChildren, Error> {
+    let mut tx = acquire.begin().await.map_internal()?;
+
+    let entity = query_file_as!(
         Entity,
         "../database/sql/entity/select.sql",
         pk_namespace,
         pk
     )
-    .fetch_optional(&state.db)
+    .fetch_one(&mut *tx)
     .await
-    .map_internal()?
-    .catch_not_found("entity")?;
+    .map_error("entity")?;
 
     let parents = if include_parents {
-        let parents = sqlx::query_file_as!(
+        let parents = query_file_as!(
             Entity,
             "../database/sql/entity/select_parents.sql",
             pk_namespace,
             pk
         )
-        .fetch_all(&state.db)
+        .fetch_all(&mut *tx)
         .await
         .map_error(&format!("entity parents for {}/{}", pk_namespace, pk))?;
 
@@ -121,14 +97,15 @@ async fn get_entity(
     } else {
         None
     };
+
     let children = if include_children {
-        let children = sqlx::query_file_as!(
+        let children = query_file_as!(
             Entity,
             "../database/sql/entity/select_children.sql",
             pk_namespace,
             pk
         )
-        .fetch_all(&state.db)
+        .fetch_all(&mut *tx)
         .await
         .map_error(&format!("entity children for {}/{}", pk_namespace, pk))?;
 
@@ -137,15 +114,99 @@ async fn get_entity(
         None
     };
 
-    Ok(Json(EntityWithParentsAndChildren {
+    Ok(EntityWithParentsAndChildren {
         entity,
         parents,
         children,
-    }))
+    })
+}
+
+pub async fn create_entity<'e, E: PgExecutor<'e>>(
+    executor: E,
+    pk_namespace: &str,
+    pk: &str,
+    title: Option<&str>,
+    profile_picture_url: Option<&str>,
+    metadata: Option<&JsonValue>,
+    user_id: Uuid,
+) -> Result<Entity, Error> {
+    debug!(
+        pk_namespace,
+        pk,
+        title,
+        profile_picture_url;
+        "creating entity",
+    );
+
+    query_file_as!(
+        Entity,
+        "../database/sql/entity/insert.sql",
+        pk_namespace,
+        pk,
+        title,
+        metadata,
+        profile_picture_url,
+        user_id
+    )
+    .fetch_one(executor)
+    .await
+    .map_error("entity")
+}
+
+pub async fn update_entity<'a, A: PgAcquire<'a>>(
+    acquire: A,
+    payload: &EntityPayload,
+    user_id: Uuid,
+) -> Result<Entity, Error> {
+    let mut tx = acquire.begin().await.map_internal()?;
+
+    let entity = query_file_as!(
+        Entity,
+        "../database/sql/entity/update.sql",
+        payload.pk_namespace,
+        payload.pk,
+        payload.title,
+        payload.metadata,
+        payload.profile_picture_url,
+        user_id
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    .map_internal()?
+    .catch_not_found("entity")?;
+
+    Ok(entity)
+}
+
+async fn post_route(
+    State(state): State<AppState>,
+    AuthenticatedUser(user): AuthenticatedUser,
+    Json(payload): Json<EntityPayload>,
+) -> Result<impl IntoResponse, Error> {
+    let entity = update_entity(&state.db, &payload, user.id).await?;
+
+    Ok((StatusCode::CREATED, Json(entity)))
+}
+
+async fn get_route(
+    State(state): State<AppState>,
+    Path((pk_namespace, pk)): Path<(String, String)>,
+    Query(params): Query<EntityQueryParams>,
+) -> Result<impl IntoResponse, Error> {
+    Ok(Json(
+        get_entity(
+            &state.db,
+            params.parents.unwrap_or(false),
+            params.children.unwrap_or(false),
+            &pk_namespace,
+            &pk,
+        )
+        .await?,
+    ))
 }
 
 async fn list_entities(State(state): State<AppState>) -> Result<impl IntoResponse, Error> {
-    let entities = sqlx::query_file_as!(Entity, "../database/sql/entity/list.sql")
+    let entities = query_file_as!(Entity, "../database/sql/entity/list.sql")
         .fetch_all(&state.db)
         .await
         .map_error("entities")?;
@@ -153,7 +214,7 @@ async fn list_entities(State(state): State<AppState>) -> Result<impl IntoRespons
     Ok((StatusCode::OK, Json(entities)))
 }
 
-async fn update_entity(
+async fn put_route(
     State(state): State<AppState>,
     Path((pk_namespace, pk)): Path<(String, String)>,
     AuthenticatedUser(user): AuthenticatedUser,
@@ -165,20 +226,7 @@ async fn update_entity(
         });
     }
 
-    let entity = sqlx::query_file_as!(
-        Entity,
-        "../database/sql/entity/update.sql",
-        pk_namespace,
-        pk,
-        payload.title,
-        payload.metadata,
-        payload.profile_picture_url,
-        user.id
-    )
-    .fetch_optional(&state.db)
-    .await
-    .map_internal()?
-    .catch_not_found("entity")?;
+    let entity = update_entity(&state.db, &payload, user.id).await?;
 
     Ok((StatusCode::OK, Json(entity)))
 }
