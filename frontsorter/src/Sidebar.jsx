@@ -23,49 +23,12 @@ function Sidebar() {
       <nav className="flex-grow space-y-1">
         {/* Updated NavLink structure with icons */}
         <NavLink
-          to={generateTo('/')}
-          end // Match root path exactly
-          className={({ isActive }) => `${commonLinkClass} ${isActive ? activeLinkClass : ''}`}
-        >
-          <div className="flex items-center space-x-2">
-            <FaHome />
-            <span>Home</span>
-          </div>
-        </NavLink>
-        <NavLink
-          to={generateTo('/search')}
-          className={({ isActive }) => `${commonLinkClass} ${isActive ? activeLinkClass : ''}`}
-        >
-          <div className="flex items-center space-x-2">
-            <FaSearch />
-            <span>Search</span>
-          </div>
-        </NavLink>
-        <NavLink
-          to={generateTo('/entity')}
-          className={({ isActive }) => `${commonLinkClass} ${isActive ? activeLinkClass : ''}`}
-        >
-          <div className="flex items-center space-x-2">
-            <FaChartBar />
-            <span>Rankings</span>
-          </div>
-        </NavLink>
-        <NavLink
           to={generateTo('/vote')}
           className={({ isActive }) => `${commonLinkClass} ${isActive ? activeLinkClass : ''}`}
         >
            <div className="flex items-center space-x-2">
             <FaVoteYea />
             <span>Vote</span>
-          </div>
-        </NavLink>
-        <NavLink
-          to={generateTo('/history')}
-          className={({ isActive }) => `${commonLinkClass} ${isActive ? activeLinkClass : ''}`}
-        >
-          <div className="flex items-center space-x-2">
-            <FaHistory />
-            <span>History</span>
           </div>
         </NavLink>
         <NavLink
