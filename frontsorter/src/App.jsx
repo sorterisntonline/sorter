@@ -1,12 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
-// Import react-router-dom hook
-import { useSearchParams, Link, Routes, Route } from 'react-router-dom';
-// Import react-query hooks
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-// Import use-debounce hook
-import { useDebounce } from 'use-debounce';
-// Import CSSTransition for animations (Step 9)
-import { CSSTransition, SwitchTransition } from 'react-transition-group';
+import { Routes, Route } from 'react-router-dom';
 import './App.css'
 
 import Layout from './Layout';
