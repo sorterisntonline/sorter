@@ -78,6 +78,25 @@ pub async fn create_relationship<'e, E: PgExecutor<'e>>(
     .map_error("relationship")
 }
 
+pub async fn create_relationship_ignore_conflict<'e, E: PgExecutor<'e>>(
+    executor: E,
+    payload: CreateRelationshipPayload,
+    user_id: Uuid,
+) -> Result<Option<EntityRelationship>, Error> {
+    sqlx::query_file_as!(
+        EntityRelationship,
+        "../database/sql/entity_relationship/insert_ignore_conflict.sql",
+        payload.parent_pk_namespace,
+        payload.parent_pk,
+        payload.child_pk_namespace,
+        payload.child_pk,
+        user_id
+    )
+    .fetch_optional(executor)
+    .await
+    .map_error("relationship")
+}
+
 async fn post_route(
     State(state): State<AppState>,
     Extension(user): Extension<User>,

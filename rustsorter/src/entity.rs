@@ -9,7 +9,7 @@ use chrono::NaiveDateTime;
 use log::debug;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
-use sqlx::{Acquire, PgExecutor, Postgres, query_file_as};
+use sqlx::{PgExecutor, query_file_as};
 use uuid::Uuid;
 
 use crate::{
@@ -63,7 +63,7 @@ pub fn protected_routes() -> Router<AppState> {
     )
 }
 
-pub async fn get_entity<'a, A: Acquire<'a, Database = Postgres>>(
+pub async fn get_entity<'a, A: PgAcquire<'a>>(
     acquire: A,
     include_parents: bool,
     include_children: bool,
@@ -114,6 +114,8 @@ pub async fn get_entity<'a, A: Acquire<'a, Database = Postgres>>(
         None
     };
 
+    tx.commit().await.map_internal()?;
+
     Ok(EntityWithParentsAndChildren {
         entity,
         parents,
@@ -153,13 +155,43 @@ pub async fn create_entity<'e, E: PgExecutor<'e>>(
     .map_error("entity")
 }
 
-pub async fn update_entity<'a, A: PgAcquire<'a>>(
-    acquire: A,
+pub async fn create_entity_ignore_conflict<'e, E: PgExecutor<'e>>(
+    executor: E,
+    pk_namespace: &str,
+    pk: &str,
+    title: Option<&str>,
+    profile_picture_url: Option<&str>,
+    metadata: Option<&JsonValue>,
+    user_id: Uuid,
+) -> Result<Option<Entity>, Error> {
+    debug!(
+        pk_namespace,
+        pk,
+        title,
+        profile_picture_url;
+        "creating entity",
+    );
+
+    query_file_as!(
+        Entity,
+        "../database/sql/entity/insert_ignore_conflict.sql",
+        pk_namespace,
+        pk,
+        title,
+        metadata,
+        profile_picture_url,
+        user_id
+    )
+    .fetch_optional(executor)
+    .await
+    .map_error("entity")
+}
+
+pub async fn update_entity<'e, E: PgExecutor<'e>>(
+    executor: E,
     payload: &EntityPayload,
     user_id: Uuid,
 ) -> Result<Entity, Error> {
-    let mut tx = acquire.begin().await.map_internal()?;
-
     let entity = query_file_as!(
         Entity,
         "../database/sql/entity/update.sql",
@@ -170,7 +202,7 @@ pub async fn update_entity<'a, A: PgAcquire<'a>>(
         payload.profile_picture_url,
         user_id
     )
-    .fetch_optional(&mut *tx)
+    .fetch_optional(executor)
     .await
     .map_internal()?
     .catch_not_found("entity")?;

@@ -35,9 +35,9 @@ use sqlx::types::Uuid;
 
 use crate::{
     app_state::AppState,
-    entity::{Entity, create_entity, get_entity},
-    entity_relationships::{CreateRelationshipPayload, create_relationship},
-    models::{Error, MapError, MapErrorAnyhow, MapErrorSqlx},
+    entity::{Entity, create_entity_ignore_conflict, get_entity},
+    entity_relationships::{CreateRelationshipPayload, create_relationship_ignore_conflict},
+    models::{Error, MapErrorAnyhow, MapErrorSqlx},
 };
 
 #[derive(Deserialize)]
@@ -368,7 +368,7 @@ async fn ensure_spotify_entity(
     let spotify = &state.spotify_client;
     let mut tx = state.db.begin().await.map_error("spotify entity")?;
 
-    let (mut entities, initial_status_code) = if let Some(entity) = create_entity(
+    let (mut entities, initial_status_code) = if let Some(entity) = create_entity_ignore_conflict(
         &mut *tx,
         &payload.pk_namespace,
         &payload.pk,
@@ -377,8 +377,7 @@ async fn ensure_spotify_entity(
         payload.metadata.as_ref(),
         state.spotify_user.id,
     )
-    .await
-    .ignore_conflict()?
+    .await?
     {
         info!(
             namespace = &payload.pk_namespace,
@@ -427,10 +426,14 @@ async fn ensure_spotify_entity(
         }
     }
 
-    let response = Json(entities[0].0.clone());
+    let response = Json(
+        get_entity(&mut tx, false, false, &payload.pk_namespace, &payload.pk)
+            .await?
+            .entity,
+    );
 
     for (entity, relationship) in entities {
-        create_entity(
+        create_entity_ignore_conflict(
             &mut *tx,
             &entity.pk_namespace,
             &entity.pk,
@@ -445,7 +448,7 @@ async fn ensure_spotify_entity(
             continue;
         };
 
-        create_relationship(&mut *tx, relationship, state.spotify_user.id).await?;
+        create_relationship_ignore_conflict(&mut *tx, relationship, state.spotify_user.id).await?;
     }
 
     tx.commit().await.map_error("spotify entity")?;

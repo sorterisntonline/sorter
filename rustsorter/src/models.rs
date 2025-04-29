@@ -26,20 +26,6 @@ impl<T: Serialize> IntoResponse for Json<T> {
     }
 }
 
-pub trait MapError<T> {
-    fn ignore_conflict(self) -> Result<Option<T>, Error>;
-}
-
-impl<T> MapError<T> for Result<T, Error> {
-    fn ignore_conflict(self) -> Result<Option<T>, Error> {
-        if let Err(Error::Conflict { .. }) = &self {
-            return Ok(None);
-        }
-
-        self.map(Some)
-    }
-}
-
 pub trait MapErrorAnyhow<T> {
     fn map_internal(self) -> Result<T, Error>;
 }

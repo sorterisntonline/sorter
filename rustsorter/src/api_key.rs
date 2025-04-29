@@ -312,7 +312,7 @@ async fn regenerate_key(
 ) -> Result<impl IntoResponse, Error> {
     validate_key_name(&payload.name)?;
 
-    revoke_key(&state.db, &payload.name, &user.auth0_sub).await?;
+    let _ = revoke_key(&state.db, &payload.name, &user.auth0_sub).await;
     let key = create_key(&state.db, payload.name, &user.auth0_sub).await?;
 
     Ok((StatusCode::OK, axum::Json(key)))
