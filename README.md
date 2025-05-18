@@ -23,7 +23,7 @@ cargo install sqlx-cli
 cd database && ./run-postgres.sh
 
 # new terminal
-cd rustsorter && sqlx migrate --source ../migrations 
+cd rustsorter && sqlx migrate run --source ../migrations 
 
 RUST_LOG=debug cargo run
 ```
