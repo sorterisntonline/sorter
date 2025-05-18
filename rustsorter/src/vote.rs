@@ -227,7 +227,7 @@ async fn list_votes(
     let votes = sqlx::query_as!( // TODO use sea-query for this query, use filters
         Vote,
         r#"
-        SELECT * FROM votes WHERE true 
+        SELECT * FROM votes WHERE true ORDER BY created_at DESC
         "#,
     )
     .fetch_all(&state.db)

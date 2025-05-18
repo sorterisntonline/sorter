@@ -18,7 +18,7 @@ use crate::{
     extractors::maybe_user::{AuthenticatedUser, MaybeUser},
 };
 
-#[derive(Serialize, Debug, sqlx::FromRow)]
+#[derive(Serialize, Debug, sqlx::FromRow, Clone)]
 pub struct Entity {
     pub user_id: Uuid,
     pub pk_namespace: String,
