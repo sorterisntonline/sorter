@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, useSearchParams } from 'react-router-dom'; // Use NavLink for active styling
 // Import icons from react-icons
-import { FaHome, FaSearch, FaChartBar, FaVoteYea, FaHistory, FaUser } from 'react-icons/fa';
+import { FaHome, FaSearch, FaChartBar, FaVoteYea, FaHistory, FaUser, FaTags } from 'react-icons/fa';
 
 function Sidebar() {
   const commonLinkClass = "block px-4 py-2 rounded-md text-gray-700 hover:bg-gray-100";
@@ -21,7 +21,18 @@ function Sidebar() {
     <div className="w-64 h-screen bg-white p-4 flex flex-col fixed top-0 left-0">
       <div className="mb-6 text-xl font-bold text-brand-600">sorter</div>
       <nav className="flex-grow space-y-1">
-        {/* Updated NavLink structure with icons */}
+        {/* Tags / Sorting Rooms Link */}
+        <NavLink
+          to={generateTo('/tags')}
+          className={({ isActive }) => `${commonLinkClass} ${isActive ? activeLinkClass : ''}`}
+        >
+          <div className="flex items-center space-x-2">
+            <FaTags />
+            <span>Sorting Rooms</span>
+          </div>
+        </NavLink>
+      
+        {/* Vote link */}
         <NavLink
           to={generateTo('/vote')}
           className={({ isActive }) => `${commonLinkClass} ${isActive ? activeLinkClass : ''}`}
@@ -31,6 +42,8 @@ function Sidebar() {
             <span>Vote</span>
           </div>
         </NavLink>
+        
+        {/* Profile link */}
         <NavLink
           to={generateTo('/profile')}
           className={({ isActive }) => `${commonLinkClass} ${isActive ? activeLinkClass : ''}`}
