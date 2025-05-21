@@ -18,14 +18,14 @@ function ComparisonDetailsModal({ isOpen, onClose, comparison, itemAText, itemBT
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 transition-opacity duration-300">
-      <div className="bg-white p-6 sm:p-8 rounded-lg shadow-2xl w-full max-w-2xl transform transition-all duration-300 scale-95 opacity-0 animate-modalEnter">
+      <div className="bg-white p-6 sm:p-8 w-full max-w-2xl transform transition-all duration-300 scale-95 opacity-0 animate-modalEnter">
         <div className="flex justify-between items-center mb-6 pb-3 border-b">
           <h2 className="text-2xl font-semibold text-gray-800 flex items-center">
             <FaBalanceScale className="mr-3 text-blue-500" /> AI Judgement Details
           </h2>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-100 transition-colors"
+            className="text-gray-500 hover:text-gray-700 p-1 hover:bg-gray-100 transition-colors"
           >
             <FaTimes size="1.5em" />
           </button>
@@ -33,11 +33,11 @@ function ComparisonDetailsModal({ isOpen, onClose, comparison, itemAText, itemBT
 
         <div className="space-y-6 text-sm sm:text-base">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className={`p-4 border rounded-md ${isLeftFavored ? 'border-green-400 bg-green-50' : 'border-gray-300'}`}>
+            <div className={`p-4 border ${isLeftFavored ? 'border-green-400 bg-green-50' : 'border-gray-300'}`}>
               <h3 className="font-semibold text-gray-700 mb-1">Item A:</h3>
               <p className="text-gray-600 leading-relaxed">{itemAText}</p>
             </div>
-            <div className={`p-4 border rounded-md ${isRightFavored ? 'border-green-400 bg-green-50' : 'border-gray-300'}`}>
+            <div className={`p-4 border ${isRightFavored ? 'border-green-400 bg-green-50' : 'border-gray-300'}`}>
               <h3 className="font-semibold text-gray-700 mb-1">Item B:</h3>
               <p className="text-gray-600 leading-relaxed">{itemBText}</p>
             </div>
@@ -45,7 +45,7 @@ function ComparisonDetailsModal({ isOpen, onClose, comparison, itemAText, itemBT
 
           <div>
             <h3 className="font-semibold text-gray-700 mb-1">AI's Reasoning:</h3>
-            <p className="text-gray-600 bg-gray-50 p-3 rounded-md leading-relaxed border">{reasoning}</p>
+            <p className="text-gray-600 bg-gray-50 p-3 leading-relaxed border">{reasoning}</p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
@@ -68,7 +68,7 @@ function ComparisonDetailsModal({ isOpen, onClose, comparison, itemAText, itemBT
             <button
                 type="button"
                 onClick={onClose}
-                className="px-5 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                className="px-5 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none"
             >
                 Close
             </button>

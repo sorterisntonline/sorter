@@ -27,7 +27,7 @@ function TagListPage() {
         <h1 className="text-3xl font-semibold text-gray-800">My Sorting Rooms</h1>
         <button
           onClick={() => setIsModalOpen(true)}
-          className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md flex items-center space-x-2 transition-colors"
+          className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 flex items-center space-x-2 transition-colors"
         >
           <FaPlus />
           <span>Create New Room</span>
@@ -40,7 +40,7 @@ function TagListPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {tags.map(tag => (
             <Link key={tag.id} to={`/tags/${tag.id}`} className="block group">
-              <div className="bg-white p-6 rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300 border border-transparent hover:border-blue-400">
+              <div className="bg-white p-6 border border-transparent hover:border-blue-400">
                 <h2 className="text-xl font-bold text-gray-800 mb-2 group-hover:text-blue-600">{tag.name}</h2>
                 <p className="text-sm text-gray-500 mb-1 italic truncate" title={tag.promptPreamble}>
                   Criteria: {tag.promptPreamble}

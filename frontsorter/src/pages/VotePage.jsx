@@ -2,7 +2,7 @@ import { useSearchParams, Link } from 'react-router-dom';
 // Import react-query hooks
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react'; // Import useState
-import { useNavigate } from 'react-router-dom'; // Import useNavigate
+// import { useNavigate } from 'react-router-dom'; // Not needed at the moment
 
 // Helper function to get the smallest image URL (can be moved to a utils file)
 const getSmallestImageUrl = (images) => {
@@ -156,9 +156,9 @@ function VoteItemDisplay({ item, isDisabled }) { // Removed isSelected, pk is un
             className={`flex flex-col items-center p-3 transition-all duration-200 ease-in-out w-40 ${isDisabled ? 'opacity-50' : 'bg-white'}`}
         >
             {imageUrl ? (
-                <img src={imageUrl} alt={`Cover for ${title}`} className="w-28 h-28 object-cover rounded-md mb-2" />
+                <img src={imageUrl} alt={`Cover for ${title}`} className="w-28 h-28 object-cover mb-2" />
             ) : (
-                <div className="w-28 h-28 bg-gray-200 rounded-md mb-2 flex items-center justify-center text-gray-400 text-3xl">?</div>
+                <div className="w-28 h-28 bg-gray-200 mb-2 flex items-center justify-center text-gray-400 text-3xl">?</div>
             )}
             <h4 className="text-xs font-semibold text-center truncate w-full" title={title}>{title || 'Unknown Title'}</h4>
             <p className="text-xs text-gray-500 capitalize">[{entityType}]</p>
@@ -169,7 +169,7 @@ function VoteItemDisplay({ item, isDisabled }) { // Removed isSelected, pk is un
 // --- Vote Page Component ---
 function VotePage() {
     const [searchParams, setSearchParams] = useSearchParams();
-    const navigate = useNavigate();
+    // const navigate = useNavigate(); // Not currently used
     const queryClient = useQueryClient();
 
     // Get potential pair identifiers from URL
@@ -325,7 +325,7 @@ function VotePage() {
 
                  {/* Display combined errors (fetch or mutation) */}
                 {combinedError && !isLoading && ( // Show only if not loading initially
-                    <div className="text-center text-red-600 bg-red-50 border border-red-200 p-4 rounded-md mb-4">
+                    <div className="text-center text-red-600 bg-red-50 border border-red-200 p-4 mb-4">
                         <p>Error loading or submitting vote:</p>
                         {pairQuery.isError && <p className="text-sm mt-1">Loading pair: {pairQuery.error?.message || 'Unknown error'}</p>}
                         {voteMutation.isError && <p className="text-sm mt-1">Submitting vote: {voteMutation.error?.message || 'Unknown error'}</p>}
@@ -337,7 +337,7 @@ function VotePage() {
 
                 {/* Only display items and slider if the pair query is successful and items exist */}
                 {isSuccess && leftItem && rightItem && (
-                    <div className="flex flex-col items-center justify-center gap-6 p-6 mb-8 rounded-lg">
+                    <div className="flex flex-col items-center justify-center gap-6 p-6 mb-8">
                         {/* Container for the two items */}
                         <div className="flex w-full items-start justify-around gap-4">
                             {/* Left Item - Wrapped in Link */}
@@ -366,7 +366,7 @@ function VotePage() {
                                 step="1" // Or adjust step as needed
                                 value={sliderValue}
                                 onChange={handleSliderChange}
-                                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-blue-500"
+                                className="w-full h-2 bg-gray-200 appearance-none cursor-pointer dark:bg-gray-700 accent-blue-500"
                                 disabled={voteMutation.isPending || isLoading} // Disable slider during submission or loading
                             />
                         </div>
@@ -375,7 +375,7 @@ function VotePage() {
                         <button
                             onClick={handleVoteSubmit}
                             disabled={voteMutation.isPending || isLoading} // Disable if loading pair or submitting
-                            className={`mt-4 px-6 py-2 cursor-pointer text-white rounded font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                            className={`mt-4 px-6 py-2 cursor-pointer text-white font-medium transition-colors focus:outline-none ${
                                 voteMutation.isPending || isLoading
                                 ? 'bg-gray-400 cursor-not-allowed'
                                 : 'bg-blue-500 hover:bg-blue-600'

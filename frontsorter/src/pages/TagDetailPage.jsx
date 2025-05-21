@@ -89,7 +89,7 @@ function TagDetailPage() {
         <FaArrowLeft className="mr-2" /> Back to All Rooms
       </Link>
 
-      <div className="bg-white p-6 rounded-lg shadow-md">
+      <div className="bg-white p-6">
         <h1 className="text-3xl font-semibold text-gray-800 mb-1">{tag.name}</h1>
         <p className="text-sm text-gray-600 italic">
           AI Judging Criteria: "{tag.promptPreamble || 'Default criteria'}"
@@ -101,13 +101,13 @@ function TagDetailPage() {
           <AddItemForm onAddItem={handleAddItem} />
 
           {/* Recent Comparisons Section (Simplified) */}
-          <div className="bg-white p-4 rounded-lg shadow">
+          <div className="bg-white p-4">
             <h3 className="text-lg font-semibold text-gray-700 mb-3">AI Judgements</h3>
             {tag.comparisons.length > 0 ? (
               <ul className="space-y-2 max-h-60 overflow-y-auto text-sm">
                 {tag.comparisons.map((comp, index) => (
                   <li key={index}
-                      className="p-2 border rounded-md hover:bg-gray-50 cursor-pointer"
+                      className="p-2 border hover:bg-gray-50 cursor-pointer"
                       onClick={() => setSelectedComparison(comp)}
                   >
                     Comparison between items ending with "{getItemTextById(comp.itemAId).slice(-15).trim()}..." and "{getItemTextById(comp.itemBId).slice(-15).trim()}..."
@@ -120,13 +120,12 @@ function TagDetailPage() {
           </div>
         </div>
 
-        <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow">
+        <div className="lg:col-span-2 bg-white p-6">
           <h2 className="text-2xl font-semibold text-gray-800 mb-4">Live Ranked Items</h2>
           <RankedItemsList 
             items={sortedItems} 
             onShowComparison={setSelectedComparison} 
             comparisons={tag.comparisons} 
-            getItemTextById={getItemTextById} 
           />
         </div>
       </div>
