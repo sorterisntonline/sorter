@@ -107,7 +107,7 @@ function RankPage() {
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
             className="topic-input"
-            rows="7"
+            rows="13"
           />
 
           <h2>Add new item:</h2>
@@ -130,71 +130,45 @@ function RankPage() {
           </button>
         </section>
 
-        {items.length > 0 && (
-          <>
-            <hr />
-            
-            <section>
-              <h2>Ranked items (by AI voter):</h2>
-              
-              <ol className="ranked-list">
-                {items.map((item, index) => (
-                  <li key={item.id} className="ranked-item">
-                    <p>{item.text}</p>
-                    <div className="item-meta">
-                      <span className="score">Score: {item.score}</span>
-                      <a
-                        href="#"
-                        className={hoveredIndex === index ? 'visited' : ''}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          setHoveredIndex(hoveredIndex === index ? null : index);
-                        }}
-                      >
-                        [Why?]
-                      </a>
-                    </div>
-                    {hoveredIndex === index && (
-                      <p className="explanation">
-                        {item.explanation}
-                      </p>
-                    )}
-                  </li>
-                ))}
-              </ol>
-            </section>
-
-            <hr />
-
-            {items.length >= 3 && (
-              <p className="share-section">
-                <a
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    generateShareLink();
-                  }}
-                >
-                  Share this ranking
-                </a>
-              </p>
-            )}
-          </>
-        )}
-
-        {items.length === 0 && (
-          <div className="empty-state">
-            <p>Items will appear here as you add them.</p>
-            <p className="comment">Watch the magic happen with your third item.</p>
-          </div>
-        )}
-
         <p className="posted">
           Last updated: {new Date().toLocaleString()}
         </p>
       </div>
+      
       <div className="sidebar">
-        <h2>Sidebar</h2>
+        {items.length > 0 && (
+          <>
+            <h2>Ranked items (by AI voter):</h2>
+            
+            <ol className="ranked-list">
+              {items.map((item, index) => (
+                <li key={item.id} className="ranked-item">
+                  <p>{item.text}</p>
+                  <div className="item-meta">
+                    <span className="score">Score: {item.score}</span>
+                    <a
+                      href="#"
+                      className={hoveredIndex === index ? 'visited' : ''}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setHoveredIndex(hoveredIndex === index ? null : index);
+                      }}
+                    >
+                      [Why?]
+                    </a>
+                  </div>
+                  {hoveredIndex === index && (
+                    <p className="explanation">
+                      {item.explanation}
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ol>
+
+            <hr />
+          </>
+        )}
       </div>
     </div>
   );
