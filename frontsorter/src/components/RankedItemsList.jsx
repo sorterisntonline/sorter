@@ -3,7 +3,7 @@ import ItemCard from './ItemCard';
 
 function RankedItemsList({ items, onShowComparison, comparisons }) {
   if (items.length === 0) {
-    return <p className="text-gray-500 text-center py-10">No items added to this room yet. Add some to see them ranked!</p>;
+    return <p className="text-gray-500 text-center py-10">No items added to this topic yet. Add some to see them ranked!</p>;
   }
 
   // Helper to find a comparison involving a specific item

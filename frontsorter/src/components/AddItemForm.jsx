@@ -24,7 +24,7 @@ function AddItemForm({ onAddItem }) {
         type="submit"
         className="mt-3 w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 transition-colors focus:outline-none"
       >
-        Add Item to Room
+        Add Item to Topic
       </button>
     </form>
   );

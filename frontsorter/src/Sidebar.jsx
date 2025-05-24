@@ -21,14 +21,14 @@ function Sidebar() {
     <div className="w-64 h-screen bg-white p-4 flex flex-col fixed top-0 left-0">
       <div className="mb-6 text-xl font-bold text-brand-600">sorter</div>
       <nav className="flex-grow space-y-1">
-        {/* Tags / Sorting Rooms Link */}
+        {/* Tags / Sorting Topics Link */}
         <NavLink
           to={generateTo('/tags')}
           className={({ isActive }) => `${commonLinkClass} ${isActive ? activeLinkClass : ''}`}
         >
           <div className="flex items-center space-x-2">
             <FaTags />
-            <span>Sorting Rooms</span>
+            <span>Sorting Topics</span>
           </div>
         </NavLink>
       

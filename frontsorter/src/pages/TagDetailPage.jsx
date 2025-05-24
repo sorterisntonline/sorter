@@ -43,7 +43,7 @@ function TagDetailPage() {
     // Simulate fetching tag details
     const foundTag = dummyTagDetails[tagId] || {
       id: tagId,
-      name: `Unknown Room (${tagId})`,
+      name: `Unknown Topic (${tagId})`,
       promptPreamble: 'No criteria defined.',
       items: [],
       comparisons: []
@@ -75,7 +75,7 @@ function TagDetailPage() {
   }, [tag]);
 
   if (!tag) {
-    return <div className="text-center p-10">Loading sorting room...</div>;
+    return <div className="text-center p-10">Loading sorting topic...</div>;
   }
 
   // Function to find item text by ID for comparison display
@@ -86,7 +86,7 @@ function TagDetailPage() {
   return (
     <div className="space-y-6">
       <Link to="/tags" className="inline-flex items-center text-blue-600 hover:text-blue-800 mb-4">
-        <FaArrowLeft className="mr-2" /> Back to All Rooms
+        <FaArrowLeft className="mr-2" /> Back to All Topics
       </Link>
 
       <div className="bg-white p-6">
