@@ -46,34 +46,23 @@ function TagListPage() {
           </button>
         ) : (
           <form onSubmit={handleCreateTag} className="space-y-4">
-            <h2 className="text-xl font-semibold text-gray-800 mb-2">Create New Sorting Topic</h2>
-            <div>
-              <label htmlFor="tagName" className="block text-sm font-medium text-gray-700 mb-1">
-                Topic Name (e.g., "Project Ideas")
-              </label>
-              <input
-                type="text"
-                id="tagName"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 focus:outline-none focus:border-blue-500"
-                required
-              />
-            </div>
-            <div>
-              <label htmlFor="tagPrompt" className="block text-sm font-medium text-gray-700 mb-1">
-                Ranking Prompt (How AI should judge items)
-              </label>
-              <textarea
-                id="tagPrompt"
-                rows="3"
-                value={promptPreamble}
-                onChange={(e) => setPromptPreamble(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 focus:outline-none focus:border-blue-500"
-                placeholder="e.g., 'Rank these based on clarity and impact.'"
-              />
-              <p className="text-xs text-gray-500 mt-1">Example: "You are a wise investor. Rank these startup ideas based on clarity, originality, and potential for 10x growth."</p>
-            </div>
+           <input
+             type="text"
+             placeholder="Topic Name"
+             id="tagName"
+             value={name}
+             onChange={(e) => setName(e.target.value)}
+             className="w-full px-3 py-2 border border-gray-300 focus:outline-none focus:border-blue-500"
+             required
+           />
+           <textarea
+             id="tagPrompt"
+             rows="3"
+             value={promptPreamble}
+             onChange={(e) => setPromptPreamble(e.target.value)}
+             className="w-full px-3 py-2 border border-gray-300 focus:outline-none focus:border-blue-500"
+             placeholder="e.g., 'Rank these based on clarity and impact.'"
+           />
             <div className="flex justify-end space-x-3 pt-2">
               <button
                 type="button"
