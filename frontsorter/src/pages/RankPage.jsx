@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useWebSocketContext } from '../contexts/WebSocketContext';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const defaultPrompt = `Between A and B, which do you prefer?
 
@@ -25,6 +26,7 @@ function RankPage() {
   const [hoveredIndex, setHoveredIndex] = useState(null);
   const [currentJobId, setCurrentJobId] = useState(jobId || null);
   const [isLoading, setIsLoading] = useState(false);
+  const [pendingItems, setPendingItems] = useState(new Set());
 
   // Handle WebSocket messages
   useEffect(() => {
@@ -40,13 +42,16 @@ function RankPage() {
 
       case 'item_added':
         if (lastMessage.job_id === currentJobId) {
-          setIsLoading(true);
+          // Add the item to pending items set
+          setPendingItems(prev => new Set(prev).add(lastMessage.item_id));
         }
         break;
 
       case 'ranking':
         if (lastMessage.job_id === currentJobId) {
           setItems(lastMessage.items);
+          // Clear pending items as they're now ranked
+          setPendingItems(new Set());
           setIsLoading(false);
         }
         break;
@@ -183,57 +188,89 @@ function RankPage() {
       </div>
       
       <div className="sidebar">
-        {isLoading && (
-          <div className="text-center py-4">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-            <p className="mt-2 text-gray-600">Ranking items...</p>
-          </div>
-        )}
-        
-        {items.length > 0 && !isLoading && (
+        {items.length > 0 && (
           <>
             <h2 style={{color: "black"}}>Ranked items:</h2>
             <ol className="ranked-list">
-              {items.map((item, index) => (
-                <li key={item.id} className="ranked-item">
-                  <p>{item.text}</p>
-                  <div className="item-meta">
-                    <a
-                      href="#"
-                      className={hoveredIndex === index ? 'visited' : ''}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setHoveredIndex(hoveredIndex === index ? null : index);
-                      }}
-                    >
-                      [Why?]
-                    </a>
-                    <a
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        handleDeleteItem(item.id);
-                      }}
-                    >
-                      [Delete]
-                    </a>
-                  </div>
-                  {hoveredIndex === index && item.explanation && (
-                    <p className="explanation">
-                      {item.explanation}
-                      {item.score && (
-                        <span className="block mt-1 text-sm text-gray-600">
-                          Score: {item.score.toFixed(1)}
-                        </span>
+              <AnimatePresence mode="popLayout">
+                {items.map((item, index) => (
+                  <motion.li 
+                    key={item.id} 
+                    className="ranked-item"
+                    layout
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    transition={{ 
+                      type: "spring",
+                      stiffness: 500,
+                      damping: 30,
+                      opacity: { duration: 0.1 }
+                    }}
+                  >
+                    <p>{item.text}</p>
+                    <div className="item-meta">
+                      <a
+                        href="#"
+                        className={hoveredIndex === index ? 'visited' : ''}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setHoveredIndex(hoveredIndex === index ? null : index);
+                        }}
+                      >
+                        [Why?]
+                      </a>
+                      <a
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleDeleteItem(item.id);
+                        }}
+                      >
+                        [Delete]
+                      </a>
+                    </div>
+                    <AnimatePresence>
+                      {hoveredIndex === index && item.explanation && (
+                        <motion.p 
+                          className="explanation"
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          {item.explanation}
+                          {item.score && (
+                            <span className="block mt-1 text-sm text-gray-600">
+                              Score: {item.score.toFixed(1)}
+                            </span>
+                          )}
+                        </motion.p>
                       )}
-                    </p>
-                  )}
-                </li>
-              ))}
+                    </AnimatePresence>
+                  </motion.li>
+                ))}
+              </AnimatePresence>
             </ol>
+
+            {pendingItems.size > 0 && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-center py-2 text-sm text-gray-500"
+              >
+                Ranking {pendingItems.size} new item{pendingItems.size > 1 ? 's' : ''}...
+              </motion.div>
+            )}
 
             <hr />
           </>
+        )}
+        
+        {items.length === 0 && !isLoading && (
+          <div className="text-center py-8 text-gray-500">
+            <p>No items yet. Add some text to rank!</p>
+          </div>
         )}
       </div>
     </div>

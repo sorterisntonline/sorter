@@ -57,12 +57,6 @@ function JobsListPage() {
       </div>
 
       <div className="jobs-controls">
-        <div className="connection-status">
-          <div className={`status-indicator ${isConnected ? 'status-connected' : 'status-disconnected'}`} />
-          <span className="status-text">
-            {isConnected ? 'Connected' : 'Disconnected'}
-          </span>
-        </div>
         
         <button
           onClick={handleCreateNewJob}

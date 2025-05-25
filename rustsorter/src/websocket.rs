@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use tokio::time::{sleep, Duration};
+use rand::seq::SliceRandom;
 
 const DEFAULT_PROMPT: &str = r#"Between A and B, which do you prefer?
 
@@ -243,7 +244,7 @@ async fn handle_command(
                             item.score = 95.0 - (i as f64 * 8.0) - (rand::random::<f64>() * 5.0);
                             item.explanation = get_mock_explanation(&item.text, i);
                         }
-                        ranked_items.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+                        ranked_items.shuffle(&mut rand::thread_rng());
                         
                         job.items = ranked_items.clone();
                         
