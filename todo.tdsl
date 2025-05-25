@@ -1,3 +1,4 @@
+ui: make adjacent vote show the sldier value colorfully, and not the text until you click on it.
 model choser dropdown.
 sqlx entity model integrations
 llm call integration
