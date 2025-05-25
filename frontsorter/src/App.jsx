@@ -5,6 +5,7 @@ import Layout from './Layout';
 import TagListPage from './pages/TagListPage';
 import TagDetailPage from './pages/TagDetailPage';
 import RankPage from './pages/RankPage';
+import { WebSocketTest } from './components/WebSocketTest';
 
 // Import RecentSongsFlow (commented out since we're not using it right now)
 // import RecentSongsFlow from './pages/RecentSongsFlow';
@@ -15,6 +16,9 @@ function App() {
         <Routes>
             {/* Rank page with its own minimal UI */}
             <Route path="/rank" element={<RankPage />} />
+            
+            {/* WebSocket test page */}
+            <Route path="/ws-test" element={<WebSocketTest />} />
             
             {/* Wrap other pages within the Layout */}
             <Route path="/" element={<Layout />}>

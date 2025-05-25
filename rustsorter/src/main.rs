@@ -9,6 +9,7 @@ pub mod pair;
 pub mod spotify;
 pub mod vote;
 pub mod extractors;
+pub mod websocket;
 use std::env;
 
 use anyhow::Result;
@@ -20,6 +21,8 @@ use rspotify::{ClientCredsSpotify, Config, Credentials};
 use crate::extractors::maybe_user::MaybeUser;
 use serde_json::json;
 use tower_http::trace::TraceLayer;
+use tower_http::cors::CorsLayer;
+use axum::http::{Method, header};
 
 async fn health() -> impl IntoResponse {
     (
@@ -93,10 +96,18 @@ async fn main() -> Result<(), anyhow::Error> {
         spotify_user: get_spotify_user(&pool).await?,
     };
 
+    // Configure CORS
+    let cors = CorsLayer::new()
+        .allow_origin("http://localhost:5173".parse::<axum::http::HeaderValue>().unwrap())
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
+        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
+        .allow_credentials(true);
+
     let app = Router::new()
         .route("/api/health", get(health))
         .nest("/api", api_routes(app_state.clone()))
         .with_state(app_state)
+        .layer(cors)
         .layer(TraceLayer::new_for_http());
 
     let addr = "127.0.0.1:8081";
@@ -124,5 +135,6 @@ fn api_routes(
         .nest("/vote", crate::vote::routes())
         .nest("/rank", crate::pagerank::routes())
         .nest("/pair", crate::pair::routes())
+        .merge(crate::websocket::routes())
         .layer(middleware::from_fn_with_state(app_state, auth_middleware::try_auth))
 }
