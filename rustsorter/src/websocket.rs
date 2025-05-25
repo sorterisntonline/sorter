@@ -11,6 +11,18 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use tokio::time::{sleep, Duration};
 
+const DEFAULT_PROMPT: &str = r#"Between A and B, which do you prefer?
+
+<A>
+{{A}}
+</A>
+<B>
+{{B}}
+</B>
+
+if -50 is strongly prefer A, and 50 is strongly prefer B, then your answer should be a number between -50 and 50.
+respond with some reasoning and your score. Your score will be read by this regex: /SCORE: (-?\d+)/"#;
+
 #[derive(Debug, Deserialize)]
 #[serde(tag = "cmd", rename_all = "snake_case")]
 pub enum WsCommand {
@@ -19,8 +31,8 @@ pub enum WsCommand {
     Pause { job_id: Uuid },
     Resume { job_id: Uuid },
     GetStatus { job_id: Uuid },
-    ListJobs,
     GetJob { job_id: Uuid },
+    ListJobs,
     DeleteItem { job_id: Uuid, item_id: Uuid },
 }
 
@@ -67,7 +79,64 @@ pub struct JobSummary {
 
 // Mock data store
 lazy_static::lazy_static! {
-    static ref JOBS: Arc<Mutex<HashMap<Uuid, Job>>> = Arc::new(Mutex::new(HashMap::new()));
+    static ref JOBS: Arc<Mutex<HashMap<Uuid, Job>>> = Arc::new(Mutex::new({
+        let mut jobs = HashMap::new();
+        
+        // Add some mock jobs for testing
+        let job1_id = Uuid::new_v4();
+        let job1 = Job {
+            id: job1_id,
+            prompt: "Which startup idea is more compelling?\n\nConsider market size, feasibility, and potential impact.".to_string(),
+            status: "active".to_string(),
+            items: vec![
+                Item {
+                    id: Uuid::new_v4(),
+                    text: "AI-powered personal nutrition coach that creates meal plans based on your DNA".to_string(),
+                    score: 92.5,
+                    explanation: "Strong market potential with personalization trend. DNA aspect adds unique value proposition.".to_string(),
+                },
+                Item {
+                    id: Uuid::new_v4(),
+                    text: "Blockchain-based supply chain for verifying organic food authenticity".to_string(),
+                    score: 78.3,
+                    explanation: "Addresses real trust issues in organic market. Implementation complexity might be a barrier.".to_string(),
+                },
+                Item {
+                    id: Uuid::new_v4(),
+                    text: "VR platform for remote team building and collaboration".to_string(),
+                    score: 85.7,
+                    explanation: "Timely with remote work trends. VR adoption still limited but growing rapidly.".to_string(),
+                },
+            ],
+            created_at: chrono::Utc::now().checked_sub_signed(chrono::Duration::hours(2)).unwrap().to_rfc3339(),
+        };
+        jobs.insert(job1_id, job1);
+        
+        let job2_id = Uuid::new_v4();
+        let job2 = Job {
+            id: job2_id,
+            prompt: DEFAULT_PROMPT.to_string(),
+            status: "paused".to_string(),
+            items: vec![
+                Item {
+                    id: Uuid::new_v4(),
+                    text: "The quick brown fox jumps over the lazy dog".to_string(),
+                    score: 65.0,
+                    explanation: "Classic pangram, demonstrates all letters but lacks creativity.".to_string(),
+                },
+                Item {
+                    id: Uuid::new_v4(),
+                    text: "To be or not to be, that is the question".to_string(),
+                    score: 88.0,
+                    explanation: "Timeless philosophical question from Shakespeare. Profound and memorable.".to_string(),
+                },
+            ],
+            created_at: chrono::Utc::now().checked_sub_signed(chrono::Duration::days(1)).unwrap().to_rfc3339(),
+        };
+        jobs.insert(job2_id, job2);
+        
+        jobs
+    }));
 }
 
 pub async fn ws_handler(

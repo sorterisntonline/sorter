@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useWebSocketContext } from '../contexts/WebSocketContext';
 
 const defaultPrompt = `Between A and B, which do you prefer?
@@ -15,12 +16,14 @@ respond with some reasoning and your score. Your score will be read by this rege
 `
 
 function RankPage() {
+  const { jobId } = useParams();
+  const navigate = useNavigate();
   const { isConnected, lastMessage, sendCommand } = useWebSocketContext();
   const [prompt, setPrompt] = useState(defaultPrompt);
   const [items, setItems] = useState([]);
   const [currentItem, setCurrentItem] = useState('');
   const [hoveredIndex, setHoveredIndex] = useState(null);
-  const [currentJobId, setCurrentJobId] = useState(null);
+  const [currentJobId, setCurrentJobId] = useState(jobId || null);
   const [isLoading, setIsLoading] = useState(false);
 
   // Handle WebSocket messages
@@ -31,8 +34,8 @@ function RankPage() {
       case 'job_created':
         setCurrentJobId(lastMessage.job_id);
         setItems([]);
-        // Save the prompt with the job
-        sendCommand({ cmd: 'get_job', job_id: lastMessage.job_id });
+        // Navigate to the new job URL
+        navigate(`/rank/${lastMessage.job_id}`, { replace: true });
         break;
 
       case 'item_added':
@@ -67,15 +70,21 @@ function RankPage() {
         setIsLoading(false);
         break;
     }
-  }, [lastMessage, currentJobId, sendCommand]);
+  }, [lastMessage, currentJobId, navigate]);
 
-  // Create or get job on mount
+  // Load job on mount or when jobId changes
   useEffect(() => {
-    if (isConnected && !currentJobId) {
-      // Create a new job with the default prompt
-      sendCommand({ cmd: 'create_job', prompt: defaultPrompt });
+    if (isConnected) {
+      if (jobId) {
+        // Load existing job
+        setCurrentJobId(jobId);
+        sendCommand({ cmd: 'get_job', job_id: jobId });
+      } else if (!currentJobId) {
+        // Create a new job if no ID provided
+        sendCommand({ cmd: 'create_job', prompt: defaultPrompt });
+      }
     }
-  }, [isConnected, currentJobId, sendCommand]);
+  }, [isConnected, jobId, sendCommand]);
 
   const handleAddItem = async () => {
     if (!currentItem.trim() || !currentJobId || !isConnected) return;
@@ -107,6 +116,10 @@ function RankPage() {
     }
   };
 
+  const handleBackToList = () => {
+    navigate('/');
+  };
+
   const handleKeyPress = (e) => {
     if (e.key === 'Enter' && e.shiftKey) {
       // Allow shift+enter for new lines
@@ -122,11 +135,19 @@ function RankPage() {
     <div className="sorter-page">
       <div className="content">
         <section>
-          <div className="flex items-center gap-2 mb-4">
-            <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-            <span className="text-sm text-gray-600">
-              {isConnected ? 'Connected' : 'Disconnected'}
-            </span>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+              <span className="text-sm text-gray-600">
+                {isConnected ? 'Connected' : 'Disconnected'}
+              </span>
+            </div>
+            <button
+              onClick={handleBackToList}
+              className="text-sm text-blue-600 hover:text-blue-800"
+            >
+              ← Back to Jobs
+            </button>
           </div>
 
           <h2>Add new item:</h2>
