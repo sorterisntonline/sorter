@@ -1,10 +1,10 @@
 import React, { createContext, useContext } from 'react';
-import { useWebSocket } from '../hooks/useWebSocket';
+import { useWebSocketLibrary } from '../hooks/useWebSocketLibrary';
 
 const WebSocketContext = createContext(null);
 
 export function WebSocketProvider({ children }) {
-  const websocket = useWebSocket();
+  const websocket = useWebSocketLibrary();
 
   return (
     <WebSocketContext.Provider value={websocket}>
