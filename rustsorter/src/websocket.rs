@@ -53,11 +53,19 @@ pub enum WsEvent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VoteRecord {
+    pub against_item_id: Uuid,
+    pub against_item_text: String,
+    pub score: i32,
+    pub reasoning: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Item {
     pub id: Uuid,
     pub text: String,
     pub score: f64,
-    pub explanation: String,
+    pub votes: Vec<VoteRecord>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -85,28 +93,71 @@ lazy_static::lazy_static! {
         
         // Add some mock jobs for testing
         let job1_id = Uuid::new_v4();
+        let item1_id = Uuid::new_v4();
+        let item2_id = Uuid::new_v4();
+        let item3_id = Uuid::new_v4();
+        
         let job1 = Job {
             id: job1_id,
             prompt: "Which startup idea is more compelling?\n\nConsider market size, feasibility, and potential impact.".to_string(),
             status: "active".to_string(),
             items: vec![
                 Item {
-                    id: Uuid::new_v4(),
+                    id: item1_id,
                     text: "AI-powered personal nutrition coach that creates meal plans based on your DNA".to_string(),
                     score: 92.5,
-                    explanation: "Strong market potential with personalization trend. DNA aspect adds unique value proposition.".to_string(),
+                    votes: vec![
+                        VoteRecord {
+                            against_item_id: item2_id,
+                            against_item_text: "Blockchain-based supply chain for verifying organic food authenticity".to_string(),
+                            score: 15,
+                            reasoning: "DNA-based nutrition has broader market appeal and more immediate consumer value than blockchain supply chain verification.".to_string(),
+                        },
+                        VoteRecord {
+                            against_item_id: item3_id,
+                            against_item_text: "VR platform for remote team building and collaboration".to_string(),
+                            score: 8,
+                            reasoning: "Both address growing markets, but nutrition coaching has lower technical barriers and faster path to market.".to_string(),
+                        },
+                    ],
                 },
                 Item {
-                    id: Uuid::new_v4(),
+                    id: item2_id,
                     text: "Blockchain-based supply chain for verifying organic food authenticity".to_string(),
                     score: 78.3,
-                    explanation: "Addresses real trust issues in organic market. Implementation complexity might be a barrier.".to_string(),
+                    votes: vec![
+                        VoteRecord {
+                            against_item_id: item1_id,
+                            against_item_text: "AI-powered personal nutrition coach that creates meal plans based on your DNA".to_string(),
+                            score: -15,
+                            reasoning: "While blockchain verification addresses real trust issues, the DNA nutrition coach has broader consumer appeal and simpler implementation.".to_string(),
+                        },
+                        VoteRecord {
+                            against_item_id: item3_id,
+                            against_item_text: "VR platform for remote team building and collaboration".to_string(),
+                            score: -5,
+                            reasoning: "VR collaboration has more immediate market demand post-pandemic, though blockchain verification has long-term potential.".to_string(),
+                        },
+                    ],
                 },
                 Item {
-                    id: Uuid::new_v4(),
+                    id: item3_id,
                     text: "VR platform for remote team building and collaboration".to_string(),
                     score: 85.7,
-                    explanation: "Timely with remote work trends. VR adoption still limited but growing rapidly.".to_string(),
+                    votes: vec![
+                        VoteRecord {
+                            against_item_id: item1_id,
+                            against_item_text: "AI-powered personal nutrition coach that creates meal plans based on your DNA".to_string(),
+                            score: -8,
+                            reasoning: "VR collaboration addresses immediate remote work needs, but nutrition coaching has broader long-term market potential.".to_string(),
+                        },
+                        VoteRecord {
+                            against_item_id: item2_id,
+                            against_item_text: "Blockchain-based supply chain for verifying organic food authenticity".to_string(),
+                            score: 5,
+                            reasoning: "VR has more immediate market traction with remote work trends compared to blockchain supply chain adoption barriers.".to_string(),
+                        },
+                    ],
                 },
             ],
             created_at: chrono::Utc::now().checked_sub_signed(chrono::Duration::hours(2)).unwrap().to_rfc3339(),
@@ -114,22 +165,39 @@ lazy_static::lazy_static! {
         jobs.insert(job1_id, job1);
         
         let job2_id = Uuid::new_v4();
+        let item4_id = Uuid::new_v4();
+        let item5_id = Uuid::new_v4();
+        
         let job2 = Job {
             id: job2_id,
             prompt: DEFAULT_PROMPT.to_string(),
             status: "paused".to_string(),
             items: vec![
                 Item {
-                    id: Uuid::new_v4(),
+                    id: item4_id,
                     text: "The quick brown fox jumps over the lazy dog".to_string(),
                     score: 65.0,
-                    explanation: "Classic pangram, demonstrates all letters but lacks creativity.".to_string(),
+                    votes: vec![
+                        VoteRecord {
+                            against_item_id: item5_id,
+                            against_item_text: "To be or not to be, that is the question".to_string(),
+                            score: -23,
+                            reasoning: "Shakespeare's philosophical depth and cultural impact far exceeds a simple pangram demonstration.".to_string(),
+                        },
+                    ],
                 },
                 Item {
-                    id: Uuid::new_v4(),
+                    id: item5_id,
                     text: "To be or not to be, that is the question".to_string(),
                     score: 88.0,
-                    explanation: "Timeless philosophical question from Shakespeare. Profound and memorable.".to_string(),
+                    votes: vec![
+                        VoteRecord {
+                            against_item_id: item4_id,
+                            against_item_text: "The quick brown fox jumps over the lazy dog".to_string(),
+                            score: 23,
+                            reasoning: "Hamlet's existential question represents profound philosophical inquiry versus a functional but mundane pangram.".to_string(),
+                        },
+                    ],
                 },
             ],
             created_at: chrono::Utc::now().checked_sub_signed(chrono::Duration::days(1)).unwrap().to_rfc3339(),
@@ -218,7 +286,7 @@ async fn handle_command(
                     id: item_id,
                     text: text.clone(),
                     score: 0.0,
-                    explanation: String::new(),
+                    votes: vec![],
                 };
                 
                 job.items.push(item.clone());
@@ -238,13 +306,57 @@ async fn handle_command(
                     
                     let mut jobs = JOBS.lock().unwrap();
                     if let Some(job) = jobs.get_mut(&job_id) {
-                        // Mock ranking logic
+                        // Mock ranking logic with pairwise comparisons
                         let mut ranked_items = job.items.clone();
-                        for (i, item) in ranked_items.iter_mut().enumerate() {
-                            item.score = 95.0 - (i as f64 * 8.0) - (rand::random::<f64>() * 5.0);
-                            item.explanation = get_mock_explanation(&item.text, i);
+                        let new_item_index = ranked_items.len() - 1;
+                        
+                        // Generate mock votes for the new item against existing items
+                        if ranked_items.len() > 1 {
+                            let new_item_id = ranked_items[new_item_index].id;
+                            let new_item_text = ranked_items[new_item_index].text.clone();
+                            
+                            // Collect existing item data to avoid borrowing conflicts
+                            let existing_items_data: Vec<(usize, Uuid, String)> = ranked_items.iter()
+                                .enumerate()
+                                .filter(|(i, _)| *i != new_item_index)
+                                .map(|(i, item)| (i, item.id, item.text.clone()))
+                                .collect();
+                            
+                            for (i, existing_item_id, existing_item_text) in existing_items_data {
+                                // Generate a random comparison score
+                                let score = (rand::random::<f64>() * 100.0 - 50.0) as i32;
+                                let reasoning = get_mock_reasoning(&new_item_text, &existing_item_text, score);
+                                
+                                // Add vote to new item
+                                ranked_items[new_item_index].votes.push(VoteRecord {
+                                    against_item_id: existing_item_id,
+                                    against_item_text: existing_item_text.clone(),
+                                    score,
+                                    reasoning: reasoning.clone(),
+                                });
+                                
+                                // Add reciprocal vote to existing item
+                                ranked_items[i].votes.push(VoteRecord {
+                                    against_item_id: new_item_id,
+                                    against_item_text: new_item_text.clone(),
+                                    score: -score,
+                                    reasoning: get_mock_reasoning(&existing_item_text, &new_item_text, -score),
+                                });
+                            }
                         }
-                        ranked_items.shuffle(&mut rand::thread_rng());
+                        
+                        // Calculate scores based on vote averages
+                        for item in ranked_items.iter_mut() {
+                            if !item.votes.is_empty() {
+                                let avg_score: f64 = item.votes.iter().map(|v| v.score as f64).sum::<f64>() / item.votes.len() as f64;
+                                item.score = 50.0 + avg_score; // Normalize to 0-100 range
+                            } else {
+                                item.score = 50.0; // Default score for items with no votes
+                            }
+                        }
+                        
+                        // Sort by score
+                        ranked_items.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
                         
                         job.items = ranked_items.clone();
                         
@@ -334,19 +446,46 @@ async fn handle_command(
     }
 }
 
-fn get_mock_explanation(text: &str, index: usize) -> String {
-    let explanations = vec![
-        "Clear narrative hook with strong emotional resonance. Establishes stakes immediately.",
-        "Personal perspective adds authenticity, but could benefit from broader context.",
-        "Strong opening that captures attention. Consider adding more specific details.",
-        "Compelling angle with good pacing. Could be more concise in places.",
-        "Interesting perspective that challenges assumptions. Missing some key context.",
-        "Well-structured argument with clear progression. Some points need elaboration.",
-        "Unique voice and perspective. Would benefit from concrete examples.",
-        "Engaging narrative flow. Consider strengthening the conclusion.",
-    ];
+fn get_mock_reasoning(item_a: &str, item_b: &str, score: i32) -> String {
+    let reasoning_templates = if score > 20 {
+        vec![
+            "Significantly stronger concept with broader market appeal and clearer value proposition.",
+            "Much more compelling approach with better execution potential and market fit.",
+            "Substantially superior in terms of innovation, feasibility, and impact potential.",
+            "Far more engaging and well-developed with stronger foundational elements.",
+        ]
+    } else if score > 5 {
+        vec![
+            "Slightly better execution with more refined approach and clearer direction.",
+            "Marginally stronger with better structure and more compelling presentation.",
+            "Somewhat more effective with improved clarity and stronger core concept.",
+            "Modestly superior with better development and more convincing arguments.",
+        ]
+    } else if score > -5 {
+        vec![
+            "Very close comparison, both have merit but slight edge in presentation quality.",
+            "Nearly equivalent options with minimal differences in overall effectiveness.",
+            "Comparable approaches with subtle advantages in specific areas.",
+            "Similar quality with minor distinctions in execution and clarity.",
+        ]
+    } else if score > -20 {
+        vec![
+            "Somewhat weaker approach with less compelling presentation and structure.",
+            "Marginally less effective with room for improvement in key areas.",
+            "Slightly inferior execution with less refined development and clarity.",
+            "Modestly weaker with less convincing arguments and presentation.",
+        ]
+    } else {
+        vec![
+            "Significantly less compelling with major gaps in development and execution.",
+            "Much weaker concept with limited appeal and unclear value proposition.",
+            "Substantially inferior approach with poor execution and market fit.",
+            "Far less engaging with fundamental issues in structure and presentation.",
+        ]
+    };
     
-    explanations[index % explanations.len()].to_string()
+    let template = reasoning_templates[rand::random::<usize>() % reasoning_templates.len()];
+    template.to_string()
 }
 
 pub fn routes() -> axum::Router<AppState> {

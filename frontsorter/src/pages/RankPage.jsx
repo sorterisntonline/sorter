@@ -23,7 +23,7 @@ function RankPage() {
   const [prompt, setPrompt] = useState(defaultPrompt);
   const [items, setItems] = useState([]);
   const [currentItem, setCurrentItem] = useState('');
-  const [hoveredIndex, setHoveredIndex] = useState(null);
+  const [expandedVotes, setExpandedVotes] = useState(null);
   const [currentJobId, setCurrentJobId] = useState(jobId || null);
   const [isLoading, setIsLoading] = useState(false);
   const [pendingItems, setPendingItems] = useState(new Set());
@@ -212,13 +212,13 @@ function RankPage() {
                     <div className="item-meta">
                       <a
                         href="#"
-                        className={hoveredIndex === index ? 'visited' : ''}
+                        className={expandedVotes === index ? 'visited' : ''}
                         onClick={(e) => {
                           e.preventDefault();
-                          setHoveredIndex(hoveredIndex === index ? null : index);
+                          setExpandedVotes(expandedVotes === index ? null : index);
                         }}
                       >
-                        [Why?]
+                        [{item.votes ? item.votes.length : 0} votes]
                       </a>
                       <a
                         href="#"
@@ -231,21 +231,31 @@ function RankPage() {
                       </a>
                     </div>
                     <AnimatePresence>
-                      {hoveredIndex === index && item.explanation && (
-                        <motion.p 
-                          className="explanation"
+                      {expandedVotes === index && item.votes && item.votes.length > 0 && (
+                        <motion.div 
+                          className="vote-history"
                           initial={{ opacity: 0, height: 0 }}
                           animate={{ opacity: 1, height: "auto" }}
                           exit={{ opacity: 0, height: 0 }}
                           transition={{ duration: 0.2 }}
                         >
-                          {item.explanation}
-                          {item.score && (
-                            <span className="block mt-1 text-sm text-gray-600">
-                              Score: {item.score.toFixed(1)}
-                            </span>
-                          )}
-                        </motion.p>
+                          <h4 className="text-sm font-semibold mt-2 mb-1">Voting History:</h4>
+                          {item.votes.map((vote, voteIndex) => (
+                            <div key={voteIndex} className="vote-record mb-2 p-2 bg-gray-50 rounded text-sm">
+                              <div className="font-medium">
+                                vs. "{vote.against_item_text.length > 50 ? 
+                                  vote.against_item_text.substring(0, 50) + '...' : 
+                                  vote.against_item_text}"
+                              </div>
+                              <div className="text-gray-600 mt-1">
+                                Score: {vote.score > 0 ? '+' : ''}{vote.score}
+                              </div>
+                              <div className="text-gray-700 mt-1">
+                                {vote.reasoning}
+                              </div>
+                            </div>
+                          ))}
+                        </motion.div>
                       )}
                     </AnimatePresence>
                   </motion.li>
