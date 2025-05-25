@@ -23,25 +23,6 @@ function RankPage() {
   });
   const [currentItem, setCurrentItem] = useState('');
   const [hoveredIndex, setHoveredIndex] = useState(null);
-  const [hasLoaded, setHasLoaded] = useState(false);
-
-  // Load from localStorage on mount
-  useEffect(() => {
-    const savedData = localStorage.getItem('rankingData');
-    if (savedData) {
-      const { prompt, items } = JSON.parse(savedData);
-      setPrompt(prompt || defaultPrompt);
-      setItems(items || []);
-    }
-    setHasLoaded(true);
-  }, []);
-
-  // Save to localStorage whenever data changes
-  useEffect(() => {
-    if (hasLoaded) {
-      localStorage.setItem('rankingData', JSON.stringify({ prompt, items }));
-    }
-  }, [prompt, items, hasLoaded]);
 
   const rankItems = async (itemsToRank) => {
     // Mock AI ranking for now - in production, this would call your AI service
