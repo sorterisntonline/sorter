@@ -446,12 +446,9 @@ div.footnotes { color: #666; padding-top: 0;}
         background-color: #fff;
         border: 1px solid #ccc;
         border-top: none;
-        max-height: 15em;
+        max-height: 200px;
         overflow-y: auto;
-        z-index: 10;
-        margin: 0;
-        padding: 0;
-        list-style: none;
+        z-index: 1000;
 }
 
 .model-dropdown-open {
@@ -463,6 +460,7 @@ div.footnotes { color: #666; padding-top: 0;}
 }
 
 .model-option {
+        padding: 0.5em;
         cursor: pointer;
         border-bottom: 1px solid #eee;
 }
@@ -471,29 +469,118 @@ div.footnotes { color: #666; padding-top: 0;}
         border-bottom: none;
 }
 
-.model-option:hover {
-        background-color: #f8f8f8;
-}
-
 .model-option-highlighted {
-        background-color: #D2D6BC;
+        background-color: #f0f0f0;
 }
 
 .model-option-selected {
-        background-color: #ffa;
-        font-weight: bold;
-}
-
-.model-name {
-        font-weight: bold;
-        color: #333;
-        margin-bottom: 0.25em;
+        background-color: #D2D6BC;
+        color: #68693F;
 }
 
 .model-id {
-        font-size: 0.75em;
-        color: #666;
         font-family: monospace;
+        font-size: 0.9em;
+}
+
+/* Job control panel styles */
+.job-control-panel {
+        background-color: #fff;
+        border: 1px solid #ddd;
+        padding: 1.5em;
+        margin-bottom: 2em;
+}
+
+.job-status {
+        margin-bottom: 1em;
+        font-weight: bold;
+}
+
+.status-badge {
+        padding: 0.25em 0.5em;
+        font-size: 0.75em;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        border-radius: 0.25em;
+        font-weight: normal;
+}
+
+.status-active {
+        background-color: #D2D6BC;
+        color: #68693F;
+}
+
+.status-model-selected {
+        background-color: #E6F3FF;
+        color: #0066CC;
+}
+
+.status-voting-started {
+        background-color: #FFE6CC;
+        color: #CC6600;
+}
+
+.status-voting-stopped {
+        background-color: #FFE6E6;
+        color: #CC0000;
+}
+
+.voting-controls {
+        margin-bottom: 1em;
+}
+
+.voting-button {
+        padding: 0.75em 1.5em;
+        border: none;
+        cursor: pointer;
+        font-family: Georgia;
+        font-size: 1em;
+        border-radius: 0.25em;
+        transition: background-color 0.2s ease;
+}
+
+.start-voting {
+        background-color: #68693F;
+        color: #fff;
+}
+
+.start-voting:hover:not(:disabled) {
+        background-color: #5a5c35;
+}
+
+.stop-voting {
+        background-color: #CC0000;
+        color: #fff;
+}
+
+.stop-voting:hover:not(:disabled) {
+        background-color: #AA0000;
+}
+
+.voting-button:disabled {
+        background-color: #ccc;
+        cursor: not-allowed;
+        color: #666;
+}
+
+.voting-status {
+        background-color: #F0F8FF;
+        border: 1px solid #B0D4F1;
+        padding: 0.75em;
+        border-radius: 0.25em;
+        color: #0066CC;
+        margin-bottom: 1em;
+        font-style: italic;
+}
+
+.warning-message {
+        background-color: #FFF8DC;
+        border: 1px solid #F0E68C;
+        padding: 0.75em;
+        border-radius: 0.25em;
+        color: #B8860B;
+        margin-bottom: 0.5em;
+        font-size: 0.9em;
 }
 
 /* Vote history styles */

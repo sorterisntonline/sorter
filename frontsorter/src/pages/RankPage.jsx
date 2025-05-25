@@ -33,6 +33,8 @@ function RankPage() {
   const [modelsLoading, setModelsLoading] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [filteredModels, setFilteredModels] = useState([]);
+  const [jobStatus, setJobStatus] = useState('active');
+  const [votingInProgress, setVotingInProgress] = useState(false);
 
   // Fetch models from OpenRouter API
   const fetchModels = async () => {
@@ -112,12 +114,36 @@ function RankPage() {
           setCurrentJobId(lastMessage.job.id);
           setPrompt(lastMessage.job.prompt);
           setItems(lastMessage.job.items);
+          setJobStatus(lastMessage.job.status || 'active');
+          if (lastMessage.job.model) {
+            setSelectedModel(lastMessage.job.model);
+          }
         }
         break;
 
       case 'item_deleted':
         if (lastMessage.job_id === currentJobId) {
           // Items will be updated by the following ranking event
+        }
+        break;
+
+      case 'model_set':
+        if (lastMessage.job_id === currentJobId) {
+          setSelectedModel(lastMessage.model);
+        }
+        break;
+
+      case 'voting_started':
+        if (lastMessage.job_id === currentJobId) {
+          setVotingInProgress(true);
+          setJobStatus('voting_started');
+        }
+        break;
+
+      case 'voting_stopped':
+        if (lastMessage.job_id === currentJobId) {
+          setVotingInProgress(false);
+          setJobStatus('voting_stopped');
         }
         break;
 
@@ -175,7 +201,6 @@ function RankPage() {
   // Combobox configuration
   const {
     isOpen,
-    getToggleButtonProps,
     getMenuProps,
     getInputProps,
     highlightedIndex,
@@ -191,8 +216,10 @@ function RankPage() {
     onSelectedItemChange: ({ selectedItem }) => {
       if (selectedItem) {
         setSelectedModel(selectedItem.id);
-        // TODO: Send model selection to backend if needed
-        // sendCommand({ cmd: 'set_model', job_id: currentJobId, model: selectedItem.id });
+        // Send model selection to backend
+        if (currentJobId) {
+          sendCommand({ cmd: 'set_model', job_id: currentJobId, model: selectedItem.id });
+        }
       }
     },
   });
@@ -209,6 +236,18 @@ function RankPage() {
     if (e.key === 'Enter') {
       e.preventDefault();
       handleAddItem();
+    }
+  };
+
+  const handleStartVoting = () => {
+    if (currentJobId && selectedModel) {
+      sendCommand({ cmd: 'start_voting', job_id: currentJobId });
+    }
+  };
+
+  const handleStopVoting = () => {
+    if (currentJobId) {
+      sendCommand({ cmd: 'stop_voting', job_id: currentJobId });
     }
   };
 
@@ -285,6 +324,53 @@ function RankPage() {
                   </li>
                 ))}
             </ul>
+          </div>
+          
+          <h2>Job Control:</h2>
+          <div className="job-control-panel">
+            <div className="job-status">
+              Status: <span className={`status-badge status-${jobStatus.replace('_', '-')}`}>
+                {jobStatus.replace('_', ' ').toUpperCase()}
+              </span>
+            </div>
+            
+            <div className="voting-controls">
+              {!votingInProgress ? (
+                <button
+                  onClick={handleStartVoting}
+                  disabled={!isConnected || !currentJobId || !selectedModel || items.length < 2}
+                  className="voting-button start-voting"
+                >
+                  Start Voting
+                </button>
+              ) : (
+                <button
+                  onClick={handleStopVoting}
+                  disabled={!isConnected || !currentJobId}
+                  className="voting-button stop-voting"
+                >
+                  Stop Voting
+                </button>
+              )}
+            </div>
+            
+            {votingInProgress && (
+              <div className="voting-status">
+                🤖 AI is voting on your items...
+              </div>
+            )}
+            
+            {!selectedModel && (
+              <div className="warning-message">
+                ⚠️ Please select a model before starting voting
+              </div>
+            )}
+            
+            {items.length < 2 && (
+              <div className="warning-message">
+                ⚠️ Add at least 2 items before starting voting
+              </div>
+            )}
           </div>
         </section>
       </div>

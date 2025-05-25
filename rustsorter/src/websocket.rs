@@ -35,6 +35,9 @@ pub enum WsCommand {
     GetJob { job_id: Uuid },
     ListJobs,
     DeleteItem { job_id: Uuid, item_id: Uuid },
+    SetModel { job_id: Uuid, model: String },
+    StartVoting { job_id: Uuid },
+    StopVoting { job_id: Uuid },
 }
 
 #[derive(Debug, Serialize)]
@@ -49,6 +52,10 @@ pub enum WsEvent {
     JobData { job: Job },
     JobsList { jobs: Vec<JobSummary> },
     ItemDeleted { job_id: Uuid, item_id: Uuid },
+    ModelSet { job_id: Uuid, model: String },
+    VotingStarted { job_id: Uuid },
+    VotingStopped { job_id: Uuid },
+    VotingProgress { job_id: Uuid, completed: usize, total: usize },
     Error { message: String },
 }
 
@@ -75,6 +82,7 @@ pub struct Job {
     pub status: String,
     pub items: Vec<Item>,
     pub created_at: String,
+    pub model: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -161,6 +169,7 @@ lazy_static::lazy_static! {
                 },
             ],
             created_at: chrono::Utc::now().checked_sub_signed(chrono::Duration::hours(2)).unwrap().to_rfc3339(),
+            model: None,
         };
         jobs.insert(job1_id, job1);
         
@@ -201,6 +210,7 @@ lazy_static::lazy_static! {
                 },
             ],
             created_at: chrono::Utc::now().checked_sub_signed(chrono::Duration::days(1)).unwrap().to_rfc3339(),
+            model: None,
         };
         jobs.insert(job2_id, job2);
         
@@ -271,6 +281,7 @@ async fn handle_command(
                 status: "active".to_string(),
                 items: vec![],
                 created_at: chrono::Utc::now().to_rfc3339(),
+                model: None,
             };
             
             JOBS.lock().unwrap().insert(job_id, job);
@@ -290,7 +301,6 @@ async fn handle_command(
                 };
                 
                 job.items.push(item.clone());
-                drop(jobs);
                 
                 // Send item added event
                 let _ = tx.send(WsEvent::ItemAdded { 
@@ -299,73 +309,78 @@ async fn handle_command(
                     item,
                 });
                 
-                // Simulate ranking process
-                let tx_clone = tx.clone();
-                tokio::spawn(async move {
-                    sleep(Duration::from_millis(500)).await;
+                // Only trigger ranking if voting is active
+                if job.status == "voting_started" {
+                    let tx_clone = tx.clone();
+                    let job_items = job.items.clone();
+                    drop(jobs);
                     
-                    let mut jobs = JOBS.lock().unwrap();
-                    if let Some(job) = jobs.get_mut(&job_id) {
-                        // Mock ranking logic with pairwise comparisons
-                        let mut ranked_items = job.items.clone();
-                        let new_item_index = ranked_items.len() - 1;
+                    tokio::spawn(async move {
+                        sleep(Duration::from_millis(500)).await;
                         
-                        // Generate mock votes for the new item against existing items
-                        if ranked_items.len() > 1 {
-                            let new_item_id = ranked_items[new_item_index].id;
-                            let new_item_text = ranked_items[new_item_index].text.clone();
+                        let mut jobs = JOBS.lock().unwrap();
+                        if let Some(job) = jobs.get_mut(&job_id) {
+                            // Mock ranking logic with pairwise comparisons
+                            let mut ranked_items = job_items;
+                            let new_item_index = ranked_items.len() - 1;
                             
-                            // Collect existing item data to avoid borrowing conflicts
-                            let existing_items_data: Vec<(usize, Uuid, String)> = ranked_items.iter()
-                                .enumerate()
-                                .filter(|(i, _)| *i != new_item_index)
-                                .map(|(i, item)| (i, item.id, item.text.clone()))
-                                .collect();
+                            // Generate mock votes for the new item against existing items
+                            if ranked_items.len() > 1 {
+                                let new_item_id = ranked_items[new_item_index].id;
+                                let new_item_text = ranked_items[new_item_index].text.clone();
+                                
+                                // Collect existing item data to avoid borrowing conflicts
+                                let existing_items_data: Vec<(usize, Uuid, String)> = ranked_items.iter()
+                                    .enumerate()
+                                    .filter(|(i, _)| *i != new_item_index)
+                                    .map(|(i, item)| (i, item.id, item.text.clone()))
+                                    .collect();
+                                
+                                for (i, existing_item_id, existing_item_text) in existing_items_data {
+                                    // Generate a random comparison score
+                                    let score = (rand::random::<f64>() * 100.0 - 50.0) as i32;
+                                    let reasoning = get_mock_reasoning(&new_item_text, &existing_item_text, score);
+                                    
+                                    // Add vote to new item
+                                    ranked_items[new_item_index].votes.push(VoteRecord {
+                                        against_item_id: existing_item_id,
+                                        against_item_text: existing_item_text.clone(),
+                                        score,
+                                        reasoning: reasoning.clone(),
+                                    });
+                                    
+                                    // Add reciprocal vote to existing item
+                                    ranked_items[i].votes.push(VoteRecord {
+                                        against_item_id: new_item_id,
+                                        against_item_text: new_item_text.clone(),
+                                        score: -score,
+                                        reasoning: get_mock_reasoning(&existing_item_text, &new_item_text, -score),
+                                    });
+                                }
+                            }
                             
-                            for (i, existing_item_id, existing_item_text) in existing_items_data {
-                                // Generate a random comparison score
-                                let score = (rand::random::<f64>() * 100.0 - 50.0) as i32;
-                                let reasoning = get_mock_reasoning(&new_item_text, &existing_item_text, score);
-                                
-                                // Add vote to new item
-                                ranked_items[new_item_index].votes.push(VoteRecord {
-                                    against_item_id: existing_item_id,
-                                    against_item_text: existing_item_text.clone(),
-                                    score,
-                                    reasoning: reasoning.clone(),
-                                });
-                                
-                                // Add reciprocal vote to existing item
-                                ranked_items[i].votes.push(VoteRecord {
-                                    against_item_id: new_item_id,
-                                    against_item_text: new_item_text.clone(),
-                                    score: -score,
-                                    reasoning: get_mock_reasoning(&existing_item_text, &new_item_text, -score),
-                                });
+                            // Calculate scores based on vote averages
+                            for item in ranked_items.iter_mut() {
+                                if !item.votes.is_empty() {
+                                    let avg_score: f64 = item.votes.iter().map(|v| v.score as f64).sum::<f64>() / item.votes.len() as f64;
+                                    item.score = 50.0 + avg_score; // Normalize to 0-100 range
+                                } else {
+                                    item.score = 50.0; // Default score for items with no votes
+                                }
                             }
+                            
+                            // Sort by score
+                            ranked_items.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+                            
+                            job.items = ranked_items.clone();
+                            
+                            let _ = tx_clone.send(WsEvent::Ranking { 
+                                job_id,
+                                items: ranked_items,
+                            });
                         }
-                        
-                        // Calculate scores based on vote averages
-                        for item in ranked_items.iter_mut() {
-                            if !item.votes.is_empty() {
-                                let avg_score: f64 = item.votes.iter().map(|v| v.score as f64).sum::<f64>() / item.votes.len() as f64;
-                                item.score = 50.0 + avg_score; // Normalize to 0-100 range
-                            } else {
-                                item.score = 50.0; // Default score for items with no votes
-                            }
-                        }
-                        
-                        // Sort by score
-                        ranked_items.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
-                        
-                        job.items = ranked_items.clone();
-                        
-                        let _ = tx_clone.send(WsEvent::Ranking { 
-                            job_id,
-                            items: ranked_items,
-                        });
-                    }
-                });
+                    });
+                }
             } else {
                 let _ = tx.send(WsEvent::Error { 
                     message: format!("Job {} not found", job_id) 
@@ -442,6 +457,100 @@ async fn handle_command(
             }).collect();
             
             let _ = tx.send(WsEvent::JobsList { jobs: summaries });
+        }
+        
+        WsCommand::SetModel { job_id, model } => {
+            let mut jobs = JOBS.lock().unwrap();
+            if let Some(job) = jobs.get_mut(&job_id) {
+                job.status = "model_selected".to_string();
+                job.model = Some(model.clone());
+                let _ = tx.send(WsEvent::ModelSet { job_id, model });
+            }
+        }
+        
+        WsCommand::StartVoting { job_id } => {
+            let mut jobs = JOBS.lock().unwrap();
+            if let Some(job) = jobs.get_mut(&job_id) {
+                job.status = "voting_started".to_string();
+                let _ = tx.send(WsEvent::VotingStarted { job_id });
+                
+                // Trigger full ranking of all items
+                if job.items.len() >= 2 {
+                    let tx_clone = tx.clone();
+                    let job_items = job.items.clone();
+                    drop(jobs);
+                    
+                    tokio::spawn(async move {
+                        sleep(Duration::from_millis(1000)).await;
+                        
+                        let mut jobs = JOBS.lock().unwrap();
+                        if let Some(job) = jobs.get_mut(&job_id) {
+                            let mut ranked_items = job_items;
+                            
+                            // Clear existing votes and regenerate all pairwise comparisons
+                            for item in ranked_items.iter_mut() {
+                                item.votes.clear();
+                            }
+                            
+                            // Generate all pairwise comparisons
+                            for i in 0..ranked_items.len() {
+                                for j in (i + 1)..ranked_items.len() {
+                                    let score = (rand::random::<f64>() * 100.0 - 50.0) as i32;
+                                    
+                                    let item_a_text = ranked_items[i].text.clone();
+                                    let item_b_text = ranked_items[j].text.clone();
+                                    let item_a_id = ranked_items[i].id;
+                                    let item_b_id = ranked_items[j].id;
+                                    
+                                    // Add vote to item A
+                                    ranked_items[i].votes.push(VoteRecord {
+                                        against_item_id: item_b_id,
+                                        against_item_text: item_b_text.clone(),
+                                        score,
+                                        reasoning: get_mock_reasoning(&item_a_text, &item_b_text, score),
+                                    });
+                                    
+                                    // Add reciprocal vote to item B
+                                    ranked_items[j].votes.push(VoteRecord {
+                                        against_item_id: item_a_id,
+                                        against_item_text: item_a_text.clone(),
+                                        score: -score,
+                                        reasoning: get_mock_reasoning(&item_b_text, &item_a_text, -score),
+                                    });
+                                }
+                            }
+                            
+                            // Calculate scores based on vote averages
+                            for item in ranked_items.iter_mut() {
+                                if !item.votes.is_empty() {
+                                    let avg_score: f64 = item.votes.iter().map(|v| v.score as f64).sum::<f64>() / item.votes.len() as f64;
+                                    item.score = 50.0 + avg_score; // Normalize to 0-100 range
+                                } else {
+                                    item.score = 50.0; // Default score for items with no votes
+                                }
+                            }
+                            
+                            // Sort by score
+                            ranked_items.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+                            
+                            job.items = ranked_items.clone();
+                            
+                            let _ = tx_clone.send(WsEvent::Ranking { 
+                                job_id,
+                                items: ranked_items,
+                            });
+                        }
+                    });
+                }
+            }
+        }
+        
+        WsCommand::StopVoting { job_id } => {
+            let mut jobs = JOBS.lock().unwrap();
+            if let Some(job) = jobs.get_mut(&job_id) {
+                job.status = "voting_stopped".to_string();
+                let _ = tx.send(WsEvent::VotingStopped { job_id });
+            }
         }
     }
 }
