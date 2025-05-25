@@ -155,6 +155,16 @@ function RankPage() {
                     >
                       [Why?]
                     </a>
+                    <a
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        const newItems = items.filter(i => i.id !== item.id);
+                        setItems(newItems);
+                      }}
+                    >
+                      [Delete]
+                    </a>
                   </div>
                   {hoveredIndex === index && (
                     <p className="explanation">
