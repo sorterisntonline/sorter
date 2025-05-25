@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import useLocalStorageState from 'use-local-storage-state'
 
 const defaultPrompt = `Between A and B, which do you prefer?
 
@@ -14,25 +15,33 @@ respond with some reasoning and your score. Your score will be read by this rege
 `
 
 function RankPage() {
-  const [topic, setTopic] = useState(defaultPrompt);
+  const [prompt, setPrompt] = useLocalStorageState('prompt', {
+    defaultValue: defaultPrompt
+  });
+  const [items, setItems] = useLocalStorageState('items', {
+    defaultValue: []
+  });
   const [currentItem, setCurrentItem] = useState('');
-  const [items, setItems] = useState([]);
   const [hoveredIndex, setHoveredIndex] = useState(null);
+  const [hasLoaded, setHasLoaded] = useState(false);
 
   // Load from localStorage on mount
   useEffect(() => {
     const savedData = localStorage.getItem('rankingData');
     if (savedData) {
-      const { topic, items } = JSON.parse(savedData);
-      setTopic(topic || '');
+      const { prompt, items } = JSON.parse(savedData);
+      setPrompt(prompt || defaultPrompt);
       setItems(items || []);
     }
+    setHasLoaded(true);
   }, []);
 
   // Save to localStorage whenever data changes
   useEffect(() => {
-    localStorage.setItem('rankingData', JSON.stringify({ topic, items }));
-  }, [topic, items]);
+    if (hasLoaded) {
+      localStorage.setItem('rankingData', JSON.stringify({ prompt, items }));
+    }
+  }, [prompt, items, hasLoaded]);
 
   const rankItems = async (itemsToRank) => {
     // Mock AI ranking for now - in production, this would call your AI service
@@ -90,26 +99,10 @@ function RankPage() {
     }
   };
 
-  const generateShareLink = () => {
-    const shareData = btoa(JSON.stringify({ topic, items }));
-    const shareUrl = `${window.location.origin}/share/${shareData}`;
-    navigator.clipboard.writeText(shareUrl);
-    alert('Share link copied to clipboard!');
-  };
-
   return (
     <div className="sorter-page">
       <div className="content">
         <section>
-          <h2>Prompt:</h2>
-          <textarea
-            type="text"
-            value={topic}
-            onChange={(e) => setTopic(e.target.value)}
-            className="topic-input"
-            rows="13"
-          />
-
           <h2>Add new item:</h2>
           <textarea
             value={currentItem}
@@ -128,24 +121,30 @@ function RankPage() {
           >
             Submit
           </button>
-        </section>
+          <h2>Prompt:</h2>
+          <textarea
+            type="text"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            className="topic-input"
+            rows="13"
+          />
 
-        <p className="posted">
-          Last updated: {new Date().toLocaleString()}
-        </p>
+
+
+        </section>
       </div>
       
       <div className="sidebar">
+        {/* TODO unsorted/sorted split */}
         {items.length > 0 && (
           <>
-            <h2>Ranked items (by AI voter):</h2>
-            
+            <h2 style={{color: "black"}}>Ranked items:</h2>
             <ol className="ranked-list">
               {items.map((item, index) => (
                 <li key={item.id} className="ranked-item">
                   <p>{item.text}</p>
                   <div className="item-meta">
-                    <span className="score">Score: {item.score}</span>
                     <a
                       href="#"
                       className={hoveredIndex === index ? 'visited' : ''}
@@ -159,6 +158,7 @@ function RankPage() {
                   </div>
                   {hoveredIndex === index && (
                     <p className="explanation">
+                      {/* TODO: vote matchup matrix with reasoning */}
                       {item.explanation}
                     </p>
                   )}
