@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import useLocalStorageState from 'use-local-storage-state'
+import { useWebSocketContext } from '../contexts/WebSocketContext';
 
 const defaultPrompt = `Between A and B, which do you prefer?
 
@@ -15,58 +15,96 @@ respond with some reasoning and your score. Your score will be read by this rege
 `
 
 function RankPage() {
-  const [prompt, setPrompt] = useLocalStorageState('prompt', {
-    defaultValue: defaultPrompt
-  });
-  const [items, setItems] = useLocalStorageState('items', {
-    defaultValue: []
-  });
+  const { isConnected, lastMessage, sendCommand } = useWebSocketContext();
+  const [prompt, setPrompt] = useState(defaultPrompt);
+  const [items, setItems] = useState([]);
   const [currentItem, setCurrentItem] = useState('');
   const [hoveredIndex, setHoveredIndex] = useState(null);
+  const [currentJobId, setCurrentJobId] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const rankItems = async (itemsToRank) => {
-    // Mock AI ranking for now - in production, this would call your AI service
-    const rankedItems = [...itemsToRank].sort((a, b) => {
-      // Simulate AI ranking logic
-      const scoreA = a.text.length + (a.text.match(/[.!?]/g) || []).length * 10 + Math.random() * 20;
-      const scoreB = b.text.length + (b.text.match(/[.!?]/g) || []).length * 10 + Math.random() * 20;
-      return scoreB - scoreA;
-    });
+  // Handle WebSocket messages
+  useEffect(() => {
+    if (!lastMessage) return;
 
-    // Add mock AI explanations and scores
-    return rankedItems.map((item, index) => ({
-      ...item,
-      score: Math.floor(95 - index * 8 - Math.random() * 5),
-      explanation: getExplanation(item.text, index)
-    }));
-  };
+    switch (lastMessage.event) {
+      case 'job_created':
+        setCurrentJobId(lastMessage.job_id);
+        setItems([]);
+        // Save the prompt with the job
+        sendCommand({ cmd: 'get_job', job_id: lastMessage.job_id });
+        break;
 
-  const getExplanation = (text, index) => {
-    const explanations = [
-      'Clear narrative hook, establishes stakes',
-      'Personal but lacks broader context',
-      'Strong opening, needs more specificity',
-      'Compelling angle, could be more concise',
-      'Interesting perspective, missing key context'
-    ];
-    return explanations[index % explanations.length];
-  };
+      case 'item_added':
+        if (lastMessage.job_id === currentJobId) {
+          setIsLoading(true);
+        }
+        break;
+
+      case 'ranking':
+        if (lastMessage.job_id === currentJobId) {
+          setItems(lastMessage.items);
+          setIsLoading(false);
+        }
+        break;
+
+      case 'job_data':
+        if (lastMessage.job) {
+          setCurrentJobId(lastMessage.job.id);
+          setPrompt(lastMessage.job.prompt);
+          setItems(lastMessage.job.items);
+        }
+        break;
+
+      case 'item_deleted':
+        if (lastMessage.job_id === currentJobId) {
+          // Items will be updated by the following ranking event
+        }
+        break;
+
+      case 'error':
+        console.error('WebSocket error:', lastMessage.message);
+        setIsLoading(false);
+        break;
+    }
+  }, [lastMessage, currentJobId, sendCommand]);
+
+  // Create or get job on mount
+  useEffect(() => {
+    if (isConnected && !currentJobId) {
+      // Create a new job with the default prompt
+      sendCommand({ cmd: 'create_job', prompt: defaultPrompt });
+    }
+  }, [isConnected, currentJobId, sendCommand]);
 
   const handleAddItem = async () => {
-    if (!currentItem.trim()) return;
+    if (!currentItem.trim() || !currentJobId || !isConnected) return;
 
-    const newItem = {
-      id: Date.now(),
-      text: currentItem,
-      explanation: '',
-      score: 0
-    };
-
-    const newItems = [...items, newItem];
-    const rankedItems = await rankItems(newItems);
+    sendCommand({
+      cmd: 'add_item',
+      job_id: currentJobId,
+      text: currentItem.trim()
+    });
     
-    setItems(rankedItems);
     setCurrentItem('');
+  };
+
+  const handleDeleteItem = (itemId) => {
+    if (!currentJobId || !isConnected) return;
+
+    sendCommand({
+      cmd: 'delete_item',
+      job_id: currentJobId,
+      item_id: itemId
+    });
+  };
+
+  const handlePromptChange = (newPrompt) => {
+    setPrompt(newPrompt);
+    // Create a new job with the new prompt
+    if (isConnected) {
+      sendCommand({ cmd: 'create_job', prompt: newPrompt });
+    }
   };
 
   const handleKeyPress = (e) => {
@@ -84,6 +122,13 @@ function RankPage() {
     <div className="sorter-page">
       <div className="content">
         <section>
+          <div className="flex items-center gap-2 mb-4">
+            <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+            <span className="text-sm text-gray-600">
+              {isConnected ? 'Connected' : 'Disconnected'}
+            </span>
+          </div>
+
           <h2>Add new item:</h2>
           <textarea
             value={currentItem}
@@ -92,10 +137,12 @@ function RankPage() {
             placeholder="Type or paste your text here..."
             className="item-textarea"
             rows="4"
+            disabled={!isConnected || !currentJobId}
           />
           <button
             className="submit-button"
             onClick={handleAddItem}
+            disabled={!isConnected || !currentJobId || !currentItem.trim()}
             onMouseDown={(e) => e.target.classList.add('pressed')}
             onMouseUp={(e) => e.target.classList.remove('pressed')}
             onMouseLeave={(e) => e.target.classList.remove('pressed')}
@@ -106,19 +153,23 @@ function RankPage() {
           <textarea
             type="text"
             value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
+            onChange={(e) => handlePromptChange(e.target.value)}
             className="topic-input"
             rows="13"
+            disabled={!isConnected}
           />
-
-
-
         </section>
       </div>
       
       <div className="sidebar">
-        {/* TODO unsorted/sorted split */}
-        {items.length > 0 && (
+        {isLoading && (
+          <div className="text-center py-4">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+            <p className="mt-2 text-gray-600">Ranking items...</p>
+          </div>
+        )}
+        
+        {items.length > 0 && !isLoading && (
           <>
             <h2 style={{color: "black"}}>Ranked items:</h2>
             <ol className="ranked-list">
@@ -140,17 +191,20 @@ function RankPage() {
                       href="#"
                       onClick={(e) => {
                         e.preventDefault();
-                        const newItems = items.filter(i => i.id !== item.id);
-                        setItems(newItems);
+                        handleDeleteItem(item.id);
                       }}
                     >
                       [Delete]
                     </a>
                   </div>
-                  {hoveredIndex === index && (
+                  {hoveredIndex === index && item.explanation && (
                     <p className="explanation">
-                      {/* TODO: vote matchup matrix with reasoning */}
                       {item.explanation}
+                      {item.score && (
+                        <span className="block mt-1 text-sm text-gray-600">
+                          Score: {item.score.toFixed(1)}
+                        </span>
+                      )}
                     </p>
                   )}
                 </li>
