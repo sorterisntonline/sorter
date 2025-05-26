@@ -4,8 +4,6 @@ import './App.css'
 import Layout from './Layout';
 import TagListPage from './pages/TagListPage';
 import TagDetailPage from './pages/TagDetailPage';
-import RankPage from './pages/RankPage';
-import JobsListPage from './pages/JobsListPage';
 import ItemsetsPage from './pages/ItemsetsPage';
 import ItemsetDetailPage from './pages/ItemsetDetailPage';
 import NewRunPage from './pages/NewRunPage';
