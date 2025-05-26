@@ -10,16 +10,11 @@ function TagDetailPage() {
   const navigate = useNavigate();
   const { isConnected, lastMessage, sendCommand } = useWebSocketContext();
   
-  // Core state
+  // Core state - now mostly from server
+  const [queryState, setQueryState] = useState(null);
   const [tag, setTag] = useState(null);
-  const [attributes, setAttributes] = useState([]);
-  const [voters, setVoters] = useState([]);
-  const [rankings, setRankings] = useState([]);
-  const [missingComparisons, setMissingComparisons] = useState([]);
   
   // UI state
-  const [selectedAttributes, setSelectedAttributes] = useState([]);
-  const [selectedVoters, setSelectedVoters] = useState([]);
   const [newItemText, setNewItemText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [votingInProgress, setVotingInProgress] = useState(false);
@@ -102,50 +97,32 @@ function TagDetailPage() {
         }
         break;
 
-      case 'attributes_list':
-        setAttributes(lastMessage.attributes);
-        // Auto-select first attribute if none selected
-        if (lastMessage.attributes.length > 0 && selectedAttributes.length === 0) {
-          setSelectedAttributes([lastMessage.attributes[0].id]);
-        }
-        break;
-
-      case 'voters_list':
-        setVoters(lastMessage.voters);
-        break;
-
       case 'query_updated':
         if (lastMessage.state.tag_id === tagId) {
-          setRankings(lastMessage.state.rankings);
-          setMissingComparisons(lastMessage.state.missing_comparisons);
-          
-          // Always update selections from server state
-          setSelectedAttributes(lastMessage.state.selected_attributes || []);
-          setSelectedVoters(lastMessage.state.selected_voters || []);
+          setQueryState(lastMessage.state);
+          setIsLoading(false);
         }
         break;
 
       case 'item_added':
         if (lastMessage.tag_id === tagId) {
           setNewItemText('');
-          // Trigger query update to refresh rankings
-          sendCommand({
-            cmd: 'update_query',
-            tag_id: tagId,
-            attribute_ids: selectedAttributes,
-            voter_ids: selectedVoters
-          });
+          // Server will automatically send updated query state
         }
         break;
 
       case 'attribute_created':
         if (lastMessage.attribute.tag_id === tagId) {
-          setAttributes(prev => [...prev, lastMessage.attribute]);
           setShowNewAttribute(false);
           setNewAttributeLabel('');
-          setNewAttributeTemplate('');
+          setNewAttributeTemplate(DEFAULT_PROMPT_TEMPLATE);
           // Auto-select the new attribute
-          setSelectedAttributes(prev => [...prev, lastMessage.attribute.id]);
+          sendCommand({
+            cmd: 'update_query',
+            tag_id: tagId,
+            attribute_ids: [lastMessage.attribute.id],
+            voter_ids: queryState?.selected_voters || []
+          });
         }
         break;
 
@@ -157,13 +134,8 @@ function TagDetailPage() {
         setVotingInProgress(false);
         break;
 
-      case 'vote_added':
-        // Rankings will be updated via query_updated
-        break;
-
       case 'voter_created':
-        setVoters(prev => [...prev, lastMessage.voter]);
-        // Don't auto-select here - let the onChange handler manage selection
+        // Server will send updated voter list via query_updated
         break;
 
       case 'error':
@@ -171,18 +143,21 @@ function TagDetailPage() {
         setIsLoading(false);
         break;
     }
-  }, [lastMessage, tagId, selectedAttributes, selectedVoters, sendCommand]);
+  }, [lastMessage, tagId, queryState, sendCommand]);
 
   // Load initial data
   useEffect(() => {
     if (isConnected && tagId) {
       sendCommand({ cmd: 'get_tag', tag_id: tagId });
-      sendCommand({ cmd: 'list_attributes', tag_id: tagId });
-      sendCommand({ cmd: 'list_voters' });
+      // Request initial query state with empty selections
+      sendCommand({ 
+        cmd: 'update_query', 
+        tag_id: tagId,
+        attribute_ids: [],
+        voter_ids: []
+      });
     }
   }, [isConnected, tagId, sendCommand]);
-
-
 
   const handleAddItem = () => {
     if (!newItemText.trim() || !isConnected) return;
@@ -195,13 +170,13 @@ function TagDetailPage() {
   };
 
   const handleSortMissingPairs = () => {
-    if (!isConnected || missingComparisons.length === 0) return;
+    if (!isConnected || !queryState || queryState.missing_comparisons.length === 0) return;
 
     sendCommand({
       cmd: 'sort_missing_pairs',
       tag_id: tagId,
-      attribute_ids: selectedAttributes,
-      voter_ids: selectedVoters,
+      attribute_ids: queryState.selected_attributes,
+      voter_ids: queryState.selected_voters,
       limit: null // Sort all missing pairs
     });
   };
@@ -217,9 +192,7 @@ function TagDetailPage() {
     });
   };
 
-
-
-  if (isLoading) {
+  if (isLoading || !queryState) {
     return (
       <div className="sorter-page">
         <div className="loading-container">
@@ -243,16 +216,27 @@ function TagDetailPage() {
     );
   }
 
-  const aiVoters = voters.filter(v => v.is_ai);
+  // Sort voters: those with votes first, then alphabetically
+  const sortedVoters = [...queryState.all_voters]
+    .filter(v => v.is_ai)
+    .sort((a, b) => {
+      const aHasVotes = queryState.voters_with_votes.includes(a.id);
+      const bHasVotes = queryState.voters_with_votes.includes(b.id);
+      
+      if (aHasVotes && !bHasVotes) return -1;
+      if (!aHasVotes && bHasVotes) return 1;
+      return a.name.localeCompare(b.name);
+    });
 
   // Prepare options for react-select
-  const voterOptions = aiVoters.map(voter => ({
+  const voterOptions = sortedVoters.map(voter => ({
     value: voter.id,
     label: `@${voter.name}`,
-    data: voter
+    data: voter,
+    hasVotes: queryState.voters_with_votes.includes(voter.id)
   }));
 
-  const attributeOptions = attributes.map(attr => ({
+  const attributeOptions = queryState.all_attributes.map(attr => ({
     value: attr.id,
     label: attr.label,
     data: attr
@@ -334,7 +318,7 @@ function TagDetailPage() {
           </div>
 
           <h1>{tag.name}</h1>
-          <p className="sorter-label">COLLECTION • {rankings.length} ITEMS</p>
+          <p className="sorter-label">COLLECTION • {queryState.all_items.length} ITEMS</p>
 
           <div className="job-control-panel">
             <h2>Whose preferences to explore:</h2>
@@ -346,14 +330,13 @@ function TagDetailPage() {
                   cacheOptions
                   defaultOptions
                   loadOptions={loadModelOptions}
-                  value={voterOptions.filter(opt => selectedVoters.includes(opt.value))}
+                  value={voterOptions.filter(opt => queryState.selected_voters.includes(opt.value))}
                   onChange={(selectedOptions) => {
-                    // Get the currently selected model names
-                    const selectedModelNames = selectedOptions.map(opt => opt.value);
-                    
                     // Find which models need to be created as voters
-                    const existingVoterNames = voters.filter(v => v.is_ai).map(v => v.name);
-                    const modelsToCreate = selectedModelNames.filter(name => !existingVoterNames.includes(name));
+                    const existingVoterNames = queryState.all_voters.filter(v => v.is_ai).map(v => v.name);
+                    const modelsToCreate = selectedOptions
+                      .filter(opt => !existingVoterNames.includes(opt.label.substring(1))) // Remove @ prefix
+                      .map(opt => opt.label.substring(1)); // Remove @ prefix
                     
                     // Create new voters for models that don't exist yet
                     modelsToCreate.forEach(modelName => {
@@ -363,16 +346,16 @@ function TagDetailPage() {
                       });
                     });
                     
-                    // Get voter IDs for selected models that already exist
-                    const voterIds = voters
-                      .filter(v => v.is_ai && selectedModelNames.includes(v.name))
-                      .map(v => v.id);
+                    // Get voter IDs for selected models
+                    const voterIds = selectedOptions
+                      .filter(opt => opt.data) // Only existing voters have data
+                      .map(opt => opt.value);
                     
                     // Send update query with selected voter IDs
                     sendCommand({
                       cmd: 'update_query',
                       tag_id: tagId,
-                      attribute_ids: selectedAttributes,
+                      attribute_ids: queryState.selected_attributes,
                       voter_ids: voterIds
                     });
                   }}
@@ -382,7 +365,10 @@ function TagDetailPage() {
                   classNamePrefix="select"
                   formatOptionLabel={(option) => (
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontFamily: 'monospace', fontSize: '0.9em' }}>{option.label}</span>
+                      <span style={{ fontFamily: 'monospace', fontSize: '0.9em' }}>
+                        {option.label}
+                        {option.hasVotes && <span style={{ marginLeft: '0.5em', color: '#68693F' }}>✓</span>}
+                      </span>
                       {option.data?.pricing?.prompt && (
                         <span style={{ fontSize: '0.8em', color: '#666', marginLeft: '1em' }}>
                           ${(parseFloat(option.data.pricing.prompt) * 1000000).toFixed(2)}/M
@@ -400,7 +386,7 @@ function TagDetailPage() {
               <div style={{ marginTop: '0.5em' }}>
                 <Select
                   options={attributeOptions}
-                  value={attributeOptions.find(opt => selectedAttributes.includes(opt.value))}
+                  value={attributeOptions.find(opt => queryState.selected_attributes.includes(opt.value))}
                   onChange={(selectedOption) => {
                     const attributeIds = selectedOption ? [selectedOption.value] : [];
                     
@@ -409,7 +395,7 @@ function TagDetailPage() {
                       cmd: 'update_query',
                       tag_id: tagId,
                       attribute_ids: attributeIds,
-                      voter_ids: selectedVoters
+                      voter_ids: queryState.selected_voters
                     });
                   }}
                   placeholder="Select evaluation prompt..."
@@ -427,19 +413,23 @@ function TagDetailPage() {
               </div>
             </div>
 
-            {missingComparisons.length > 0 && selectedVoters.length > 0 && selectedAttributes.length > 0 && (
+            {queryState.missing_comparisons.length > 0 && 
+             queryState.selected_voters.length > 0 && 
+             queryState.selected_attributes.length > 0 && (
               <div className="voting-status" style={{ marginBottom: '1em' }}>
-                🔄 {missingComparisons.length} missing comparisons
+                🔄 {queryState.missing_comparisons.length} missing comparisons
               </div>
             )}
 
             <button
               onClick={handleSortMissingPairs}
-              disabled={!isConnected || votingInProgress || missingComparisons.length === 0 || 
-                       selectedVoters.length === 0 || selectedAttributes.length === 0}
+              disabled={!isConnected || votingInProgress || 
+                       queryState.missing_comparisons.length === 0 || 
+                       queryState.selected_voters.length === 0 || 
+                       queryState.selected_attributes.length === 0}
               className="voting-button start-voting"
             >
-              {votingInProgress ? '⏳ Sorting...' : `Sort ${missingComparisons.length} missing pairs`}
+              {votingInProgress ? '⏳ Sorting...' : `Sort ${queryState.missing_comparisons.length} missing pairs`}
             </button>
           </div>
 
@@ -508,13 +498,13 @@ function TagDetailPage() {
       
       <div className="sidebar">
         <h2 style={{color: "black"}}>Ensemble Rankings:</h2>
-        {rankings.length === 0 ? (
+        {queryState.rankings.length === 0 ? (
           <div className="empty-state">
-            <p>Add items below and select voters + prompts to see rankings</p>
+            <p>Add items below to see rankings</p>
           </div>
         ) : (
           <ol className="ranked-list">
-            {rankings.map((item) => (
+            {queryState.rankings.map((item) => (
               <li key={item.item_id} className="ranked-item">
                 <p>{item.text}</p>
                 <div className="item-meta">

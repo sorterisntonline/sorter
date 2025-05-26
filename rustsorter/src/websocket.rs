@@ -110,6 +110,10 @@ pub struct QueryState {
     pub selected_voters: Vec<Uuid>,
     pub rankings: Vec<RankedItem>,
     pub missing_comparisons: Vec<MissingComparison>,
+    pub all_items: Vec<Item>,
+    pub all_attributes: Vec<Attribute>,
+    pub all_voters: Vec<Voter>,
+    pub voters_with_votes: Vec<Uuid>,
 }
 
 // WebSocket commands from client
@@ -332,6 +336,7 @@ async fn handle_command(
     tx: mpsc::UnboundedSender<WsEvent>,
     state: &AppState,
 ) {
+    log::info!("Received command: {:?}", cmd);
     match cmd {
         WsCommand::CreateTag { name } => {
             let tag_id = Uuid::new_v4();
@@ -376,11 +381,9 @@ async fn handle_command(
                 ITEMS.lock().unwrap().insert(item_id, item.clone());
                 let _ = tx.send(WsEvent::ItemAdded { tag_id, item });
                 
-                // Automatically trigger query update to show new missing comparisons
+                // Automatically trigger query update to show new item in rankings
                 drop(tags);
-                let empty_attrs: Vec<Uuid> = vec![];
-                let empty_voters: Vec<Uuid> = vec![];
-                update_query_state(tag_id, empty_attrs, empty_voters, &tx);
+                update_query_state(tag_id, vec![], vec![], &tx);
             } else {
                 let _ = tx.send(WsEvent::Error { 
                     message: format!("Tag {} not found", tag_id) 
@@ -592,19 +595,43 @@ fn update_query_state(
     tx: &mpsc::UnboundedSender<WsEvent>,
 ) {
     // Get all items for this tag
-    let items = ITEMS.lock().unwrap();
-    let tag_items: Vec<Item> = items.values()
-        .filter(|item| item.tag_id == tag_id)
-        .cloned()
-        .collect();
+    let tag_items: Vec<Item> = {
+        let items = ITEMS.lock().unwrap();
+        items.values()
+            .filter(|item| item.tag_id == tag_id)
+            .cloned()
+            .collect()
+    }; // Lock released here
     
-    // Get relevant votes
-    let votes = VOTES.lock().unwrap();
-    let relevant_votes: Vec<Vote> = votes.iter()
+    // Get all votes for this tag to determine which voters have voted
+    let all_tag_votes: Vec<Vote> = {
+        let votes = VOTES.lock().unwrap();
+        votes.iter()
+            .filter(|vote| vote.tag_id == tag_id)
+            .cloned()
+            .collect()
+    }; // Lock released here
+    
+    // Get unique voter IDs that have cast votes for this tag
+    let mut voters_with_votes: HashSet<Uuid> = HashSet::new();
+    for vote in &all_tag_votes {
+        voters_with_votes.insert(vote.voter_id);
+    }
+    let voters_with_votes_vec: Vec<Uuid> = voters_with_votes.into_iter().collect();
+    
+    // Determine which voter IDs to use for rankings
+    let effective_voter_ids = if voter_ids.is_empty() {
+        // If no voters selected, use all voters that have cast votes
+        voters_with_votes_vec.clone()
+    } else {
+        voter_ids.clone()
+    };
+    
+    // Get relevant votes for ranking calculation
+    let relevant_votes: Vec<Vote> = all_tag_votes.iter()
         .filter(|vote| {
-            vote.tag_id == tag_id &&
             (attribute_ids.is_empty() || attribute_ids.contains(&vote.attribute_id)) &&
-            (voter_ids.is_empty() || voter_ids.contains(&vote.voter_id))
+            effective_voter_ids.contains(&vote.voter_id)
         })
         .cloned()
         .collect();
@@ -612,8 +639,23 @@ fn update_query_state(
     // Calculate rankings
     let rankings = calculate_rankings(&tag_items, &relevant_votes);
     
-    // Get missing comparisons
+    // Get missing comparisons (only for explicitly selected voters)
     let missing_comparisons = get_missing_comparisons(tag_id, &attribute_ids, &voter_ids);
+    
+    // Get all attributes for this tag
+    let all_attributes: Vec<Attribute> = {
+        let attributes = ATTRIBUTES.lock().unwrap();
+        attributes.values()
+            .filter(|attr| attr.tag_id == tag_id)
+            .cloned()
+            .collect()
+    }; // Lock released here
+    
+    // Get all voters
+    let all_voters: Vec<Voter> = {
+        let voters = VOTERS.lock().unwrap();
+        voters.values().cloned().collect()
+    }; // Lock released here
     
     let state = QueryState {
         tag_id,
@@ -621,6 +663,10 @@ fn update_query_state(
         selected_voters: voter_ids,
         rankings,
         missing_comparisons,
+        all_items: tag_items,
+        all_attributes,
+        all_voters,
+        voters_with_votes: voters_with_votes_vec,
     };
     
     let _ = tx.send(WsEvent::QueryUpdated { state });
@@ -631,24 +677,35 @@ fn get_missing_comparisons(
     attribute_ids: &[Uuid],
     voter_ids: &[Uuid],
 ) -> Vec<MissingComparison> {
-    let items = ITEMS.lock().unwrap();
-    let votes = VOTES.lock().unwrap();
-    let voters = VOTERS.lock().unwrap();
+    // Get data and release locks immediately
+    let tag_items: Vec<Item> = {
+        let items = ITEMS.lock().unwrap();
+        items.values()
+            .filter(|item| item.tag_id == tag_id)
+            .cloned()
+            .collect()
+    };
     
-    let tag_items: Vec<Item> = items.values()
-        .filter(|item| item.tag_id == tag_id)
-        .cloned()
-        .collect();
-    
-    let mut missing = Vec::new();
+    let all_votes: Vec<Vote> = {
+        let votes = VOTES.lock().unwrap();
+        votes.iter()
+            .filter(|vote| vote.tag_id == tag_id)
+            .cloned()
+            .collect()
+    };
     
     // Only check AI voters
-    let ai_voter_ids: Vec<Uuid> = voter_ids.iter()
-        .filter(|voter_id| {
-            voters.get(voter_id).map(|v| v.is_ai).unwrap_or(false)
-        })
-        .cloned()
-        .collect();
+    let ai_voter_ids: Vec<Uuid> = {
+        let voters = VOTERS.lock().unwrap();
+        voter_ids.iter()
+            .filter(|voter_id| {
+                voters.get(voter_id).map(|v| v.is_ai).unwrap_or(false)
+            })
+            .cloned()
+            .collect()
+    };
+    
+    let mut missing = Vec::new();
     
     if ai_voter_ids.is_empty() || attribute_ids.is_empty() {
         return missing;
@@ -665,8 +722,7 @@ fn get_missing_comparisons(
             
             for voter_id in &ai_voter_ids {
                 for attribute_id in attribute_ids {
-                    let has_vote = votes.iter().any(|vote| {
-                        vote.tag_id == tag_id &&
+                    let has_vote = all_votes.iter().any(|vote| {
                         vote.voter_id == *voter_id &&
                         vote.attribute_id == *attribute_id &&
                         ((vote.item_a_id == item_a.id && vote.item_b_id == item_b.id) ||
@@ -689,10 +745,10 @@ fn get_missing_comparisons(
                     item_b_id: item_b.id,
                     item_a_text: item_a.text.clone(),
                     item_b_text: item_b.text.clone(),
-            });
+                });
+            }
         }
     }
-}
 
     missing
 }
