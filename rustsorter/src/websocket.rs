@@ -569,10 +569,14 @@ async fn handle_command(
         
         WsCommand::CreateHumanVoter { name } => {
             let voter_id = Uuid::new_v4();
+            
+            // Check if this is actually an AI model by name pattern
+            let is_ai = name.contains('/') || name.starts_with("gpt-") || name.starts_with("claude-");
+            
             let voter = Voter {
                 id: voter_id,
                 name,
-                is_ai: false,
+                is_ai,
             };
             
             VOTERS.lock().unwrap().insert(voter_id, voter.clone());
