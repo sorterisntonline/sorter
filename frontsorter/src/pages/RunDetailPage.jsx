@@ -103,6 +103,24 @@ function RunDetailPage() {
     }
   };
 
+  const handleDeleteRun = () => {
+    if (!runId || !isConnected) return;
+    
+    const confirmDelete = window.confirm(
+      'Are you sure you want to delete this preference revelation? This action cannot be undone.'
+    );
+    
+    if (confirmDelete) {
+      sendCommand({ cmd: 'delete_run', run_id: runId });
+      // Navigate back to itemset after deletion
+      if (itemset) {
+        navigate(`/itemsets/${itemset.id}`);
+      } else {
+        navigate('/itemsets');
+      }
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="sorter-page">
@@ -203,6 +221,28 @@ function RunDetailPage() {
                 </div>
               </>
             )}
+            
+            <div style={{ marginTop: '2em' }}>
+              <button
+                onClick={handleDeleteRun}
+                disabled={!isConnected}
+                className="delete-button"
+                style={{
+                  padding: '0.75em 1.5em',
+                  backgroundColor: '#CC0000',
+                  color: '#fff',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontFamily: 'Georgia',
+                  fontSize: '1em',
+                  borderRadius: '0.25em'
+                }}
+                onMouseOver={(e) => e.target.style.backgroundColor = '#AA0000'}
+                onMouseOut={(e) => e.target.style.backgroundColor = '#CC0000'}
+              >
+                🗑️ Delete Revelation
+              </button>
+            </div>
           </div>
         </section>
       </div>

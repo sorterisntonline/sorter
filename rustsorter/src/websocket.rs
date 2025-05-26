@@ -102,6 +102,7 @@ pub enum WsCommand {
     ListRuns { itemset_id: Uuid },
     StartRunVoting { run_id: Uuid },
     StopRunVoting { run_id: Uuid },
+    DeleteRun { run_id: Uuid },
     
     // Debug command
     GetUniversalVotes,
@@ -128,6 +129,7 @@ pub enum WsEvent {
     RunVotingStarted { run_id: Uuid },
     RunVotingStopped { run_id: Uuid },
     VotingCompleted { run_id: Uuid },
+    RunDeleted { run_id: Uuid },
     
     // Debug event
     UniversalVotesList { votes: Vec<UniversalVote>, ai_users: HashMap<String, Uuid> },
@@ -538,6 +540,17 @@ async fn handle_command(
             if let Some(run) = runs.get_mut(&run_id) {
                 run.status = "stopped".to_string();
                 let _ = tx.send(WsEvent::RunVotingStopped { run_id });
+            }
+        }
+        
+        WsCommand::DeleteRun { run_id } => {
+            let mut runs = RUNS.lock().unwrap();
+            if runs.remove(&run_id).is_some() {
+                let _ = tx.send(WsEvent::RunDeleted { run_id });
+            } else {
+                let _ = tx.send(WsEvent::Error { 
+                    message: format!("Run {} not found", run_id) 
+                });
             }
         }
         
