@@ -8,10 +8,6 @@ import ItemsetsPage from './pages/ItemsetsPage';
 import ItemsetDetailPage from './pages/ItemsetDetailPage';
 import NewRunPage from './pages/NewRunPage';
 import RunDetailPage from './pages/RunDetailPage';
-import { WebSocketTest } from './components/WebSocketTest';
-
-// Import RecentSongsFlow (commented out since we're not using it right now)
-// import RecentSongsFlow from './pages/RecentSongsFlow';
 
 function App() {
     // Single return statement (removed the unreachable code)
@@ -27,15 +23,6 @@ function App() {
             
             {/* Run detail page */}
             <Route path="/runs/:runId" element={<RunDetailPage />} />
-            
-            {/* Wrap other pages within the Layout */}
-            <Route path="/app" element={<Layout />}>
-                <Route path="tags" element={<TagListPage />} />
-                <Route path="tags/:tagId" element={<TagDetailPage />} />
-                {/* Add a catch-all or Not Found route if desired */}
-                <Route path="*" element={<div className="p-4">Page Not Found</div>} />
-            </Route>
-            {/* Routes outside the main layout (e.g., login) could go here */}
         </Routes>
     );
 }
