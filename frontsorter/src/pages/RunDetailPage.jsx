@@ -14,6 +14,7 @@ function RunDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [votingInProgress, setVotingInProgress] = useState(false);
   const [activeTab, setActiveTab] = useState('ranking');
+  const [singleComparisonInProgress, setSingleComparisonInProgress] = useState(new Set());
 
   // Handle WebSocket messages
   useEffect(() => {
@@ -108,6 +109,72 @@ function RunDetailPage() {
         }
         break;
 
+      case 'single_comparison_started':
+        if (lastMessage.run_id === runId) {
+          const pairKey = `${lastMessage.item_a_id}-${lastMessage.item_b_id}`;
+          setSingleComparisonInProgress(prev => new Set([...prev, pairKey]));
+          console.log('Single comparison started for items:', lastMessage.item_a_id, lastMessage.item_b_id);
+        }
+        break;
+
+      case 'single_comparison_completed':
+        if (lastMessage.run_id === runId) {
+          const pairKey = `${lastMessage.vote.item_a_id}-${lastMessage.vote.item_b_id}`;
+          setSingleComparisonInProgress(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(pairKey);
+            return newSet;
+          });
+          
+          // Add the new vote to the run
+          setRun(prevRun => ({
+            ...prevRun,
+            votes: [...(prevRun?.votes || []), lastMessage.vote]
+          }));
+          console.log('Single comparison completed:', lastMessage.vote);
+        }
+        break;
+
+      case 'rankings_updated':
+        if (lastMessage.run_id === runId && itemset) {
+          const itemsMap = new Map(itemset.items.map(item => [item.id, item]));
+          
+          // Process ranked items
+          const ranked = lastMessage.ranked
+            .sort((a, b) => a.rank - b.rank)
+            .map(ranking => {
+              const item = itemsMap.get(ranking.item_id);
+              return {
+                ...item,
+                score: ranking.score,
+                votes: [] // We'll populate this in the render based on current run.votes
+              };
+            });
+          
+          // Process unranked items (items with no votes)
+          const unranked = lastMessage.unranked
+            .map(ranking => {
+              const item = itemsMap.get(ranking.item_id);
+              return {
+                ...item,
+                score: ranking.score,
+                votes: []
+              };
+            });
+          
+          // Combine ranked and unranked, with ranked items first
+          setRankedItems([...ranked, ...unranked]);
+          
+          // Also update the run's rankings to keep it in sync
+          setRun(prevRun => ({
+            ...prevRun,
+            rankings: lastMessage.ranked
+          }));
+          
+          console.log('Rankings updated after single comparison');
+        }
+        break;
+
       case 'error':
         console.error('WebSocket error:', lastMessage.message);
         setIsLoading(false);
@@ -160,6 +227,17 @@ function RunDetailPage() {
         navigate('/itemsets');
       }
     }
+  };
+
+  const handleRerunVote = (vote) => {
+    if (!runId || !isConnected || votingInProgress) return;
+    
+    sendCommand({ 
+      cmd: 'run_single_comparison', 
+      run_id: runId,
+      item_a_id: vote.item_a_id,
+      item_b_id: vote.item_b_id
+    });
   };
 
   if (isLoading) {
@@ -381,21 +459,51 @@ function RunDetailPage() {
                               transition={{ duration: 0.2 }}
                             >
                               <h4 className="vote-history-title">The Mind's Reasoning:</h4>
-                              {itemVotes.map((vote, voteIndex) => (
-                                <div key={voteIndex} className="vote-record">
-                                  <div className="vote-opponent">
-                                    compared to: "{vote.against_item_text.length > 50 ? 
-                                      vote.against_item_text.substring(0, 50) + '...' : 
-                                      vote.against_item_text}"
+                              {itemVotes.map((vote, voteIndex) => {
+                                // Find the original vote object to get the correct IDs
+                                const originalVote = run?.votes?.find(v => 
+                                  (v.item_a_id === item.id && v.item_b_id === vote.against_item_id) ||
+                                  (v.item_b_id === item.id && v.item_a_id === vote.against_item_id)
+                                );
+                                const pairKey = originalVote ? `${originalVote.item_a_id}-${originalVote.item_b_id}` : '';
+                                const isComparisonInProgress = singleComparisonInProgress.has(pairKey);
+                                
+                                return (
+                                  <div key={voteIndex} className="vote-record">
+                                    <div className="vote-opponent">
+                                      compared to: "{vote.against_item_text.length > 50 ? 
+                                        vote.against_item_text.substring(0, 50) + '...' : 
+                                        vote.against_item_text}"
+                                    </div>
+                                    <div className="vote-score">
+                                      {vote.score > 0 ? 'WON' : vote.score < 0 ? 'LOST' : 'TIED'}
+                                      {originalVote && (
+                                        <button
+                                          className="rerun-vote-button"
+                                          onClick={() => handleRerunVote(originalVote)}
+                                          disabled={!isConnected || votingInProgress || isComparisonInProgress}
+                                          title={isComparisonInProgress ? "Comparison in progress..." : "Rerun this comparison"}
+                                          style={{
+                                            marginLeft: '0.5em',
+                                            padding: '0.2em 0.4em',
+                                            backgroundColor: 'transparent',
+                                            border: '1px solid #ccc',
+                                            borderRadius: '0.25em',
+                                            cursor: isComparisonInProgress ? 'not-allowed' : 'pointer',
+                                            fontSize: '0.75em',
+                                            opacity: isComparisonInProgress ? 0.6 : 1
+                                          }}
+                                        >
+                                          {isComparisonInProgress ? '⏳' : '🔄'}
+                                        </button>
+                                      )}
+                                    </div>
+                                    <div className="vote-reasoning">
+                                      <em>"{vote.reasoning}"</em>
+                                    </div>
                                   </div>
-                                  <div className="vote-score">
-                                    {vote.score > 0 ? 'WON' : vote.score < 0 ? 'LOST' : 'TIED'}
-                                  </div>
-                                  <div className="vote-reasoning">
-                                    <em>"{vote.reasoning}"</em>
-                                  </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </motion.div>
                           )}
                         </AnimatePresence>
@@ -418,6 +526,8 @@ function RunDetailPage() {
                 {run?.votes?.map((vote, index) => {
                   const itemA = itemset?.items.find(item => item.id === vote.item_a_id);
                   const itemB = itemset?.items.find(item => item.id === vote.item_b_id);
+                  const pairKey = `${vote.item_a_id}-${vote.item_b_id}`;
+                  const isComparisonInProgress = singleComparisonInProgress.has(pairKey);
                   
                   return (
                     <div key={index} className="vote-card">
@@ -440,6 +550,24 @@ function RunDetailPage() {
                           <span className="vote-magnitude">
                             Score: {vote.score > 0 ? '+' : ''}{vote.score}
                           </span>
+                          <button
+                            className="rerun-vote-button"
+                            onClick={() => handleRerunVote(vote)}
+                            disabled={!isConnected || votingInProgress || isComparisonInProgress}
+                            title={isComparisonInProgress ? "Comparison in progress..." : "Rerun this comparison"}
+                            style={{
+                              marginLeft: '1em',
+                              padding: '0.25em 0.5em',
+                              backgroundColor: 'transparent',
+                              border: '1px solid #ccc',
+                              borderRadius: '0.25em',
+                              cursor: isComparisonInProgress ? 'not-allowed' : 'pointer',
+                              fontSize: '0.875em',
+                              opacity: isComparisonInProgress ? 0.6 : 1
+                            }}
+                          >
+                            {isComparisonInProgress ? '⏳' : '🔄'}
+                          </button>
                         </div>
                         <div className="vote-reasoning">
                           <em>"{vote.reasoning}"</em>

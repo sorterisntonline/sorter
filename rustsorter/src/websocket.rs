@@ -133,6 +133,7 @@ pub enum WsCommand {
     StartRunVoting { run_id: Uuid },
     StopRunVoting { run_id: Uuid },
     DeleteRun { run_id: Uuid },
+    RunSingleComparison { run_id: Uuid, item_a_id: Uuid, item_b_id: Uuid },
     
     // Debug command
     GetUniversalVotes,
@@ -163,6 +164,9 @@ pub enum WsEvent {
     IntermediateRankings { run_id: Uuid, ranked: Vec<RankedItem>, unranked: Vec<RankedItem> },
     VotingCompleted { run_id: Uuid },
     RunDeleted { run_id: Uuid },
+    SingleComparisonStarted { run_id: Uuid, item_a_id: Uuid, item_b_id: Uuid },
+    SingleComparisonCompleted { run_id: Uuid, vote: Vote },
+    RankingsUpdated { run_id: Uuid, ranked: Vec<RankedItem>, unranked: Vec<RankedItem> },
     
     // Debug event
     UniversalVotesList { votes: Vec<UniversalVote>, ai_users: HashMap<String, Uuid> },
@@ -745,6 +749,143 @@ async fn handle_command(
             let mut runs = RUNS.lock().unwrap();
             if runs.remove(&run_id).is_some() {
                 let _ = tx.send(WsEvent::RunDeleted { run_id });
+            } else {
+                let _ = tx.send(WsEvent::Error { 
+                    message: format!("Run {} not found", run_id) 
+                });
+            }
+        }
+        
+        WsCommand::RunSingleComparison { run_id, item_a_id, item_b_id } => {
+            let runs = RUNS.lock().unwrap();
+            let itemsets = ITEMSETS.lock().unwrap();
+            
+            if let Some(run) = runs.get(&run_id) {
+                if let Some(itemset) = itemsets.get(&run.itemset_id) {
+                    // Find the items
+                    let item_a = itemset.items.iter().find(|item| item.id == item_a_id);
+                    let item_b = itemset.items.iter().find(|item| item.id == item_b_id);
+                    
+                    if let (Some(item_a), Some(item_b)) = (item_a, item_b) {
+                        let _ = tx.send(WsEvent::SingleComparisonStarted { 
+                            run_id, 
+                            item_a_id, 
+                            item_b_id 
+                        });
+                        
+                        // Start single comparison in background
+                        let tx_clone = tx.clone();
+                        let model = run.model.clone().unwrap_or_default();
+                        let prompt = run.prompt.clone();
+                        let attribute_slug = run.attribute_slug.clone();
+                        let itemset_id = run.itemset_id;
+                        let item_a_text = item_a.text.clone();
+                        let item_b_text = item_b.text.clone();
+                        
+                        // Get or create AI user
+                        let ai_user_id = {
+                            let mut ai_users = AI_USERS.lock().unwrap();
+                            ai_users.entry(model.clone())
+                                .or_insert_with(Uuid::new_v4)
+                                .clone()
+                        };
+                        
+                        drop(runs);
+                        drop(itemsets);
+                        
+                        tokio::spawn(async move {
+                            // Make the comparison
+                            match call_openrouter_api(
+                                &model,
+                                &prompt,
+                                &item_a_text,
+                                &item_b_text,
+                            ).await {
+                                Ok((score, reasoning)) => {
+                                    let vote = Vote {
+                                        item_a_id,
+                                        item_b_id,
+                                        score,
+                                        reasoning: reasoning.clone(),
+                                    };
+                                    
+                                    // Add vote to run and recalculate rankings
+                                    let updated_rankings = {
+                                        let mut runs = RUNS.lock().unwrap();
+                                        let itemsets = ITEMSETS.lock().unwrap();
+                                        
+                                        if let Some(run) = runs.get_mut(&run_id) {
+                                            run.votes.push(vote.clone());
+                                            
+                                                                                         // Recalculate rankings with the new vote
+                                             if let Some(itemset) = itemsets.get(&run.itemset_id) {
+                                                 let ranking_result = calculate_rankings(&itemset.items, &run.votes);
+                                                 run.rankings = ranking_result.ranked.clone();
+                                                 Some(ranking_result)
+                                             } else {
+                                                 None
+                                             }
+                                        } else {
+                                            None
+                                        }
+                                    };
+                                    
+                                    // Store in universal format
+                                    let (left_item_id, right_item_id, final_score) = 
+                                        if item_a_id < item_b_id {
+                                            (item_a_id, item_b_id, -score)
+                                        } else {
+                                            (item_b_id, item_a_id, score)
+                                        };
+                                    
+                                    let universal_vote = UniversalVote {
+                                        left_entity_namespace: format!("sorter.itemset.{}", itemset_id),
+                                        left_entity_pk: left_item_id.to_string(),
+                                        right_entity_namespace: format!("sorter.itemset.{}", itemset_id),
+                                        right_entity_pk: right_item_id.to_string(),
+                                        user_id: ai_user_id,
+                                        magnitude: final_score,
+                                        attribute_slug,
+                                        created_at: chrono::Utc::now().to_rfc3339(),
+                                    };
+                                    
+                                    {
+                                        let mut universal_votes = UNIVERSAL_VOTES.lock().unwrap();
+                                        universal_votes.push(universal_vote);
+                                    }
+                                    
+                                    let _ = tx_clone.send(WsEvent::SingleComparisonCompleted { 
+                                        run_id, 
+                                        vote 
+                                    });
+                                    
+                                    // Send updated rankings if available
+                                    if let Some(ranking_result) = updated_rankings {
+                                        let _ = tx_clone.send(WsEvent::RankingsUpdated {
+                                            run_id,
+                                            ranked: ranking_result.ranked,
+                                            unranked: ranking_result.unranked,
+                                        });
+                                    }
+                                }
+                                Err(e) => {
+                                    log::error!("Single comparison API error: {}", e);
+                                    let _ = tx_clone.send(WsEvent::Error { 
+                                        message: format!("Failed to complete comparison: {}", e) 
+                                    });
+                                }
+                            }
+                        });
+                    } else {
+                        let _ = tx.send(WsEvent::Error { 
+                            message: "One or both items not found".to_string() 
+                        });
+                    }
+                } else {
+                    let _ = tx.send(WsEvent::Error { 
+                        message: format!("Itemset for run {} not found", run_id) 
+                    });
+                }
             } else {
                 let _ = tx.send(WsEvent::Error { 
                     message: format!("Run {} not found", run_id) 
