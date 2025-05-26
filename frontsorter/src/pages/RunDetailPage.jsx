@@ -389,7 +389,7 @@ function RunDetailPage() {
                                       vote.against_item_text}"
                                   </div>
                                   <div className="vote-score">
-                                    Preference: {vote.score > 0 ? '+' : ''}{vote.score}
+                                    {vote.score > 0 ? 'WON' : vote.score < 0 ? 'LOST' : 'TIED'}
                                   </div>
                                   <div className="vote-reasoning">
                                     <em>"{vote.reasoning}"</em>

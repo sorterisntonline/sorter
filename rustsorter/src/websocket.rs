@@ -589,106 +589,125 @@ async fn handle_command(
                                 sleep(Duration::from_millis(500)).await;
                             }
                             
-                            // Phase 2: Refine rankings by comparing adjacent pairs
-                            log::info!("Phase 2: Refining rankings with adjacent comparisons");
-                            let mut refinement_rounds = 0;
-                            let max_refinement_rounds = 10;
-                            
-                            while refinement_rounds < max_refinement_rounds && current_rankings.ranked.len() > 1 {
-                                refinement_rounds += 1;
-                                let mut changes_made = false;
-                                
-                                // Compare adjacent pairs in current ranking
-                                for i in 0..(current_rankings.ranked.len() - 1) {
-                                    let item_a_id = current_rankings.ranked[i].item_id;
-                                    let item_b_id = current_rankings.ranked[i + 1].item_id;
-                                    
-                                    let item_a = itemset_items.iter().find(|item| item.id == item_a_id).unwrap();
-                                    let item_b = itemset_items.iter().find(|item| item.id == item_b_id).unwrap();
-                                    
-                                    // Check if we already have a direct comparison
-                                    let has_direct_comparison = votes.iter().any(|vote| {
-                                        (vote.item_a_id == item_a_id && vote.item_b_id == item_b_id) ||
-                                        (vote.item_a_id == item_b_id && vote.item_b_id == item_a_id)
-                                    });
-                                    
-                                    if has_direct_comparison {
-                                        continue; // Skip if already compared
-                                    }
-                                    
-                                    // Make the comparison
-                                    let (score, reasoning) = match call_openrouter_api(
-                                        &model,
-                                        &prompt,
-                                        &item_a.text,
-                                        &item_b.text,
-                                    ).await {
-                                        Ok(result) => result,
-                                        Err(e) => {
-                                            log::error!("OpenRouter API error in Phase 2: {}", e);
-                                            sleep(Duration::from_millis(500)).await;
-                                            continue;
-                                        }
-                                    };
-                                    
-                                    let vote = Vote {
-                                        item_a_id: item_a.id,
-                                        item_b_id: item_b.id,
-                                        score,
-                                        reasoning: reasoning.clone(),
-                                    };
-                                    
-                                    votes.push(vote.clone());
-                                    changes_made = true;
-                                    
-                                    // Send vote update
-                                    let _ = tx_clone.send(WsEvent::VoteAdded { 
-                                        run_id: run_id_copy, 
-                                        vote: vote.clone() 
-                                    });
-                                    
-                                    // Store in universal format
-                                    let (left_item, right_item, final_score) = 
-                                        if item_a.id < item_b.id {
-                                            (item_a, item_b, -score)
-                                        } else {
-                                            (item_b, item_a, score)
-                                        };
-                                    
-                                    let universal_vote = UniversalVote {
-                                        left_entity_namespace: format!("sorter.itemset.{}", run_id_for_votes),
-                                        left_entity_pk: left_item.id.to_string(),
-                                        right_entity_namespace: format!("sorter.itemset.{}", run_id_for_votes),
-                                        right_entity_pk: right_item.id.to_string(),
-                                        user_id: ai_user_id,
-                                        magnitude: final_score,
-                                        attribute_slug: attribute_slug.clone(),
-                                        created_at: chrono::Utc::now().to_rfc3339(),
-                                    };
-                                    
-                                    {
-                                        let mut universal_votes = UNIVERSAL_VOTES.lock().unwrap();
-                                        universal_votes.push(universal_vote);
-                                    }
-                                    
-                                    sleep(Duration::from_millis(500)).await;
-                                }
-                                
-                                if changes_made {
-                                    // Recalculate rankings after this round
-                                    current_rankings = calculate_rankings(&itemset_items, &votes);
-                                    
-                                    // Send updated rankings
-                                    let _ = tx_clone.send(WsEvent::IntermediateRankings {
-                                        run_id: run_id_copy,
-                                        ranked: current_rankings.ranked.clone(),
-                                        unranked: current_rankings.unranked.clone(),
-                                    });
-                                } else {
-                                    // No new comparisons needed, we're done
-                                    break;
-                                }
-                            }
+                                        // Phase 2: Refine rankings by comparing adjacent pairs
+            log::info!("Phase 2: Refining rankings with adjacent comparisons");
+            let mut refinement_rounds = 0;
+            let max_refinement_rounds = 10;
+            
+            while refinement_rounds < max_refinement_rounds && current_rankings.ranked.len() > 1 {
+                refinement_rounds += 1;
+                let mut votes_made_this_round = false;
+                
+                // Check if all adjacent pairs in current ranking have been compared
+                let mut all_adjacent_pairs_compared = true;
+                for i in 0..(current_rankings.ranked.len() - 1) {
+                    let item_a_id = current_rankings.ranked[i].item_id;
+                    let item_b_id = current_rankings.ranked[i + 1].item_id;
+                    
+                    let has_direct_comparison = votes.iter().any(|vote| {
+                        (vote.item_a_id == item_a_id && vote.item_b_id == item_b_id) ||
+                        (vote.item_a_id == item_b_id && vote.item_b_id == item_a_id)
+                    });
+                    
+                    if !has_direct_comparison {
+                        all_adjacent_pairs_compared = false;
+                        break;
+                    }
+                }
+                
+                if all_adjacent_pairs_compared {
+                    log::info!("All adjacent pairs have been compared, ending Phase 2");
+                    break;
+                }
+                
+                // Compare adjacent pairs in current ranking
+                for i in 0..(current_rankings.ranked.len() - 1) {
+                    let item_a_id = current_rankings.ranked[i].item_id;
+                    let item_b_id = current_rankings.ranked[i + 1].item_id;
+                    
+                    let item_a = itemset_items.iter().find(|item| item.id == item_a_id).unwrap();
+                    let item_b = itemset_items.iter().find(|item| item.id == item_b_id).unwrap();
+                    
+                    // Check if we already have a direct comparison
+                    let has_direct_comparison = votes.iter().any(|vote| {
+                        (vote.item_a_id == item_a_id && vote.item_b_id == item_b_id) ||
+                        (vote.item_a_id == item_b_id && vote.item_b_id == item_a_id)
+                    });
+                    
+                    if has_direct_comparison {
+                        continue; // Skip if already compared
+                    }
+                    
+                    // Make the comparison
+                    let (score, reasoning) = match call_openrouter_api(
+                        &model,
+                        &prompt,
+                        &item_a.text,
+                        &item_b.text,
+                    ).await {
+                        Ok(result) => result,
+                        Err(e) => {
+                            log::error!("OpenRouter API error in Phase 2: {}", e);
+                            sleep(Duration::from_millis(500)).await;
+                            continue;
+                        }
+                    };
+                    
+                    let vote = Vote {
+                        item_a_id: item_a.id,
+                        item_b_id: item_b.id,
+                        score,
+                        reasoning: reasoning.clone(),
+                    };
+                    
+                    votes.push(vote.clone());
+                    votes_made_this_round = true;
+                    
+                    // Send vote update
+                    let _ = tx_clone.send(WsEvent::VoteAdded { 
+                        run_id: run_id_copy, 
+                        vote: vote.clone() 
+                    });
+                    
+                    // Store in universal format
+                    let (left_item, right_item, final_score) = 
+                        if item_a.id < item_b.id {
+                            (item_a, item_b, -score)
+                        } else {
+                            (item_b, item_a, score)
+                        };
+                    
+                    let universal_vote = UniversalVote {
+                        left_entity_namespace: format!("sorter.itemset.{}", run_id_for_votes),
+                        left_entity_pk: left_item.id.to_string(),
+                        right_entity_namespace: format!("sorter.itemset.{}", run_id_for_votes),
+                        right_entity_pk: right_item.id.to_string(),
+                        user_id: ai_user_id,
+                        magnitude: final_score,
+                        attribute_slug: attribute_slug.clone(),
+                        created_at: chrono::Utc::now().to_rfc3339(),
+                    };
+                    
+                    {
+                        let mut universal_votes = UNIVERSAL_VOTES.lock().unwrap();
+                        universal_votes.push(universal_vote);
+                    }
+                    
+                    sleep(Duration::from_millis(500)).await;
+                }
+                
+                if votes_made_this_round {
+                    // Recalculate rankings after this round
+                    current_rankings = calculate_rankings(&itemset_items, &votes);
+                    
+                    // Send updated rankings
+                    let _ = tx_clone.send(WsEvent::IntermediateRankings {
+                        run_id: run_id_copy,
+                        ranked: current_rankings.ranked.clone(),
+                        unranked: current_rankings.unranked.clone(),
+                    });
+                }
+            }
                             
                             // Calculate final rankings
                             let final_rankings = calculate_rankings(&itemset_items, &votes);
