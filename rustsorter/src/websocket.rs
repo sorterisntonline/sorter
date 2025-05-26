@@ -118,18 +118,18 @@ pub enum WsCommand {
     // Tags list page commands
     UpdateNewTagName { name: String },
     ToggleNewTagForm,
-    CreateTag,
+    CreateTag { name: String },
     
     // Tag detail page commands (current tag_id is implicit from current page)
     UpdateSelectedVoters { voter_ids: Vec<Uuid> },
     UpdateSelectedAttributes { attribute_ids: Vec<Uuid> },
     UpdateNewItemText { text: String },
-    AddItem,
+    AddItem { text: String },
     DeleteItem { item_id: Uuid },
     ToggleNewAttributeForm,
     UpdateNewAttributeLabel { label: String },
     UpdateNewAttributeTemplate { template: String },
-    CreateAttribute,
+    CreateAttribute { label: String, template: String },
     DeleteAttribute { attribute_id: Uuid },
     SortMissingPairs,
     CreateOrSelectVoter { name: String },
@@ -268,17 +268,12 @@ async fn handle_command(
             let _ = tx.send(WsEvent::PageState { state: page_state });
         }
         
-        WsCommand::CreateTag => {
-            let tag_name = {
-                let session = session_state.lock().unwrap();
-                session.tags_list_state.new_tag_name.clone()
-            };
-            
-            if !tag_name.trim().is_empty() {
+        WsCommand::CreateTag { name } => {
+            if !name.trim().is_empty() {
                 let tag_id = Uuid::new_v4();
                 let tag = Tag {
                     id: tag_id,
-                    name: tag_name.trim().to_string(),
+                    name: name.trim().to_string(),
                     created_at: chrono::Utc::now().to_rfc3339(),
                 };
                 
@@ -336,12 +331,8 @@ async fn handle_command(
             }
         }
         
-        WsCommand::AddItem => {
+        WsCommand::AddItem { text } => {
             if let Some(tag_id) = session_state.lock().unwrap().current_tag_id {
-                let text = get_tag_detail_state(&session_state, tag_id)
-                    .map(|state| state.new_item_text.clone())
-                    .unwrap_or_default();
-                
                 if !text.trim().is_empty() {
                     let item_id = Uuid::new_v4();
                     let item = Item {
@@ -352,11 +343,6 @@ async fn handle_command(
                     };
                     
                     ITEMS.lock().unwrap().insert(item_id, item);
-                    
-                    // Clear the input and refresh page
-                    update_tag_detail_state(tag_id, &session_state, |state| {
-                        state.new_item_text = String::new();
-                    });
                 }
                 
                 let page_state = build_tag_detail_page_state(tag_id, &session_state);
@@ -364,6 +350,27 @@ async fn handle_command(
             }
         }
         
+        WsCommand::CreateAttribute { label, template } => {
+            if let Some(tag_id) = session_state.lock().unwrap().current_tag_id {
+                if !label.trim().is_empty() && !template.trim().is_empty() {
+                    let attr_id = Uuid::new_v4();
+                    let attribute = Attribute {
+                        id: attr_id,
+                        tag_id,
+                        label: label.trim().to_string(),
+                        template: template.trim().to_string(),
+                        created_by: Uuid::new_v4(), // TODO: use actual user ID
+                        created_at: chrono::Utc::now().to_rfc3339(),
+                    };
+                    
+                    ATTRIBUTES.lock().unwrap().insert(attr_id, attribute);
+                }
+                
+                let page_state = build_tag_detail_page_state(tag_id, &session_state);
+                let _ = tx.send(WsEvent::PageState { state: page_state });
+            }
+        }
+
         // ... other commands would be implemented similarly
         _ => {
             let _ = tx.send(WsEvent::Error { 
