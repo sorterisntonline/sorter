@@ -228,6 +228,7 @@ async fn handle_command(
     _state: &AppState,
     session_state: Arc<Mutex<SessionState>>,
 ) {
+    log::info!("handle_command: {:?}", cmd);
     match cmd {
         WsCommand::NavigateToTagsList => {
             let tags = {

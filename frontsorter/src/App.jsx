@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import './App.css'
 
 import { useWebSocketContext } from './contexts/WebSocketContext';
-import TagsListPage from './pages/TagsListPage';
-import TagDetailPage from './pages/TagDetailPage';
 
 function App() {
     const { isConnected, lastMessage, sendCommand } = useWebSocketContext();
@@ -91,19 +89,10 @@ function App() {
 function TagsListPageV2({ pageState, sendCommand, isConnected }) {
     const [localNewTagName, setLocalNewTagName] = useState('');
 
-    // Sync local state with server state
-    useEffect(() => {
-        setLocalNewTagName(pageState.new_tag_name || '');
-    }, [pageState.new_tag_name]);
-
     const handleCreateTag = () => {
         if (!localNewTagName.trim() || !isConnected) return;
-        sendCommand({ cmd: 'create_tag' });
-    };
-
-    const handleNewTagNameChange = (name) => {
-        setLocalNewTagName(name);
-        sendCommand({ cmd: 'update_new_tag_name', name });
+        sendCommand({ cmd: 'create_tag', name: localNewTagName.trim() });
+        setLocalNewTagName(''); // Clear input after creating
     };
 
 
@@ -143,7 +132,7 @@ function TagsListPageV2({ pageState, sendCommand, isConnected }) {
                     <input
                         type="text"
                         value={localNewTagName}
-                        onChange={(e) => handleNewTagNameChange(e.target.value)}
+                        onChange={(e) => setLocalNewTagName(e.target.value)}
                         onKeyDown={handleKeyPress}
                         placeholder="e.g., Startup Ideas, Book Recommendations..."
                         className="topic-input"
@@ -191,10 +180,289 @@ function TagsListPageV2({ pageState, sendCommand, isConnected }) {
     );
 }
 
-function TagDetailPageV2() {
-    // For now, use the existing TagDetailPage
-    // TODO: Create a proper thin client version that uses pageState
-    return <TagDetailPage />;
+function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
+    const [localNewItemText, setLocalNewItemText] = useState('');
+    const [localNewAttributeLabel, setLocalNewAttributeLabel] = useState('');
+    const [localNewAttributeTemplate, setLocalNewAttributeTemplate] = useState('');
+
+    // Initialize local state from server state only once
+    useEffect(() => {
+        setLocalNewItemText(pageState.new_item_text || '');
+    }, [pageState.tag.id]); // Only reset when switching tags
+
+    useEffect(() => {
+        setLocalNewAttributeLabel(pageState.new_attribute_label || '');
+        setLocalNewAttributeTemplate(pageState.new_attribute_template || '');
+    }, [pageState.show_new_attribute_form]); // Only reset when form opens/closes
+
+    // Handle voting progress messages
+    const [votingProgress, setVotingProgress] = useState(null);
+    useEffect(() => {
+        if (lastMessage?.event === 'voting_progress') {
+            setVotingProgress(lastMessage);
+        }
+    }, [lastMessage]);
+
+    const handleBackToCollections = () => {
+        sendCommand({ cmd: 'navigate_to_tags_list' });
+    };
+
+    const handleAddItem = () => {
+        if (!localNewItemText.trim() || !isConnected) return;
+        sendCommand({ cmd: 'add_item', text: localNewItemText.trim() });
+        setLocalNewItemText(''); // Clear input after adding
+    };
+
+    const handleSelectedVotersChange = (voterIds) => {
+        sendCommand({ cmd: 'update_selected_voters', voter_ids: voterIds });
+    };
+
+    const handleSelectedAttributesChange = (attributeIds) => {
+        sendCommand({ cmd: 'update_selected_attributes', attribute_ids: attributeIds });
+    };
+
+    const handleSortMissingPairs = () => {
+        if (!isConnected || pageState.missing_comparisons.length === 0) return;
+        sendCommand({ cmd: 'sort_missing_pairs' });
+    };
+
+    const handleToggleNewAttributeForm = () => {
+        sendCommand({ cmd: 'toggle_new_attribute_form' });
+    };
+
+    const handleCreateAttribute = () => {
+        if (!localNewAttributeLabel.trim() || !localNewAttributeTemplate.trim() || !isConnected) return;
+        sendCommand({ 
+            cmd: 'create_attribute', 
+            label: localNewAttributeLabel.trim(),
+            template: localNewAttributeTemplate.trim()
+        });
+        // Clear form after creating
+        setLocalNewAttributeLabel('');
+        setLocalNewAttributeTemplate('');
+    };
+
+    const handleCreateOrSelectVoter = (name) => {
+        sendCommand({ cmd: 'create_or_select_voter', name });
+    };
+
+    const handleKeyPress = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleAddItem();
+        }
+    };
+
+    // Sort voters: those with votes first, then alphabetically
+    const sortedVoters = [...pageState.voters]
+        .filter(v => v.is_ai)
+        .sort((a, b) => {
+            const aHasVotes = pageState.voters_with_votes.includes(a.id);
+            const bHasVotes = pageState.voters_with_votes.includes(b.id);
+            
+            if (aHasVotes && !bHasVotes) return -1;
+            if (!aHasVotes && bHasVotes) return 1;
+            return a.name.localeCompare(b.name);
+        });
+
+    return (
+        <div className="sorter-page">
+            <div className="content">
+                <section>
+                    <div className="page-header">
+                        <div className="connection-status">
+                            <div className={`status-indicator ${isConnected ? 'status-connected' : 'status-disconnected'}`} />
+                            <span className="status-text">
+                                {isConnected ? 'Connected' : 'Disconnected'}
+                            </span>
+                        </div>
+                        <button
+                            onClick={handleBackToCollections}
+                            className="back-link"
+                        >
+                            ← Back to Collections
+                        </button>
+                    </div>
+
+                    <h1>{pageState.tag.name}</h1>
+                    <p className="sorter-label">COLLECTION • {pageState.items.length} ITEMS</p>
+
+                    <div className="job-control-panel">
+                        <h2>Whose preferences to explore:</h2>
+                        <div style={{ marginBottom: '1.5em' }}>
+                            <span className="sorter-label">SELECT AI MODELS</span>
+                            <div style={{ marginTop: '0.5em', marginBottom: '1em' }}>
+                                <select
+                                    multiple
+                                    value={pageState.selected_voters}
+                                    onChange={(e) => {
+                                        const selected = Array.from(e.target.selectedOptions, option => option.value);
+                                        handleSelectedVotersChange(selected);
+                                    }}
+                                    className="model-selector"
+                                    style={{ width: '100%', minHeight: '100px' }}
+                                >
+                                    {sortedVoters.map(voter => (
+                                        <option key={voter.id} value={voter.id}>
+                                            @{voter.name} {pageState.voters_with_votes.includes(voter.id) ? '✓' : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                                <input
+                                    type="text"
+                                    placeholder="Type model name to create new voter..."
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && e.target.value.trim()) {
+                                            handleCreateOrSelectVoter(e.target.value.trim());
+                                            e.target.value = '';
+                                        }
+                                    }}
+                                    className="topic-input"
+                                    style={{ marginTop: '0.5em' }}
+                                />
+                            </div>
+                        </div>
+
+                        <h2>Through which lens:</h2>
+                        <div style={{ marginBottom: '1.5em' }}>
+                            <span className="sorter-label">EVALUATION PROMPTS</span>
+                            <div style={{ marginTop: '0.5em' }}>
+                                <select
+                                    value={pageState.selected_attributes[0] || ''}
+                                    onChange={(e) => {
+                                        const attributeIds = e.target.value ? [e.target.value] : [];
+                                        handleSelectedAttributesChange(attributeIds);
+                                    }}
+                                    className="attribute-selector"
+                                    style={{ width: '100%' }}
+                                >
+                                    <option value="">Select evaluation prompt...</option>
+                                    {pageState.attributes.map(attr => (
+                                        <option key={attr.id} value={attr.id}>
+                                            {attr.label}
+                                        </option>
+                                    ))}
+                                </select>
+                                <button
+                                    onClick={handleToggleNewAttributeForm}
+                                    className="back-link"
+                                    style={{ marginTop: '0.5em', display: 'inline-block' }}
+                                >
+                                    + Create New Prompt
+                                </button>
+                            </div>
+                        </div>
+
+                        {pageState.missing_comparisons.length > 0 && 
+                         pageState.selected_voters.length > 0 && 
+                         pageState.selected_attributes.length > 0 && (
+                            <div className="voting-status" style={{ marginBottom: '1em' }}>
+                                🔄 {pageState.missing_comparisons.length} missing comparisons
+                                {votingProgress && (
+                                    <span style={{ marginLeft: '1em' }}>
+                                        ({votingProgress.completed}/{votingProgress.total})
+                                    </span>
+                                )}
+                            </div>
+                        )}
+
+                        <button
+                            onClick={handleSortMissingPairs}
+                            disabled={!isConnected || pageState.is_voting_in_progress || 
+                                     pageState.missing_comparisons.length === 0 || 
+                                     pageState.selected_voters.length === 0 || 
+                                     pageState.selected_attributes.length === 0}
+                            className="voting-button start-voting"
+                        >
+                            {pageState.is_voting_in_progress ? '⏳ Sorting...' : `Sort ${pageState.missing_comparisons.length} missing pairs`}
+                        </button>
+                    </div>
+
+                    {pageState.show_new_attribute_form && (
+                        <div className="job-control-panel" style={{ marginTop: '2em' }}>
+                            <h3>Create new evaluation prompt:</h3>
+                            
+                            <input
+                                type="text"
+                                value={localNewAttributeLabel}
+                                onChange={(e) => setLocalNewAttributeLabel(e.target.value)}
+                                placeholder="Prompt name (e.g., Aesthetic Soul)"
+                                className="topic-input"
+                                style={{ marginBottom: '0.5em' }}
+                            />
+                            <textarea
+                                value={localNewAttributeTemplate}
+                                onChange={(e) => setLocalNewAttributeTemplate(e.target.value)}
+                                placeholder="Enter your prompt template. Use {{A}} and {{B}} as placeholders..."
+                                className="topic-input"
+                                rows="10"
+                            />
+                            <div style={{ display: 'flex', gap: '1em' }}>
+                                <button
+                                    onClick={handleCreateAttribute}
+                                    disabled={!isConnected || !localNewAttributeLabel.trim() || !localNewAttributeTemplate.trim()}
+                                    className="primary-button"
+                                >
+                                    Create Prompt
+                                </button>
+                                <button
+                                    onClick={handleToggleNewAttributeForm}
+                                    className="back-link"
+                                    style={{ padding: '0.75em 1.5em' }}
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </section>
+            </div>
+            
+            <div className="sidebar">
+                <h2 style={{color: "black"}}>Ensemble Rankings:</h2>
+                {pageState.rankings.length === 0 ? (
+                    <div className="empty-state">
+                        <p>Add items below to see rankings</p>
+                    </div>
+                ) : (
+                    <ol className="ranked-list">
+                        {pageState.rankings.map((item) => (
+                            <li key={item.item_id} className="ranked-item">
+                                <p>{item.text}</p>
+                                <div className="item-meta">
+                                    <span className="score">
+                                        Score: {item.score.toFixed(1)}
+                                    </span>
+                                </div>
+                            </li>
+                        ))}
+                    </ol>
+                )}
+
+                <div style={{ marginTop: '3em', borderTop: '1px solid #ddd', paddingTop: '2em' }}>
+                    <h3 style={{ fontSize: '1em', marginBottom: '0.5em' }}>Add new item:</h3>
+                    <textarea
+                        value={localNewItemText}
+                        onChange={(e) => setLocalNewItemText(e.target.value)}
+                        onKeyDown={handleKeyPress}
+                        placeholder="Type or paste your text here..."
+                        className="item-textarea"
+                        rows="3"
+                        disabled={!isConnected}
+                        style={{ marginBottom: '0.5em' }}
+                    />
+                    <button
+                        className="submit-button"
+                        onClick={handleAddItem}
+                        disabled={!isConnected || !localNewItemText.trim()}
+                        style={{ width: '100%' }}
+                    >
+                        Add Item
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
 }
 
 export default App
