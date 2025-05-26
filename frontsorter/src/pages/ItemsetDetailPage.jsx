@@ -139,51 +139,7 @@ function ItemsetDetailPage() {
           <h1>{itemset.title}</h1>
           <p className="sorter-label">ITEMSET • {itemset.items.length} ITEMS</p>
 
-          <h2>Add new item:</h2>
-          <textarea
-            value={currentItem}
-            onChange={(e) => setCurrentItem(e.target.value)}
-            onKeyDown={handleKeyPress}
-            placeholder="Type or paste your text here..."
-            className="item-textarea"
-            rows="4"
-            disabled={!isConnected}
-          />
-          <button
-            className="submit-button"
-            onClick={handleAddItem}
-            disabled={!isConnected || !currentItem.trim()}
-          >
-            Add Item
-          </button>
-
-          <h2>Items in this set:</h2>
-          {itemset.items.length === 0 ? (
-            <div className="empty-state">
-              <p>No items yet. Add some text above!</p>
-            </div>
-          ) : (
-            <ol className="ranked-list">
-              {itemset.items.map((item) => (
-                <li key={item.id} className="ranked-item">
-                  <p>{item.text}</p>
-                  <div className="item-meta">
-                    <a
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        handleDeleteItem(item.id);
-                      }}
-                    >
-                      [Delete]
-                    </a>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          )}
-
-          <div style={{ marginTop: '2em' }}>
+          <div style={{ marginTop: '2em', marginBottom: '2em' }}>
             <button
               onClick={handleStartRun}
               disabled={!isConnected || itemset.items.length < 2}
@@ -197,42 +153,91 @@ function ItemsetDetailPage() {
               </p>
             )}
           </div>
+
+          <h2>Preference Experiments:</h2>
+          {runs.length === 0 ? (
+            <div className="empty-state">
+              <p>No preference revelations yet. Explore how different minds rank these items!</p>
+            </div>
+          ) : (
+            <ul className="jobs-list" style={{ marginLeft: 0 }}>
+              {runs.map((run) => (
+                <li
+                  key={run.id}
+                  className="job-item"
+                  onClick={() => handleRunClick(run.id)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <div className="job-header">
+                    <h3 className="job-title" style={{ fontSize: '1em' }}>
+                      @{run.model || 'unknown'}
+                    </h3>
+                    <span className={`job-status job-status-${run.status}`}>
+                      {run.status}
+                    </span>
+                  </div>
+                  <div className="job-details">
+                    <p>Revealed: {new Date(run.created_at).toLocaleString()}</p>
+                    <p>{run.vote_count || 0} preferences expressed</p>
+                  </div>
+                  <div className="job-prompt">
+                    <em>"{run.prompt.substring(0, 100)}..."</em>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       </div>
       
       <div className="sidebar">
-        <h2 style={{color: "black"}}>Preference Experiments:</h2>
-        {runs.length === 0 ? (
+        <h2 style={{color: "black"}}>Items in this set:</h2>
+        
+        <div style={{ marginBottom: '1.5em' }}>
+          <h3 style={{ fontSize: '1em', marginBottom: '0.5em' }}>Add new item:</h3>
+          <textarea
+            value={currentItem}
+            onChange={(e) => setCurrentItem(e.target.value)}
+            onKeyDown={handleKeyPress}
+            placeholder="Type or paste your text here..."
+            className="item-textarea"
+            rows="3"
+            disabled={!isConnected}
+            style={{ marginBottom: '0.5em' }}
+          />
+          <button
+            className="submit-button"
+            onClick={handleAddItem}
+            disabled={!isConnected || !currentItem.trim()}
+            style={{ width: '100%' }}
+          >
+            Add Item
+          </button>
+        </div>
+
+        {itemset.items.length === 0 ? (
           <div className="empty-state">
-            <p>No preference revelations yet. Explore how different minds rank these items!</p>
+            <p>No items yet. Add some text above!</p>
           </div>
         ) : (
-          <ul className="jobs-list" style={{ marginLeft: 0 }}>
-            {runs.map((run) => (
-              <li
-                key={run.id}
-                className="job-item"
-                onClick={() => handleRunClick(run.id)}
-                style={{ cursor: 'pointer' }}
-              >
-                <div className="job-header">
-                  <h3 className="job-title" style={{ fontSize: '1em' }}>
-                    @{run.model || 'unknown'}
-                  </h3>
-                  <span className={`job-status job-status-${run.status}`}>
-                    {run.status}
-                  </span>
-                </div>
-                <div className="job-details">
-                  <p>Revealed: {new Date(run.created_at).toLocaleString()}</p>
-                  <p>{run.vote_count || 0} preferences expressed</p>
-                </div>
-                <div className="job-prompt">
-                  <em>"{run.prompt.substring(0, 100)}..."</em>
+          <ol className="ranked-list">
+            {itemset.items.map((item) => (
+              <li key={item.id} className="ranked-item">
+                <p>{item.text}</p>
+                <div className="item-meta">
+                  <a
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleDeleteItem(item.id);
+                    }}
+                  >
+                    [Delete]
+                  </a>
                 </div>
               </li>
             ))}
-          </ul>
+          </ol>
         )}
       </div>
     </div>
