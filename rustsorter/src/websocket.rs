@@ -24,9 +24,72 @@ const DEFAULT_PROMPT: &str = r#"Between A and B, which do you prefer?
 if -50 is strongly prefer A, and 50 is strongly prefer B, then your answer should be a number between -50 and 50.
 respond with some reasoning and your score. Your score will be read by this regex: /SCORE: (-?\d+)/"#;
 
+// New data structures for the refactor
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Itemset {
+    pub id: Uuid,
+    pub title: String,
+    pub items: Vec<ItemsetItem>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ItemsetItem {
+    pub id: Uuid,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Run {
+    pub id: Uuid,
+    pub itemset_id: Uuid,
+    pub prompt: String,
+    pub model: Option<String>,
+    pub status: String,
+    pub votes: Vec<Vote>,
+    pub rankings: Vec<RankedItem>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Vote {
+    pub item_a_id: Uuid,
+    pub item_b_id: Uuid,
+    pub score: i32, // -50 to 50, negative favors A, positive favors B
+    pub reasoning: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RankedItem {
+    pub item_id: Uuid,
+    pub rank: usize,
+    pub score: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ItemsetSummary {
+    pub id: Uuid,
+    pub title: String,
+    pub items: Vec<ItemsetItem>,
+    pub created_at: String,
+    pub run_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RunSummary {
+    pub id: Uuid,
+    pub itemset_id: Uuid,
+    pub model: Option<String>,
+    pub status: String,
+    pub vote_count: usize,
+    pub created_at: String,
+    pub prompt: String,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(tag = "cmd", rename_all = "snake_case")]
 pub enum WsCommand {
+    // Legacy job commands (kept for compatibility)
     CreateJob { prompt: String },
     AddItem { job_id: Uuid, text: String },
     Pause { job_id: Uuid },
@@ -38,11 +101,26 @@ pub enum WsCommand {
     SetModel { job_id: Uuid, model: String },
     StartVoting { job_id: Uuid },
     StopVoting { job_id: Uuid },
+    
+    // New itemset commands
+    CreateItemset { title: String },
+    GetItemset { itemset_id: Uuid },
+    ListItemsets,
+    AddItemToItemset { itemset_id: Uuid, text: String },
+    DeleteItemFromItemset { itemset_id: Uuid, item_id: Uuid },
+    
+    // New run commands
+    CreateRun { itemset_id: Uuid, prompt: String, model: String },
+    GetRun { run_id: Uuid },
+    ListRuns { itemset_id: Uuid },
+    StartRunVoting { run_id: Uuid },
+    StopRunVoting { run_id: Uuid },
 }
 
 #[derive(Debug, Serialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum WsEvent {
+    // Legacy events
     Connected { user_id: Option<Uuid> },
     JobCreated { job_id: Uuid, prompt: String },
     ItemAdded { job_id: Uuid, item_id: Uuid, item: Item },
@@ -57,6 +135,21 @@ pub enum WsEvent {
     VotingStopped { job_id: Uuid },
     VotingProgress { job_id: Uuid, completed: usize, total: usize },
     Error { message: String },
+    
+    // New itemset events
+    ItemsetCreated { itemset_id: Uuid },
+    ItemsetData { itemset: Itemset },
+    ItemsetsList { itemsets: Vec<ItemsetSummary> },
+    ItemAddedToItemset { itemset_id: Uuid, item_id: Uuid },
+    ItemDeletedFromItemset { itemset_id: Uuid, item_id: Uuid },
+    
+    // New run events
+    RunCreated { run_id: Uuid },
+    RunData { run: Run, itemset: Itemset },
+    RunsList { itemset_id: Uuid, runs: Vec<RunSummary> },
+    RunVotingStarted { run_id: Uuid },
+    RunVotingStopped { run_id: Uuid },
+    VotingCompleted { run_id: Uuid },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -216,6 +309,41 @@ lazy_static::lazy_static! {
         
         jobs
     }));
+    
+    static ref ITEMSETS: Arc<Mutex<HashMap<Uuid, Itemset>>> = Arc::new(Mutex::new({
+        let mut itemsets = HashMap::new();
+        
+        // Add mock itemset for testing
+        let itemset1_id = Uuid::new_v4();
+        let item1_id = Uuid::new_v4();
+        let item2_id = Uuid::new_v4();
+        let item3_id = Uuid::new_v4();
+        
+        let itemset1 = Itemset {
+            id: itemset1_id,
+            title: "Startup Ideas".to_string(),
+            items: vec![
+                ItemsetItem {
+                    id: item1_id,
+                    text: "AI-powered personal nutrition coach that creates meal plans based on your DNA".to_string(),
+                },
+                ItemsetItem {
+                    id: item2_id,
+                    text: "Blockchain-based supply chain for verifying organic food authenticity".to_string(),
+                },
+                ItemsetItem {
+                    id: item3_id,
+                    text: "VR platform for remote team building and collaboration".to_string(),
+                },
+            ],
+            created_at: chrono::Utc::now().checked_sub_signed(chrono::Duration::hours(3)).unwrap().to_rfc3339(),
+        };
+        itemsets.insert(itemset1_id, itemset1);
+        
+        itemsets
+    }));
+    
+    static ref RUNS: Arc<Mutex<HashMap<Uuid, Run>>> = Arc::new(Mutex::new(HashMap::new()));
 }
 
 pub async fn ws_handler(
@@ -550,6 +678,253 @@ async fn handle_command(
             if let Some(job) = jobs.get_mut(&job_id) {
                 job.status = "voting_stopped".to_string();
                 let _ = tx.send(WsEvent::VotingStopped { job_id });
+            }
+        }
+        
+        WsCommand::CreateItemset { title } => {
+            let itemset_id = Uuid::new_v4();
+            let itemset = Itemset {
+                id: itemset_id,
+                title,
+                items: vec![],
+                created_at: chrono::Utc::now().to_rfc3339(),
+            };
+            
+            ITEMSETS.lock().unwrap().insert(itemset_id, itemset);
+            
+            let _ = tx.send(WsEvent::ItemsetCreated { itemset_id });
+        }
+        
+        WsCommand::GetItemset { itemset_id } => {
+            let itemsets = ITEMSETS.lock().unwrap();
+            if let Some(itemset) = itemsets.get(&itemset_id) {
+                let _ = tx.send(WsEvent::ItemsetData { itemset: itemset.clone() });
+            } else {
+                let _ = tx.send(WsEvent::Error { 
+                    message: format!("Itemset {} not found", itemset_id) 
+                });
+            }
+        }
+        
+        WsCommand::ListItemsets => {
+            let itemsets = ITEMSETS.lock().unwrap();
+            let runs = RUNS.lock().unwrap();
+            
+            let summaries: Vec<ItemsetSummary> = itemsets.values().map(|itemset| {
+                let run_count = runs.values()
+                    .filter(|run| run.itemset_id == itemset.id)
+                    .count();
+                
+                ItemsetSummary {
+                    id: itemset.id,
+                    title: itemset.title.clone(),
+                    items: itemset.items.clone(),
+                    created_at: itemset.created_at.clone(),
+                    run_count,
+                }
+            }).collect();
+            
+            let _ = tx.send(WsEvent::ItemsetsList { itemsets: summaries });
+        }
+        
+        WsCommand::AddItemToItemset { itemset_id, text } => {
+            let mut itemsets = ITEMSETS.lock().unwrap();
+            if let Some(itemset) = itemsets.get_mut(&itemset_id) {
+                let item_id = Uuid::new_v4();
+                let item = ItemsetItem {
+                    id: item_id,
+                    text,
+                };
+                
+                itemset.items.push(item);
+                
+                let _ = tx.send(WsEvent::ItemAddedToItemset { 
+                    itemset_id, 
+                    item_id,
+                });
+            } else {
+                let _ = tx.send(WsEvent::Error { 
+                    message: format!("Itemset {} not found", itemset_id) 
+                });
+            }
+        }
+        
+        WsCommand::DeleteItemFromItemset { itemset_id, item_id } => {
+            let mut itemsets = ITEMSETS.lock().unwrap();
+            if let Some(itemset) = itemsets.get_mut(&itemset_id) {
+                itemset.items.retain(|item| item.id != item_id);
+                let _ = tx.send(WsEvent::ItemDeletedFromItemset { itemset_id, item_id });
+            } else {
+                let _ = tx.send(WsEvent::Error { 
+                    message: format!("Itemset {} not found", itemset_id) 
+                });
+            }
+        }
+        
+        WsCommand::CreateRun { itemset_id, prompt, model } => {
+            let itemsets = ITEMSETS.lock().unwrap();
+            if let Some(_itemset) = itemsets.get(&itemset_id) {
+                let run_id = Uuid::new_v4();
+                let run = Run {
+                    id: run_id,
+                    itemset_id,
+                    prompt,
+                    model: Some(model),
+                    status: "created".to_string(),
+                    votes: vec![],
+                    rankings: vec![],
+                    created_at: chrono::Utc::now().to_rfc3339(),
+                };
+                
+                RUNS.lock().unwrap().insert(run_id, run);
+                
+                let _ = tx.send(WsEvent::RunCreated { run_id });
+            } else {
+                let _ = tx.send(WsEvent::Error { 
+                    message: format!("Itemset {} not found", itemset_id) 
+                });
+            }
+        }
+        
+        WsCommand::GetRun { run_id } => {
+            let runs = RUNS.lock().unwrap();
+            let itemsets = ITEMSETS.lock().unwrap();
+            
+            if let Some(run) = runs.get(&run_id) {
+                if let Some(itemset) = itemsets.get(&run.itemset_id) {
+                    let _ = tx.send(WsEvent::RunData { 
+                        run: run.clone(),
+                        itemset: itemset.clone()
+                    });
+                } else {
+                    let _ = tx.send(WsEvent::Error { 
+                        message: format!("Itemset for run {} not found", run_id) 
+                    });
+                }
+            } else {
+                let _ = tx.send(WsEvent::Error { 
+                    message: format!("Run {} not found", run_id) 
+                });
+            }
+        }
+        
+        WsCommand::ListRuns { itemset_id } => {
+            let runs = RUNS.lock().unwrap();
+            
+            let summaries: Vec<RunSummary> = runs.values()
+                .filter(|run| run.itemset_id == itemset_id)
+                .map(|run| RunSummary {
+                    id: run.id,
+                    itemset_id: run.itemset_id,
+                    model: run.model.clone(),
+                    status: run.status.clone(),
+                    vote_count: run.votes.len(),
+                    created_at: run.created_at.clone(),
+                    prompt: run.prompt.clone(),
+                })
+                .collect();
+            
+            let _ = tx.send(WsEvent::RunsList { itemset_id, runs: summaries });
+        }
+        
+        WsCommand::StartRunVoting { run_id } => {
+            let mut runs = RUNS.lock().unwrap();
+            let itemsets = ITEMSETS.lock().unwrap();
+            
+            if let Some(run) = runs.get_mut(&run_id) {
+                if let Some(itemset) = itemsets.get(&run.itemset_id) {
+                    run.status = "voting_in_progress".to_string();
+                    let _ = tx.send(WsEvent::RunVotingStarted { run_id });
+                    
+                    // Start mock voting process
+                    if itemset.items.len() >= 2 {
+                        let tx_clone = tx.clone();
+                        let run_id_copy = run_id;
+                        let itemset_items = itemset.items.clone();
+                        drop(runs);
+                        drop(itemsets);
+                        
+                        tokio::spawn(async move {
+                            sleep(Duration::from_millis(1000)).await;
+                            
+                            let mut runs = RUNS.lock().unwrap();
+                            if let Some(run) = runs.get_mut(&run_id_copy) {
+                                // Generate all pairwise comparisons
+                                let mut votes = Vec::new();
+                                let mut rankings = Vec::new();
+                                
+                                for i in 0..itemset_items.len() {
+                                    for j in (i + 1)..itemset_items.len() {
+                                        let score = (rand::random::<f64>() * 100.0 - 50.0) as i32;
+                                        
+                                        votes.push(Vote {
+                                            item_a_id: itemset_items[i].id,
+                                            item_b_id: itemset_items[j].id,
+                                            score,
+                                            reasoning: get_mock_reasoning(&itemset_items[i].text, &itemset_items[j].text, score),
+                                        });
+                                    }
+                                }
+                                
+                                // Calculate rankings based on votes
+                                let mut item_scores: HashMap<Uuid, f64> = HashMap::new();
+                                
+                                for item in &itemset_items {
+                                    let mut total_score = 0.0;
+                                    let mut vote_count = 0;
+                                    
+                                    for vote in &votes {
+                                        if vote.item_a_id == item.id {
+                                            total_score -= vote.score as f64;
+                                            vote_count += 1;
+                                        } else if vote.item_b_id == item.id {
+                                            total_score += vote.score as f64;
+                                            vote_count += 1;
+                                        }
+                                    }
+                                    
+                                    let avg_score = if vote_count > 0 {
+                                        50.0 + (total_score / vote_count as f64)
+                                    } else {
+                                        50.0
+                                    };
+                                    
+                                    item_scores.insert(item.id, avg_score);
+                                }
+                                
+                                // Create rankings
+                                let mut sorted_items: Vec<_> = item_scores.iter().collect();
+                                sorted_items.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap());
+                                
+                                for (rank, (item_id, score)) in sorted_items.iter().enumerate() {
+                                    rankings.push(RankedItem {
+                                        item_id: **item_id,
+                                        rank: rank + 1,
+                                        score: **score,
+                                    });
+                                }
+                                
+                                run.votes = votes;
+                                run.rankings = rankings;
+                                run.status = "completed".to_string();
+                                
+                                let _ = tx_clone.send(WsEvent::VotingCompleted { run_id: run_id_copy });
+                            }
+                        });
+                    }
+                }
+            } else {
+                let _ = tx.send(WsEvent::Error { 
+                    message: format!("Run {} not found", run_id) 
+                });
+            }
+        }
+        
+        WsCommand::StopRunVoting { run_id } => {
+            let mut runs = RUNS.lock().unwrap();
+            if let Some(run) = runs.get_mut(&run_id) {
+                run.status = "stopped".to_string();
+                let _ = tx.send(WsEvent::RunVotingStopped { run_id });
             }
         }
     }

@@ -6,6 +6,10 @@ import TagListPage from './pages/TagListPage';
 import TagDetailPage from './pages/TagDetailPage';
 import RankPage from './pages/RankPage';
 import JobsListPage from './pages/JobsListPage';
+import ItemsetsPage from './pages/ItemsetsPage';
+import ItemsetDetailPage from './pages/ItemsetDetailPage';
+import NewRunPage from './pages/NewRunPage';
+import RunDetailPage from './pages/RunDetailPage';
 import { WebSocketTest } from './components/WebSocketTest';
 
 // Import RecentSongsFlow (commented out since we're not using it right now)
@@ -15,12 +19,21 @@ function App() {
     // Single return statement (removed the unreachable code)
     return (
         <Routes>
-            {/* Jobs list as index page */}
-            <Route path="/" element={<JobsListPage />} />
+            {/* Itemsets as the new index page */}
+            <Route path="/" element={<ItemsetsPage />} />
             
-            {/* Rank page with optional job ID */}
-            <Route path="/rank" element={<RankPage />} />
-            <Route path="/rank/:jobId" element={<RankPage />} />
+            {/* Itemset routes */}
+            <Route path="/itemsets" element={<ItemsetsPage />} />
+            <Route path="/itemsets/:itemsetId" element={<ItemsetDetailPage />} />
+            <Route path="/itemsets/:itemsetId/new-run" element={<NewRunPage />} />
+            
+            {/* Run detail page */}
+            <Route path="/runs/:runId" element={<RunDetailPage />} />
+            
+            {/* Legacy routes - redirect to itemsets */}
+            <Route path="/jobs" element={<Navigate to="/itemsets" replace />} />
+            <Route path="/rank" element={<Navigate to="/itemsets" replace />} />
+            <Route path="/rank/:jobId" element={<Navigate to="/itemsets" replace />} />
             
             {/* WebSocket test page */}
             <Route path="/ws-test" element={<WebSocketTest />} />
