@@ -158,6 +158,8 @@ pub enum WsEvent {
     RunVotingStarted { run_id: Uuid },
     RunVotingStopped { run_id: Uuid },
     VotingProgress { run_id: Uuid, completed: usize, total: usize },
+    VoteAdded { run_id: Uuid, vote: Vote },
+    IntermediateRankings { run_id: Uuid, rankings: Vec<RankedItem> },
     VotingCompleted { run_id: Uuid },
     RunDeleted { run_id: Uuid },
     
@@ -510,11 +512,19 @@ async fn handle_command(
                                         }
                                     };
                                     
-                                    votes.push(Vote {
+                                    let vote = Vote {
                                         item_a_id: itemset_items[i].id,
                                         item_b_id: itemset_items[j].id,
                                         score,
                                         reasoning: reasoning.clone(),
+                                    };
+                                    
+                                    votes.push(vote.clone());
+                                    
+                                    // Send vote update
+                                    let _ = tx_clone.send(WsEvent::VoteAdded { 
+                                        run_id: run_id_copy, 
+                                        vote: vote.clone() 
                                     });
                                     
                                     // Store in universal format
@@ -543,49 +553,20 @@ async fn handle_command(
                                         universal_votes.push(universal_vote);
                                     }
                                     
+                                    // Calculate intermediate rankings
+                                    let intermediate_rankings = calculate_rankings(&itemset_items, &votes);
+                                    let _ = tx_clone.send(WsEvent::IntermediateRankings {
+                                        run_id: run_id_copy,
+                                        rankings: intermediate_rankings,
+                                    });
+                                    
                                     // Add delay to avoid rate limiting
                                     sleep(Duration::from_millis(500)).await;
                                 }
                             }
                             
-                            // Calculate rankings based on votes
-                            let mut item_scores: HashMap<Uuid, f64> = HashMap::new();
-                            
-                            for item in &itemset_items {
-                                let mut total_score = 0.0;
-                                let mut vote_count = 0;
-                                
-                                for vote in &votes {
-                                    if vote.item_a_id == item.id {
-                                        total_score -= vote.score as f64;
-                                        vote_count += 1;
-                                    } else if vote.item_b_id == item.id {
-                                        total_score += vote.score as f64;
-                                        vote_count += 1;
-                                    }
-                                }
-                                
-                                let avg_score = if vote_count > 0 {
-                                    50.0 + (total_score / vote_count as f64)
-                                } else {
-                                    50.0
-                                };
-                                
-                                item_scores.insert(item.id, avg_score);
-                            }
-                            
-                            // Create rankings
-                            let mut sorted_items: Vec<_> = item_scores.iter().collect();
-                            sorted_items.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap());
-                            
-                            let mut rankings = Vec::new();
-                            for (rank, (item_id, score)) in sorted_items.iter().enumerate() {
-                                rankings.push(RankedItem {
-                                    item_id: **item_id,
-                                    rank: rank + 1,
-                                    score: **score,
-                                });
-                            }
+                            // Calculate final rankings
+                            let rankings = calculate_rankings(&itemset_items, &votes);
                             
                             // Update run with results
                             {
@@ -679,6 +660,48 @@ fn get_mock_reasoning(item_a: &str, item_b: &str, score: i32) -> String {
     
     let template = reasoning_templates[rand::random::<usize>() % reasoning_templates.len()];
     template.to_string()
+}
+
+fn calculate_rankings(items: &[ItemsetItem], votes: &[Vote]) -> Vec<RankedItem> {
+    let mut item_scores: HashMap<Uuid, f64> = HashMap::new();
+    
+    for item in items {
+        let mut total_score = 0.0;
+        let mut vote_count = 0;
+        
+        for vote in votes {
+            if vote.item_a_id == item.id {
+                total_score -= vote.score as f64;
+                vote_count += 1;
+            } else if vote.item_b_id == item.id {
+                total_score += vote.score as f64;
+                vote_count += 1;
+            }
+        }
+        
+        let avg_score = if vote_count > 0 {
+            50.0 + (total_score / vote_count as f64)
+        } else {
+            50.0
+        };
+        
+        item_scores.insert(item.id, avg_score);
+    }
+    
+    // Create rankings
+    let mut sorted_items: Vec<_> = item_scores.iter().collect();
+    sorted_items.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap());
+    
+    let mut rankings = Vec::new();
+    for (rank, (item_id, score)) in sorted_items.iter().enumerate() {
+        rankings.push(RankedItem {
+            item_id: **item_id,
+            rank: rank + 1,
+            score: **score,
+        });
+    }
+    
+    rankings
 }
 
 async fn call_openrouter_api(
