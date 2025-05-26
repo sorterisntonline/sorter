@@ -3,6 +3,7 @@ import './App.css'
 
 import TagsListPage from './pages/TagsListPage';
 import TagDetailPage from './pages/TagDetailPage';
+import TagDetailPageV2 from './pages/TagDetailPageV2';
 
 function App() {
     return (
