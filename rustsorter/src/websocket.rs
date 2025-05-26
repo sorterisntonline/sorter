@@ -487,46 +487,159 @@ async fn handle_command(
                                     .clone()
                             };
                             
-                            // Generate all pairwise comparisons
+                            // Adaptive voting algorithm
                             let mut votes = Vec::new();
-                            let total_pairs = itemset_items.len() * (itemset_items.len() - 1) / 2;
-                            let mut completed_pairs = 0;
+                            let mut current_rankings = calculate_rankings(&itemset_items, &votes);
                             
-                            for i in 0..itemset_items.len() {
-                                for j in (i + 1)..itemset_items.len() {
-                                    // Send progress update
-                                    completed_pairs += 1;
-                                    let progress_event = WsEvent::VotingProgress { 
-                                        run_id: run_id_copy,
-                                        completed: completed_pairs,
-                                        total: total_pairs,
+                            // Phase 1: Connect unsorted items to sorted items
+                            log::info!("Phase 1: Connecting unsorted items to sorted items");
+                            let mut iteration = 0;
+                            let max_iterations = 100; // Safety limit
+                            
+                            while !current_rankings.unranked.is_empty() && iteration < max_iterations {
+                                iteration += 1;
+                                
+                                // Pick random item from unranked
+                                let unranked_idx = rand::random::<usize>() % current_rankings.unranked.len();
+                                let unranked_item_id = current_rankings.unranked[unranked_idx].item_id;
+                                let unranked_item = itemset_items.iter().find(|item| item.id == unranked_item_id).unwrap();
+                                
+                                // Pick random item from ranked (or any item if none ranked yet)
+                                let ranked_item = if current_rankings.ranked.is_empty() {
+                                    // If no ranked items yet, pick another unranked item
+                                    let other_unranked: Vec<_> = current_rankings.unranked.iter()
+                                        .filter(|item| item.item_id != unranked_item_id)
+                                        .collect();
+                                    if other_unranked.is_empty() {
+                                        break; // Only one item left
+                                    }
+                                    let other_idx = rand::random::<usize>() % other_unranked.len();
+                                    let other_item_id = other_unranked[other_idx].item_id;
+                                    itemset_items.iter().find(|item| item.id == other_item_id).unwrap()
+                                } else {
+                                    let ranked_idx = rand::random::<usize>() % current_rankings.ranked.len();
+                                    let ranked_item_id = current_rankings.ranked[ranked_idx].item_id;
+                                    itemset_items.iter().find(|item| item.id == ranked_item_id).unwrap()
+                                };
+                                
+                                // Make the comparison
+                                let (score, reasoning) = match call_openrouter_api(
+                                    &model,
+                                    &prompt,
+                                    &unranked_item.text,
+                                    &ranked_item.text,
+                                ).await {
+                                    Ok(result) => result,
+                                    Err(e) => {
+                                        log::error!("OpenRouter API error in Phase 1: {}", e);
+                                        sleep(Duration::from_millis(500)).await;
+                                        continue;
+                                    }
+                                };
+                                
+                                let vote = Vote {
+                                    item_a_id: unranked_item.id,
+                                    item_b_id: ranked_item.id,
+                                    score,
+                                    reasoning: reasoning.clone(),
+                                };
+                                
+                                votes.push(vote.clone());
+                                
+                                // Send vote update
+                                let _ = tx_clone.send(WsEvent::VoteAdded { 
+                                    run_id: run_id_copy, 
+                                    vote: vote.clone() 
+                                });
+                                
+                                // Store in universal format
+                                let (left_item, right_item, final_score) = 
+                                    if unranked_item.id < ranked_item.id {
+                                        (unranked_item, ranked_item, -score)
+                                    } else {
+                                        (ranked_item, unranked_item, score)
                                     };
-                                    let _ = tx_clone.send(progress_event);
+                                
+                                let universal_vote = UniversalVote {
+                                    left_entity_namespace: format!("sorter.itemset.{}", run_id_for_votes),
+                                    left_entity_pk: left_item.id.to_string(),
+                                    right_entity_namespace: format!("sorter.itemset.{}", run_id_for_votes),
+                                    right_entity_pk: right_item.id.to_string(),
+                                    user_id: ai_user_id,
+                                    magnitude: final_score,
+                                    attribute_slug: attribute_slug.clone(),
+                                    created_at: chrono::Utc::now().to_rfc3339(),
+                                };
+                                
+                                {
+                                    let mut universal_votes = UNIVERSAL_VOTES.lock().unwrap();
+                                    universal_votes.push(universal_vote);
+                                }
+                                
+                                // Recalculate rankings
+                                current_rankings = calculate_rankings(&itemset_items, &votes);
+                                
+                                // Send updated rankings
+                                let _ = tx_clone.send(WsEvent::IntermediateRankings {
+                                    run_id: run_id_copy,
+                                    ranked: current_rankings.ranked.clone(),
+                                    unranked: current_rankings.unranked.clone(),
+                                });
+                                
+                                sleep(Duration::from_millis(500)).await;
+                            }
+                            
+                            // Phase 2: Refine rankings by comparing adjacent pairs
+                            log::info!("Phase 2: Refining rankings with adjacent comparisons");
+                            let mut refinement_rounds = 0;
+                            let max_refinement_rounds = 10;
+                            
+                            while refinement_rounds < max_refinement_rounds && current_rankings.ranked.len() > 1 {
+                                refinement_rounds += 1;
+                                let mut changes_made = false;
+                                
+                                // Compare adjacent pairs in current ranking
+                                for i in 0..(current_rankings.ranked.len() - 1) {
+                                    let item_a_id = current_rankings.ranked[i].item_id;
+                                    let item_b_id = current_rankings.ranked[i + 1].item_id;
                                     
-                                    // Call the actual API
+                                    let item_a = itemset_items.iter().find(|item| item.id == item_a_id).unwrap();
+                                    let item_b = itemset_items.iter().find(|item| item.id == item_b_id).unwrap();
+                                    
+                                    // Check if we already have a direct comparison
+                                    let has_direct_comparison = votes.iter().any(|vote| {
+                                        (vote.item_a_id == item_a_id && vote.item_b_id == item_b_id) ||
+                                        (vote.item_a_id == item_b_id && vote.item_b_id == item_a_id)
+                                    });
+                                    
+                                    if has_direct_comparison {
+                                        continue; // Skip if already compared
+                                    }
+                                    
+                                    // Make the comparison
                                     let (score, reasoning) = match call_openrouter_api(
                                         &model,
                                         &prompt,
-                                        &itemset_items[i].text,
-                                        &itemset_items[j].text,
+                                        &item_a.text,
+                                        &item_b.text,
                                     ).await {
                                         Ok(result) => result,
                                         Err(e) => {
-                                            log::error!("OpenRouter API error for pair {}-{}: {}", i, j, e);
-                                            // Skip this pair and continue to next
+                                            log::error!("OpenRouter API error in Phase 2: {}", e);
                                             sleep(Duration::from_millis(500)).await;
                                             continue;
                                         }
                                     };
                                     
                                     let vote = Vote {
-                                        item_a_id: itemset_items[i].id,
-                                        item_b_id: itemset_items[j].id,
+                                        item_a_id: item_a.id,
+                                        item_b_id: item_b.id,
                                         score,
                                         reasoning: reasoning.clone(),
                                     };
                                     
                                     votes.push(vote.clone());
+                                    changes_made = true;
                                     
                                     // Send vote update
                                     let _ = tx_clone.send(WsEvent::VoteAdded { 
@@ -535,12 +648,11 @@ async fn handle_command(
                                     });
                                     
                                     // Store in universal format
-                                    // Ensure canonical ordering (smaller ID first)
                                     let (left_item, right_item, final_score) = 
-                                        if itemset_items[i].id < itemset_items[j].id {
-                                            (&itemset_items[i], &itemset_items[j], -score)
+                                        if item_a.id < item_b.id {
+                                            (item_a, item_b, -score)
                                         } else {
-                                            (&itemset_items[j], &itemset_items[i], score)
+                                            (item_b, item_a, score)
                                         };
                                     
                                     let universal_vote = UniversalVote {
@@ -554,34 +666,39 @@ async fn handle_command(
                                         created_at: chrono::Utc::now().to_rfc3339(),
                                     };
                                     
-                                    // Store vote after acquiring lock
                                     {
                                         let mut universal_votes = UNIVERSAL_VOTES.lock().unwrap();
                                         universal_votes.push(universal_vote);
                                     }
                                     
-                                    // Calculate intermediate rankings
-                                    let intermediate_rankings = calculate_rankings(&itemset_items, &votes);
+                                    sleep(Duration::from_millis(500)).await;
+                                }
+                                
+                                if changes_made {
+                                    // Recalculate rankings after this round
+                                    current_rankings = calculate_rankings(&itemset_items, &votes);
+                                    
+                                    // Send updated rankings
                                     let _ = tx_clone.send(WsEvent::IntermediateRankings {
                                         run_id: run_id_copy,
-                                        ranked: intermediate_rankings.ranked,
-                                        unranked: intermediate_rankings.unranked,
+                                        ranked: current_rankings.ranked.clone(),
+                                        unranked: current_rankings.unranked.clone(),
                                     });
-                                    
-                                    // Add delay to avoid rate limiting
-                                    sleep(Duration::from_millis(500)).await;
+                                } else {
+                                    // No new comparisons needed, we're done
+                                    break;
                                 }
                             }
                             
                             // Calculate final rankings
-                            let rankings = calculate_rankings(&itemset_items, &votes);
+                            let final_rankings = calculate_rankings(&itemset_items, &votes);
                             
                             // Update run with results
                             {
                                 let mut runs = RUNS.lock().unwrap();
                                 if let Some(run) = runs.get_mut(&run_id_copy) {
                                     run.votes = votes;
-                                    run.rankings = rankings.ranked;
+                                    run.rankings = final_rankings.ranked;
                                     run.status = "completed".to_string();
                                 }
                             }

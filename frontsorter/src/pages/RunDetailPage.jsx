@@ -13,7 +13,6 @@ function RunDetailPage() {
   const [expandedVotes, setExpandedVotes] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [votingInProgress, setVotingInProgress] = useState(false);
-  const [votingProgress, setVotingProgress] = useState({ completed: 0, total: 0 });
   const [activeTab, setActiveTab] = useState('ranking');
 
   // Handle WebSocket messages
@@ -54,19 +53,9 @@ function RunDetailPage() {
         }
         break;
 
-      case 'voting_progress':
-        if (lastMessage.run_id === runId) {
-          setVotingProgress({
-            completed: lastMessage.completed,
-            total: lastMessage.total
-          });
-        }
-        break;
-
       case 'run_voting_started':
         if (lastMessage.run_id === runId) {
           setVotingInProgress(true);
-          setVotingProgress({ completed: 0, total: 0 });
         }
         break;
 
@@ -114,7 +103,6 @@ function RunDetailPage() {
       case 'voting_completed':
         if (lastMessage.run_id === runId) {
           setVotingInProgress(false);
-          setVotingProgress({ completed: 0, total: 0 });
           // Refresh run data to get final rankings
           sendCommand({ cmd: 'get_run', run_id: runId });
         }
@@ -271,18 +259,9 @@ function RunDetailPage() {
                 </button>
                 <div className="voting-status">
                   ✨ The machine contemplates...
-                  {votingProgress.total > 0 && (
-                    <div style={{ marginTop: '0.5em' }}>
-                      <progress 
-                        value={votingProgress.completed} 
-                        max={votingProgress.total}
-                        style={{ width: '100%' }}
-                      />
-                      <span style={{ fontSize: '0.875em', color: '#666' }}>
-                        {votingProgress.completed} of {votingProgress.total} comparisons
-                      </span>
-                    </div>
-                  )}
+                  <div style={{ marginTop: '0.5em', fontSize: '0.875em', color: '#666' }}>
+                    Adaptively exploring preferences...
+                  </div>
                 </div>
               </>
             )}
