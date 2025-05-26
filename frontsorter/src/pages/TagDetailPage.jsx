@@ -118,8 +118,10 @@ function TagDetailPage() {
         if (lastMessage.state.tag_id === tagId) {
           setRankings(lastMessage.state.rankings);
           setMissingComparisons(lastMessage.state.missing_comparisons);
-          setSelectedAttributes(lastMessage.state.selected_attributes);
-          setSelectedVoters(lastMessage.state.selected_voters);
+          
+          // Always update selections from server state
+          setSelectedAttributes(lastMessage.state.selected_attributes || []);
+          setSelectedVoters(lastMessage.state.selected_voters || []);
         }
         break;
 
@@ -161,8 +163,7 @@ function TagDetailPage() {
 
       case 'voter_created':
         setVoters(prev => [...prev, lastMessage.voter]);
-        // Auto-select the new voter
-        setSelectedVoters(prev => [...prev, lastMessage.voter.id]);
+        // Don't auto-select here - let the onChange handler manage selection
         break;
 
       case 'error':
@@ -170,7 +171,7 @@ function TagDetailPage() {
         setIsLoading(false);
         break;
     }
-  }, [lastMessage, tagId, selectedAttributes.length, selectedVoters, sendCommand]);
+  }, [lastMessage, tagId, selectedAttributes, selectedVoters, sendCommand]);
 
   // Load initial data
   useEffect(() => {
@@ -181,17 +182,7 @@ function TagDetailPage() {
     }
   }, [isConnected, tagId, sendCommand]);
 
-  // Update query when selections change
-  useEffect(() => {
-    if (isConnected && tagId && (selectedAttributes.length > 0 || selectedVoters.length > 0)) {
-      sendCommand({
-        cmd: 'update_query',
-        tag_id: tagId,
-        attribute_ids: selectedAttributes,
-        voter_ids: selectedVoters
-      });
-    }
-  }, [isConnected, tagId, selectedAttributes, selectedVoters, sendCommand]);
+
 
   const handleAddItem = () => {
     if (!newItemText.trim() || !isConnected) return;
@@ -226,30 +217,7 @@ function TagDetailPage() {
     });
   };
 
-  const handleAddModelsAsVoters = (selectedOptions) => {
-    // Check which models are already voters
-    const existingVoterModels = voters.filter(v => v.is_ai).map(v => v.name);
-    
-    selectedOptions.forEach(option => {
-      const modelId = option.value;
-      
-      // Skip if already exists
-      if (existingVoterModels.includes(modelId)) {
-        // Find the existing voter and select it
-        const existingVoter = voters.find(v => v.name === modelId);
-        if (existingVoter && !selectedVoters.includes(existingVoter.id)) {
-          setSelectedVoters(prev => [...prev, existingVoter.id]);
-        }
-      } else {
-        // Create new AI voter
-        sendCommand({
-          cmd: 'create_human_voter',
-          name: modelId
-        });
-        // Note: The voter will be created as human but backend should recognize it as AI by the name pattern
-      }
-    });
-  };
+
 
   if (isLoading) {
     return (
@@ -380,14 +348,33 @@ function TagDetailPage() {
                   loadOptions={loadModelOptions}
                   value={voterOptions.filter(opt => selectedVoters.includes(opt.value))}
                   onChange={(selectedOptions) => {
-                    // First, handle adding new models as voters
-                    handleAddModelsAsVoters(selectedOptions);
+                    // Get the currently selected model names
+                    const selectedModelNames = selectedOptions.map(opt => opt.value);
                     
-                    // Then update selected voters
-                    const voterIds = selectedOptions
-                      .map(opt => voterOptions.find(v => v.label === opt.label)?.value)
-                      .filter(Boolean);
-                    setSelectedVoters(voterIds);
+                    // Find which models need to be created as voters
+                    const existingVoterNames = voters.filter(v => v.is_ai).map(v => v.name);
+                    const modelsToCreate = selectedModelNames.filter(name => !existingVoterNames.includes(name));
+                    
+                    // Create new voters for models that don't exist yet
+                    modelsToCreate.forEach(modelName => {
+                      sendCommand({
+                        cmd: 'create_human_voter',
+                        name: modelName
+                      });
+                    });
+                    
+                    // Get voter IDs for selected models that already exist
+                    const voterIds = voters
+                      .filter(v => v.is_ai && selectedModelNames.includes(v.name))
+                      .map(v => v.id);
+                    
+                    // Send update query with selected voter IDs
+                    sendCommand({
+                      cmd: 'update_query',
+                      tag_id: tagId,
+                      attribute_ids: selectedAttributes,
+                      voter_ids: voterIds
+                    });
                   }}
                   placeholder="Type to search AI models..."
                   styles={selectStyles}
@@ -416,7 +403,15 @@ function TagDetailPage() {
                   options={attributeOptions}
                   value={attributeOptions.filter(opt => selectedAttributes.includes(opt.value))}
                   onChange={(selectedOptions) => {
-                    setSelectedAttributes(selectedOptions.map(opt => opt.value));
+                    const attributeIds = selectedOptions.map(opt => opt.value);
+                    
+                    // Send update query with new attribute selection
+                    sendCommand({
+                      cmd: 'update_query',
+                      tag_id: tagId,
+                      attribute_ids: attributeIds,
+                      voter_ids: selectedVoters
+                    });
                   }}
                   placeholder="Select evaluation prompts..."
                   styles={selectStyles}
