@@ -13,6 +13,7 @@ function RunDetailPage() {
   const [expandedVotes, setExpandedVotes] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [votingInProgress, setVotingInProgress] = useState(false);
+  const [activeTab, setActiveTab] = useState('ranking');
 
   // Handle WebSocket messages
   useEffect(() => {
@@ -207,75 +208,141 @@ function RunDetailPage() {
       </div>
       
       <div className="sidebar">
-        <h2 style={{color: "black"}}>Revealed Preferences:</h2>
-        {rankedItems.length === 0 ? (
-          <div className="empty-state">
-            <p>No preferences revealed yet. Begin the revelation to explore this mind's taste.</p>
+        <div className="tab-panel">
+          <div className="tab-buttons">
+            <button
+              className={`tab-button ${activeTab === 'ranking' ? 'tab-active' : ''}`}
+              onClick={() => setActiveTab('ranking')}
+            >
+              Revealed Preferences
+            </button>
+            <button
+              className={`tab-button ${activeTab === 'votes' ? 'tab-active' : ''}`}
+              onClick={() => setActiveTab('votes')}
+            >
+              All Votes ({run?.votes?.length || 0})
+            </button>
           </div>
-        ) : (
-          <ol className="ranked-list">
-            <AnimatePresence mode="popLayout">
-              {rankedItems.map((item, index) => (
-                <motion.li 
-                  key={item.id} 
-                  className="ranked-item"
-                  layout
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                  transition={{ 
-                    type: "spring",
-                    stiffness: 500,
-                    damping: 30,
-                    opacity: { duration: 0.1 }
-                  }}
-                >
-                  <p>{item.text}</p>
-                  <div className="item-meta">
-                    <span className="score">Score: {item.score.toFixed(1)}</span>
-                    <a
-                      href="#"
-                      className={expandedVotes === index ? 'visited' : ''}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setExpandedVotes(expandedVotes === index ? null : index);
+        </div>
+
+        {activeTab === 'ranking' ? (
+          <>
+            <h2 style={{color: "black"}}>Revealed Preferences:</h2>
+            {rankedItems.length === 0 ? (
+              <div className="empty-state">
+                <p>No preferences revealed yet. Begin the revelation to explore this mind's taste.</p>
+              </div>
+            ) : (
+              <ol className="ranked-list">
+                <AnimatePresence mode="popLayout">
+                  {rankedItems.map((item, index) => (
+                    <motion.li 
+                      key={item.id} 
+                      className="ranked-item"
+                      layout
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 20 }}
+                      transition={{ 
+                        type: "spring",
+                        stiffness: 500,
+                        damping: 30,
+                        opacity: { duration: 0.1 }
                       }}
                     >
-                      [{item.votes ? item.votes.length : 0} votes]
-                    </a>
-                  </div>
-                  <AnimatePresence>
-                    {expandedVotes === index && item.votes && item.votes.length > 0 && (
-                      <motion.div 
-                        className="vote-history"
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.2 }}
-                      >
-                        <h4 className="vote-history-title">The Mind's Reasoning:</h4>
-                        {item.votes.map((vote, voteIndex) => (
-                          <div key={voteIndex} className="vote-record">
-                            <div className="vote-opponent">
-                              compared to: "{vote.against_item_text.length > 50 ? 
-                                vote.against_item_text.substring(0, 50) + '...' : 
-                                vote.against_item_text}"
-                            </div>
-                            <div className="vote-score">
-                              Preference: {vote.score > 0 ? '+' : ''}{vote.score}
-                            </div>
-                            <div className="vote-reasoning">
-                              <em>"{vote.reasoning}"</em>
-                            </div>
-                          </div>
-                        ))}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </motion.li>
-              ))}
-            </AnimatePresence>
-          </ol>
+                      <p>{item.text}</p>
+                      <div className="item-meta">
+                        <span className="score">Score: {item.score.toFixed(1)}</span>
+                        <a
+                          href="#"
+                          className={expandedVotes === index ? 'visited' : ''}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setExpandedVotes(expandedVotes === index ? null : index);
+                          }}
+                        >
+                          [{item.votes ? item.votes.length : 0} votes]
+                        </a>
+                      </div>
+                      <AnimatePresence>
+                        {expandedVotes === index && item.votes && item.votes.length > 0 && (
+                          <motion.div 
+                            className="vote-history"
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.2 }}
+                          >
+                            <h4 className="vote-history-title">The Mind's Reasoning:</h4>
+                            {item.votes.map((vote, voteIndex) => (
+                              <div key={voteIndex} className="vote-record">
+                                <div className="vote-opponent">
+                                  compared to: "{vote.against_item_text.length > 50 ? 
+                                    vote.against_item_text.substring(0, 50) + '...' : 
+                                    vote.against_item_text}"
+                                </div>
+                                <div className="vote-score">
+                                  Preference: {vote.score > 0 ? '+' : ''}{vote.score}
+                                </div>
+                                <div className="vote-reasoning">
+                                  <em>"{vote.reasoning}"</em>
+                                </div>
+                              </div>
+                            ))}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </motion.li>
+                  ))}
+                </AnimatePresence>
+              </ol>
+            )}
+          </>
+        ) : (
+          <>
+            <h2 style={{color: "black"}}>All Votes:</h2>
+            {run?.votes?.length === 0 ? (
+              <div className="empty-state">
+                <p>No votes recorded yet.</p>
+              </div>
+            ) : (
+              <div className="votes-list">
+                {run?.votes?.map((vote, index) => {
+                  const itemA = itemset?.items.find(item => item.id === vote.item_a_id);
+                  const itemB = itemset?.items.find(item => item.id === vote.item_b_id);
+                  
+                  return (
+                    <div key={index} className="vote-card">
+                      <div className="vote-comparison">
+                        <div className="vote-item">
+                          <span className="vote-label">A:</span>
+                          <p className="vote-text">"{itemA?.text || 'Unknown item'}"</p>
+                        </div>
+                        <div className="vote-versus">vs</div>
+                        <div className="vote-item">
+                          <span className="vote-label">B:</span>
+                          <p className="vote-text">"{itemB?.text || 'Unknown item'}"</p>
+                        </div>
+                      </div>
+                      <div className="vote-result">
+                        <div className="vote-score-display">
+                          <span className="vote-direction">
+                            {vote.score < 0 ? '← Prefers A' : vote.score > 0 ? 'Prefers B →' : 'Neutral'}
+                          </span>
+                          <span className="vote-magnitude">
+                            Score: {vote.score > 0 ? '+' : ''}{vote.score}
+                          </span>
+                        </div>
+                        <div className="vote-reasoning">
+                          <em>"{vote.reasoning}"</em>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
