@@ -76,8 +76,6 @@ pub struct MissingComparison {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TagsListPageState {
     pub tags: Vec<Tag>,
-    pub new_tag_name: String,
-    pub show_new_tag_form: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -94,9 +92,6 @@ pub struct TagDetailPageState {
     pub selected_voters: Vec<Uuid>,
     pub is_voting_in_progress: bool,
     pub show_new_attribute_form: bool,
-    pub new_item_text: String,
-    pub new_attribute_label: String,
-    pub new_attribute_template: String,
 }
 
 // Union of all possible page states
@@ -116,19 +111,14 @@ pub enum WsCommand {
     NavigateToTagDetail { tag_id: Uuid },
     
     // Tags list page commands
-    UpdateNewTagName { name: String },
-    ToggleNewTagForm,
     CreateTag { name: String },
     
     // Tag detail page commands (current tag_id is implicit from current page)
     UpdateSelectedVoters { voter_ids: Vec<Uuid> },
     UpdateSelectedAttributes { attribute_ids: Vec<Uuid> },
-    UpdateNewItemText { text: String },
     AddItem { text: String },
     DeleteItem { item_id: Uuid },
     ToggleNewAttributeForm,
-    UpdateNewAttributeLabel { label: String },
-    UpdateNewAttributeTemplate { template: String },
     CreateAttribute { label: String, template: String },
     DeleteAttribute { attribute_id: Uuid },
     SortMissingPairs,
@@ -168,8 +158,6 @@ impl SessionState {
             current_tag_id: None,
             tags_list_state: TagsListPageState {
                 tags: Vec::new(),
-                new_tag_name: String::new(),
-                show_new_tag_form: false,
             },
         }
     }
@@ -249,25 +237,6 @@ async fn handle_command(
             let _ = tx.send(WsEvent::PageState { state: page_state });
         }
         
-        WsCommand::UpdateNewTagName { name } => {
-            let mut session = session_state.lock().unwrap();
-            session.tags_list_state.new_tag_name = name;
-            
-            let page_state = PageState::TagsList(session.tags_list_state.clone());
-            let _ = tx.send(WsEvent::PageState { state: page_state });
-        }
-        
-        WsCommand::ToggleNewTagForm => {
-            let mut session = session_state.lock().unwrap();
-            session.tags_list_state.show_new_tag_form = !session.tags_list_state.show_new_tag_form;
-            if session.tags_list_state.show_new_tag_form {
-                session.tags_list_state.new_tag_name = String::new();
-            }
-            
-            let page_state = PageState::TagsList(session.tags_list_state.clone());
-            let _ = tx.send(WsEvent::PageState { state: page_state });
-        }
-        
         WsCommand::CreateTag { name } => {
             if !name.trim().is_empty() {
                 let tag_id = Uuid::new_v4();
@@ -299,7 +268,12 @@ async fn handle_command(
         
         // Tag detail page commands
         WsCommand::UpdateSelectedVoters { voter_ids } => {
-            if let Some(tag_id) = session_state.lock().unwrap().current_tag_id {
+            let tag_id = {
+                let session = session_state.lock().unwrap();
+                session.current_tag_id
+            }; // Release session lock here
+            
+            if let Some(tag_id) = tag_id {
                 update_tag_detail_state(tag_id, &session_state, |state| {
                     state.selected_voters = voter_ids;
                 });
@@ -310,7 +284,12 @@ async fn handle_command(
         }
         
         WsCommand::UpdateSelectedAttributes { attribute_ids } => {
-            if let Some(tag_id) = session_state.lock().unwrap().current_tag_id {
+            let tag_id = {
+                let session = session_state.lock().unwrap();
+                session.current_tag_id
+            }; // Release session lock here
+            
+            if let Some(tag_id) = tag_id {
                 update_tag_detail_state(tag_id, &session_state, |state| {
                     state.selected_attributes = attribute_ids;
                 });
@@ -320,19 +299,13 @@ async fn handle_command(
             }
         }
         
-        WsCommand::UpdateNewItemText { text } => {
-            if let Some(tag_id) = session_state.lock().unwrap().current_tag_id {
-                update_tag_detail_state(tag_id, &session_state, |state| {
-                    state.new_item_text = text;
-                });
-                
-                let page_state = build_tag_detail_page_state(tag_id, &session_state);
-                let _ = tx.send(WsEvent::PageState { state: page_state });
-            }
-        }
-        
         WsCommand::AddItem { text } => {
-            if let Some(tag_id) = session_state.lock().unwrap().current_tag_id {
+            let tag_id = {
+                let session = session_state.lock().unwrap();
+                session.current_tag_id
+            }; // Release session lock here
+            
+            if let Some(tag_id) = tag_id {
                 if !text.trim().is_empty() {
                     let item_id = Uuid::new_v4();
                     let item = Item {
@@ -351,7 +324,12 @@ async fn handle_command(
         }
         
         WsCommand::CreateAttribute { label, template } => {
-            if let Some(tag_id) = session_state.lock().unwrap().current_tag_id {
+            let tag_id = {
+                let session = session_state.lock().unwrap();
+                session.current_tag_id
+            }; // Release session lock here
+            
+            if let Some(tag_id) = tag_id {
                 if !label.trim().is_empty() && !template.trim().is_empty() {
                     let attr_id = Uuid::new_v4();
                     let attribute = Attribute {
@@ -448,9 +426,6 @@ fn build_tag_detail_page_state(
         selected_voters: Vec::new(),
         is_voting_in_progress: false,
         show_new_attribute_form: false,
-        new_item_text: String::new(),
-        new_attribute_label: String::new(),
-        new_attribute_template: String::new(),
     };
     
     PageState::TagDetail(state)
