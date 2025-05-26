@@ -145,15 +145,15 @@ function RunDetailPage() {
             </button>
           </div>
 
-          <h1>Ranking Run Results</h1>
+          <h1>Preference Revelation</h1>
           <p className="sorter-label">
-            {itemset?.title || 'Unknown Itemset'} • {run.model || 'No model'} • {new Date(run.created_at).toLocaleString()}
+            {itemset?.title || 'Unknown Collection'} • @{run.model || 'unknown'} • {new Date(run.created_at).toLocaleString()}
           </p>
 
-          <h2>Configuration:</h2>
+          <h2>The Mind Explored:</h2>
           <div className="job-control-panel">
             <div className="job-status">
-              Model: <strong>{run.model || 'Not selected'}</strong>
+              Soul: <strong>@{run.model || 'Not selected'}</strong>
             </div>
             <div className="job-status">
               Status: <span className={`status-badge status-${run.status.replace('_', '-')}`}>
@@ -161,16 +161,17 @@ function RunDetailPage() {
               </span>
             </div>
             <div className="job-status">
-              Votes Cast: <strong>{run.votes?.length || 0}</strong>
+              Preferences Revealed: <strong>{run.votes?.length || 0}</strong>
             </div>
           </div>
 
-          <h2>Prompt:</h2>
+          <h2>The Lens Applied:</h2>
           <pre className="job-prompt" style={{ 
             whiteSpace: 'pre-wrap', 
             backgroundColor: '#f8f8f8', 
             padding: '1em',
-            border: '1px solid #ddd'
+            border: '1px solid #ddd',
+            fontStyle: 'italic'
           }}>
             {run.prompt}
           </pre>
@@ -183,7 +184,7 @@ function RunDetailPage() {
                 disabled={!isConnected || votingInProgress}
                 className="voting-button start-voting"
               >
-                Start Voting
+                Begin Revelation
               </button>
             )}
             
@@ -194,10 +195,10 @@ function RunDetailPage() {
                   disabled={!isConnected}
                   className="voting-button stop-voting"
                 >
-                  Stop Voting
+                  Pause Revelation
                 </button>
                 <div className="voting-status">
-                  🤖 AI is comparing items...
+                  ✨ The machine contemplates...
                 </div>
               </>
             )}
@@ -206,10 +207,10 @@ function RunDetailPage() {
       </div>
       
       <div className="sidebar">
-        <h2 style={{color: "black"}}>Rankings:</h2>
+        <h2 style={{color: "black"}}>Revealed Preferences:</h2>
         {rankedItems.length === 0 ? (
           <div className="empty-state">
-            <p>No rankings yet. Start voting to see results!</p>
+            <p>No preferences revealed yet. Begin the revelation to explore this mind's taste.</p>
           </div>
         ) : (
           <ol className="ranked-list">
@@ -252,19 +253,19 @@ function RunDetailPage() {
                         exit={{ opacity: 0, height: 0 }}
                         transition={{ duration: 0.2 }}
                       >
-                        <h4 className="vote-history-title">Voting History:</h4>
+                        <h4 className="vote-history-title">The Mind's Reasoning:</h4>
                         {item.votes.map((vote, voteIndex) => (
                           <div key={voteIndex} className="vote-record">
                             <div className="vote-opponent">
-                              vs. "{vote.against_item_text.length > 50 ? 
+                              compared to: "{vote.against_item_text.length > 50 ? 
                                 vote.against_item_text.substring(0, 50) + '...' : 
                                 vote.against_item_text}"
                             </div>
                             <div className="vote-score">
-                              Score: {vote.score > 0 ? '+' : ''}{vote.score}
+                              Preference: {vote.score > 0 ? '+' : ''}{vote.score}
                             </div>
                             <div className="vote-reasoning">
-                              {vote.reasoning}
+                              <em>"{vote.reasoning}"</em>
                             </div>
                           </div>
                         ))}

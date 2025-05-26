@@ -16,6 +16,41 @@ if -50 is strongly prefer A, and 50 is strongly prefer B, then your answer shoul
 respond with some reasoning and your score. Your score will be read by this regex: /SCORE: (-?\\d+)/
 `;
 
+const poeticPrompts = [
+  {
+    name: "Pure Preference",
+    prompt: defaultPrompt
+  },
+  {
+    name: "Aesthetic Soul",
+    prompt: `Which resonates more deeply with your aesthetic sensibility?
+
+<A>
+{{A}}
+</A>
+<B>
+{{B}}
+</B>
+
+Consider beauty, elegance, and emotional resonance. Express your preference from -50 (strongly A) to 50 (strongly B).
+Meditate on your choice and explain. Your score will be read by: /SCORE: (-?\\d+)/`
+  },
+  {
+    name: "Pragmatic Mind", 
+    prompt: `From a purely practical standpoint, which serves humanity better?
+
+<A>
+{{A}}
+</A>
+<B>
+{{B}}
+</B>
+
+Consider utility, efficiency, and real-world impact. Rate from -50 (strongly A) to 50 (strongly B).
+Explain your reasoning. Your score will be read by: /SCORE: (-?\\d+)/`
+  }
+];
+
 function NewRunPage() {
   const { itemsetId } = useParams();
   const navigate = useNavigate();
@@ -126,15 +161,15 @@ function NewRunPage() {
             </button>
           </div>
 
-          <h1>Configure New Ranking Run</h1>
-          <p className="sorter-label">SET UP YOUR RANKING PARAMETERS</p>
+          <h1>Reveal AI Preferences</h1>
+          <p className="sorter-label">EXPLORE THE SOUL OF THE MACHINE</p>
 
-          <h2>Model:</h2>
+          <h2>Whose preferences shall we explore?</h2>
           <div className="model-selector">
             <div className="model-input-container">
               <input
                 {...getInputProps()}
-                placeholder={modelsLoading ? "Loading models..." : "Search models..."}
+                placeholder={modelsLoading ? "Summoning available minds..." : "Search for a model..."}
                 className="model-input"
                 disabled={!isConnected || modelsLoading}
               />
@@ -150,20 +185,37 @@ function NewRunPage() {
                     {...getItemProps({ item, index })}
                     className={`model-option ${highlightedIndex === index ? 'model-option-highlighted' : ''} ${selectedItem?.id === item.id ? 'model-option-selected' : ''}`}
                   >
-                    <div className="model-id">{item.id}</div>
+                    <div className="model-id">@{item.id}</div>
                   </li>
                 ))}
             </ul>
           </div>
 
-          <h2>Prompt:</h2>
+          <h2>Through which lens?</h2>
+          
+          <div style={{ marginBottom: '1em' }}>
+            <span className="sorter-label">PROMPT TEMPLATES</span>
+            <div style={{ display: 'flex', gap: '0.5em', marginTop: '0.5em' }}>
+              {poeticPrompts.map((template) => (
+                <button
+                  key={template.name}
+                  onClick={() => setPrompt(template.prompt)}
+                  className="back-link"
+                  style={{ padding: '0.5em 1em', fontSize: '0.875em' }}
+                >
+                  {template.name}
+                </button>
+              ))}
+            </div>
+          </div>
+          
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             className="topic-input"
             rows="13"
             disabled={!isConnected}
-            placeholder="Enter your comparison prompt..."
+            placeholder="Craft your prompt to reveal deeper preferences..."
           />
 
           <div style={{ marginTop: '2em', display: 'flex', gap: '1em' }}>
@@ -172,7 +224,7 @@ function NewRunPage() {
               disabled={!isConnected || !selectedModel || !prompt.trim()}
               className="primary-button"
             >
-              Start Ranking Run
+              ✨ Begin Revelation
             </button>
             <button
               onClick={handleCancel}
@@ -185,24 +237,27 @@ function NewRunPage() {
 
           {!selectedModel && (
             <p className="warning-message">
-              ⚠️ Please select a model before starting the run
+              ⚡ Select a mind to explore
             </p>
           )}
         </section>
       </div>
       
       <div className="sidebar">
-        <h2 style={{color: "black"}}>About Ranking Runs</h2>
+        <h2 style={{color: "black"}}>The Revelation Process</h2>
         <div className="empty-state">
-          <p>A ranking run will:</p>
+          <p>We will systematically explore preferences by:</p>
           <ol style={{ textAlign: 'left', marginTop: '1em' }}>
-            <li>Use your selected model to compare all items pairwise</li>
-            <li>Apply your custom prompt to guide the comparisons</li>
-            <li>Generate a complete ranking based on the AI's preferences</li>
-            <li>Save all voting history for transparency</li>
+            <li>Presenting every possible pair from your collection</li>
+            <li>Recording not just choices, but reasoning</li>
+            <li>Building a complete preference map</li>
+            <li>Revealing the hidden structure of AI taste</li>
           </ol>
           <p style={{ marginTop: '1em' }}>
-            You can create multiple runs with different models or prompts to see how rankings change!
+            Each model, each prompt reveals a different facet of machine consciousness.
+          </p>
+          <p style={{ marginTop: '1em', fontStyle: 'italic' }}>
+            "In their preferences, we glimpse their souls."
           </p>
         </div>
       </div>

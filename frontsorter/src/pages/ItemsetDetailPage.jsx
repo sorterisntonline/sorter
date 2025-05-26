@@ -189,11 +189,11 @@ function ItemsetDetailPage() {
               disabled={!isConnected || itemset.items.length < 2}
               className="primary-button"
             >
-              Start New Ranking Run
+              ✨ Reveal Preferences
             </button>
             {itemset.items.length < 2 && (
               <p className="warning-message">
-                Add at least 2 items before starting a ranking run
+                Add at least 2 items before revealing preferences
               </p>
             )}
           </div>
@@ -201,10 +201,10 @@ function ItemsetDetailPage() {
       </div>
       
       <div className="sidebar">
-        <h2 style={{color: "black"}}>Ranking Runs:</h2>
+        <h2 style={{color: "black"}}>Preference Experiments:</h2>
         {runs.length === 0 ? (
           <div className="empty-state">
-            <p>No ranking runs yet. Start one to see how different models rank these items!</p>
+            <p>No preference revelations yet. Explore how different minds rank these items!</p>
           </div>
         ) : (
           <ul className="jobs-list" style={{ marginLeft: 0 }}>
@@ -217,18 +217,18 @@ function ItemsetDetailPage() {
               >
                 <div className="job-header">
                   <h3 className="job-title" style={{ fontSize: '1em' }}>
-                    {run.model || 'No model selected'}
+                    @{run.model || 'unknown'}
                   </h3>
                   <span className={`job-status job-status-${run.status}`}>
                     {run.status}
                   </span>
                 </div>
                 <div className="job-details">
-                  <p>Created: {new Date(run.created_at).toLocaleString()}</p>
-                  <p>{run.vote_count || 0} votes cast</p>
+                  <p>Revealed: {new Date(run.created_at).toLocaleString()}</p>
+                  <p>{run.vote_count || 0} preferences expressed</p>
                 </div>
                 <div className="job-prompt">
-                  {run.prompt.substring(0, 100)}...
+                  <em>"{run.prompt.substring(0, 100)}..."</em>
                 </div>
               </li>
             ))}

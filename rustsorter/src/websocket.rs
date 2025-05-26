@@ -10,7 +10,6 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use tokio::time::{sleep, Duration};
-use rand::seq::SliceRandom;
 
 const DEFAULT_PROMPT: &str = r#"Between A and B, which do you prefer?
 
@@ -49,6 +48,7 @@ pub struct Run {
     pub votes: Vec<Vote>,
     pub rankings: Vec<RankedItem>,
     pub created_at: String,
+    pub attribute_slug: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -102,6 +102,9 @@ pub enum WsCommand {
     ListRuns { itemset_id: Uuid },
     StartRunVoting { run_id: Uuid },
     StopRunVoting { run_id: Uuid },
+    
+    // Debug command
+    GetUniversalVotes,
 }
 
 #[derive(Debug, Serialize)]
@@ -125,6 +128,21 @@ pub enum WsEvent {
     RunVotingStarted { run_id: Uuid },
     RunVotingStopped { run_id: Uuid },
     VotingCompleted { run_id: Uuid },
+    
+    // Debug event
+    UniversalVotesList { votes: Vec<UniversalVote>, ai_users: HashMap<String, Uuid> },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UniversalVote {
+    pub left_entity_namespace: String,
+    pub left_entity_pk: String,
+    pub right_entity_namespace: String, 
+    pub right_entity_pk: String,
+    pub user_id: Uuid,
+    pub magnitude: i32,
+    pub attribute_slug: String,
+    pub created_at: String,
 }
 
 // Mock data store
@@ -163,6 +181,20 @@ lazy_static::lazy_static! {
     }));
     
     static ref RUNS: Arc<Mutex<HashMap<Uuid, Run>>> = Arc::new(Mutex::new(HashMap::new()));
+    
+    // Mock AI users - in real system these would be in the database
+    static ref AI_USERS: Arc<Mutex<HashMap<String, Uuid>>> = Arc::new(Mutex::new({
+        let mut users = HashMap::new();
+        // Pre-populate with some common models
+        users.insert("openai/gpt-4".to_string(), Uuid::new_v4());
+        users.insert("openai/gpt-4o".to_string(), Uuid::new_v4());
+        users.insert("anthropic/claude-3-opus".to_string(), Uuid::new_v4());
+        users.insert("anthropic/claude-3-sonnet".to_string(), Uuid::new_v4());
+        users
+    }));
+    
+    // Mock universal votes table
+    static ref UNIVERSAL_VOTES: Arc<Mutex<Vec<UniversalVote>>> = Arc::new(Mutex::new(Vec::new()));
 }
 
 pub async fn ws_handler(
@@ -304,6 +336,17 @@ async fn handle_command(
             let itemsets = ITEMSETS.lock().unwrap();
             if let Some(_itemset) = itemsets.get(&itemset_id) {
                 let run_id = Uuid::new_v4();
+                
+                // Generate attribute slug from prompt (first 50 chars, alphanumeric + dashes)
+                let attribute_slug = format!("{}-{}", 
+                    prompt.chars()
+                        .take(50)
+                        .map(|c| if c.is_alphanumeric() { c.to_lowercase().to_string() } else { "-".to_string() })
+                        .collect::<String>()
+                        .trim_matches('-'),
+                    chrono::Utc::now().timestamp()
+                );
+                
                 let run = Run {
                     id: run_id,
                     itemset_id,
@@ -313,6 +356,7 @@ async fn handle_command(
                     votes: vec![],
                     rankings: vec![],
                     created_at: chrono::Utc::now().to_rfc3339(),
+                    attribute_slug,
                 };
                 
                 RUNS.lock().unwrap().insert(run_id, run);
@@ -388,9 +432,17 @@ async fn handle_command(
                             
                             let mut runs = RUNS.lock().unwrap();
                             if let Some(run) = runs.get_mut(&run_id_copy) {
+                                // Get or create AI user
+                                let mut ai_users = AI_USERS.lock().unwrap();
+                                let ai_user_id = ai_users.entry(run.model.clone().unwrap_or_default())
+                                    .or_insert_with(Uuid::new_v4)
+                                    .clone();
+                                drop(ai_users);
+                                
                                 // Generate all pairwise comparisons
                                 let mut votes = Vec::new();
                                 let mut rankings = Vec::new();
+                                let mut universal_votes = UNIVERSAL_VOTES.lock().unwrap();
                                 
                                 for i in 0..itemset_items.len() {
                                     for j in (i + 1)..itemset_items.len() {
@@ -402,8 +454,30 @@ async fn handle_command(
                                             score,
                                             reasoning: get_mock_reasoning(&itemset_items[i].text, &itemset_items[j].text, score),
                                         });
+                                        
+                                        // Store in universal format
+                                        // Ensure canonical ordering (smaller ID first)
+                                        let (left_item, right_item, final_score) = 
+                                            if itemset_items[i].id < itemset_items[j].id {
+                                                (&itemset_items[i], &itemset_items[j], -score)
+                                            } else {
+                                                (&itemset_items[j], &itemset_items[i], score)
+                                            };
+                                        
+                                        universal_votes.push(UniversalVote {
+                                            left_entity_namespace: format!("sorter.itemset.{}", run.itemset_id),
+                                            left_entity_pk: left_item.id.to_string(),
+                                            right_entity_namespace: format!("sorter.itemset.{}", run.itemset_id),
+                                            right_entity_pk: right_item.id.to_string(),
+                                            user_id: ai_user_id,
+                                            magnitude: final_score,
+                                            attribute_slug: run.attribute_slug.clone(),
+                                            created_at: chrono::Utc::now().to_rfc3339(),
+                                        });
                                     }
                                 }
+                                
+                                drop(universal_votes);
                                 
                                 // Calculate rankings based on votes
                                 let mut item_scores: HashMap<Uuid, f64> = HashMap::new();
@@ -465,6 +539,16 @@ async fn handle_command(
                 run.status = "stopped".to_string();
                 let _ = tx.send(WsEvent::RunVotingStopped { run_id });
             }
+        }
+        
+        WsCommand::GetUniversalVotes => {
+            let universal_votes = UNIVERSAL_VOTES.lock().unwrap();
+            let ai_users = AI_USERS.lock().unwrap();
+            
+            let _ = tx.send(WsEvent::UniversalVotesList { 
+                votes: universal_votes.clone(),
+                ai_users: ai_users.clone(),
+            });
         }
     }
 }
