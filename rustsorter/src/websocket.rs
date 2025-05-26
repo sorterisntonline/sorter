@@ -10,6 +10,35 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use tokio::time::{sleep, Duration};
+use reqwest;
+use regex::Regex;
+
+const OPENROUTER_API_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
+
+// OpenRouter API structures
+#[derive(Debug, Serialize)]
+struct OpenRouterRequest {
+    model: String,
+    messages: Vec<OpenRouterMessage>,
+    temperature: f32,
+    max_tokens: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct OpenRouterMessage {
+    role: String,
+    content: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenRouterResponse {
+    choices: Vec<OpenRouterChoice>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenRouterChoice {
+    message: OpenRouterMessage,
+}
 
 const DEFAULT_PROMPT: &str = r#"Between A and B, which do you prefer?
 
@@ -128,6 +157,7 @@ pub enum WsEvent {
     RunsList { itemset_id: Uuid, runs: Vec<RunSummary> },
     RunVotingStarted { run_id: Uuid },
     RunVotingStopped { run_id: Uuid },
+    VotingProgress { run_id: Uuid, completed: usize, total: usize },
     VotingCompleted { run_id: Uuid },
     RunDeleted { run_id: Uuid },
     
@@ -421,7 +451,7 @@ async fn handle_command(
                     run.status = "voting_in_progress".to_string();
                     let _ = tx.send(WsEvent::RunVotingStarted { run_id });
                     
-                    // Start mock voting process
+                    // Start real voting process
                     if itemset.items.len() >= 2 {
                         let tx_clone = tx.clone();
                         let run_id_copy = run_id;
@@ -430,101 +460,144 @@ async fn handle_command(
                         drop(itemsets);
                         
                         tokio::spawn(async move {
-                            sleep(Duration::from_millis(1000)).await;
-                            
-                            let mut runs = RUNS.lock().unwrap();
-                            if let Some(run) = runs.get_mut(&run_id_copy) {
-                                // Get or create AI user
-                                let mut ai_users = AI_USERS.lock().unwrap();
-                                let ai_user_id = ai_users.entry(run.model.clone().unwrap_or_default())
-                                    .or_insert_with(Uuid::new_v4)
-                                    .clone();
-                                drop(ai_users);
-                                
-                                // Generate all pairwise comparisons
-                                let mut votes = Vec::new();
-                                let mut rankings = Vec::new();
-                                let mut universal_votes = UNIVERSAL_VOTES.lock().unwrap();
-                                
-                                for i in 0..itemset_items.len() {
-                                    for j in (i + 1)..itemset_items.len() {
-                                        let score = (rand::random::<f64>() * 100.0 - 50.0) as i32;
-                                        
-                                        votes.push(Vote {
-                                            item_a_id: itemset_items[i].id,
-                                            item_b_id: itemset_items[j].id,
-                                            score,
-                                            reasoning: get_mock_reasoning(&itemset_items[i].text, &itemset_items[j].text, score),
-                                        });
-                                        
-                                        // Store in universal format
-                                        // Ensure canonical ordering (smaller ID first)
-                                        let (left_item, right_item, final_score) = 
-                                            if itemset_items[i].id < itemset_items[j].id {
-                                                (&itemset_items[i], &itemset_items[j], -score)
-                                            } else {
-                                                (&itemset_items[j], &itemset_items[i], score)
-                                            };
-                                        
-                                        universal_votes.push(UniversalVote {
-                                            left_entity_namespace: format!("sorter.itemset.{}", run.itemset_id),
-                                            left_entity_pk: left_item.id.to_string(),
-                                            right_entity_namespace: format!("sorter.itemset.{}", run.itemset_id),
-                                            right_entity_pk: right_item.id.to_string(),
-                                            user_id: ai_user_id,
-                                            magnitude: final_score,
-                                            attribute_slug: run.attribute_slug.clone(),
-                                            created_at: chrono::Utc::now().to_rfc3339(),
-                                        });
-                                    }
+                            // Get the run details we'll need
+                            let (model, prompt, run_id_for_votes, attribute_slug) = {
+                                let runs = RUNS.lock().unwrap();
+                                if let Some(run) = runs.get(&run_id_copy) {
+                                    (run.model.clone().unwrap_or_default(), run.prompt.clone(), run.itemset_id, run.attribute_slug.clone())
+                                } else {
+                                    return;
                                 }
-                                
-                                drop(universal_votes);
-                                
-                                // Calculate rankings based on votes
-                                let mut item_scores: HashMap<Uuid, f64> = HashMap::new();
-                                
-                                for item in &itemset_items {
-                                    let mut total_score = 0.0;
-                                    let mut vote_count = 0;
+                            };
+                            
+                            // Get or create AI user
+                            let ai_user_id = {
+                                let mut ai_users = AI_USERS.lock().unwrap();
+                                ai_users.entry(model.clone())
+                                    .or_insert_with(Uuid::new_v4)
+                                    .clone()
+                            };
+                            
+                            // Generate all pairwise comparisons
+                            let mut votes = Vec::new();
+                            let total_pairs = itemset_items.len() * (itemset_items.len() - 1) / 2;
+                            let mut completed_pairs = 0;
+                            
+                            for i in 0..itemset_items.len() {
+                                for j in (i + 1)..itemset_items.len() {
+                                    // Send progress update
+                                    completed_pairs += 1;
+                                    let progress_event = WsEvent::VotingProgress { 
+                                        run_id: run_id_copy,
+                                        completed: completed_pairs,
+                                        total: total_pairs,
+                                    };
+                                    let _ = tx_clone.send(progress_event);
                                     
-                                    for vote in &votes {
-                                        if vote.item_a_id == item.id {
-                                            total_score -= vote.score as f64;
-                                            vote_count += 1;
-                                        } else if vote.item_b_id == item.id {
-                                            total_score += vote.score as f64;
-                                            vote_count += 1;
+                                    // Call the actual API
+                                    let (score, reasoning) = match call_openrouter_api(
+                                        &model,
+                                        &prompt,
+                                        &itemset_items[i].text,
+                                        &itemset_items[j].text,
+                                    ).await {
+                                        Ok(result) => result,
+                                        Err(e) => {
+                                            log::error!("OpenRouter API error: {}", e);
+                                            // Fall back to mock if API fails
+                                            let mock_score = (rand::random::<f64>() * 100.0 - 50.0) as i32;
+                                            (mock_score, format!("API Error: {}. Using mock reasoning.", e))
                                         }
-                                    }
-                                    
-                                    let avg_score = if vote_count > 0 {
-                                        50.0 + (total_score / vote_count as f64)
-                                    } else {
-                                        50.0
                                     };
                                     
-                                    item_scores.insert(item.id, avg_score);
-                                }
-                                
-                                // Create rankings
-                                let mut sorted_items: Vec<_> = item_scores.iter().collect();
-                                sorted_items.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap());
-                                
-                                for (rank, (item_id, score)) in sorted_items.iter().enumerate() {
-                                    rankings.push(RankedItem {
-                                        item_id: **item_id,
-                                        rank: rank + 1,
-                                        score: **score,
+                                    votes.push(Vote {
+                                        item_a_id: itemset_items[i].id,
+                                        item_b_id: itemset_items[j].id,
+                                        score,
+                                        reasoning: reasoning.clone(),
                                     });
+                                    
+                                    // Store in universal format
+                                    // Ensure canonical ordering (smaller ID first)
+                                    let (left_item, right_item, final_score) = 
+                                        if itemset_items[i].id < itemset_items[j].id {
+                                            (&itemset_items[i], &itemset_items[j], -score)
+                                        } else {
+                                            (&itemset_items[j], &itemset_items[i], score)
+                                        };
+                                    
+                                    let universal_vote = UniversalVote {
+                                        left_entity_namespace: format!("sorter.itemset.{}", run_id_for_votes),
+                                        left_entity_pk: left_item.id.to_string(),
+                                        right_entity_namespace: format!("sorter.itemset.{}", run_id_for_votes),
+                                        right_entity_pk: right_item.id.to_string(),
+                                        user_id: ai_user_id,
+                                        magnitude: final_score,
+                                        attribute_slug: attribute_slug.clone(),
+                                        created_at: chrono::Utc::now().to_rfc3339(),
+                                    };
+                                    
+                                    // Store vote after acquiring lock
+                                    {
+                                        let mut universal_votes = UNIVERSAL_VOTES.lock().unwrap();
+                                        universal_votes.push(universal_vote);
+                                    }
+                                    
+                                    // Add delay to avoid rate limiting
+                                    sleep(Duration::from_millis(500)).await;
+                                }
+                            }
+                            
+                            // Calculate rankings based on votes
+                            let mut item_scores: HashMap<Uuid, f64> = HashMap::new();
+                            
+                            for item in &itemset_items {
+                                let mut total_score = 0.0;
+                                let mut vote_count = 0;
+                                
+                                for vote in &votes {
+                                    if vote.item_a_id == item.id {
+                                        total_score -= vote.score as f64;
+                                        vote_count += 1;
+                                    } else if vote.item_b_id == item.id {
+                                        total_score += vote.score as f64;
+                                        vote_count += 1;
+                                    }
                                 }
                                 
-                                run.votes = votes;
-                                run.rankings = rankings;
-                                run.status = "completed".to_string();
+                                let avg_score = if vote_count > 0 {
+                                    50.0 + (total_score / vote_count as f64)
+                                } else {
+                                    50.0
+                                };
                                 
-                                let _ = tx_clone.send(WsEvent::VotingCompleted { run_id: run_id_copy });
+                                item_scores.insert(item.id, avg_score);
                             }
+                            
+                            // Create rankings
+                            let mut sorted_items: Vec<_> = item_scores.iter().collect();
+                            sorted_items.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap());
+                            
+                            let mut rankings = Vec::new();
+                            for (rank, (item_id, score)) in sorted_items.iter().enumerate() {
+                                rankings.push(RankedItem {
+                                    item_id: **item_id,
+                                    rank: rank + 1,
+                                    score: **score,
+                                });
+                            }
+                            
+                            // Update run with results
+                            {
+                                let mut runs = RUNS.lock().unwrap();
+                                if let Some(run) = runs.get_mut(&run_id_copy) {
+                                    run.votes = votes;
+                                    run.rankings = rankings;
+                                    run.status = "completed".to_string();
+                                }
+                            }
+                            
+                            let _ = tx_clone.send(WsEvent::VotingCompleted { run_id: run_id_copy });
                         });
                     }
                 }
@@ -606,6 +679,88 @@ fn get_mock_reasoning(item_a: &str, item_b: &str, score: i32) -> String {
     
     let template = reasoning_templates[rand::random::<usize>() % reasoning_templates.len()];
     template.to_string()
+}
+
+async fn call_openrouter_api(
+    model: &str,
+    prompt: &str,
+    item_a: &str,
+    item_b: &str,
+) -> Result<(i32, String), String> {
+    // Get API key from environment
+    let api_key = std::env::var("OPENROUTER_API_KEY")
+        .map_err(|_| "OPENROUTER_API_KEY not found in environment")?;
+    
+    // Format the prompt with items
+    let formatted_prompt = prompt
+        .replace("{{A}}", item_a)
+        .replace("{{B}}", item_b);
+    
+    // Create the request
+    let request = OpenRouterRequest {
+        model: model.to_string(),
+        messages: vec![
+            OpenRouterMessage {
+                role: "user".to_string(),
+                content: formatted_prompt,
+            }
+        ],
+        temperature: 0.7,
+        max_tokens: 500,
+    };
+    
+    // Make the API call
+    let client = reqwest::Client::new();
+    let response = client
+        .post(OPENROUTER_API_URL)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .header("HTTP-Referer", "https://sorter.app") // Required by OpenRouter
+        .header("X-Title", "Sorter App") // Optional but recommended
+        .json(&request)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to send request: {}", e))?;
+    
+    if !response.status().is_success() {
+        let error_text = response.text().await.unwrap_or_default();
+        return Err(format!("API request failed: {}", error_text));
+    }
+    
+    let response_data: OpenRouterResponse = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+    
+    // Extract the response content
+    let content = response_data
+        .choices
+        .first()
+        .ok_or("No choices in response")?
+        .message
+        .content
+        .clone();
+    
+    // Parse the score using regex
+    let score_regex = Regex::new(r"SCORE:\s*(-?\d+)")
+        .map_err(|e| format!("Invalid regex: {}", e))?;
+    
+    let score = score_regex
+        .captures(&content)
+        .and_then(|caps| caps.get(1))
+        .and_then(|m| m.as_str().parse::<i32>().ok())
+        .ok_or("Could not parse score from response")?;
+    
+    // Validate score is in range
+    let score = score.clamp(-50, 50);
+    
+    // Extract reasoning (everything except the SCORE line)
+    let reasoning = score_regex
+        .replace(&content, "")
+        .trim()
+        .to_string();
+    
+    Ok((score, reasoning))
 }
 
 pub fn routes() -> axum::Router<AppState> {
