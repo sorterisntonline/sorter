@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::pagerank::{EntityIdentifier, RankedEntity, RelevantVote, build_rank_graph, calculate_tommy_rank};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use tokio::time::{sleep, Duration};
@@ -41,7 +41,199 @@ struct OpenRouterChoice {
     message: OpenRouterMessage,
 }
 
-const DEFAULT_PROMPT: &str = r#"Between A and B, which do you prefer?
+// Core data structures for the new architecture
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Tag {
+    pub id: Uuid,
+    pub name: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Item {
+    pub id: Uuid,
+    pub tag_id: Uuid,
+    pub text: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Attribute {
+    pub id: Uuid,
+    pub tag_id: Uuid,
+    pub label: String,
+    pub template: String,
+    pub created_by: Uuid,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Vote {
+    pub id: i64,
+    pub tag_id: Uuid,
+    pub attribute_id: Uuid,
+    pub voter_id: Uuid,
+    pub item_a_id: Uuid,
+    pub item_b_id: Uuid,
+    pub score: i32, // -50 to 50
+    pub rationale: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Voter {
+    pub id: Uuid,
+    pub name: String,
+    pub is_ai: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RankedItem {
+    pub item_id: Uuid,
+    pub rank: usize,
+    pub score: f64,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MissingComparison {
+    pub item_a_id: Uuid,
+    pub item_b_id: Uuid,
+    pub item_a_text: String,
+    pub item_b_text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueryState {
+    pub tag_id: Uuid,
+    pub selected_attributes: Vec<Uuid>,
+    pub selected_voters: Vec<Uuid>,
+    pub rankings: Vec<RankedItem>,
+    pub missing_comparisons: Vec<MissingComparison>,
+}
+
+// WebSocket commands from client
+#[derive(Debug, Deserialize)]
+#[serde(tag = "cmd", rename_all = "snake_case")]
+pub enum WsCommand {
+    // Tag commands
+    CreateTag { name: String },
+    GetTag { tag_id: Uuid },
+    ListTags,
+    
+    // Item commands
+    AddItem { tag_id: Uuid, text: String },
+    DeleteItem { tag_id: Uuid, item_id: Uuid },
+    
+    // Attribute (prompt) commands
+    CreateAttribute { tag_id: Uuid, label: String, template: String },
+    UpdateAttribute { attribute_id: Uuid, label: String, template: String },
+    DeleteAttribute { attribute_id: Uuid },
+    ListAttributes { tag_id: Uuid },
+    
+    // Query commands
+    UpdateQuery { 
+        tag_id: Uuid, 
+        attribute_ids: Vec<Uuid>, 
+        voter_ids: Vec<Uuid> 
+    },
+    
+    // Voting commands
+    SortMissingPairs { 
+        tag_id: Uuid,
+        attribute_ids: Vec<Uuid>,
+        voter_ids: Vec<Uuid>,
+        limit: Option<usize> // How many pairs to sort
+    },
+    
+    // Voter commands
+    ListVoters,
+    CreateHumanVoter { name: String },
+}
+
+// WebSocket events to client
+#[derive(Debug, Serialize)]
+#[serde(tag = "event", rename_all = "snake_case")]
+pub enum WsEvent {
+    // General events
+    Connected { user_id: Option<Uuid> },
+    Error { message: String },
+    
+    // Tag events
+    TagCreated { tag: Tag },
+    TagData { tag: Tag },
+    TagsList { tags: Vec<Tag> },
+    
+    // Item events
+    ItemAdded { tag_id: Uuid, item: Item },
+    ItemDeleted { tag_id: Uuid, item_id: Uuid },
+    
+    // Attribute events
+    AttributeCreated { attribute: Attribute },
+    AttributeUpdated { attribute: Attribute },
+    AttributeDeleted { attribute_id: Uuid },
+    AttributesList { attributes: Vec<Attribute> },
+    
+    // Query events
+    QueryUpdated { state: QueryState },
+    
+    // Voting events
+    VotingStarted { tag_id: Uuid, total_comparisons: usize },
+    VoteAdded { vote: Vote },
+    VotingProgress { completed: usize, total: usize },
+    VotingCompleted { tag_id: Uuid },
+    
+    // Voter events
+    VotersList { voters: Vec<Voter> },
+    VoterCreated { voter: Voter },
+}
+
+// Mock data stores (in production, these would be database tables)
+lazy_static::lazy_static! {
+    static ref TAGS: Arc<Mutex<HashMap<Uuid, Tag>>> = Arc::new(Mutex::new({
+        let mut tags = HashMap::new();
+        let tag_id = Uuid::new_v4();
+        tags.insert(tag_id, Tag {
+            id: tag_id,
+            name: "Startup Ideas".to_string(),
+            created_at: chrono::Utc::now().to_rfc3339(),
+        });
+        tags
+    }));
+    
+    static ref ITEMS: Arc<Mutex<HashMap<Uuid, Item>>> = Arc::new(Mutex::new({
+        let mut items = HashMap::new();
+        let tag_id = TAGS.lock().unwrap().keys().next().unwrap().clone();
+        
+        let ideas = vec![
+            "AI-powered personal nutrition coach that creates meal plans based on your DNA",
+            "Blockchain-based supply chain for verifying organic food authenticity",
+            "VR platform for remote team building and collaboration",
+        ];
+        
+        for idea in ideas {
+            let item_id = Uuid::new_v4();
+            items.insert(item_id, Item {
+                id: item_id,
+                tag_id,
+                text: idea.to_string(),
+                created_at: chrono::Utc::now().to_rfc3339(),
+            });
+        }
+        items
+    }));
+    
+    static ref ATTRIBUTES: Arc<Mutex<HashMap<Uuid, Attribute>>> = Arc::new(Mutex::new({
+        let mut attrs = HashMap::new();
+        let tag_id = TAGS.lock().unwrap().keys().next().unwrap().clone();
+        
+        // Default attribute
+        let attr_id = Uuid::new_v4();
+        attrs.insert(attr_id, Attribute {
+            id: attr_id,
+            tag_id,
+            label: "Pure Preference".to_string(),
+            template: r#"Between A and B, which do you prefer?
 
 <A>
 {{A}}
@@ -51,195 +243,39 @@ const DEFAULT_PROMPT: &str = r#"Between A and B, which do you prefer?
 </B>
 
 if -50 is strongly prefer A, and 50 is strongly prefer B, then your answer should be a number between -50 and 50.
-respond with some reasoning and your score. Your score will be read by this regex: /SCORE: (-?\d+)/"#;
-
-// New data structures for the refactor
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Itemset {
-    pub id: Uuid,
-    pub title: String,
-    pub items: Vec<ItemsetItem>,
-    pub created_at: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ItemsetItem {
-    pub id: Uuid,
-    pub text: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Run {
-    pub id: Uuid,
-    pub itemset_id: Uuid,
-    pub prompt: String,
-    pub model: Option<String>,
-    pub status: String,
-    pub votes: Vec<Vote>,
-    pub rankings: Vec<RankedItem>,
-    pub created_at: String,
-    pub attribute_slug: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Vote {
-    pub item_a_id: Uuid,
-    pub item_b_id: Uuid,
-    pub score: i32, // -50 to 50, negative favors A, positive favors B
-    pub reasoning: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RankedItem {
-    pub item_id: Uuid,
-    pub rank: usize,
-    pub score: f64,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct ItemsetSummary {
-    pub id: Uuid,
-    pub title: String,
-    pub items: Vec<ItemsetItem>,
-    pub created_at: String,
-    pub run_count: usize,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct RunSummary {
-    pub id: Uuid,
-    pub itemset_id: Uuid,
-    pub model: Option<String>,
-    pub status: String,
-    pub vote_count: usize,
-    pub created_at: String,
-    pub prompt: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(tag = "cmd", rename_all = "snake_case")]
-pub enum WsCommand {
-    // Itemset commands
-    CreateItemset { title: String },
-    GetItemset { itemset_id: Uuid },
-    ListItemsets,
-    AddItemToItemset { itemset_id: Uuid, text: String },
-    DeleteItemFromItemset { itemset_id: Uuid, item_id: Uuid },
-    
-    // Run commands
-    CreateRun { itemset_id: Uuid, prompt: String, model: String },
-    GetRun { run_id: Uuid },
-    ListRuns { itemset_id: Uuid },
-    StartRunVoting { run_id: Uuid },
-    StopRunVoting { run_id: Uuid },
-    DeleteRun { run_id: Uuid },
-    RunSingleComparison { run_id: Uuid, item_a_id: Uuid, item_b_id: Uuid },
-    
-    // Debug command
-    GetUniversalVotes,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(tag = "event", rename_all = "snake_case")]
-pub enum WsEvent {
-    // General events
-    Connected { user_id: Option<Uuid> },
-    Error { message: String },
-    
-    // Itemset events
-    ItemsetCreated { itemset_id: Uuid },
-    ItemsetData { itemset: Itemset },
-    ItemsetsList { itemsets: Vec<ItemsetSummary> },
-    ItemAddedToItemset { itemset_id: Uuid, item_id: Uuid },
-    ItemDeletedFromItemset { itemset_id: Uuid, item_id: Uuid },
-    
-    // Run events
-    RunCreated { run_id: Uuid },
-    RunData { run: Run, itemset: Itemset },
-    RunsList { itemset_id: Uuid, runs: Vec<RunSummary> },
-    RunVotingStarted { run_id: Uuid },
-    RunVotingStopped { run_id: Uuid },
-    VotingProgress { run_id: Uuid, completed: usize, total: usize },
-    VoteAdded { run_id: Uuid, vote: Vote },
-    IntermediateRankings { run_id: Uuid, ranked: Vec<RankedItem>, unranked: Vec<RankedItem> },
-    VotingCompleted { run_id: Uuid },
-    RunDeleted { run_id: Uuid },
-    SingleComparisonStarted { run_id: Uuid, item_a_id: Uuid, item_b_id: Uuid },
-    SingleComparisonCompleted { run_id: Uuid, vote: Vote },
-    RankingsUpdated { run_id: Uuid, ranked: Vec<RankedItem>, unranked: Vec<RankedItem> },
-    
-    // Debug event
-    UniversalVotesList { votes: Vec<UniversalVote>, ai_users: HashMap<String, Uuid> },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UniversalVote {
-    pub left_entity_namespace: String,
-    pub left_entity_pk: String,
-    pub right_entity_namespace: String, 
-    pub right_entity_pk: String,
-    pub user_id: Uuid,
-    pub magnitude: i32,
-    pub attribute_slug: String,
-    pub created_at: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct RankingResult {
-    pub ranked: Vec<RankedItem>,
-    pub unranked: Vec<RankedItem>, // Items with no votes, given default scores
-}
-
-// Mock data store
-lazy_static::lazy_static! {
-    static ref ITEMSETS: Arc<Mutex<HashMap<Uuid, Itemset>>> = Arc::new(Mutex::new({
-        let mut itemsets = HashMap::new();
-        
-        // Add mock itemset for testing
-        let itemset1_id = Uuid::new_v4();
-        let item1_id = Uuid::new_v4();
-        let item2_id = Uuid::new_v4();
-        let item3_id = Uuid::new_v4();
-        
-        let itemset1 = Itemset {
-            id: itemset1_id,
-            title: "Startup Ideas".to_string(),
-            items: vec![
-                ItemsetItem {
-                    id: item1_id,
-                    text: "AI-powered personal nutrition coach that creates meal plans based on your DNA".to_string(),
-                },
-                ItemsetItem {
-                    id: item2_id,
-                    text: "Blockchain-based supply chain for verifying organic food authenticity".to_string(),
-                },
-                ItemsetItem {
-                    id: item3_id,
-                    text: "VR platform for remote team building and collaboration".to_string(),
-                },
-            ],
-            created_at: chrono::Utc::now().checked_sub_signed(chrono::Duration::hours(3)).unwrap().to_rfc3339(),
-        };
-        itemsets.insert(itemset1_id, itemset1);
-        
-        itemsets
+respond with some reasoning and your score. Your score will be read by this regex: /SCORE: (-?\d+)/"#.to_string(),
+            created_by: Uuid::new_v4(), // System user
+            created_at: chrono::Utc::now().to_rfc3339(),
+        });
+        attrs
     }));
     
-    static ref RUNS: Arc<Mutex<HashMap<Uuid, Run>>> = Arc::new(Mutex::new(HashMap::new()));
+    static ref VOTES: Arc<Mutex<Vec<Vote>>> = Arc::new(Mutex::new(Vec::new()));
     
-    // Mock AI users - in real system these would be in the database
-    static ref AI_USERS: Arc<Mutex<HashMap<String, Uuid>>> = Arc::new(Mutex::new({
-        let mut users = HashMap::new();
-        // Pre-populate with some common models
-        users.insert("openai/gpt-4".to_string(), Uuid::new_v4());
-        users.insert("openai/gpt-4o".to_string(), Uuid::new_v4());
-        users.insert("anthropic/claude-3-opus".to_string(), Uuid::new_v4());
-        users.insert("anthropic/claude-3-sonnet".to_string(), Uuid::new_v4());
-        users
+    static ref VOTERS: Arc<Mutex<HashMap<Uuid, Voter>>> = Arc::new(Mutex::new({
+        let mut voters = HashMap::new();
+        
+        // Pre-populate with common AI models
+        let ai_models = vec![
+            "openai/gpt-4",
+            "openai/gpt-4o", 
+            "anthropic/claude-3-opus",
+            "anthropic/claude-3-sonnet",
+        ];
+        
+        for model in ai_models {
+            let voter_id = Uuid::new_v4();
+            voters.insert(voter_id, Voter {
+                id: voter_id,
+                name: model.to_string(),
+                is_ai: true,
+            });
+        }
+        
+        voters
     }));
     
-    // Mock universal votes table
-    static ref UNIVERSAL_VOTES: Arc<Mutex<Vec<UniversalVote>>> = Arc::new(Mutex::new(Vec::new()));
+    static ref VOTE_ID_COUNTER: Arc<Mutex<i64>> = Arc::new(Mutex::new(1));
 }
 
 pub async fn ws_handler(
@@ -297,843 +333,435 @@ async fn handle_command(
     state: &AppState,
 ) {
     match cmd {
-        WsCommand::CreateItemset { title } => {
-            let itemset_id = Uuid::new_v4();
-            let itemset = Itemset {
-                id: itemset_id,
-                title,
-                items: vec![],
+        WsCommand::CreateTag { name } => {
+            let tag_id = Uuid::new_v4();
+            let tag = Tag {
+                id: tag_id,
+                name,
                 created_at: chrono::Utc::now().to_rfc3339(),
             };
             
-            ITEMSETS.lock().unwrap().insert(itemset_id, itemset);
-            
-            let _ = tx.send(WsEvent::ItemsetCreated { itemset_id });
+            TAGS.lock().unwrap().insert(tag_id, tag.clone());
+            let _ = tx.send(WsEvent::TagCreated { tag });
         }
         
-        WsCommand::GetItemset { itemset_id } => {
-            let itemsets = ITEMSETS.lock().unwrap();
-            if let Some(itemset) = itemsets.get(&itemset_id) {
-                let _ = tx.send(WsEvent::ItemsetData { itemset: itemset.clone() });
+        WsCommand::GetTag { tag_id } => {
+            let tags = TAGS.lock().unwrap();
+            if let Some(tag) = tags.get(&tag_id) {
+                let _ = tx.send(WsEvent::TagData { tag: tag.clone() });
             } else {
                 let _ = tx.send(WsEvent::Error { 
-                    message: format!("Itemset {} not found", itemset_id) 
+                    message: format!("Tag {} not found", tag_id) 
                 });
             }
         }
         
-        WsCommand::ListItemsets => {
-            let itemsets = ITEMSETS.lock().unwrap();
-            let runs = RUNS.lock().unwrap();
-            
-            let summaries: Vec<ItemsetSummary> = itemsets.values().map(|itemset| {
-                let run_count = runs.values()
-                    .filter(|run| run.itemset_id == itemset.id)
-                    .count();
-                
-                ItemsetSummary {
-                    id: itemset.id,
-                    title: itemset.title.clone(),
-                    items: itemset.items.clone(),
-                    created_at: itemset.created_at.clone(),
-                    run_count,
-                }
-            }).collect();
-            
-            let _ = tx.send(WsEvent::ItemsetsList { itemsets: summaries });
+        WsCommand::ListTags => {
+            let tags = TAGS.lock().unwrap();
+            let tags_list: Vec<Tag> = tags.values().cloned().collect();
+            let _ = tx.send(WsEvent::TagsList { tags: tags_list });
         }
         
-        WsCommand::AddItemToItemset { itemset_id, text } => {
-            let mut itemsets = ITEMSETS.lock().unwrap();
-            if let Some(itemset) = itemsets.get_mut(&itemset_id) {
+        WsCommand::AddItem { tag_id, text } => {
+            let tags = TAGS.lock().unwrap();
+            if tags.contains_key(&tag_id) {
                 let item_id = Uuid::new_v4();
-                let item = ItemsetItem {
+                let item = Item {
                     id: item_id,
+                    tag_id,
                     text,
-                };
-                
-                itemset.items.push(item);
-                
-                let _ = tx.send(WsEvent::ItemAddedToItemset { 
-                    itemset_id, 
-                    item_id,
-                });
-            } else {
-                let _ = tx.send(WsEvent::Error { 
-                    message: format!("Itemset {} not found", itemset_id) 
-                });
-            }
-        }
-        
-        WsCommand::DeleteItemFromItemset { itemset_id, item_id } => {
-            let mut itemsets = ITEMSETS.lock().unwrap();
-            if let Some(itemset) = itemsets.get_mut(&itemset_id) {
-                itemset.items.retain(|item| item.id != item_id);
-                let _ = tx.send(WsEvent::ItemDeletedFromItemset { itemset_id, item_id });
-            } else {
-                let _ = tx.send(WsEvent::Error { 
-                    message: format!("Itemset {} not found", itemset_id) 
-                });
-            }
-        }
-        
-        WsCommand::CreateRun { itemset_id, prompt, model } => {
-            let itemsets = ITEMSETS.lock().unwrap();
-            if let Some(_itemset) = itemsets.get(&itemset_id) {
-                let run_id = Uuid::new_v4();
-                
-                // Generate attribute slug from prompt (first 50 chars, alphanumeric + dashes)
-                let attribute_slug = format!("{}-{}", 
-                    prompt.chars()
-                        .take(50)
-                        .map(|c| if c.is_alphanumeric() { c.to_lowercase().to_string() } else { "-".to_string() })
-                        .collect::<String>()
-                        .trim_matches('-'),
-                    chrono::Utc::now().timestamp()
-                );
-                
-                let run = Run {
-                    id: run_id,
-                    itemset_id,
-                    prompt,
-                    model: Some(model),
-                    status: "created".to_string(),
-                    votes: vec![],
-                    rankings: vec![],
                     created_at: chrono::Utc::now().to_rfc3339(),
-                    attribute_slug,
                 };
                 
-                RUNS.lock().unwrap().insert(run_id, run);
+                ITEMS.lock().unwrap().insert(item_id, item.clone());
+                let _ = tx.send(WsEvent::ItemAdded { tag_id, item });
                 
-                let _ = tx.send(WsEvent::RunCreated { run_id });
+                // Automatically trigger query update to show new missing comparisons
+                drop(tags);
+                let empty_attrs: Vec<Uuid> = vec![];
+                let empty_voters: Vec<Uuid> = vec![];
+                update_query_state(tag_id, empty_attrs, empty_voters, &tx);
             } else {
                 let _ = tx.send(WsEvent::Error { 
-                    message: format!("Itemset {} not found", itemset_id) 
+                    message: format!("Tag {} not found", tag_id) 
                 });
             }
         }
         
-        WsCommand::GetRun { run_id } => {
-            let runs = RUNS.lock().unwrap();
-            let itemsets = ITEMSETS.lock().unwrap();
-            
-            if let Some(run) = runs.get(&run_id) {
-                if let Some(itemset) = itemsets.get(&run.itemset_id) {
-                    let _ = tx.send(WsEvent::RunData { 
-                        run: run.clone(),
-                        itemset: itemset.clone()
-                    });
-                } else {
-                    let _ = tx.send(WsEvent::Error { 
-                        message: format!("Itemset for run {} not found", run_id) 
-                    });
-                }
-            } else {
-                let _ = tx.send(WsEvent::Error { 
-                    message: format!("Run {} not found", run_id) 
-                });
-            }
-        }
-        
-        WsCommand::ListRuns { itemset_id } => {
-            let runs = RUNS.lock().unwrap();
-            
-            let summaries: Vec<RunSummary> = runs.values()
-                .filter(|run| run.itemset_id == itemset_id)
-                .map(|run| RunSummary {
-                    id: run.id,
-                    itemset_id: run.itemset_id,
-                    model: run.model.clone(),
-                    status: run.status.clone(),
-                    vote_count: run.votes.len(),
-                    created_at: run.created_at.clone(),
-                    prompt: run.prompt.clone(),
-                })
-                .collect();
-            
-            let _ = tx.send(WsEvent::RunsList { itemset_id, runs: summaries });
-        }
-        
-        WsCommand::StartRunVoting { run_id } => {
-            let mut runs = RUNS.lock().unwrap();
-            let itemsets = ITEMSETS.lock().unwrap();
-            
-            if let Some(run) = runs.get_mut(&run_id) {
-                if let Some(itemset) = itemsets.get(&run.itemset_id) {
-                    run.status = "voting_in_progress".to_string();
-                    let _ = tx.send(WsEvent::RunVotingStarted { run_id });
+        WsCommand::DeleteItem { tag_id, item_id } => {
+            let mut items = ITEMS.lock().unwrap();
+            if let Some(item) = items.get(&item_id) {
+                if item.tag_id == tag_id {
+                    items.remove(&item_id);
                     
-                    // Start real voting process
-                    if itemset.items.len() >= 2 {
-                        let tx_clone = tx.clone();
-                        let run_id_copy = run_id;
-                        let itemset_items = itemset.items.clone();
-                        drop(runs);
-                        drop(itemsets);
-                        
-                        tokio::spawn(async move {
-                            // Get the run details we'll need
-                            let (model, prompt, run_id_for_votes, attribute_slug) = {
-                                let runs = RUNS.lock().unwrap();
-                                if let Some(run) = runs.get(&run_id_copy) {
-                                    (run.model.clone().unwrap_or_default(), run.prompt.clone(), run.itemset_id, run.attribute_slug.clone())
-                                } else {
+                    // Remove all votes involving this item
+                    let mut votes = VOTES.lock().unwrap();
+                    votes.retain(|vote| vote.item_a_id != item_id && vote.item_b_id != item_id);
+                    
+                    let _ = tx.send(WsEvent::ItemDeleted { tag_id, item_id });
+                }
+            }
+        }
+        
+        WsCommand::CreateAttribute { tag_id, label, template } => {
+            let attribute_id = Uuid::new_v4();
+            let attribute = Attribute {
+                id: attribute_id,
+                tag_id,
+                label,
+                template,
+                created_by: Uuid::new_v4(), // TODO: Use actual user ID
+                    created_at: chrono::Utc::now().to_rfc3339(),
+            };
+            
+            ATTRIBUTES.lock().unwrap().insert(attribute_id, attribute.clone());
+            let _ = tx.send(WsEvent::AttributeCreated { attribute });
+        }
+        
+        WsCommand::UpdateAttribute { attribute_id, label, template } => {
+            let mut attributes = ATTRIBUTES.lock().unwrap();
+            if let Some(attribute) = attributes.get_mut(&attribute_id) {
+                attribute.label = label;
+                attribute.template = template;
+                let _ = tx.send(WsEvent::AttributeUpdated { attribute: attribute.clone() });
+            } else {
+                let _ = tx.send(WsEvent::Error { 
+                    message: format!("Attribute {} not found", attribute_id) 
+                });
+            }
+        }
+        
+        WsCommand::DeleteAttribute { attribute_id } => {
+            let mut attributes = ATTRIBUTES.lock().unwrap();
+            if attributes.remove(&attribute_id).is_some() {
+                // Remove all votes using this attribute
+                let mut votes = VOTES.lock().unwrap();
+                votes.retain(|vote| vote.attribute_id != attribute_id);
+                
+                let _ = tx.send(WsEvent::AttributeDeleted { attribute_id });
+            }
+        }
+        
+        WsCommand::ListAttributes { tag_id } => {
+            let attributes = ATTRIBUTES.lock().unwrap();
+            let attrs_list: Vec<Attribute> = attributes.values()
+                .filter(|attr| attr.tag_id == tag_id)
+                .cloned()
+                .collect();
+            let _ = tx.send(WsEvent::AttributesList { attributes: attrs_list });
+        }
+        
+        WsCommand::UpdateQuery { tag_id, attribute_ids, voter_ids } => {
+            update_query_state(tag_id, attribute_ids, voter_ids, &tx);
+        }
+        
+        WsCommand::SortMissingPairs { tag_id, attribute_ids, voter_ids, limit } => {
+            // Get missing comparisons
+            let missing = get_missing_comparisons(tag_id, &attribute_ids, &voter_ids);
+            
+            if missing.is_empty() {
+                let _ = tx.send(WsEvent::VotingCompleted { tag_id });
                                     return;
                                 }
-                            };
-                            
-                            // Get or create AI user
-                            let ai_user_id = {
-                                let mut ai_users = AI_USERS.lock().unwrap();
-                                ai_users.entry(model.clone())
-                                    .or_insert_with(Uuid::new_v4)
-                                    .clone()
-                            };
-                            
-                            // Adaptive voting algorithm
-                            let mut votes = Vec::new();
-                            let mut current_rankings = calculate_rankings(&itemset_items, &votes);
-                            
-                            // Phase 1: Connect unsorted items to sorted items
-                            log::info!("Phase 1: Connecting unsorted items to sorted items");
-                            let mut iteration = 0;
-                            let max_iterations = 100; // Safety limit
-                            
-                            while !current_rankings.unranked.is_empty() && iteration < max_iterations {
-                                iteration += 1;
-                                
-                                // Pick random item from unranked
-                                let unranked_idx = rand::random::<usize>() % current_rankings.unranked.len();
-                                let unranked_item_id = current_rankings.unranked[unranked_idx].item_id;
-                                let unranked_item = itemset_items.iter().find(|item| item.id == unranked_item_id).unwrap();
-                                
-                                // Pick random item from ranked (or any item if none ranked yet)
-                                let ranked_item = if current_rankings.ranked.is_empty() {
-                                    // If no ranked items yet, pick another unranked item
-                                    let other_unranked: Vec<_> = current_rankings.unranked.iter()
-                                        .filter(|item| item.item_id != unranked_item_id)
+            
+            // Limit the number of comparisons if specified
+            let comparisons_to_make: Vec<_> = if let Some(limit) = limit {
+                missing.into_iter().take(limit).collect()
+            } else {
+                missing
+            };
+            
+            let _ = tx.send(WsEvent::VotingStarted { 
+                tag_id, 
+                total_comparisons: comparisons_to_make.len() 
+            });
+            
+            // Start voting process in background
+            let tx_clone = tx.clone();
+            tokio::spawn(async move {
+                let mut completed = 0;
+                let total = comparisons_to_make.len();
+                
+                for comparison in comparisons_to_make {
+                    // Get all AI voters
+                    let ai_voters: Vec<Voter> = voter_ids.iter()
+                        .filter_map(|voter_id| {
+                            let voters = VOTERS.lock().unwrap();
+                            voters.get(voter_id).filter(|v| v.is_ai).cloned()
+                        })
+                        .collect();
+                    
+                    // Get all attributes
+                    let attrs: Vec<Attribute> = attribute_ids.iter()
+                        .filter_map(|attr_id| {
+                            let attributes = ATTRIBUTES.lock().unwrap();
+                            attributes.get(attr_id).cloned()
+                        })
                                         .collect();
-                                    if other_unranked.is_empty() {
-                                        break; // Only one item left
-                                    }
-                                    let other_idx = rand::random::<usize>() % other_unranked.len();
-                                    let other_item_id = other_unranked[other_idx].item_id;
-                                    itemset_items.iter().find(|item| item.id == other_item_id).unwrap()
-                                } else {
-                                    let ranked_idx = rand::random::<usize>() % current_rankings.ranked.len();
-                                    let ranked_item_id = current_rankings.ranked[ranked_idx].item_id;
-                                    itemset_items.iter().find(|item| item.id == ranked_item_id).unwrap()
-                                };
-                                
-                                // Make the comparison
-                                let (score, reasoning) = match call_openrouter_api(
-                                    &model,
-                                    &prompt,
-                                    &unranked_item.text,
-                                    &ranked_item.text,
+                    
+                    // Make comparisons for each AI voter and attribute combination
+                    for voter in &ai_voters {
+                        for attribute in &attrs {
+                            // Extract model name from voter name (e.g., "openai/gpt-4" -> "openai/gpt-4")
+                            let model = &voter.name;
+                            
+                            match call_openrouter_api(
+                                model,
+                                &attribute.template,
+                                &comparison.item_a_text,
+                                &comparison.item_b_text,
                                 ).await {
-                                    Ok(result) => result,
-                                    Err(e) => {
-                                        log::error!("OpenRouter API error in Phase 1: {}", e);
-                                        let _ = tx_clone.send(WsEvent::Error { 
-                                            message: format!("OpenRouter API error in Phase 1: {}", e) 
-                                        });
-                                        sleep(Duration::from_millis(500)).await;
-                                        continue;
-                                    }
+                                Ok((score, reasoning)) => {
+                                    let vote_id = {
+                                        let mut counter = VOTE_ID_COUNTER.lock().unwrap();
+                                        let id = *counter;
+                                        *counter += 1;
+                                        id
                                 };
                                 
                                 let vote = Vote {
-                                    item_a_id: unranked_item.id,
-                                    item_b_id: ranked_item.id,
+                                        id: vote_id,
+                                        tag_id,
+                                        attribute_id: attribute.id,
+                                        voter_id: voter.id,
+                                        item_a_id: comparison.item_a_id,
+                                        item_b_id: comparison.item_b_id,
                                     score,
-                                    reasoning: reasoning.clone(),
-                                };
-                                
-                                votes.push(vote.clone());
-                                
-                                // Send vote update
-                                let _ = tx_clone.send(WsEvent::VoteAdded { 
-                                    run_id: run_id_copy, 
-                                    vote: vote.clone() 
-                                });
-                                
-                                // Store in universal format
-                                let (left_item, right_item, final_score) = 
-                                    if unranked_item.id < ranked_item.id {
-                                        (unranked_item, ranked_item, -score)
-                                    } else {
-                                        (ranked_item, unranked_item, score)
-                                    };
-                                
-                                let universal_vote = UniversalVote {
-                                    left_entity_namespace: format!("sorter.itemset.{}", run_id_for_votes),
-                                    left_entity_pk: left_item.id.to_string(),
-                                    right_entity_namespace: format!("sorter.itemset.{}", run_id_for_votes),
-                                    right_entity_pk: right_item.id.to_string(),
-                                    user_id: ai_user_id,
-                                    magnitude: final_score,
-                                    attribute_slug: attribute_slug.clone(),
+                                        rationale: Some(reasoning),
                                     created_at: chrono::Utc::now().to_rfc3339(),
                                 };
                                 
-                                {
-                                    let mut universal_votes = UNIVERSAL_VOTES.lock().unwrap();
-                                    universal_votes.push(universal_vote);
+                                    VOTES.lock().unwrap().push(vote.clone());
+                                    let _ = tx_clone.send(WsEvent::VoteAdded { vote });
                                 }
-                                
-                                // Recalculate rankings
-                                current_rankings = calculate_rankings(&itemset_items, &votes);
-                                
-                                // Send updated rankings
-                                let _ = tx_clone.send(WsEvent::IntermediateRankings {
-                                    run_id: run_id_copy,
-                                    ranked: current_rankings.ranked.clone(),
-                                    unranked: current_rankings.unranked.clone(),
-                                });
-                                
-                                sleep(Duration::from_millis(500)).await;
+                                Err(e) => {
+                                    log::error!("OpenRouter API error: {}", e);
+                                    let _ = tx_clone.send(WsEvent::Error { 
+                                        message: format!("API error: {}", e) 
+                                    });
+                                }
                             }
                             
-                                        // Phase 2: Refine rankings by comparing adjacent pairs
-            log::info!("Phase 2: Refining rankings with adjacent comparisons");
-            let mut refinement_rounds = 0;
-            let max_refinement_rounds = 10;
-            
-            while refinement_rounds < max_refinement_rounds && current_rankings.ranked.len() > 1 {
-                refinement_rounds += 1;
-                let mut votes_made_this_round = false;
-                
-                // Check if all adjacent pairs in current ranking have been compared
-                let mut all_adjacent_pairs_compared = true;
-                for i in 0..(current_rankings.ranked.len() - 1) {
-                    let item_a_id = current_rankings.ranked[i].item_id;
-                    let item_b_id = current_rankings.ranked[i + 1].item_id;
+                            // Small delay between API calls
+                            sleep(Duration::from_millis(500)).await;
+                        }
+                    }
                     
-                    let has_direct_comparison = votes.iter().any(|vote| {
-                        (vote.item_a_id == item_a_id && vote.item_b_id == item_b_id) ||
-                        (vote.item_a_id == item_b_id && vote.item_b_id == item_a_id)
+                    completed += 1;
+                    let _ = tx_clone.send(WsEvent::VotingProgress { 
+                        completed, 
+                        total 
+                    });
+                }
+                
+                let _ = tx_clone.send(WsEvent::VotingCompleted { tag_id });
+                
+                // Update query state with new rankings
+                update_query_state(tag_id, attribute_ids, voter_ids, &tx_clone);
+            });
+        }
+        
+        WsCommand::ListVoters => {
+            let voters = VOTERS.lock().unwrap();
+            let voters_list: Vec<Voter> = voters.values().cloned().collect();
+            let _ = tx.send(WsEvent::VotersList { voters: voters_list });
+        }
+        
+        WsCommand::CreateHumanVoter { name } => {
+            let voter_id = Uuid::new_v4();
+            let voter = Voter {
+                id: voter_id,
+                name,
+                is_ai: false,
+            };
+            
+            VOTERS.lock().unwrap().insert(voter_id, voter.clone());
+            let _ = tx.send(WsEvent::VoterCreated { voter });
+        }
+    }
+}
+
+fn update_query_state(
+    tag_id: Uuid,
+    attribute_ids: Vec<Uuid>,
+    voter_ids: Vec<Uuid>,
+    tx: &mpsc::UnboundedSender<WsEvent>,
+) {
+    // Get all items for this tag
+    let items = ITEMS.lock().unwrap();
+    let tag_items: Vec<Item> = items.values()
+        .filter(|item| item.tag_id == tag_id)
+        .cloned()
+        .collect();
+    
+    // Get relevant votes
+    let votes = VOTES.lock().unwrap();
+    let relevant_votes: Vec<Vote> = votes.iter()
+        .filter(|vote| {
+            vote.tag_id == tag_id &&
+            (attribute_ids.is_empty() || attribute_ids.contains(&vote.attribute_id)) &&
+            (voter_ids.is_empty() || voter_ids.contains(&vote.voter_id))
+        })
+        .cloned()
+        .collect();
+    
+    // Calculate rankings
+    let rankings = calculate_rankings(&tag_items, &relevant_votes);
+    
+    // Get missing comparisons
+    let missing_comparisons = get_missing_comparisons(tag_id, &attribute_ids, &voter_ids);
+    
+    let state = QueryState {
+        tag_id,
+        selected_attributes: attribute_ids,
+        selected_voters: voter_ids,
+        rankings,
+        missing_comparisons,
+    };
+    
+    let _ = tx.send(WsEvent::QueryUpdated { state });
+}
+
+fn get_missing_comparisons(
+    tag_id: Uuid,
+    attribute_ids: &[Uuid],
+    voter_ids: &[Uuid],
+) -> Vec<MissingComparison> {
+    let items = ITEMS.lock().unwrap();
+    let votes = VOTES.lock().unwrap();
+    let voters = VOTERS.lock().unwrap();
+    
+    let tag_items: Vec<Item> = items.values()
+        .filter(|item| item.tag_id == tag_id)
+        .cloned()
+        .collect();
+    
+    let mut missing = Vec::new();
+    
+    // Only check AI voters
+    let ai_voter_ids: Vec<Uuid> = voter_ids.iter()
+        .filter(|voter_id| {
+            voters.get(voter_id).map(|v| v.is_ai).unwrap_or(false)
+        })
+        .cloned()
+        .collect();
+    
+    if ai_voter_ids.is_empty() || attribute_ids.is_empty() {
+        return missing;
+    }
+    
+    // Check all pairs
+    for i in 0..tag_items.len() {
+        for j in (i + 1)..tag_items.len() {
+            let item_a = &tag_items[i];
+            let item_b = &tag_items[j];
+            
+            // Check if we have votes for all selected voter/attribute combinations
+            let mut has_all_votes = true;
+            
+            for voter_id in &ai_voter_ids {
+                for attribute_id in attribute_ids {
+                    let has_vote = votes.iter().any(|vote| {
+                        vote.tag_id == tag_id &&
+                        vote.voter_id == *voter_id &&
+                        vote.attribute_id == *attribute_id &&
+                        ((vote.item_a_id == item_a.id && vote.item_b_id == item_b.id) ||
+                         (vote.item_a_id == item_b.id && vote.item_b_id == item_a.id))
                     });
                     
-                    if !has_direct_comparison {
-                        all_adjacent_pairs_compared = false;
+                    if !has_vote {
+                        has_all_votes = false;
                         break;
                     }
                 }
-                
-                if all_adjacent_pairs_compared {
-                    log::info!("All adjacent pairs have been compared, ending Phase 2");
+                if !has_all_votes {
                     break;
                 }
-                
-                // Compare adjacent pairs in current ranking
-                for i in 0..(current_rankings.ranked.len() - 1) {
-                    let item_a_id = current_rankings.ranked[i].item_id;
-                    let item_b_id = current_rankings.ranked[i + 1].item_id;
-                    
-                    let item_a = itemset_items.iter().find(|item| item.id == item_a_id).unwrap();
-                    let item_b = itemset_items.iter().find(|item| item.id == item_b_id).unwrap();
-                    
-                    // Check if we already have a direct comparison
-                    let has_direct_comparison = votes.iter().any(|vote| {
-                        (vote.item_a_id == item_a_id && vote.item_b_id == item_b_id) ||
-                        (vote.item_a_id == item_b_id && vote.item_b_id == item_a_id)
-                    });
-                    
-                    if has_direct_comparison {
-                        continue; // Skip if already compared
-                    }
-                    
-                                                        // Make the comparison
-                                    let (score, reasoning) = match call_openrouter_api(
-                                        &model,
-                                        &prompt,
-                                        &item_a.text,
-                                        &item_b.text,
-                                    ).await {
-                                        Ok(result) => result,
-                                        Err(e) => {
-                                            log::error!("OpenRouter API error in Phase 2: {}", e);
-                                            let _ = tx_clone.send(WsEvent::Error { 
-                                                message: format!("OpenRouter API error in Phase 2: {}", e) 
-                                            });
-                                            sleep(Duration::from_millis(500)).await;
-                                            continue;
-                                        }
-                                    };
-                    
-                    let vote = Vote {
-                        item_a_id: item_a.id,
-                        item_b_id: item_b.id,
-                        score,
-                        reasoning: reasoning.clone(),
-                    };
-                    
-                    votes.push(vote.clone());
-                    votes_made_this_round = true;
-                    
-                    // Send vote update
-                    let _ = tx_clone.send(WsEvent::VoteAdded { 
-                        run_id: run_id_copy, 
-                        vote: vote.clone() 
-                    });
-                    
-                    // Store in universal format
-                    let (left_item, right_item, final_score) = 
-                        if item_a.id < item_b.id {
-                            (item_a, item_b, -score)
-                        } else {
-                            (item_b, item_a, score)
-                        };
-                    
-                    let universal_vote = UniversalVote {
-                        left_entity_namespace: format!("sorter.itemset.{}", run_id_for_votes),
-                        left_entity_pk: left_item.id.to_string(),
-                        right_entity_namespace: format!("sorter.itemset.{}", run_id_for_votes),
-                        right_entity_pk: right_item.id.to_string(),
-                        user_id: ai_user_id,
-                        magnitude: final_score,
-                        attribute_slug: attribute_slug.clone(),
-                        created_at: chrono::Utc::now().to_rfc3339(),
-                    };
-                    
-                    {
-                        let mut universal_votes = UNIVERSAL_VOTES.lock().unwrap();
-                        universal_votes.push(universal_vote);
-                    }
-                    
-                    sleep(Duration::from_millis(500)).await;
-                }
-                
-                if votes_made_this_round {
-                    // Recalculate rankings after this round
-                    current_rankings = calculate_rankings(&itemset_items, &votes);
-                    
-                    // Send updated rankings
-                    let _ = tx_clone.send(WsEvent::IntermediateRankings {
-                        run_id: run_id_copy,
-                        ranked: current_rankings.ranked.clone(),
-                        unranked: current_rankings.unranked.clone(),
-                    });
-                }
             }
-                            
-                            // Calculate final rankings
-                            let final_rankings = calculate_rankings(&itemset_items, &votes);
-                            
-                            // Update run with results
-                            {
-                                let mut runs = RUNS.lock().unwrap();
-                                if let Some(run) = runs.get_mut(&run_id_copy) {
-                                    run.votes = votes;
-                                    run.rankings = final_rankings.ranked;
-                                    run.status = "completed".to_string();
-                                }
-                            }
-                            
-                            let _ = tx_clone.send(WsEvent::VotingCompleted { run_id: run_id_copy });
-                        });
-                    }
-                }
-            } else {
-                let _ = tx.send(WsEvent::Error { 
-                    message: format!("Run {} not found", run_id) 
-                });
-            }
-        }
-        
-        WsCommand::StopRunVoting { run_id } => {
-            let mut runs = RUNS.lock().unwrap();
-            if let Some(run) = runs.get_mut(&run_id) {
-                run.status = "stopped".to_string();
-                let _ = tx.send(WsEvent::RunVotingStopped { run_id });
-            }
-        }
-        
-        WsCommand::DeleteRun { run_id } => {
-            let mut runs = RUNS.lock().unwrap();
-            if runs.remove(&run_id).is_some() {
-                let _ = tx.send(WsEvent::RunDeleted { run_id });
-            } else {
-                let _ = tx.send(WsEvent::Error { 
-                    message: format!("Run {} not found", run_id) 
-                });
-            }
-        }
-        
-        WsCommand::RunSingleComparison { run_id, item_a_id, item_b_id } => {
-            let runs = RUNS.lock().unwrap();
-            let itemsets = ITEMSETS.lock().unwrap();
             
-            if let Some(run) = runs.get(&run_id) {
-                if let Some(itemset) = itemsets.get(&run.itemset_id) {
-                    // Find the items
-                    let item_a = itemset.items.iter().find(|item| item.id == item_a_id);
-                    let item_b = itemset.items.iter().find(|item| item.id == item_b_id);
-                    
-                    if let (Some(item_a), Some(item_b)) = (item_a, item_b) {
-                        let _ = tx.send(WsEvent::SingleComparisonStarted { 
-                            run_id, 
-                            item_a_id, 
-                            item_b_id 
-                        });
-                        
-                        // Start single comparison in background
-                        let tx_clone = tx.clone();
-                        let model = run.model.clone().unwrap_or_default();
-                        let prompt = run.prompt.clone();
-                        let attribute_slug = run.attribute_slug.clone();
-                        let itemset_id = run.itemset_id;
-                        let item_a_text = item_a.text.clone();
-                        let item_b_text = item_b.text.clone();
-                        
-                        // Get or create AI user
-                        let ai_user_id = {
-                            let mut ai_users = AI_USERS.lock().unwrap();
-                            ai_users.entry(model.clone())
-                                .or_insert_with(Uuid::new_v4)
-                                .clone()
-                        };
-                        
-                        drop(runs);
-                        drop(itemsets);
-                        
-                        tokio::spawn(async move {
-                            // Make the comparison
-                            match call_openrouter_api(
-                                &model,
-                                &prompt,
-                                &item_a_text,
-                                &item_b_text,
-                            ).await {
-                                Ok((score, reasoning)) => {
-                                    let vote = Vote {
-                                        item_a_id,
-                                        item_b_id,
-                                        score,
-                                        reasoning: reasoning.clone(),
-                                    };
-                                    
-                                    // Add vote to run and recalculate rankings
-                                    let updated_rankings = {
-                                        let mut runs = RUNS.lock().unwrap();
-                                        let itemsets = ITEMSETS.lock().unwrap();
-                                        
-                                        if let Some(run) = runs.get_mut(&run_id) {
-                                            run.votes.push(vote.clone());
-                                            
-                                                                                         // Recalculate rankings with the new vote
-                                             if let Some(itemset) = itemsets.get(&run.itemset_id) {
-                                                 let ranking_result = calculate_rankings(&itemset.items, &run.votes);
-                                                 run.rankings = ranking_result.ranked.clone();
-                                                 Some(ranking_result)
-                                             } else {
-                                                 None
-                                             }
-                                        } else {
-                                            None
-                                        }
-                                    };
-                                    
-                                    // Store in universal format
-                                    let (left_item_id, right_item_id, final_score) = 
-                                        if item_a_id < item_b_id {
-                                            (item_a_id, item_b_id, -score)
-                                        } else {
-                                            (item_b_id, item_a_id, score)
-                                        };
-                                    
-                                    let universal_vote = UniversalVote {
-                                        left_entity_namespace: format!("sorter.itemset.{}", itemset_id),
-                                        left_entity_pk: left_item_id.to_string(),
-                                        right_entity_namespace: format!("sorter.itemset.{}", itemset_id),
-                                        right_entity_pk: right_item_id.to_string(),
-                                        user_id: ai_user_id,
-                                        magnitude: final_score,
-                                        attribute_slug,
-                                        created_at: chrono::Utc::now().to_rfc3339(),
-                                    };
-                                    
-                                    {
-                                        let mut universal_votes = UNIVERSAL_VOTES.lock().unwrap();
-                                        universal_votes.push(universal_vote);
-                                    }
-                                    
-                                    let _ = tx_clone.send(WsEvent::SingleComparisonCompleted { 
-                                        run_id, 
-                                        vote 
-                                    });
-                                    
-                                    // Send updated rankings if available
-                                    if let Some(ranking_result) = updated_rankings {
-                                        let _ = tx_clone.send(WsEvent::RankingsUpdated {
-                                            run_id,
-                                            ranked: ranking_result.ranked,
-                                            unranked: ranking_result.unranked,
-                                        });
-                                    }
-                                }
-                                Err(e) => {
-                                    log::error!("Single comparison API error: {}", e);
-                                    let _ = tx_clone.send(WsEvent::Error { 
-                                        message: format!("Failed to complete comparison: {}", e) 
-                                    });
-                                }
-                            }
-                        });
-                    } else {
-                        let _ = tx.send(WsEvent::Error { 
-                            message: "One or both items not found".to_string() 
-                        });
-                    }
-                } else {
-                    let _ = tx.send(WsEvent::Error { 
-                        message: format!("Itemset for run {} not found", run_id) 
-                    });
-                }
-            } else {
-                let _ = tx.send(WsEvent::Error { 
-                    message: format!("Run {} not found", run_id) 
-                });
-            }
-        }
-        
-        WsCommand::GetUniversalVotes => {
-            let universal_votes = UNIVERSAL_VOTES.lock().unwrap();
-            let ai_users = AI_USERS.lock().unwrap();
-            
-            let _ = tx.send(WsEvent::UniversalVotesList { 
-                votes: universal_votes.clone(),
-                ai_users: ai_users.clone(),
+            if !has_all_votes {
+                missing.push(MissingComparison {
+                    item_a_id: item_a.id,
+                    item_b_id: item_b.id,
+                    item_a_text: item_a.text.clone(),
+                    item_b_text: item_b.text.clone(),
             });
         }
     }
 }
 
-fn get_mock_reasoning(item_a: &str, item_b: &str, score: i32) -> String {
-    let reasoning_templates = if score > 20 {
-        vec![
-            "Significantly stronger concept with broader market appeal and clearer value proposition.",
-            "Much more compelling approach with better execution potential and market fit.",
-            "Substantially superior in terms of innovation, feasibility, and impact potential.",
-            "Far more engaging and well-developed with stronger foundational elements.",
-        ]
-    } else if score > 5 {
-        vec![
-            "Slightly better execution with more refined approach and clearer direction.",
-            "Marginally stronger with better structure and more compelling presentation.",
-            "Somewhat more effective with improved clarity and stronger core concept.",
-            "Modestly superior with better development and more convincing arguments.",
-        ]
-    } else if score > -5 {
-        vec![
-            "Very close comparison, both have merit but slight edge in presentation quality.",
-            "Nearly equivalent options with minimal differences in overall effectiveness.",
-            "Comparable approaches with subtle advantages in specific areas.",
-            "Similar quality with minor distinctions in execution and clarity.",
-        ]
-    } else if score > -20 {
-        vec![
-            "Somewhat weaker approach with less compelling presentation and structure.",
-            "Marginally less effective with room for improvement in key areas.",
-            "Slightly inferior execution with less refined development and clarity.",
-            "Modestly weaker with less convincing arguments and presentation.",
-        ]
-    } else {
-        vec![
-            "Significantly less compelling with major gaps in development and execution.",
-            "Much weaker concept with limited appeal and unclear value proposition.",
-            "Substantially inferior approach with poor execution and market fit.",
-            "Far less engaging with fundamental issues in structure and presentation.",
-        ]
-    };
-    
-    let template = reasoning_templates[rand::random::<usize>() % reasoning_templates.len()];
-    template.to_string()
+    missing
 }
 
-fn calculate_rankings(items: &[ItemsetItem], votes: &[Vote]) -> RankingResult {
+fn calculate_rankings(items: &[Item], votes: &[Vote]) -> Vec<RankedItem> {
     if votes.is_empty() {
-        // If no votes, all items are unranked with default score
-        let unranked = items.iter().enumerate().map(|(index, item)| RankedItem {
-            item_id: item.id,
-            rank: index + 1,
-            score: 50.0, // Default neutral score
-        }).collect();
-        
-        return RankingResult {
-            ranked: vec![],
-            unranked,
-        };
-    }
-
-    // Find items that have votes
-    let mut items_with_votes = std::collections::HashSet::new();
-    for vote in votes {
-        items_with_votes.insert(vote.item_a_id);
-        items_with_votes.insert(vote.item_b_id);
-    }
-
-    // Create entity identifiers for items with votes
-    let entities_with_votes: Vec<EntityIdentifier> = items
-        .iter()
-        .filter(|item| items_with_votes.contains(&item.id))
-        .map(|item| EntityIdentifier {
-            pk_namespace: "sorter_item".to_string(),
-            pk: item.id.to_string(),
-        })
-        .collect();
-
-    if entities_with_votes.is_empty() {
-        // All items are unranked
-        let unranked = items.iter().enumerate().map(|(index, item)| RankedItem {
+        // If no votes, return items in original order with neutral scores
+        return items.iter().enumerate().map(|(index, item)| RankedItem {
             item_id: item.id,
             rank: index + 1,
             score: 50.0,
+            text: item.text.clone(),
         }).collect();
-        
-        return RankingResult {
-            ranked: vec![],
-            unranked,
-        };
     }
 
-    // Convert votes to RelevantVote format for PageRank
-    let relevant_votes: Vec<RelevantVote> = votes
-        .iter()
-        .map(|vote| RelevantVote {
-            left_entity_pk_namespace: "sorter_item".to_string(),
-            left_entity_pk: vote.item_a_id.to_string(),
-            right_entity_pk_namespace: "sorter_item".to_string(),
-            right_entity_pk: vote.item_b_id.to_string(),
-            magnitude: vote.score,
-        })
-        .collect();
-
-    // Build the graph using PageRank functions
-    let rank_graph = match build_rank_graph(&entities_with_votes, &relevant_votes) {
-        Ok(graph) => graph,
-        Err(e) => {
-            log::error!("Failed to build rank graph: {:?}", e);
-            // Fall back to simple calculation
-            return calculate_rankings_simple(items, votes);
-        }
-    };
-
-    // Calculate Tommy Rank scores
-    let scores = calculate_tommy_rank(&rank_graph.graph, 100000, 1e-8);
-
-    // Create ranked list from PageRank results
-    let mut ranked_entities: Vec<(Uuid, f64)> = Vec::new();
-    
-    for (index, score) in scores.iter().enumerate() {
-        if let Some(entity_id) = rank_graph.index_to_entity_identifier.get(&index) {
-            if let Ok(item_id) = Uuid::parse_str(&entity_id.pk) {
-                ranked_entities.push((item_id, *score as f64));
-            }
-        }
-    }
-
-    // Sort by score descending
-    ranked_entities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-
-    // Convert to RankedItem format
-    let ranked = ranked_entities
-        .iter()
-        .enumerate()
-        .map(|(index, (item_id, score))| RankedItem {
-            item_id: *item_id,
-            rank: index + 1,
-            score: *score,
-        })
-        .collect();
-
-    // Create unranked list from items without votes
-    let unranked = items
-        .iter()
-        .filter(|item| !items_with_votes.contains(&item.id))
-        .enumerate()
-        .map(|(index, item)| RankedItem {
-            item_id: item.id,
-            rank: index + 1,
-            score: 50.0, // Default neutral score
-        })
-        .collect();
-
-    RankingResult {
-        ranked,
-        unranked,
-    }
-}
-
-// Fallback simple calculation if PageRank fails
-fn calculate_rankings_simple(items: &[ItemsetItem], votes: &[Vote]) -> RankingResult {
-    // Find items that have votes
-    let mut items_with_votes = std::collections::HashSet::new();
-    for vote in votes {
-        items_with_votes.insert(vote.item_a_id);
-        items_with_votes.insert(vote.item_b_id);
-    }
-
+    // Calculate aggregate scores
     let mut item_scores: HashMap<Uuid, f64> = HashMap::new();
+    let mut item_vote_counts: HashMap<Uuid, usize> = HashMap::new();
     
     for item in items {
-        if items_with_votes.contains(&item.id) {
-            let mut total_score = 0.0;
-            let mut vote_count = 0;
-            
-            for vote in votes {
-                if vote.item_a_id == item.id {
-                    total_score -= vote.score as f64;
-                    vote_count += 1;
-                } else if vote.item_b_id == item.id {
-                    total_score += vote.score as f64;
-                    vote_count += 1;
-                }
-            }
-            
-            let avg_score = if vote_count > 0 {
-                50.0 + (total_score / vote_count as f64)
-            } else {
-                50.0
-            };
-            
-            item_scores.insert(item.id, avg_score);
+        item_scores.insert(item.id, 0.0);
+        item_vote_counts.insert(item.id, 0);
+    }
+    
+    for vote in votes {
+        // Item A gets negative score (lower is better)
+        if let Some(score_a) = item_scores.get_mut(&vote.item_a_id) {
+            *score_a -= vote.score as f64;
+            *item_vote_counts.get_mut(&vote.item_a_id).unwrap() += 1;
+        }
+        
+        // Item B gets positive score
+        if let Some(score_b) = item_scores.get_mut(&vote.item_b_id) {
+            *score_b += vote.score as f64;
+            *item_vote_counts.get_mut(&vote.item_b_id).unwrap() += 1;
         }
     }
     
-    // Create ranked list from items with votes
-    let mut ranked_items: Vec<_> = item_scores.iter().collect();
-    ranked_items.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap());
+    // Normalize scores by vote count
+    for (item_id, score) in item_scores.iter_mut() {
+        if let Some(count) = item_vote_counts.get(item_id) {
+            if *count > 0 {
+                *score = *score / *count as f64 + 50.0; // Normalize to 0-100 range
+            } else {
+                *score = 50.0; // Neutral score for items with no votes
+            }
+        }
+    }
     
-    let ranked = ranked_items.iter().enumerate().map(|(index, (item_id, score))| RankedItem {
-        item_id: **item_id,
-        rank: index + 1,
-        score: **score,
-    }).collect();
-
-    // Create unranked list from items without votes
-    let unranked = items
-        .iter()
-        .filter(|item| !items_with_votes.contains(&item.id))
-        .enumerate()
-        .map(|(index, item)| RankedItem {
+    // Create ranked list
+    let mut ranked_items: Vec<RankedItem> = items.iter()
+        .map(|item| RankedItem {
             item_id: item.id,
-            rank: index + 1,
-            score: 50.0, // Default neutral score
+            rank: 0, // Will be set after sorting
+            score: *item_scores.get(&item.id).unwrap_or(&50.0),
+            text: item.text.clone(),
         })
         .collect();
 
-    RankingResult {
-        ranked,
-        unranked,
+    // Sort by score descending
+    ranked_items.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    
+    // Assign ranks
+    for (index, item) in ranked_items.iter_mut().enumerate() {
+        item.rank = index + 1;
     }
+    
+    ranked_items
 }
 
 async fn call_openrouter_api(
     model: &str,
-    prompt: &str,
+    prompt_template: &str,
     item_a: &str,
     item_b: &str,
 ) -> Result<(i32, String), String> {
@@ -1142,7 +770,7 @@ async fn call_openrouter_api(
         .map_err(|_| "OPENROUTER_API_KEY not found in environment")?;
     
     // Format the prompt with items
-    let formatted_prompt = prompt
+    let formatted_prompt = prompt_template
         .replace("{{A}}", item_a)
         .replace("{{B}}", item_b);
     
@@ -1165,8 +793,8 @@ async fn call_openrouter_api(
         .post(OPENROUTER_API_URL)
         .header("Authorization", format!("Bearer {}", api_key))
         .header("Content-Type", "application/json")
-        .header("HTTP-Referer", "https://sorter.app") // Required by OpenRouter
-        .header("X-Title", "Sorter App") // Optional but recommended
+        .header("HTTP-Referer", "https://sorter.app")
+        .header("X-Title", "Sorter App")
         .json(&request)
         .send()
         .await
