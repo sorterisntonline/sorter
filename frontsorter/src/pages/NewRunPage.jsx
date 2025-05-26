@@ -54,13 +54,33 @@ Explain your reasoning. Your score will be read by: /SCORE: (-?\\d+)/`
 function NewRunPage() {
   const { itemsetId } = useParams();
   const navigate = useNavigate();
-  const { isConnected, sendCommand } = useWebSocketContext();
+  const { isConnected, sendCommand, lastMessage } = useWebSocketContext();
   const [prompt, setPrompt] = useState(defaultPrompt);
   const [models, setModels] = useState([]);
   const [selectedModel, setSelectedModel] = useState('');
   const [modelsLoading, setModelsLoading] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [filteredModels, setFilteredModels] = useState([]);
+
+  // Handle WebSocket messages
+  useEffect(() => {
+    if (!lastMessage) return;
+
+    switch (lastMessage.event) {
+      case 'run_created':
+        // Navigate to the new run and start voting automatically
+        navigate(`/runs/${lastMessage.run_id}`);
+        // Start voting automatically after a short delay to ensure navigation completes
+        setTimeout(() => {
+          sendCommand({ cmd: 'start_run_voting', run_id: lastMessage.run_id });
+        }, 100);
+        break;
+
+      case 'error':
+        console.error('WebSocket error:', lastMessage.message);
+        break;
+    }
+  }, [lastMessage, navigate, sendCommand]);
 
   // Fetch models from OpenRouter API
   const fetchModels = async () => {
