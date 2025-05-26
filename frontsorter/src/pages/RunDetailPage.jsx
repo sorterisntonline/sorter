@@ -82,7 +82,9 @@ function RunDetailPage() {
       case 'intermediate_rankings':
         if (lastMessage.run_id === runId && itemset) {
           const itemsMap = new Map(itemset.items.map(item => [item.id, item]));
-          const ranked = lastMessage.rankings
+          
+          // Process ranked items
+          const ranked = lastMessage.ranked
             .sort((a, b) => a.rank - b.rank)
             .map(ranking => {
               const item = itemsMap.get(ranking.item_id);
@@ -92,7 +94,20 @@ function RunDetailPage() {
                 votes: [] // We'll populate this in the render based on current run.votes
               };
             });
-          setRankedItems(ranked);
+          
+          // Process unranked items (items with no votes)
+          const unranked = lastMessage.unranked
+            .map(ranking => {
+              const item = itemsMap.get(ranking.item_id);
+              return {
+                ...item,
+                score: ranking.score,
+                votes: []
+              };
+            });
+          
+          // Combine ranked and unranked, with ranked items first
+          setRankedItems([...ranked, ...unranked]);
         }
         break;
 
@@ -341,10 +356,12 @@ function RunDetailPage() {
                       };
                     }) || [];
 
+                    const isUnranked = itemVotes.length === 0;
+
                     return (
                       <motion.li 
                         key={item.id} 
-                        className="ranked-item"
+                        className={`ranked-item ${isUnranked ? 'unranked-item' : ''}`}
                         layout
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
@@ -358,13 +375,18 @@ function RunDetailPage() {
                       >
                         <p>{item.text}</p>
                         <div className="item-meta">
-                          <span className="score">Score: {item.score.toFixed(1)}</span>
+                          <span className="score">
+                            Score: {item.score.toFixed(1)}
+                            {isUnranked && <em> (no votes)</em>}
+                          </span>
                           <a
                             href="#"
                             className={expandedVotes === index ? 'visited' : ''}
                             onClick={(e) => {
                               e.preventDefault();
-                              setExpandedVotes(expandedVotes === index ? null : index);
+                              if (!isUnranked) {
+                                setExpandedVotes(expandedVotes === index ? null : index);
+                              }
                             }}
                           >
                             [{itemVotes.length} votes]

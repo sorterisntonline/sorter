@@ -34,28 +34,28 @@ pub struct RankingResponse {
 }
 
 // Represents a vote relevant to the input entities
-#[derive(sqlx::FromRow, Debug)]
-struct RelevantVote {
-    left_entity_pk_namespace: String,
-    left_entity_pk: String,
-    right_entity_pk_namespace: String,
-    right_entity_pk: String,
+#[derive(sqlx::FromRow, Debug, Clone)]
+pub struct RelevantVote {
+    pub left_entity_pk_namespace: String,
+    pub left_entity_pk: String,
+    pub right_entity_pk_namespace: String,
+    pub right_entity_pk: String,
     // Assuming magnitude is stored as -50 to +50 in DB
-    magnitude: i32,
+    pub magnitude: i32,
 }
 
 // Internal struct to hold graph and mappings
-struct RankGraph {
+pub struct RankGraph {
     // Map composite key "ns:pk" to graph index
-    entity_key_to_index: HashMap<String, usize>,
+    pub entity_key_to_index: HashMap<String, usize>,
     // Map graph index back to original identifier
-    index_to_entity_identifier: HashMap<usize, EntityIdentifier>,
-    graph: DirectedCsrGraph<usize, (), f32>, // Use usize index, f32 weight
+    pub index_to_entity_identifier: HashMap<usize, EntityIdentifier>,
+    pub graph: DirectedCsrGraph<usize, (), f32>, // Use usize index, f32 weight
 }
 
 // --- Graph Building ---
 
-fn build_rank_graph(
+pub fn build_rank_graph(
     entities: &[EntityIdentifier],
     votes: &[RelevantVote],
 ) -> Result<RankGraph, ErrorResponse> {
@@ -111,7 +111,7 @@ fn build_rank_graph(
 // --- Tommy Rank Calculation ---
 
 /// Alternative ranking implementation based on direct weights and max out-degree normalization.
-fn calculate_tommy_rank(
+pub fn calculate_tommy_rank(
     graph: &DirectedCsrGraph<usize, (), f32>,
     max_iters: usize,
     tol: f32,

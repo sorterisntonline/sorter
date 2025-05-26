@@ -6,6 +6,7 @@ use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::app_state::AppState;
+use crate::pagerank::{EntityIdentifier, RankedEntity, RelevantVote, build_rank_graph, calculate_tommy_rank};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
@@ -159,7 +160,7 @@ pub enum WsEvent {
     RunVotingStopped { run_id: Uuid },
     VotingProgress { run_id: Uuid, completed: usize, total: usize },
     VoteAdded { run_id: Uuid, vote: Vote },
-    IntermediateRankings { run_id: Uuid, rankings: Vec<RankedItem> },
+    IntermediateRankings { run_id: Uuid, ranked: Vec<RankedItem>, unranked: Vec<RankedItem> },
     VotingCompleted { run_id: Uuid },
     RunDeleted { run_id: Uuid },
     
@@ -177,6 +178,12 @@ pub struct UniversalVote {
     pub magnitude: i32,
     pub attribute_slug: String,
     pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RankingResult {
+    pub ranked: Vec<RankedItem>,
+    pub unranked: Vec<RankedItem>, // Items with no votes, given default scores
 }
 
 // Mock data store
@@ -557,7 +564,8 @@ async fn handle_command(
                                     let intermediate_rankings = calculate_rankings(&itemset_items, &votes);
                                     let _ = tx_clone.send(WsEvent::IntermediateRankings {
                                         run_id: run_id_copy,
-                                        rankings: intermediate_rankings,
+                                        ranked: intermediate_rankings.ranked,
+                                        unranked: intermediate_rankings.unranked,
                                     });
                                     
                                     // Add delay to avoid rate limiting
@@ -573,7 +581,7 @@ async fn handle_command(
                                 let mut runs = RUNS.lock().unwrap();
                                 if let Some(run) = runs.get_mut(&run_id_copy) {
                                     run.votes = votes;
-                                    run.rankings = rankings;
+                                    run.rankings = rankings.ranked;
                                     run.status = "completed".to_string();
                                 }
                             }
@@ -662,46 +670,107 @@ fn get_mock_reasoning(item_a: &str, item_b: &str, score: i32) -> String {
     template.to_string()
 }
 
-fn calculate_rankings(items: &[ItemsetItem], votes: &[Vote]) -> Vec<RankedItem> {
+fn calculate_rankings(items: &[ItemsetItem], votes: &[Vote]) -> RankingResult {
+    if votes.is_empty() {
+        // If no votes, all items are unranked with default score
+        let unranked = items.iter().enumerate().map(|(index, item)| RankedItem {
+            item_id: item.id,
+            rank: index + 1,
+            score: 50.0, // Default neutral score
+        }).collect();
+        
+        return RankingResult {
+            ranked: vec![],
+            unranked,
+        };
+    }
+
+    // Find items that have votes
+    let mut items_with_votes = std::collections::HashSet::new();
+    for vote in votes {
+        items_with_votes.insert(vote.item_a_id);
+        items_with_votes.insert(vote.item_b_id);
+    }
+
+    // Create entity identifiers for items with votes
+    let entities_with_votes: Vec<EntityIdentifier> = items
+        .iter()
+        .filter(|item| items_with_votes.contains(&item.id))
+        .map(|item| EntityIdentifier {
+            pk_namespace: "sorter_item".to_string(),
+            pk: item.id.to_string(),
+        })
+        .collect();
+
+    if entities_with_votes.is_empty() {
+        // All items are unranked
+        let unranked = items.iter().enumerate().map(|(index, item)| RankedItem {
+            item_id: item.id,
+            rank: index + 1,
+            score: 50.0,
+        }).collect();
+        
+        return RankingResult {
+            ranked: vec![],
+            unranked,
+        };
+    }
+
+    // For now, fall back to simple calculation since we can't easily call the PageRank endpoint from here
+    // TODO: Refactor to use PageRank calculation directly
     let mut item_scores: HashMap<Uuid, f64> = HashMap::new();
     
     for item in items {
-        let mut total_score = 0.0;
-        let mut vote_count = 0;
-        
-        for vote in votes {
-            if vote.item_a_id == item.id {
-                total_score -= vote.score as f64;
-                vote_count += 1;
-            } else if vote.item_b_id == item.id {
-                total_score += vote.score as f64;
-                vote_count += 1;
+        if items_with_votes.contains(&item.id) {
+            let mut total_score = 0.0;
+            let mut vote_count = 0;
+            
+            for vote in votes {
+                if vote.item_a_id == item.id {
+                    total_score -= vote.score as f64;
+                    vote_count += 1;
+                } else if vote.item_b_id == item.id {
+                    total_score += vote.score as f64;
+                    vote_count += 1;
+                }
             }
+            
+            let avg_score = if vote_count > 0 {
+                50.0 + (total_score / vote_count as f64)
+            } else {
+                50.0
+            };
+            
+            item_scores.insert(item.id, avg_score);
         }
-        
-        let avg_score = if vote_count > 0 {
-            50.0 + (total_score / vote_count as f64)
-        } else {
-            50.0
-        };
-        
-        item_scores.insert(item.id, avg_score);
     }
     
-    // Create rankings
-    let mut sorted_items: Vec<_> = item_scores.iter().collect();
-    sorted_items.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap());
+    // Create ranked list from items with votes
+    let mut ranked_items: Vec<_> = item_scores.iter().collect();
+    ranked_items.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap());
     
-    let mut rankings = Vec::new();
-    for (rank, (item_id, score)) in sorted_items.iter().enumerate() {
-        rankings.push(RankedItem {
-            item_id: **item_id,
-            rank: rank + 1,
-            score: **score,
-        });
+    let ranked = ranked_items.iter().enumerate().map(|(index, (item_id, score))| RankedItem {
+        item_id: **item_id,
+        rank: index + 1,
+        score: **score,
+    }).collect();
+
+    // Create unranked list from items without votes
+    let unranked = items
+        .iter()
+        .filter(|item| !items_with_votes.contains(&item.id))
+        .enumerate()
+        .map(|(index, item)| RankedItem {
+            item_id: item.id,
+            rank: index + 1,
+            score: 50.0, // Default neutral score
+        })
+        .collect();
+
+    RankingResult {
+        ranked,
+        unranked,
     }
-    
-    rankings
 }
 
 async fn call_openrouter_api(
