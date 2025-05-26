@@ -15,6 +15,7 @@ function RunDetailPage() {
   const [votingInProgress, setVotingInProgress] = useState(false);
   const [activeTab, setActiveTab] = useState('ranking');
   const [singleComparisonInProgress, setSingleComparisonInProgress] = useState(new Set());
+  const [errorMessage, setErrorMessage] = useState(null);
 
   // Handle WebSocket messages
   useEffect(() => {
@@ -177,7 +178,10 @@ function RunDetailPage() {
 
       case 'error':
         console.error('WebSocket error:', lastMessage.message);
+        setErrorMessage(lastMessage.message);
         setIsLoading(false);
+        // Auto-hide error after 10 seconds
+        setTimeout(() => setErrorMessage(null), 10000);
         break;
     }
   }, [lastMessage, runId, sendCommand, itemset]);
@@ -240,6 +244,54 @@ function RunDetailPage() {
     });
   };
 
+  const handleCopyAllVotes = () => {
+    if (!run?.votes || run.votes.length === 0) return;
+    
+    const votesText = run.votes.map((vote, index) => {
+      const itemA = itemset?.items.find(item => item.id === vote.item_a_id);
+      const itemB = itemset?.items.find(item => item.id === vote.item_b_id);
+      
+      const preference = vote.score < 0 ? 'Prefers A' : vote.score > 0 ? 'Prefers B' : 'Neutral';
+      
+      return `Vote ${index + 1}:
+A: "${itemA?.text || 'Unknown item'}"
+B: "${itemB?.text || 'Unknown item'}"
+Result: ${preference} (Score: ${vote.score})
+Reasoning: "${vote.reasoning}"
+`;
+    }).join('\n---\n\n');
+    
+    const fullText = `Preference Revelation Results
+Collection: ${itemset?.title || 'Unknown Collection'}
+Model: @${run.model || 'unknown'}
+Date: ${new Date(run.created_at).toLocaleString()}
+Total Votes: ${run.votes.length}
+
+Prompt Used:
+${run.prompt}
+
+---
+
+${votesText}`;
+    
+    navigator.clipboard.writeText(fullText).then(() => {
+      // Show a temporary success message
+      const button = document.querySelector('.copy-votes-button');
+      if (button) {
+        const originalText = button.textContent;
+        button.textContent = '✓ Copied!';
+        button.style.backgroundColor = '#28a745';
+        setTimeout(() => {
+          button.textContent = originalText;
+          button.style.backgroundColor = '';
+        }, 2000);
+      }
+    }).catch(err => {
+      console.error('Failed to copy to clipboard:', err);
+      alert('Failed to copy to clipboard. Please try again.');
+    });
+  };
+
   if (isLoading) {
     return (
       <div className="sorter-page">
@@ -266,6 +318,41 @@ function RunDetailPage() {
 
   return (
     <div className="sorter-page">
+      {errorMessage && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          backgroundColor: '#ff4444',
+          color: 'white',
+          padding: '1em',
+          borderRadius: '0.25em',
+          maxWidth: '400px',
+          zIndex: 1000,
+          fontSize: '0.9em',
+          lineHeight: '1.4'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div style={{ paddingRight: '1em' }}>
+              <strong>API Error:</strong><br />
+              {errorMessage}
+            </div>
+            <button
+              onClick={() => setErrorMessage(null)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '1.2em',
+                padding: '0'
+              }}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
       <div className="content">
         <section>
           <div className="page-header">
@@ -516,7 +603,29 @@ function RunDetailPage() {
           </>
         ) : (
           <>
-            <h2 style={{color: "black"}}>All Votes:</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1em' }}>
+              <h2 style={{color: "black", margin: 0}}>All Votes:</h2>
+              {run?.votes?.length > 0 && (
+                <button
+                  onClick={handleCopyAllVotes}
+                  className="copy-votes-button"
+                  style={{
+                    padding: '0.5em 1em',
+                    backgroundColor: '#007bff',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '0.25em',
+                    cursor: 'pointer',
+                    fontSize: '0.875em',
+                    fontFamily: 'Georgia'
+                  }}
+                  onMouseOver={(e) => e.target.style.backgroundColor = '#0056b3'}
+                  onMouseOut={(e) => e.target.style.backgroundColor = '#007bff'}
+                >
+                  📋 Copy All Votes
+                </button>
+              )}
+            </div>
             {run?.votes?.length === 0 ? (
               <div className="empty-state">
                 <p>No votes recorded yet.</p>

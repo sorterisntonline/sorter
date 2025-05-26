@@ -536,6 +536,9 @@ async fn handle_command(
                                     Ok(result) => result,
                                     Err(e) => {
                                         log::error!("OpenRouter API error in Phase 1: {}", e);
+                                        let _ = tx_clone.send(WsEvent::Error { 
+                                            message: format!("OpenRouter API error in Phase 1: {}", e) 
+                                        });
                                         sleep(Duration::from_millis(500)).await;
                                         continue;
                                     }
@@ -642,20 +645,23 @@ async fn handle_command(
                         continue; // Skip if already compared
                     }
                     
-                    // Make the comparison
-                    let (score, reasoning) = match call_openrouter_api(
-                        &model,
-                        &prompt,
-                        &item_a.text,
-                        &item_b.text,
-                    ).await {
-                        Ok(result) => result,
-                        Err(e) => {
-                            log::error!("OpenRouter API error in Phase 2: {}", e);
-                            sleep(Duration::from_millis(500)).await;
-                            continue;
-                        }
-                    };
+                                                        // Make the comparison
+                                    let (score, reasoning) = match call_openrouter_api(
+                                        &model,
+                                        &prompt,
+                                        &item_a.text,
+                                        &item_b.text,
+                                    ).await {
+                                        Ok(result) => result,
+                                        Err(e) => {
+                                            log::error!("OpenRouter API error in Phase 2: {}", e);
+                                            let _ = tx_clone.send(WsEvent::Error { 
+                                                message: format!("OpenRouter API error in Phase 2: {}", e) 
+                                            });
+                                            sleep(Duration::from_millis(500)).await;
+                                            continue;
+                                        }
+                                    };
                     
                     let vote = Vote {
                         item_a_id: item_a.id,
@@ -1150,7 +1156,7 @@ async fn call_openrouter_api(
             }
         ],
         temperature: 0.7,
-        max_tokens: 500,
+        max_tokens: 5000,
     };
     
     // Make the API call
@@ -1193,7 +1199,7 @@ async fn call_openrouter_api(
         .captures(&content)
         .and_then(|caps| caps.get(1))
         .and_then(|m| m.as_str().parse::<i32>().ok())
-        .ok_or("Could not parse score from response")?;
+        .ok_or_else(|| format!("Could not parse score from response. Full output: {}", content))?;
     
     // Validate score is in range
     let score = score.clamp(-50, 50);
