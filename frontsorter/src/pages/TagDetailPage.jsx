@@ -399,11 +399,10 @@ function TagDetailPage() {
               <span className="sorter-label">EVALUATION PROMPTS</span>
               <div style={{ marginTop: '0.5em' }}>
                 <Select
-                  isMulti
                   options={attributeOptions}
-                  value={attributeOptions.filter(opt => selectedAttributes.includes(opt.value))}
-                  onChange={(selectedOptions) => {
-                    const attributeIds = selectedOptions.map(opt => opt.value);
+                  value={attributeOptions.find(opt => selectedAttributes.includes(opt.value))}
+                  onChange={(selectedOption) => {
+                    const attributeIds = selectedOption ? [selectedOption.value] : [];
                     
                     // Send update query with new attribute selection
                     sendCommand({
@@ -413,7 +412,7 @@ function TagDetailPage() {
                       voter_ids: selectedVoters
                     });
                   }}
-                  placeholder="Select evaluation prompts..."
+                  placeholder="Select evaluation prompt..."
                   styles={selectStyles}
                   className="attribute-selector"
                   classNamePrefix="select"
