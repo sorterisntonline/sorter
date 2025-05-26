@@ -512,10 +512,10 @@ async fn handle_command(
                                     ).await {
                                         Ok(result) => result,
                                         Err(e) => {
-                                            log::error!("OpenRouter API error: {}", e);
-                                            // Fall back to mock if API fails
-                                            let mock_score = (rand::random::<f64>() * 100.0 - 50.0) as i32;
-                                            (mock_score, format!("API Error: {}. Using mock reasoning.", e))
+                                            log::error!("OpenRouter API error for pair {}-{}: {}", i, j, e);
+                                            // Skip this pair and continue to next
+                                            sleep(Duration::from_millis(500)).await;
+                                            continue;
                                         }
                                     };
                                     
@@ -716,8 +716,83 @@ fn calculate_rankings(items: &[ItemsetItem], votes: &[Vote]) -> RankingResult {
         };
     }
 
-    // For now, fall back to simple calculation since we can't easily call the PageRank endpoint from here
-    // TODO: Refactor to use PageRank calculation directly
+    // Convert votes to RelevantVote format for PageRank
+    let relevant_votes: Vec<RelevantVote> = votes
+        .iter()
+        .map(|vote| RelevantVote {
+            left_entity_pk_namespace: "sorter_item".to_string(),
+            left_entity_pk: vote.item_a_id.to_string(),
+            right_entity_pk_namespace: "sorter_item".to_string(),
+            right_entity_pk: vote.item_b_id.to_string(),
+            magnitude: vote.score,
+        })
+        .collect();
+
+    // Build the graph using PageRank functions
+    let rank_graph = match build_rank_graph(&entities_with_votes, &relevant_votes) {
+        Ok(graph) => graph,
+        Err(e) => {
+            log::error!("Failed to build rank graph: {:?}", e);
+            // Fall back to simple calculation
+            return calculate_rankings_simple(items, votes);
+        }
+    };
+
+    // Calculate Tommy Rank scores
+    let scores = calculate_tommy_rank(&rank_graph.graph, 100000, 1e-8);
+
+    // Create ranked list from PageRank results
+    let mut ranked_entities: Vec<(Uuid, f64)> = Vec::new();
+    
+    for (index, score) in scores.iter().enumerate() {
+        if let Some(entity_id) = rank_graph.index_to_entity_identifier.get(&index) {
+            if let Ok(item_id) = Uuid::parse_str(&entity_id.pk) {
+                ranked_entities.push((item_id, *score as f64));
+            }
+        }
+    }
+
+    // Sort by score descending
+    ranked_entities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    // Convert to RankedItem format
+    let ranked = ranked_entities
+        .iter()
+        .enumerate()
+        .map(|(index, (item_id, score))| RankedItem {
+            item_id: *item_id,
+            rank: index + 1,
+            score: *score,
+        })
+        .collect();
+
+    // Create unranked list from items without votes
+    let unranked = items
+        .iter()
+        .filter(|item| !items_with_votes.contains(&item.id))
+        .enumerate()
+        .map(|(index, item)| RankedItem {
+            item_id: item.id,
+            rank: index + 1,
+            score: 50.0, // Default neutral score
+        })
+        .collect();
+
+    RankingResult {
+        ranked,
+        unranked,
+    }
+}
+
+// Fallback simple calculation if PageRank fails
+fn calculate_rankings_simple(items: &[ItemsetItem], votes: &[Vote]) -> RankingResult {
+    // Find items that have votes
+    let mut items_with_votes = std::collections::HashSet::new();
+    for vote in votes {
+        items_with_votes.insert(vote.item_a_id);
+        items_with_votes.insert(vote.item_b_id);
+    }
+
     let mut item_scores: HashMap<Uuid, f64> = HashMap::new();
     
     for item in items {
