@@ -28,14 +28,6 @@ function App() {
             {/* Run detail page */}
             <Route path="/runs/:runId" element={<RunDetailPage />} />
             
-            {/* Legacy routes - redirect to itemsets */}
-            <Route path="/jobs" element={<Navigate to="/itemsets" replace />} />
-            <Route path="/rank" element={<Navigate to="/itemsets" replace />} />
-            <Route path="/rank/:jobId" element={<Navigate to="/itemsets" replace />} />
-            
-            {/* WebSocket test page */}
-            <Route path="/ws-test" element={<WebSocketTest />} />
-            
             {/* Wrap other pages within the Layout */}
             <Route path="/app" element={<Layout />}>
                 <Route path="tags" element={<TagListPage />} />
