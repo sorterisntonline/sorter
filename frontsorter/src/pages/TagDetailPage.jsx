@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useWebSocketContext } from '../contexts/WebSocketContext';
 import { DEFAULT_PROMPT_TEMPLATE, PROMPT_TEMPLATES } from '../constants/prompts';
 import Select from 'react-select';
+import AsyncSelect from 'react-select/async';
 
 function TagDetailPage() {
   const { tagId } = useParams();
@@ -16,10 +17,6 @@ function TagDetailPage() {
   const [rankings, setRankings] = useState([]);
   const [missingComparisons, setMissingComparisons] = useState([]);
   
-  // OpenRouter models state
-  const [availableModels, setAvailableModels] = useState([]);
-  const [modelsLoading, setModelsLoading] = useState(false);
-  
   // UI state
   const [selectedAttributes, setSelectedAttributes] = useState([]);
   const [selectedVoters, setSelectedVoters] = useState([]);
@@ -31,16 +28,36 @@ function TagDetailPage() {
   const [showNewAttribute, setShowNewAttribute] = useState(false);
   const [newAttributeLabel, setNewAttributeLabel] = useState('');
   const [newAttributeTemplate, setNewAttributeTemplate] = useState(DEFAULT_PROMPT_TEMPLATE);
+  
+  // Cache for models to avoid refetching
+  const modelsCache = useRef(null);
+  const modelsCacheTime = useRef(null);
+  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
-  // Fetch models from OpenRouter API
-  const fetchModels = async () => {
-    setModelsLoading(true);
+  // Load models with search
+  const loadModelOptions = async (inputValue) => {
     try {
+      // Check cache first
+      const now = Date.now();
+      if (modelsCache.current && modelsCacheTime.current && (now - modelsCacheTime.current < CACHE_DURATION)) {
+        // Use cached data
+        const filtered = modelsCache.current.filter(model =>
+          !inputValue || model.id.toLowerCase().includes(inputValue.toLowerCase())
+        );
+        
+        return filtered.slice(0, 50).map(model => ({
+          value: model.id,
+          label: `@${model.id}`,
+          data: model
+        }));
+      }
+      
+      // Fetch fresh data
       const response = await fetch('https://openrouter.ai/api/v1/models');
       const data = await response.json();
       
       if (data.data && Array.isArray(data.data)) {
-        const filteredModels = data.data
+        const allModels = data.data
           .filter(model => model.id)
           .sort((a, b) => {
             // Sort by pricing.prompt ascending (cheapest first)
@@ -49,19 +66,29 @@ function TagDetailPage() {
             return priceA - priceB;
           });
         
-        setAvailableModels(filteredModels);
+        // Cache the results
+        modelsCache.current = allModels;
+        modelsCacheTime.current = now;
+        
+        // Filter based on input
+        const filtered = allModels.filter(model =>
+          !inputValue || model.id.toLowerCase().includes(inputValue.toLowerCase())
+        );
+        
+        // Return top 50 matches to avoid overwhelming the UI
+        return filtered.slice(0, 50).map(model => ({
+          value: model.id,
+          label: `@${model.id}`,
+          data: model
+        }));
       }
+      
+      return [];
     } catch (error) {
       console.error('Failed to fetch models:', error);
-    } finally {
-      setModelsLoading(false);
+      return [];
     }
   };
-
-  // Fetch models on component mount
-  useEffect(() => {
-    fetchModels();
-  }, []);
 
   // Handle WebSocket messages
   useEffect(() => {
@@ -251,12 +278,6 @@ function TagDetailPage() {
   const aiVoters = voters.filter(v => v.is_ai);
 
   // Prepare options for react-select
-  const modelOptions = availableModels.map(model => ({
-    value: model.id,
-    label: `@${model.id}`,
-    data: model
-  }));
-
   const voterOptions = aiVoters.map(voter => ({
     value: voter.id,
     label: `@${voter.name}`,
@@ -352,9 +373,11 @@ function TagDetailPage() {
             <div style={{ marginBottom: '1.5em' }}>
               <span className="sorter-label">SELECT AI MODELS</span>
               <div style={{ marginTop: '0.5em', marginBottom: '1em' }}>
-                <Select
+                <AsyncSelect
                   isMulti
-                  options={modelOptions}
+                  cacheOptions
+                  defaultOptions
+                  loadOptions={loadModelOptions}
                   value={voterOptions.filter(opt => selectedVoters.includes(opt.value))}
                   onChange={(selectedOptions) => {
                     // First, handle adding new models as voters
@@ -366,8 +389,7 @@ function TagDetailPage() {
                       .filter(Boolean);
                     setSelectedVoters(voterIds);
                   }}
-                  placeholder={modelsLoading ? "Loading models..." : "Search and select AI models..."}
-                  isLoading={modelsLoading}
+                  placeholder="Type to search AI models..."
                   styles={selectStyles}
                   className="model-selector"
                   classNamePrefix="select"
