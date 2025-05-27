@@ -6,6 +6,7 @@ use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::app_state::AppState;
+use crate::pagerank::{EntityIdentifier, RelevantVote, build_rank_graph, calculate_tommy_rank};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
@@ -71,6 +72,8 @@ pub struct MissingComparison {
     pub item_a_text: String,
     pub item_b_text: String,
 }
+
+
 
 // Page-specific state structures
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -522,14 +525,17 @@ fn build_tag_detail_page_state(
     // Calculate derived state
     let voters_with_votes = calculate_voters_with_votes(&votes);
     let rankings = calculate_rankings(&items, &votes);
-    let missing_comparisons = Vec::new(); // TODO: implement
     
-    // Get selected state from session
+    // Get selected state from session to calculate missing comparisons
     let (selected_voters, selected_attributes) = {
         let mut session = session_state.lock().unwrap();
         let selection = session.get_or_create_tag_selection(tag_id);
         (selection.selected_voters.clone(), selection.selected_attributes.clone())
     };
+    
+    let missing_comparisons = calculate_missing_comparisons(&items, &votes, &selected_voters, &selected_attributes);
+    
+    // Note: selected_voters and selected_attributes already obtained above
     
     let state = TagDetailPageState {
         tag,
@@ -577,14 +583,129 @@ fn calculate_voters_with_votes(votes: &[Vote]) -> Vec<Uuid> {
     voter_ids.into_iter().collect()
 }
 
+fn calculate_missing_comparisons(
+    items: &[Item], 
+    votes: &[Vote], 
+    _selected_voters: &[Uuid], 
+    _selected_attributes: &[Uuid]
+) -> Vec<MissingComparison> {
+    // Shortcut: Just return the number of unsorted items as missing comparisons
+    // Find items that have votes
+    let voted_item_ids: HashSet<Uuid> = votes
+        .iter()
+        .flat_map(|vote| [vote.item_a_id, vote.item_b_id])
+        .collect();
+
+    // Create fake missing comparisons for items without votes
+    let mut missing_comparisons = Vec::new();
+    for item in items {
+        if !voted_item_ids.contains(&item.id) {
+            // Create a dummy comparison entry for this unvoted item
+            missing_comparisons.push(MissingComparison {
+                item_a_id: item.id,
+                item_b_id: item.id, // Same item for both sides as a placeholder
+                item_a_text: item.text.clone(),
+                item_b_text: format!("(unvoted: {})", item.text),
+            });
+        }
+    }
+
+    missing_comparisons
+}
+
 fn calculate_rankings(items: &[Item], votes: &[Vote]) -> Vec<RankedItem> {
-    // Simplified ranking calculation
-    items.iter().enumerate().map(|(i, item)| RankedItem {
-        item_id: item.id,
-        rank: i + 1,
-        score: 50.0,
-        text: item.text.clone(),
-    }).collect()
+    if items.is_empty() {
+        return Vec::new();
+    }
+
+    // Convert items to EntityIdentifier format
+    let entities: Vec<EntityIdentifier> = items
+        .iter()
+        .map(|item| EntityIdentifier {
+            pk_namespace: "item".to_string(),
+            pk: item.id.to_string(),
+        })
+        .collect();
+
+    // Convert votes to RelevantVote format
+    let pagerank_votes: Vec<RelevantVote> = votes
+        .iter()
+        .map(|vote| RelevantVote {
+            left_entity_pk_namespace: "item".to_string(),
+            left_entity_pk: vote.item_a_id.to_string(),
+            right_entity_pk_namespace: "item".to_string(),
+            right_entity_pk: vote.item_b_id.to_string(),
+            magnitude: vote.score,
+        })
+        .collect();
+
+    // If no votes, return items in original order with equal scores
+    if pagerank_votes.is_empty() {
+        return items.iter().enumerate().map(|(i, item)| RankedItem {
+            item_id: item.id,
+            rank: i + 1,
+            score: 1.0,
+            text: item.text.clone(),
+        }).collect();
+    }
+
+    // Build the ranking graph
+    let rank_graph = match build_rank_graph(&entities, &pagerank_votes) {
+        Ok(graph) => graph,
+        Err(e) => {
+            log::error!("Failed to build ranking graph: {:?}", e);
+            // Fallback to equal scores
+            return items.iter().enumerate().map(|(i, item)| RankedItem {
+                item_id: item.id,
+                rank: i + 1,
+                score: 1.0,
+                text: item.text.clone(),
+            }).collect();
+        }
+    };
+
+    // Calculate Tommy Rank scores
+    let scores = calculate_tommy_rank(&rank_graph.graph, 100000, 1e-8);
+
+    // Create ranked items with scores
+    let mut ranked_items: Vec<RankedItem> = Vec::new();
+    
+    // Add items that have votes (ranked items)
+    for (index, score) in scores.iter().enumerate() {
+        if let Some(entity_id) = rank_graph.index_to_entity_identifier.get(&index) {
+            if let Ok(item_uuid) = Uuid::parse_str(&entity_id.pk) {
+                if let Some(item) = items.iter().find(|i| i.id == item_uuid) {
+                    ranked_items.push(RankedItem {
+                        item_id: item.id,
+                        rank: 0, // Will be set after sorting
+                        score: *score as f64,
+                        text: item.text.clone(),
+                    });
+                }
+            }
+        }
+    }
+
+    // Add items that don't have votes (unranked items) with score 0
+    let voted_item_ids: HashSet<Uuid> = ranked_items.iter().map(|ri| ri.item_id).collect();
+    for item in items {
+        if !voted_item_ids.contains(&item.id) {
+            ranked_items.push(RankedItem {
+                item_id: item.id,
+                rank: 0, // Will be set after sorting
+                score: 0.0,
+                text: item.text.clone(),
+            });
+        }
+    }
+
+    // Sort by score (descending) and assign ranks
+    ranked_items.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    for (i, item) in ranked_items.iter_mut().enumerate() {
+        item.rank = i + 1;
+    }
+
+    ranked_items
 }
 
 pub fn routes() -> axum::Router<AppState> {

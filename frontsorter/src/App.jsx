@@ -304,7 +304,6 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
                     <div className="job-control-panel">
                         <h2>Whose preferences to explore:</h2>
                         <div style={{ marginBottom: '1.5em' }}>
-                            <span className="sorter-label">SELECT AI MODELS</span>
                             <div style={{ marginTop: '0.5em', marginBottom: '1em' }}>
                                 <OpenRouterModelSelector
                                     value={selectedVoterOptions}
@@ -345,7 +344,6 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
 
                         <h2>Through which lens:</h2>
                         <div style={{ marginBottom: '1.5em' }}>
-                            <span className="sorter-label">EVALUATION PROMPTS</span>
                             <div style={{ marginTop: '0.5em' }}>
                                 <select
                                     value={pageState.selected_attributes[0] || ''}
