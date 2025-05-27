@@ -1,9 +1,2 @@
-get my nice dropdown choser back for model (its in residual file still)
-get prompt crud workign again.
-get models voting again, model loop. streaming votes. 
-get itemlist/voetlist tab switcher back 
-
-ui: make adjacent vote show the sldier value colorfully, and not the text until you click on it.
-model choser dropdown.
-sqlx entity model integrations
-llm call integration
+need to add a remix button: alert that asks for N, keep top N items, for new tag
+sqlx/entityify

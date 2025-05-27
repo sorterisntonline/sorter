@@ -93,8 +93,6 @@ function TagsListPageV2({ pageState, sendCommand, isConnected }) {
         setLocalNewTagName(''); // Clear input after creating
     };
 
-
-
     const handleKeyPress = (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
@@ -265,6 +263,27 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected }) {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             handleAddItem();
+        }
+    };
+
+    // Helper function to format timestamps as relative time
+    const formatTimeAgo = (timestamp) => {
+        const now = new Date();
+        const voteTime = new Date(timestamp);
+        const diffMs = now - voteTime;
+        const diffSeconds = Math.floor(diffMs / 1000);
+        const diffMinutes = Math.floor(diffSeconds / 60);
+        const diffHours = Math.floor(diffMinutes / 60);
+        const diffDays = Math.floor(diffHours / 24);
+
+        if (diffSeconds < 60) {
+            return `${diffSeconds} second${diffSeconds !== 1 ? 's' : ''} ago`;
+        } else if (diffMinutes < 60) {
+            return `${diffMinutes} minute${diffMinutes !== 1 ? 's' : ''} ago`;
+        } else if (diffHours < 24) {
+            return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+        } else {
+            return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
         }
     };
 
@@ -664,12 +683,16 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected }) {
                                             <div className="vote-comparison">
                                                 <div className="vote-item">
                                                     <span className="vote-label">A:</span>
-                                                    <p className="vote-text">"{itemA?.text || 'Unknown item'}"</p>
+                                                    <p className="vote-text">"{itemA?.text.length > 100 ? 
+                                                        itemA.text.substring(0, 100) + '...' : 
+                                                        itemA?.text || 'Unknown item'}"</p>
                                                 </div>
                                                 <div className="vote-versus">vs</div>
                                                 <div className="vote-item">
                                                     <span className="vote-label">B:</span>
-                                                    <p className="vote-text">"{itemB?.text || 'Unknown item'}"</p>
+                                                    <p className="vote-text">"{itemB?.text.length > 100 ? 
+                                                        itemB.text.substring(0, 100) + '...' : 
+                                                        itemB?.text || 'Unknown item'}"</p>
                                                 </div>
                                             </div>
                                             <div className="vote-result">
@@ -684,6 +707,7 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected }) {
                                                 <div className="vote-meta">
                                                     <span>Voter: @{voter?.name || 'Unknown'}</span>
                                                     <span>Lens: {attribute?.label || 'Unknown'}</span>
+                                                    <span>{formatTimeAgo(vote.created_at)}</span>
                                                 </div>
                                                 {vote.rationale && (
                                                     <div className="vote-reasoning">
