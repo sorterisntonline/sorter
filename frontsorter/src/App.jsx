@@ -316,8 +316,11 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected }) {
             const aHasVotes = pageState.voters_with_votes.includes(a.id);
             const bHasVotes = pageState.voters_with_votes.includes(b.id);
             
+            // First priority: voters with votes come first
             if (aHasVotes && !bHasVotes) return -1;
             if (!aHasVotes && bHasVotes) return 1;
+            
+            // Second priority: alphabetical within each group
             return a.name.localeCompare(b.name);
         });
 
@@ -584,7 +587,15 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected }) {
                                                 <div className="vote-history">
                                                     <h4 className="vote-history-title">Vote Details:</h4>
                                                     {itemVotes.map((vote, voteIndex) => (
-                                                        <div key={voteIndex} className="vote-record">
+                                                        <div 
+                                                            key={voteIndex} 
+                                                            className="vote-record"
+                                                            style={{
+                                                                backgroundColor: vote.score > 0 ? 'rgba(34, 197, 94, 0.1)' : 
+                                                                               vote.score < 0 ? 'rgba(239, 68, 68, 0.1)' : 
+                                                                               'transparent'
+                                                            }}
+                                                        >
                                                             <div className="vote-opponent">
                                                                 compared to: "{vote.against_item_text.length > 50 ? 
                                                                     vote.against_item_text.substring(0, 50) + '...' : 
