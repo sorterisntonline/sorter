@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './App.css'
 import OpenRouterModelSelector from './components/OpenRouterModelSelector';
+import LensSelector from './components/LensSelector';
 import { PROMPT_TEMPLATES, DEFAULT_PROMPT_TEMPLATE } from './constants/prompts';
 
 import { useWebSocketContext } from './contexts/WebSocketContext';
@@ -304,6 +305,17 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
         .map(voterId => voterOptions.find(opt => opt.value === voterId))
         .filter(Boolean);
 
+    // Prepare attribute options for LensSelector
+    const attributeOptions = pageState.attributes.map(attr => ({
+        value: attr.id,
+        label: attr.label
+    }));
+
+    // Get selected attribute option
+    const selectedAttributeOption = pageState.selected_attributes.length > 0 
+        ? attributeOptions.find(opt => opt.value === pageState.selected_attributes[0])
+        : null;
+
     return (
         <div className="sorter-page">
             <div className="content">
@@ -370,22 +382,14 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
                         <h2>Through which lens:</h2>
                         <div style={{ marginBottom: '1.5em' }}>
                             <div style={{ marginTop: '0.5em' }}>
-                                <select
-                                    value={pageState.selected_attributes[0] || ''}
-                                    onChange={(e) => {
-                                        const attributeIds = e.target.value ? [e.target.value] : [];
+                                <LensSelector
+                                    value={selectedAttributeOption}
+                                    onChange={(selectedOption) => {
+                                        const attributeIds = selectedOption ? [selectedOption.value] : [];
                                         handleSelectedAttributesChange(attributeIds);
                                     }}
-                                    className="attribute-selector"
-                                    style={{ width: '100%' }}
-                                >
-                                    <option value="">Select evaluation prompt...</option>
-                                    {pageState.attributes.map(attr => (
-                                        <option key={attr.id} value={attr.id}>
-                                            {attr.label}
-                                        </option>
-                                    ))}
-                                </select>
+                                    options={attributeOptions}
+                                />
                                 <button
                                     onClick={handleToggleNewAttributeForm}
                                     className="back-link"
