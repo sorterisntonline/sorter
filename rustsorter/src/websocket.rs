@@ -307,6 +307,10 @@ fn generate_missing_comparisons(
     let existing_votes: HashSet<(Uuid, Uuid, Uuid, Uuid)> = votes
         .iter()
         .filter(|vote| vote.tag_id == tag_id)
+        .filter(|vote| {
+            // Only consider votes from selected voters and attributes when determining missing comparisons
+            selected_voters.contains(&vote.voter_id) && selected_attributes.contains(&vote.attribute_id)
+        })
         .map(|vote| (vote.voter_id, vote.attribute_id, vote.item_a_id, vote.item_b_id))
         .collect();
     
@@ -425,8 +429,6 @@ async fn process_voting_session(
                 let prompt = attribute_template
                     .replace("{{A}}", &comparison.item_a_text)
                     .replace("{{B}}", &comparison.item_b_text);
-
-                log::debug!("Prompt: {}", prompt);
                 
                 // Call OpenRouter API
                 match call_openrouter_api(&voter_name, &prompt).await {
@@ -927,10 +929,6 @@ fn build_tag_detail_page_state(
             .collect()
     };
     
-    // Calculate derived state
-    let voters_with_votes = calculate_voters_with_votes(&votes);
-    let rankings = calculate_rankings(&items, &votes);
-    
     // Get selected state from session and check voting status
     let (selected_voters, selected_attributes, is_voting_in_progress) = {
         let mut session = session_state.lock().unwrap();
@@ -948,8 +946,22 @@ fn build_tag_detail_page_state(
         (selected_voters, selected_attributes, is_voting)
     };
     
-    // Separate sorted and unsorted items
-    let voted_item_ids: HashSet<Uuid> = votes
+    // Filter votes by selected voters and attributes
+    let filtered_votes: Vec<Vote> = votes
+        .iter()
+        .filter(|vote| {
+            (selected_voters.is_empty() || selected_voters.contains(&vote.voter_id)) &&
+            (selected_attributes.is_empty() || selected_attributes.contains(&vote.attribute_id))
+        })
+        .cloned()
+        .collect();
+    
+    // Calculate derived state using filtered votes
+    let voters_with_votes = calculate_voters_with_votes(&filtered_votes);
+    let rankings = calculate_rankings(&items, &filtered_votes);
+    
+    // Separate sorted and unsorted items based on filtered votes
+    let voted_item_ids: HashSet<Uuid> = filtered_votes
         .iter()
         .flat_map(|vote| [vote.item_a_id, vote.item_b_id])
         .collect();
@@ -978,26 +990,6 @@ fn build_tag_detail_page_state(
     };
     
     PageState::TagDetail(state)
-}
-
-fn update_tag_detail_state<F>(
-    tag_id: Uuid,
-    session_state: &Arc<Mutex<SessionState>>,
-    update_fn: F,
-) where
-    F: FnOnce(&mut TagDetailPageState),
-{
-    // This is a simplified version - in a real implementation,
-    // you'd store the tag detail state in the session
-    // For now, we'll just rebuild it each time
-}
-
-fn get_tag_detail_state(
-    session_state: &Arc<Mutex<SessionState>>,
-    tag_id: Uuid,
-) -> Option<TagDetailPageState> {
-    // Simplified - would normally get from session state
-    None
 }
 
 fn calculate_voters_with_votes(votes: &[Vote]) -> Vec<Uuid> {

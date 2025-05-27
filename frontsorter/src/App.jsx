@@ -188,6 +188,8 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
     const [localNewAttributeTemplate, setLocalNewAttributeTemplate] = useState('');
     const [selectedTemplateIndex, setSelectedTemplateIndex] = useState('');
     const [showNewAttributeForm, setShowNewAttributeForm] = useState(false);
+    const [activeTab, setActiveTab] = useState('ranking');
+    const [expandedVotes, setExpandedVotes] = useState(null);
 
     // Initialize local state from server state only once
     useEffect(() => {
@@ -479,36 +481,164 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
             </div>
             
             <div className="sidebar">
-                <h2 style={{color: "black"}}>Ensemble Rankings:</h2>
-                {pageState.sorted_items.length === 0 ? (
-                    <div className="empty-state">
-                        <p>Add items below to see rankings</p>
+                <div className="tab-panel">
+                    <div className="tab-buttons">
+                        <button
+                            className={`tab-button ${activeTab === 'ranking' ? 'tab-active' : ''}`}
+                            onClick={() => setActiveTab('ranking')}
+                        >
+                            Ensemble Rankings
+                        </button>
+                        <button
+                            className={`tab-button ${activeTab === 'votes' ? 'tab-active' : ''}`}
+                            onClick={() => setActiveTab('votes')}
+                        >
+                            All Votes ({pageState.votes.length})
+                        </button>
                     </div>
-                ) : (
-                    <ol className="ranked-list">
-                        {pageState.sorted_items.map((item) => (
-                            <li key={item.item_id} className="ranked-item">
-                                <p>{item.text}</p>
-                                <div className="item-meta">
-                                    <span className="score">
-                                        Score: {item.score.toFixed(1)}
-                                    </span>
-                                </div>
-                            </li>
-                        ))}
-                    </ol>
-                )}
+                </div>
 
-                {pageState.unsorted_items.length > 0 && (
+                {activeTab === 'ranking' ? (
                     <>
-                        <h3 style={{color: "black", marginTop: "2em"}}>Unvoted Items:</h3>
-                        <ul className="unranked-list">
-                            {pageState.unsorted_items.map((item) => (
-                                <li key={item.id} className="unranked-item">
-                                    <p>{item.text}</p>
-                                </li>
-                            ))}
-                        </ul>
+                        <h2 style={{color: "black"}}>Ensemble Rankings:</h2>
+                        {pageState.sorted_items.length === 0 ? (
+                            <div className="empty-state">
+                                <p>Add items below to see rankings</p>
+                            </div>
+                        ) : (
+                            <ol className="ranked-list">
+                                {pageState.sorted_items.map((item, index) => {
+                                    // Calculate votes for this item dynamically
+                                    const itemVotes = pageState.votes.filter(vote => 
+                                        vote.item_a_id === item.item_id || vote.item_b_id === item.item_id
+                                    ).map(vote => {
+                                        const isItemA = vote.item_a_id === item.item_id;
+                                        const againstId = isItemA ? vote.item_b_id : vote.item_a_id;
+                                        const againstItem = [...pageState.sorted_items, ...pageState.unsorted_items]
+                                            .find(i => (i.item_id || i.id) === againstId);
+                                        return {
+                                            against_item_id: againstId,
+                                            against_item_text: againstItem?.text || 'Unknown item',
+                                            score: isItemA ? -vote.score : vote.score,
+                                            rationale: vote.rationale
+                                        };
+                                    });
+
+                                    return (
+                                        <li key={item.item_id} className="ranked-item">
+                                            <p>{item.text}</p>
+                                            <div className="item-meta">
+                                                <span className="score">
+                                                    Score: {item.score.toFixed(1)}
+                                                </span>
+                                                <a
+                                                    href="#"
+                                                    className={expandedVotes === index ? 'visited' : ''}
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        if (itemVotes.length > 0) {
+                                                            setExpandedVotes(expandedVotes === index ? null : index);
+                                                        }
+                                                    }}
+                                                >
+                                                    [{itemVotes.length} votes]
+                                                </a>
+                                            </div>
+                                            {expandedVotes === index && itemVotes.length > 0 && (
+                                                <div className="vote-history">
+                                                    <h4 className="vote-history-title">Vote Details:</h4>
+                                                    {itemVotes.map((vote, voteIndex) => (
+                                                        <div key={voteIndex} className="vote-record">
+                                                            <div className="vote-opponent">
+                                                                compared to: "{vote.against_item_text.length > 50 ? 
+                                                                    vote.against_item_text.substring(0, 50) + '...' : 
+                                                                    vote.against_item_text}"
+                                                            </div>
+                                                            <div className="vote-score">
+                                                                {vote.score > 0 ? 'WON' : vote.score < 0 ? 'LOST' : 'TIED'}
+                                                            </div>
+                                                            {vote.rationale && (
+                                                                <div className="vote-reasoning">
+                                                                    <em>"{vote.rationale}"</em>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </li>
+                                    );
+                                })}
+                            </ol>
+                        )}
+
+                        {pageState.unsorted_items.length > 0 && (
+                            <>
+                                <h3 style={{color: "black", marginTop: "2em"}}>Unvoted Items:</h3>
+                                <ul className="unranked-list">
+                                    {pageState.unsorted_items.map((item) => (
+                                        <li key={item.id} className="unranked-item">
+                                            <p>{item.text}</p>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </>
+                        )}
+                    </>
+                ) : (
+                    <>
+                        <h2 style={{color: "black"}}>All Votes:</h2>
+                        {pageState.votes.length === 0 ? (
+                            <div className="empty-state">
+                                <p>No votes recorded yet.</p>
+                            </div>
+                        ) : (
+                            <div className="votes-list">
+                                {pageState.votes.map((vote, index) => {
+                                    const itemA = [...pageState.sorted_items, ...pageState.unsorted_items]
+                                        .find(item => (item.item_id || item.id) === vote.item_a_id);
+                                    const itemB = [...pageState.sorted_items, ...pageState.unsorted_items]
+                                        .find(item => (item.item_id || item.id) === vote.item_b_id);
+                                    const voter = pageState.voters.find(v => v.id === vote.voter_id);
+                                    const attribute = pageState.attributes.find(a => a.id === vote.attribute_id);
+                                    
+                                    return (
+                                        <div key={index} className="vote-card">
+                                            <div className="vote-comparison">
+                                                <div className="vote-item">
+                                                    <span className="vote-label">A:</span>
+                                                    <p className="vote-text">"{itemA?.text || 'Unknown item'}"</p>
+                                                </div>
+                                                <div className="vote-versus">vs</div>
+                                                <div className="vote-item">
+                                                    <span className="vote-label">B:</span>
+                                                    <p className="vote-text">"{itemB?.text || 'Unknown item'}"</p>
+                                                </div>
+                                            </div>
+                                            <div className="vote-result">
+                                                <div className="vote-score-display">
+                                                    <span className="vote-direction">
+                                                        {vote.score < 0 ? '← Prefers A' : vote.score > 0 ? 'Prefers B →' : 'Neutral'}
+                                                    </span>
+                                                    <span className="vote-magnitude">
+                                                        Score: {vote.score > 0 ? '+' : ''}{vote.score}
+                                                    </span>
+                                                </div>
+                                                <div className="vote-meta">
+                                                    <span>Voter: @{voter?.name || 'Unknown'}</span>
+                                                    <span>Lens: {attribute?.label || 'Unknown'}</span>
+                                                </div>
+                                                {vote.rationale && (
+                                                    <div className="vote-reasoning">
+                                                        <em>"{vote.rationale}"</em>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </>
                 )}
 
