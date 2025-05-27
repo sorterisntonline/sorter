@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useWebSocketContext } from '../contexts/WebSocketContext';
 import { DEFAULT_PROMPT_TEMPLATE, PROMPT_TEMPLATES } from '../constants/prompts';
 import Select from 'react-select';
-import AsyncSelect from 'react-select/async';
+import OpenRouterModelSelector from '../components/OpenRouterModelSelector';
 
 function TagDetailPageV2() {
   const { tagId } = useParams();
@@ -80,35 +80,6 @@ function TagDetailPageV2() {
 
   const handleSortMissingPairs = () => {
     sendCommand({ cmd: 'sort_missing_pairs', tag_id: tagId });
-  };
-
-  // Models loader for AsyncSelect
-  const loadModelOptions = async (inputValue) => {
-    try {
-      const response = await fetch('https://openrouter.ai/api/v1/models');
-      const data = await response.json();
-      
-      if (data.data && Array.isArray(data.data)) {
-        const allModels = data.data
-          .filter(model => model.id && (!inputValue || model.id.toLowerCase().includes(inputValue.toLowerCase())))
-          .sort((a, b) => {
-            const priceA = a.pricing?.prompt ? parseFloat(a.pricing.prompt) : 999;
-            const priceB = b.pricing?.prompt ? parseFloat(b.pricing.prompt) : 999;
-            return priceA - priceB;
-          });
-        
-        return allModels.slice(0, 50).map(model => ({
-          value: model.id,
-          label: `@${model.id}`,
-          data: model
-        }));
-      }
-      
-      return [];
-    } catch (error) {
-      console.error('Failed to fetch models:', error);
-      return [];
-    }
   };
 
   if (!pageState) {
@@ -230,11 +201,7 @@ function TagDetailPageV2() {
             <div style={{ marginBottom: '1.5em' }}>
               <span className="sorter-label">SELECT AI MODELS</span>
               <div style={{ marginTop: '0.5em', marginBottom: '1em' }}>
-                <AsyncSelect
-                  isMulti
-                  cacheOptions
-                  defaultOptions
-                  loadOptions={loadModelOptions}
+                <OpenRouterModelSelector
                   value={voterOptions.filter(opt => pageState.selected_voters.includes(opt.value))}
                   onChange={(selectedOptions) => {
                     // Check if we need to create any new voters
@@ -252,23 +219,6 @@ function TagDetailPageV2() {
                     
                     handleUpdateSelectedVoters(voterIds);
                   }}
-                  placeholder="Type to search AI models..."
-                  styles={selectStyles}
-                  className="model-selector"
-                  classNamePrefix="select"
-                  formatOptionLabel={(option) => (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontFamily: 'monospace', fontSize: '0.9em' }}>
-                        {option.label}
-                        {option.hasVotes && <span style={{ marginLeft: '0.5em', color: '#68693F' }}>✓</span>}
-                      </span>
-                      {option.data?.pricing?.prompt && (
-                        <span style={{ fontSize: '0.8em', color: '#666', marginLeft: '1em' }}>
-                          ${(parseFloat(option.data.pricing.prompt) * 1000000).toFixed(2)}/M
-                        </span>
-                      )}
-                    </div>
-                  )}
                 />
               </div>
             </div>

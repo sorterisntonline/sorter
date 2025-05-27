@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './App.css'
+import OpenRouterModelSelector from './components/OpenRouterModelSelector';
 
 import { useWebSocketContext } from './contexts/WebSocketContext';
 
@@ -265,6 +266,14 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
             return a.name.localeCompare(b.name);
         });
 
+    // Prepare voter options for OpenRouterModelSelector
+    const voterOptions = sortedVoters.map(voter => ({
+        value: voter.id,
+        label: `@${voter.name}`,
+        data: voter,
+        hasVotes: pageState.voters_with_votes.includes(voter.id)
+    }));
+
     return (
         <div className="sorter-page">
             <div className="content">
@@ -292,33 +301,24 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
                         <div style={{ marginBottom: '1.5em' }}>
                             <span className="sorter-label">SELECT AI MODELS</span>
                             <div style={{ marginTop: '0.5em', marginBottom: '1em' }}>
-                                <select
-                                    multiple
-                                    value={pageState.selected_voters}
-                                    onChange={(e) => {
-                                        const selected = Array.from(e.target.selectedOptions, option => option.value);
-                                        handleSelectedVotersChange(selected);
+                                <OpenRouterModelSelector
+                                    value={voterOptions.filter(opt => pageState.selected_voters.includes(opt.value))}
+                                    onChange={(selectedOptions) => {
+                                        // Check if we need to create any new voters
+                                        selectedOptions.forEach(opt => {
+                                            if (!opt.data) {
+                                                // This is a new model, create it
+                                                handleCreateOrSelectVoter(opt.label.substring(1)); // Remove @ prefix
+                                            }
+                                        });
+                                        
+                                        // Update selected voters
+                                        const voterIds = selectedOptions
+                                            .filter(opt => opt.data) // Only existing voters
+                                            .map(opt => opt.value);
+                                        
+                                        handleSelectedVotersChange(voterIds);
                                     }}
-                                    className="model-selector"
-                                    style={{ width: '100%', minHeight: '100px' }}
-                                >
-                                    {sortedVoters.map(voter => (
-                                        <option key={voter.id} value={voter.id}>
-                                            @{voter.name} {pageState.voters_with_votes.includes(voter.id) ? '✓' : ''}
-                                        </option>
-                                    ))}
-                                </select>
-                                <input
-                                    type="text"
-                                    placeholder="Type model name to create new voter..."
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter' && e.target.value.trim()) {
-                                            handleCreateOrSelectVoter(e.target.value.trim());
-                                            e.target.value = '';
-                                        }
-                                    }}
-                                    className="topic-input"
-                                    style={{ marginTop: '0.5em' }}
                                 />
                             </div>
                         </div>
