@@ -223,7 +223,7 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
     };
 
     const handleSortMissingPairs = () => {
-        if (!isConnected || pageState.missing_comparisons.length === 0) return;
+        if (!isConnected || pageState.unvoted_item_count === 0) return;
         sendCommand({ cmd: 'sort_missing_pairs' });
     };
 
@@ -299,7 +299,7 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
                     </div>
 
                     <h1>{pageState.tag.name}</h1>
-                    <p className="sorter-label">COLLECTION • {pageState.items.length} ITEMS</p>
+                    <p className="sorter-label">COLLECTION • {pageState.sorted_items.length + pageState.unsorted_items.length} ITEMS</p>
 
                     <div className="job-control-panel">
                         <h2>Whose preferences to explore:</h2>
@@ -371,11 +371,11 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
                             </div>
                         </div>
 
-                        {pageState.missing_comparisons.length > 0 && 
+                        {pageState.unvoted_item_count > 0 && 
                          pageState.selected_voters.length > 0 && 
                          pageState.selected_attributes.length > 0 && (
                             <div className="voting-status" style={{ marginBottom: '1em' }}>
-                                🔄 {pageState.missing_comparisons.length} missing comparisons
+                                🔄 {pageState.unvoted_item_count} unvoted items
                                 {votingProgress && (
                                     <span style={{ marginLeft: '1em' }}>
                                         ({votingProgress.completed}/{votingProgress.total})
@@ -387,12 +387,12 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
                         <button
                             onClick={handleSortMissingPairs}
                             disabled={!isConnected || pageState.is_voting_in_progress || 
-                                     pageState.missing_comparisons.length === 0 || 
+                                     pageState.unvoted_item_count === 0 || 
                                      pageState.selected_voters.length === 0 || 
                                      pageState.selected_attributes.length === 0}
                             className="voting-button start-voting"
                         >
-                            {pageState.is_voting_in_progress ? '⏳ Sorting...' : `Sort ${pageState.missing_comparisons.length} missing pairs`}
+                            {pageState.is_voting_in_progress ? '⏳ Sorting...' : `Vote on ${pageState.unvoted_item_count} unvoted items`}
                         </button>
                     </div>
 
@@ -438,13 +438,13 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
             
             <div className="sidebar">
                 <h2 style={{color: "black"}}>Ensemble Rankings:</h2>
-                {pageState.rankings.length === 0 ? (
+                {pageState.sorted_items.length === 0 ? (
                     <div className="empty-state">
                         <p>Add items below to see rankings</p>
                     </div>
                 ) : (
                     <ol className="ranked-list">
-                        {pageState.rankings.map((item) => (
+                        {pageState.sorted_items.map((item) => (
                             <li key={item.item_id} className="ranked-item">
                                 <p>{item.text}</p>
                                 <div className="item-meta">
@@ -455,6 +455,19 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
                             </li>
                         ))}
                     </ol>
+                )}
+
+                {pageState.unsorted_items.length > 0 && (
+                    <>
+                        <h3 style={{color: "black", marginTop: "2em"}}>Unvoted Items:</h3>
+                        <ul className="unranked-list">
+                            {pageState.unsorted_items.map((item) => (
+                                <li key={item.id} className="unranked-item">
+                                    <p>{item.text}</p>
+                                </li>
+                            ))}
+                        </ul>
+                    </>
                 )}
 
                 <div style={{ marginTop: '3em', borderTop: '1px solid #ddd', paddingTop: '2em' }}>

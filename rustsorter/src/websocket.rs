@@ -84,12 +84,13 @@ pub struct TagsListPageState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TagDetailPageState {
     pub tag: Tag,
-    pub items: Vec<Item>,
+    pub sorted_items: Vec<RankedItem>, // Items with votes and rankings
+    pub unsorted_items: Vec<Item>, // Items without votes
     pub attributes: Vec<Attribute>,
     pub voters: Vec<Voter>,
     pub votes: Vec<Vote>,
-    pub rankings: Vec<RankedItem>,
-    pub missing_comparisons: Vec<MissingComparison>,
+    pub rankings: Vec<RankedItem>, // Keep for backward compatibility
+    pub unvoted_item_count: usize, // Count of items without votes
     pub voters_with_votes: Vec<Uuid>,
     pub selected_attributes: Vec<Uuid>,
     pub selected_voters: Vec<Uuid>,
@@ -526,25 +527,36 @@ fn build_tag_detail_page_state(
     let voters_with_votes = calculate_voters_with_votes(&votes);
     let rankings = calculate_rankings(&items, &votes);
     
-    // Get selected state from session to calculate missing comparisons
+    // Get selected state from session
     let (selected_voters, selected_attributes) = {
         let mut session = session_state.lock().unwrap();
         let selection = session.get_or_create_tag_selection(tag_id);
         (selection.selected_voters.clone(), selection.selected_attributes.clone())
     };
     
-    let missing_comparisons = calculate_missing_comparisons(&items, &votes, &selected_voters, &selected_attributes);
+    // Separate sorted and unsorted items
+    let voted_item_ids: HashSet<Uuid> = votes
+        .iter()
+        .flat_map(|vote| [vote.item_a_id, vote.item_b_id])
+        .collect();
     
-    // Note: selected_voters and selected_attributes already obtained above
+    let unsorted_items: Vec<Item> = items
+        .iter()
+        .filter(|item| !voted_item_ids.contains(&item.id))
+        .cloned()
+        .collect();
+    
+    let unvoted_item_count = unsorted_items.len();
     
     let state = TagDetailPageState {
         tag,
-        items,
+        sorted_items: rankings.clone(), // Items with votes and rankings
+        unsorted_items, // Items without votes
         attributes,
         voters,
         votes,
-        rankings,
-        missing_comparisons,
+        rankings, // Keep for backward compatibility
+        unvoted_item_count, // Count of items without votes
         voters_with_votes,
         selected_attributes,
         selected_voters,
@@ -583,43 +595,31 @@ fn calculate_voters_with_votes(votes: &[Vote]) -> Vec<Uuid> {
     voter_ids.into_iter().collect()
 }
 
-fn calculate_missing_comparisons(
-    items: &[Item], 
-    votes: &[Vote], 
-    _selected_voters: &[Uuid], 
-    _selected_attributes: &[Uuid]
-) -> Vec<MissingComparison> {
-    // Shortcut: Just return the number of unsorted items as missing comparisons
+
+
+fn calculate_rankings(items: &[Item], votes: &[Vote]) -> Vec<RankedItem> {
+    if items.is_empty() || votes.is_empty() {
+        return Vec::new();
+    }
+
     // Find items that have votes
     let voted_item_ids: HashSet<Uuid> = votes
         .iter()
         .flat_map(|vote| [vote.item_a_id, vote.item_b_id])
         .collect();
 
-    // Create fake missing comparisons for items without votes
-    let mut missing_comparisons = Vec::new();
-    for item in items {
-        if !voted_item_ids.contains(&item.id) {
-            // Create a dummy comparison entry for this unvoted item
-            missing_comparisons.push(MissingComparison {
-                item_a_id: item.id,
-                item_b_id: item.id, // Same item for both sides as a placeholder
-                item_a_text: item.text.clone(),
-                item_b_text: format!("(unvoted: {})", item.text),
-            });
-        }
-    }
+    // Only include items that have votes
+    let voted_items: Vec<&Item> = items
+        .iter()
+        .filter(|item| voted_item_ids.contains(&item.id))
+        .collect();
 
-    missing_comparisons
-}
-
-fn calculate_rankings(items: &[Item], votes: &[Vote]) -> Vec<RankedItem> {
-    if items.is_empty() {
+    if voted_items.is_empty() {
         return Vec::new();
     }
 
-    // Convert items to EntityIdentifier format
-    let entities: Vec<EntityIdentifier> = items
+    // Convert voted items to EntityIdentifier format
+    let entities: Vec<EntityIdentifier> = voted_items
         .iter()
         .map(|item| EntityIdentifier {
             pk_namespace: "item".to_string(),
@@ -639,42 +639,25 @@ fn calculate_rankings(items: &[Item], votes: &[Vote]) -> Vec<RankedItem> {
         })
         .collect();
 
-    // If no votes, return items in original order with equal scores
-    if pagerank_votes.is_empty() {
-        return items.iter().enumerate().map(|(i, item)| RankedItem {
-            item_id: item.id,
-            rank: i + 1,
-            score: 1.0,
-            text: item.text.clone(),
-        }).collect();
-    }
-
     // Build the ranking graph
     let rank_graph = match build_rank_graph(&entities, &pagerank_votes) {
         Ok(graph) => graph,
         Err(e) => {
             log::error!("Failed to build ranking graph: {:?}", e);
-            // Fallback to equal scores
-            return items.iter().enumerate().map(|(i, item)| RankedItem {
-                item_id: item.id,
-                rank: i + 1,
-                score: 1.0,
-                text: item.text.clone(),
-            }).collect();
+            return Vec::new();
         }
     };
 
     // Calculate Tommy Rank scores
     let scores = calculate_tommy_rank(&rank_graph.graph, 100000, 1e-8);
 
-    // Create ranked items with scores
+    // Create ranked items with scores (only for items that have votes)
     let mut ranked_items: Vec<RankedItem> = Vec::new();
     
-    // Add items that have votes (ranked items)
     for (index, score) in scores.iter().enumerate() {
         if let Some(entity_id) = rank_graph.index_to_entity_identifier.get(&index) {
             if let Ok(item_uuid) = Uuid::parse_str(&entity_id.pk) {
-                if let Some(item) = items.iter().find(|i| i.id == item_uuid) {
+                if let Some(item) = voted_items.iter().find(|i| i.id == item_uuid) {
                     ranked_items.push(RankedItem {
                         item_id: item.id,
                         rank: 0, // Will be set after sorting
@@ -683,19 +666,6 @@ fn calculate_rankings(items: &[Item], votes: &[Vote]) -> Vec<RankedItem> {
                     });
                 }
             }
-        }
-    }
-
-    // Add items that don't have votes (unranked items) with score 0
-    let voted_item_ids: HashSet<Uuid> = ranked_items.iter().map(|ri| ri.item_id).collect();
-    for item in items {
-        if !voted_item_ids.contains(&item.id) {
-            ranked_items.push(RankedItem {
-                item_id: item.id,
-                rank: 0, // Will be set after sorting
-                score: 0.0,
-                text: item.text.clone(),
-            });
         }
     }
 

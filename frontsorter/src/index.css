@@ -760,8 +760,3 @@ div.footnotes { color: #666; padding-top: 0;}
         opacity: 0.6;
         font-style: italic;
 }
-
-.unranked-item:before {
-        content: "—" !important;
-        counter-increment: none !important;
-}
