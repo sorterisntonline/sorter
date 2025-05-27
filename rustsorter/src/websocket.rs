@@ -140,7 +140,7 @@ pub struct TagDetailPageState {
     pub selected_attributes: Vec<Uuid>,
     pub selected_voters: Vec<Uuid>,
     pub is_voting_in_progress: bool,
-    pub show_new_attribute_form: bool,
+
 }
 
 // Union of all possible page states
@@ -167,7 +167,6 @@ pub enum WsCommand {
     UpdateSelectedAttributes { attribute_ids: Vec<Uuid> },
     AddItem { text: String },
     DeleteItem { item_id: Uuid },
-    ToggleNewAttributeForm,
     CreateAttribute { label: String, template: String },
     DeleteAttribute { attribute_id: Uuid },
     SortMissingPairs,
@@ -729,19 +728,7 @@ async fn handle_command(
             }
         }
 
-        WsCommand::ToggleNewAttributeForm => {
-            let tag_id = {
-                let session = session_state.lock().unwrap();
-                session.current_tag_id
-            };
-            
-            if let Some(tag_id) = tag_id {
-                // For now, just toggle in the rebuilt state
-                // In a real implementation, you'd track this in session state
-                let page_state = build_tag_detail_page_state(tag_id, &session_state);
-                let _ = tx.send(WsEvent::PageState { state: page_state });
-            }
-        }
+
         
         WsCommand::DeleteItem { item_id } => {
             ITEMS.lock().unwrap().remove(&item_id);
@@ -988,7 +975,6 @@ fn build_tag_detail_page_state(
         selected_attributes,
         selected_voters,
         is_voting_in_progress,
-        show_new_attribute_form: false,
     };
     
     PageState::TagDetail(state)

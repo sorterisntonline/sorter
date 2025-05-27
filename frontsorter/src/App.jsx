@@ -25,17 +25,6 @@ function App() {
                 console.log('Received page state:', lastMessage.state);
                 setCurrentPageState(lastMessage.state);
                 setIsLoading(false);
-                
-                // If this is a new tag detail page with no attributes, create a default one
-                if (lastMessage.state.page === 'tag_detail' && 
-                    lastMessage.state.attributes && 
-                    lastMessage.state.attributes.length === 0) {
-                    sendCommand({
-                        cmd: 'create_attribute',
-                        label: "Pure Preference",
-                        template: DEFAULT_PROMPT_TEMPLATE
-                    });
-                }
                 break;
 
             case 'voting_progress':
@@ -198,6 +187,7 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
     const [localNewAttributeLabel, setLocalNewAttributeLabel] = useState('');
     const [localNewAttributeTemplate, setLocalNewAttributeTemplate] = useState('');
     const [selectedTemplateIndex, setSelectedTemplateIndex] = useState('');
+    const [showNewAttributeForm, setShowNewAttributeForm] = useState(false);
 
     // Initialize local state from server state only once
     useEffect(() => {
@@ -205,10 +195,12 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
     }, [pageState.tag.id]); // Only reset when switching tags
 
     useEffect(() => {
-        setLocalNewAttributeLabel(pageState.new_attribute_label || '');
-        setLocalNewAttributeTemplate(pageState.new_attribute_template || '');
-        setSelectedTemplateIndex(''); // Reset template selection when form opens/closes
-    }, [pageState.show_new_attribute_form]); // Only reset when form opens/closes
+        // Reset form when switching tags
+        setShowNewAttributeForm(false);
+        setLocalNewAttributeLabel('');
+        setLocalNewAttributeTemplate('');
+        setSelectedTemplateIndex('');
+    }, [pageState.tag.id]); // Reset when switching tags
 
     // Handle voting progress messages
     const [votingProgress, setVotingProgress] = useState(null);
@@ -242,7 +234,13 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
     };
 
     const handleToggleNewAttributeForm = () => {
-        sendCommand({ cmd: 'toggle_new_attribute_form' });
+        setShowNewAttributeForm(!showNewAttributeForm);
+        // Clear form when opening
+        if (!showNewAttributeForm) {
+            setLocalNewAttributeLabel('');
+            setLocalNewAttributeTemplate('');
+            setSelectedTemplateIndex('');
+        }
     };
 
     const handleTemplateSelect = (templateIndex) => {
@@ -261,10 +259,11 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
             label: localNewAttributeLabel.trim(),
             template: localNewAttributeTemplate.trim()
         });
-        // Clear form after creating
+        // Clear form and close after creating
         setLocalNewAttributeLabel('');
         setLocalNewAttributeTemplate('');
         setSelectedTemplateIndex('');
+        setShowNewAttributeForm(false);
     };
 
     const handleCreateOrSelectVoter = (name) => {
@@ -420,7 +419,7 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
                         </button>
                     </div>
 
-                    {pageState.show_new_attribute_form && (
+                    {showNewAttributeForm && (
                         <div className="job-control-panel" style={{ marginTop: '2em' }}>
                             <h3>Create new evaluation prompt:</h3>
                             
