@@ -150,6 +150,14 @@ lazy_static::lazy_static! {
 struct SessionState {
     current_tag_id: Option<Uuid>, // For tag detail pages
     tags_list_state: TagsListPageState,
+    // Track selected state per tag
+    tag_selections: HashMap<Uuid, TagSelectionState>,
+}
+
+#[derive(Debug, Clone)]
+struct TagSelectionState {
+    selected_voters: Vec<Uuid>,
+    selected_attributes: Vec<Uuid>,
 }
 
 impl SessionState {
@@ -159,7 +167,15 @@ impl SessionState {
             tags_list_state: TagsListPageState {
                 tags: Vec::new(),
             },
+            tag_selections: HashMap::new(),
         }
+    }
+    
+    fn get_or_create_tag_selection(&mut self, tag_id: Uuid) -> &mut TagSelectionState {
+        self.tag_selections.entry(tag_id).or_insert_with(|| TagSelectionState {
+            selected_voters: Vec::new(),
+            selected_attributes: Vec::new(),
+        })
     }
 }
 
@@ -269,15 +285,17 @@ async fn handle_command(
         // Tag detail page commands
         WsCommand::UpdateSelectedVoters { voter_ids } => {
             let tag_id = {
-                let session = session_state.lock().unwrap();
-                session.current_tag_id
-            }; // Release session lock here
+                let mut session = session_state.lock().unwrap();
+                if let Some(tag_id) = session.current_tag_id {
+                    let selection = session.get_or_create_tag_selection(tag_id);
+                    selection.selected_voters = voter_ids;
+                    Some(tag_id)
+                } else {
+                    None
+                }
+            };
             
             if let Some(tag_id) = tag_id {
-                update_tag_detail_state(tag_id, &session_state, |state| {
-                    state.selected_voters = voter_ids;
-                });
-                
                 let page_state = build_tag_detail_page_state(tag_id, &session_state);
                 let _ = tx.send(WsEvent::PageState { state: page_state });
             }
@@ -285,15 +303,17 @@ async fn handle_command(
         
         WsCommand::UpdateSelectedAttributes { attribute_ids } => {
             let tag_id = {
-                let session = session_state.lock().unwrap();
-                session.current_tag_id
-            }; // Release session lock here
+                let mut session = session_state.lock().unwrap();
+                if let Some(tag_id) = session.current_tag_id {
+                    let selection = session.get_or_create_tag_selection(tag_id);
+                    selection.selected_attributes = attribute_ids;
+                    Some(tag_id)
+                } else {
+                    None
+                }
+            };
             
             if let Some(tag_id) = tag_id {
-                update_tag_detail_state(tag_id, &session_state, |state| {
-                    state.selected_attributes = attribute_ids;
-                });
-                
                 let page_state = build_tag_detail_page_state(tag_id, &session_state);
                 let _ = tx.send(WsEvent::PageState { state: page_state });
             }
@@ -348,11 +368,102 @@ async fn handle_command(
                 let _ = tx.send(WsEvent::PageState { state: page_state });
             }
         }
+        
+        WsCommand::CreateOrSelectVoter { name } => {
+            if !name.trim().is_empty() {
+                let voter_name = name.trim().to_string();
+                
+                // Check if voter already exists
+                let existing_voter_id = {
+                    let voters = VOTERS.lock().unwrap();
+                    voters.values()
+                        .find(|v| v.name == voter_name)
+                        .map(|v| v.id)
+                };
+                
+                let voter_id = if let Some(id) = existing_voter_id {
+                    id
+                } else {
+                    // Create new voter
+                    let new_id = Uuid::new_v4();
+                    let voter = Voter {
+                        id: new_id,
+                        name: voter_name,
+                        is_ai: true,
+                    };
+                    VOTERS.lock().unwrap().insert(new_id, voter);
+                    new_id
+                };
+                
+                // Get current tag_id
+                let tag_id = {
+                    let session = session_state.lock().unwrap();
+                    session.current_tag_id
+                };
+                
+                if let Some(tag_id) = tag_id {
+                    // Add voter to selected voters in session state
+                    {
+                        let mut session = session_state.lock().unwrap();
+                        let selection = session.get_or_create_tag_selection(tag_id);
+                        if !selection.selected_voters.contains(&voter_id) {
+                            selection.selected_voters.push(voter_id);
+                        }
+                    }
+                    
+                    // Send back the updated page state
+                    let page_state = build_tag_detail_page_state(tag_id, &session_state);
+                    let _ = tx.send(WsEvent::PageState { state: page_state });
+                }
+            }
+        }
 
-        // ... other commands would be implemented similarly
-        _ => {
+        WsCommand::ToggleNewAttributeForm => {
+            let tag_id = {
+                let session = session_state.lock().unwrap();
+                session.current_tag_id
+            };
+            
+            if let Some(tag_id) = tag_id {
+                // For now, just toggle in the rebuilt state
+                // In a real implementation, you'd track this in session state
+                let page_state = build_tag_detail_page_state(tag_id, &session_state);
+                let _ = tx.send(WsEvent::PageState { state: page_state });
+            }
+        }
+        
+        WsCommand::DeleteItem { item_id } => {
+            ITEMS.lock().unwrap().remove(&item_id);
+            
+            let tag_id = {
+                let session = session_state.lock().unwrap();
+                session.current_tag_id
+            };
+            
+            if let Some(tag_id) = tag_id {
+                let page_state = build_tag_detail_page_state(tag_id, &session_state);
+                let _ = tx.send(WsEvent::PageState { state: page_state });
+            }
+        }
+        
+        WsCommand::DeleteAttribute { attribute_id } => {
+            ATTRIBUTES.lock().unwrap().remove(&attribute_id);
+            
+            let tag_id = {
+                let session = session_state.lock().unwrap();
+                session.current_tag_id
+            };
+            
+            if let Some(tag_id) = tag_id {
+                let page_state = build_tag_detail_page_state(tag_id, &session_state);
+                let _ = tx.send(WsEvent::PageState { state: page_state });
+            }
+        }
+        
+        WsCommand::SortMissingPairs => {
+            // TODO: Implement voting logic
             let _ = tx.send(WsEvent::Error { 
-                message: "Command not implemented yet".to_string() 
+                message: "Voting not implemented yet".to_string() 
             });
         }
     }
@@ -413,6 +524,13 @@ fn build_tag_detail_page_state(
     let rankings = calculate_rankings(&items, &votes);
     let missing_comparisons = Vec::new(); // TODO: implement
     
+    // Get selected state from session
+    let (selected_voters, selected_attributes) = {
+        let mut session = session_state.lock().unwrap();
+        let selection = session.get_or_create_tag_selection(tag_id);
+        (selection.selected_voters.clone(), selection.selected_attributes.clone())
+    };
+    
     let state = TagDetailPageState {
         tag,
         items,
@@ -422,8 +540,8 @@ fn build_tag_detail_page_state(
         rankings,
         missing_comparisons,
         voters_with_votes,
-        selected_attributes: Vec::new(),
-        selected_voters: Vec::new(),
+        selected_attributes,
+        selected_voters,
         is_voting_in_progress: false,
         show_new_attribute_form: false,
     };

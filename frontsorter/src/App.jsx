@@ -274,6 +274,11 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
         hasVotes: pageState.voters_with_votes.includes(voter.id)
     }));
 
+    // Also prepare selected voter options using the voter names
+    const selectedVoterOptions = pageState.selected_voters
+        .map(voterId => voterOptions.find(opt => opt.value === voterId))
+        .filter(Boolean);
+
     return (
         <div className="sorter-page">
             <div className="content">
@@ -302,22 +307,37 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
                             <span className="sorter-label">SELECT AI MODELS</span>
                             <div style={{ marginTop: '0.5em', marginBottom: '1em' }}>
                                 <OpenRouterModelSelector
-                                    value={voterOptions.filter(opt => pageState.selected_voters.includes(opt.value))}
+                                    value={selectedVoterOptions}
                                     onChange={(selectedOptions) => {
-                                        // Check if we need to create any new voters
-                                        selectedOptions.forEach(opt => {
-                                            if (!opt.data) {
-                                                // This is a new model, create it
-                                                handleCreateOrSelectVoter(opt.label.substring(1)); // Remove @ prefix
+                                        // Separate existing voters from new models
+                                        const existingVoterIds = [];
+                                        const newModels = [];
+                                        
+                                        selectedOptions.forEach(option => {
+                                            // Check if this is an existing voter by matching the label
+                                            const existingVoter = voterOptions.find(v => 
+                                                v.label === option.label
+                                            );
+                                            
+                                            if (existingVoter) {
+                                                existingVoterIds.push(existingVoter.value);
+                                            } else {
+                                                // This is a new model from OpenRouter
+                                                const modelName = option.label.startsWith('@') 
+                                                    ? option.label.substring(1) 
+                                                    : option.value;
+                                                newModels.push(modelName);
                                             }
                                         });
                                         
-                                        // Update selected voters
-                                        const voterIds = selectedOptions
-                                            .filter(opt => opt.data) // Only existing voters
-                                            .map(opt => opt.value);
+                                        // First, update selected voters with ONLY existing ones
+                                        // This will clear any deselected voters
+                                        handleSelectedVotersChange(existingVoterIds);
                                         
-                                        handleSelectedVotersChange(voterIds);
+                                        // Then create new voters (they will be auto-selected by the backend)
+                                        newModels.forEach(modelName => {
+                                            handleCreateOrSelectVoter(modelName);
+                                        });
                                     }}
                                 />
                             </div>
