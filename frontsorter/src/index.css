@@ -138,6 +138,13 @@ div.footnotes { color: #666; padding-top: 0;}
 .ranked-item {
         margin-bottom: 2em;
         list-style: none;
+        padding: 1em;
+        transition: background-color 0.2s ease;
+        cursor: pointer;
+}
+
+.ranked-item:hover {
+        background-color: rgba(104, 105, 63, 0.05);
 }
 
 .ranked-item:before {
@@ -759,4 +766,17 @@ div.footnotes { color: #666; padding-top: 0;}
 .unranked-item {
         opacity: 0.6;
         font-style: italic;
+        padding: 0.75em;
+        transition: background-color 0.2s ease, opacity 0.2s ease;
+        cursor: pointer;
+}
+
+.unranked-item:hover {
+        background-color: rgba(104, 105, 63, 0.05);
+        opacity: 0.8;
+}
+
+.unranked-list {
+        margin-left: 0;
+        list-style: none;
 }
