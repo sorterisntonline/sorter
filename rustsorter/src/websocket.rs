@@ -980,7 +980,7 @@ fn build_tag_detail_page_state(
         unsorted_items, // Items without votes
         attributes,
         voters,
-        votes,
+        votes: filtered_votes.clone(),
         rankings, // Keep for backward compatibility
         unvoted_item_count, // Count of items without votes
         voters_with_votes,
