@@ -28,10 +28,6 @@ function App() {
                 setIsLoading(false);
                 break;
 
-            case 'voting_progress':
-                // Pass through to current page component
-                break;
-
             case 'error':
                 console.error('WebSocket error:', lastMessage.message);
                 setIsLoading(false);
@@ -73,7 +69,6 @@ function App() {
                     pageState={currentPageState}
                     sendCommand={sendCommand}
                     isConnected={isConnected}
-                    lastMessage={lastMessage}
                 />
             );
 
@@ -183,7 +178,7 @@ function TagsListPageV2({ pageState, sendCommand, isConnected }) {
     );
 }
 
-function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
+function TagDetailPageV2({ pageState, sendCommand, isConnected }) {
     const [localNewItemText, setLocalNewItemText] = useState('');
     const [localNewAttributeLabel, setLocalNewAttributeLabel] = useState('');
     const [localNewAttributeTemplate, setLocalNewAttributeTemplate] = useState('');
@@ -204,14 +199,6 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
         setLocalNewAttributeTemplate('');
         setSelectedTemplateIndex('');
     }, [pageState.tag.id]); // Reset when switching tags
-
-    // Handle voting progress messages
-    const [votingProgress, setVotingProgress] = useState(null);
-    useEffect(() => {
-        if (lastMessage?.event === 'voting_progress') {
-            setVotingProgress(lastMessage);
-        }
-    }, [lastMessage]);
 
     const handleBackToCollections = () => {
         sendCommand({ cmd: 'navigate_to_tags_list' });
@@ -405,9 +392,11 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
                          pageState.selected_attributes.length > 0 && (
                             <div className="voting-status" style={{ marginBottom: '1em' }}>
                                 🔄 {pageState.unvoted_item_count} unvoted items
-                                {votingProgress && (
+                                {pageState.is_voting_in_progress && 
+                                 pageState.completed_comparisons !== null && 
+                                 pageState.total_comparisons !== null && (
                                     <span style={{ marginLeft: '1em' }}>
-                                        ({votingProgress.completed}/{votingProgress.total})
+                                        ({pageState.completed_comparisons}/{pageState.total_comparisons})
                                     </span>
                                 )}
                             </div>

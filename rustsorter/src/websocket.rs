@@ -140,7 +140,8 @@ pub struct TagDetailPageState {
     pub selected_attributes: Vec<Uuid>,
     pub selected_voters: Vec<Uuid>,
     pub is_voting_in_progress: bool,
-
+    pub completed_comparisons: Option<usize>,
+    pub total_comparisons: Option<usize>,
 }
 
 // Union of all possible page states
@@ -183,7 +184,6 @@ pub enum WsEvent {
     Connected,
     Error { message: String },
     PageState { state: PageState },
-    VotingProgress { completed: usize, total: usize },
 }
 
 // Mock data stores
@@ -353,153 +353,141 @@ fn generate_missing_comparisons(
 async fn process_voting_session(
     session_id: Uuid,
     tx: mpsc::UnboundedSender<WsEvent>,
-    session_state: Arc<Mutex<SessionState>>,
+    session_state_arc: Arc<Mutex<SessionState>>,
 ) {
     loop {
-        // Check if session still exists and get current state
-        let (tag_id, voter_ids, attribute_ids, comparison, should_continue) = {
+        let (tag_id_option, voter_ids_option, attribute_ids_option, comparison_option, action_str) = {
             let mut sessions = VOTING_SESSIONS.lock().unwrap();
             if let Some(session) = sessions.get_mut(&session_id) {
                 if session.is_paused {
-                    // Session is paused, wait and check again
-                    drop(sessions);
-                    return; // Exit the function, will be restarted when resumed
+                    drop(sessions); // Release lock
+                    // Task will end. ResumeVoting must restart it.
+                    log::info!("Voting session {} is paused. Worker terminating.", session_id);
+                    return;
                 }
-                
+
                 if session.current_index >= session.comparisons.len() {
                     // Voting complete
                     let tag_id = session.tag_id;
-                    sessions.remove(&session_id);
-                    drop(sessions);
-                    
-                    // Clear session state
-                    {
-                        let mut session_state = session_state.lock().unwrap();
-                        session_state.voting_session_id = None;
+                    sessions.remove(&session_id); // Remove session from global store
+                    drop(sessions); // Release lock before further actions
+
+                    { // Clear voting_session_id from the client's SessionState
+                        let mut ss_guard = session_state_arc.lock().unwrap();
+                        ss_guard.voting_session_id = None;
                     }
-                    
-                    // Send final page state update
-                    let page_state = build_tag_detail_page_state(tag_id, &session_state);
-                    let _ = tx.send(WsEvent::PageState { state: page_state });
-                    return;
+
+                    // Send final page state
+                    let final_page_state = build_tag_detail_page_state(tag_id, &session_state_arc);
+                    if tx.send(WsEvent::PageState { state: final_page_state }).is_err() {
+                        log::warn!("Client disconnected before final PageState for session {} could be sent.", session_id);
+                    }
+                    log::info!("Voting session {} completed.", session_id);
+                    return; // Voting complete, task ends
                 }
-                
+
+                // Prepare for processing the current comparison
                 let comparison = session.comparisons[session.current_index].clone();
-                let result = (
-                    session.tag_id,
-                    session.voter_ids.clone(),
-                    session.attribute_ids.clone(),
-                    comparison,
-                    true,
-                );
-                drop(sessions); // Release lock before continuing
-                result
+                (Some(session.tag_id), Some(session.voter_ids.clone()), Some(session.attribute_ids.clone()), Some(comparison), "process")
             } else {
-                // Session was removed, exit
+                // Session was removed (e.g., by StopVoting or if it never existed), exit task
+                log::info!("Voting session {} not found or removed. Worker terminating.", session_id);
                 return;
             }
         };
-        
-        if !should_continue {
-            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-            continue;
-        }
-        
-        // Process current comparison
-        for voter_id in &voter_ids {
-            for attribute_id in &attribute_ids {
-                // Get voter and attribute details
-                let (voter_name, attribute_template) = {
-                    let voters = VOTERS.lock().unwrap();
-                    let attributes = ATTRIBUTES.lock().unwrap();
-                    
-                    let voter = voters.get(voter_id);
-                    let attribute = attributes.get(attribute_id);
-                    
-                    match (voter, attribute) {
-                        (Some(v), Some(a)) => (v.name.clone(), a.template.clone()),
-                        _ => {
-                            log::error!("Missing voter or attribute for voting");
-                            continue;
+
+        if action_str == "process" {
+            let tag_id = tag_id_option.unwrap();
+            let voter_ids = voter_ids_option.unwrap();
+            let attribute_ids = attribute_ids_option.unwrap();
+            let comparison_to_process = comparison_option.unwrap();
+
+            // Process current comparison
+            for voter_id in &voter_ids {
+                for attribute_id_val in &attribute_ids { // Renamed to avoid conflict
+                    let (voter_name, attribute_template) = {
+                        let voters_guard = VOTERS.lock().unwrap();
+                        let attributes_guard = ATTRIBUTES.lock().unwrap();
+                        let voter = voters_guard.get(voter_id);
+                        let attribute = attributes_guard.get(attribute_id_val);
+                        match (voter, attribute) {
+                            (Some(v), Some(a)) => (v.name.clone(), a.template.clone()),
+                            _ => {
+                                log::error!("Missing voter {} or attribute {} for voting in session {}", voter_id, attribute_id_val, session_id);
+                                continue;
+                            }
+                        }
+                    };
+
+                    let prompt = attribute_template
+                        .replace("{{A}}", &comparison_to_process.item_a_text)
+                        .replace("{{B}}", &comparison_to_process.item_b_text);
+
+                    match call_openrouter_api(&voter_name, &prompt).await {
+                        Ok(response) => {
+                            if let Some(score) = extract_score_from_response(&response) {
+                                let vote_id = {
+                                    let mut counter = VOTE_ID_COUNTER.lock().unwrap();
+                                    let id = *counter;
+                                    *counter += 1;
+                                    id
+                                };
+                                let vote = Vote {
+                                    id: vote_id,
+                                    tag_id,
+                                    attribute_id: *attribute_id_val,
+                                    voter_id: *voter_id,
+                                    item_a_id: comparison_to_process.item_a_id,
+                                    item_b_id: comparison_to_process.item_b_id,
+                                    score,
+                                    rationale: Some(response),
+                                    created_at: chrono::Utc::now().to_rfc3339(),
+                                };
+                                VOTES.lock().unwrap().push(vote);
+                                log::info!("Vote recorded for session {}: ItemA: {}, ItemB: {}, Score: {} by {}", session_id, comparison_to_process.item_a_text, comparison_to_process.item_b_text, score, voter_name);
+                            } else {
+                                log::warn!("Could not extract score from response for session {}: {}", session_id, response);
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("OpenRouter API call failed for session {}: {}", session_id, e);
                         }
                     }
-                };
-                
-                // Create prompt by substituting placeholders
-                let prompt = attribute_template
-                    .replace("{{A}}", &comparison.item_a_text)
-                    .replace("{{B}}", &comparison.item_b_text);
-                
-                // Call OpenRouter API
-                match call_openrouter_api(&voter_name, &prompt).await {
-                    Ok(response) => {
-                        // Extract score from response
-                        if let Some(score) = extract_score_from_response(&response) {
-                            // Create vote record
-                            let vote_id = {
-                                let mut counter = VOTE_ID_COUNTER.lock().unwrap();
-                                let id = *counter;
-                                *counter += 1;
-                                id
-                            };
-                            
-                            let vote = Vote {
-                                id: vote_id,
-                                tag_id,
-                                attribute_id: *attribute_id,
-                                voter_id: *voter_id,
-                                item_a_id: comparison.item_a_id,
-                                item_b_id: comparison.item_b_id,
-                                score,
-                                rationale: Some(response),
-                                created_at: chrono::Utc::now().to_rfc3339(),
-                            };
-                            
-                            // Store vote
-                            VOTES.lock().unwrap().push(vote);
-                            
-                            log::info!("Vote recorded: {} vs {} = {} (voter: {}, attribute: {})", 
-                                comparison.item_a_text, comparison.item_b_text, score, voter_name, attribute_id);
-                        } else {
-                            log::warn!("Could not extract score from response: {}", response);
-                        }
-                    }
-                    Err(e) => {
-                        log::error!("OpenRouter API call failed: {}", e);
-                        // Continue with next voter/attribute
-                    }
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await; // Delay between API calls
                 }
-                
-                // Small delay between API calls to avoid rate limiting
-                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            }
+
+            // Increment progress AFTER processing the current comparison item
+            let session_active_and_updated = {
+                let mut sessions_guard = VOTING_SESSIONS.lock().unwrap();
+                if let Some(session) = sessions_guard.get_mut(&session_id) {
+                    if session.is_paused { // Re-check pause, could have been paused during API calls
+                        false // Treat as needing to stop for pause
+                    } else {
+                        session.current_index += 1;
+                        log::info!("Session {} progress: {}/{}", session_id, session.current_index, session.total_comparisons);
+                        true
+                    }
+                } else {
+                    false // Session removed during processing
+                }
+            };
+
+            if !session_active_and_updated {
+                log::info!("Session {} paused or removed during processing. Worker terminating.", session_id);
+                return; // Exit if paused or removed
+            }
+
+            // ALWAYS send updated page state
+            let page_state_update = build_tag_detail_page_state(tag_id, &session_state_arc);
+            if tx.send(WsEvent::PageState { state: page_state_update }).is_err() {
+                log::warn!("Client disconnected during voting session {}. Worker terminating.", session_id);
+                // Optionally, consider cleaning up the session from VOTING_SESSIONS if this worker was "owner"
+                // VOTING_SESSIONS.lock().unwrap().remove(&session_id);
+                return;
             }
         }
-        
-        // Update progress
-        let (completed, total, should_update_page) = {
-            let mut sessions = VOTING_SESSIONS.lock().unwrap();
-            if let Some(session) = sessions.get_mut(&session_id) {
-                session.current_index += 1;
-                let completed = session.current_index;
-                let total = session.total_comparisons;
-                let should_update = completed % 5 == 0 || completed >= total;
-                (completed, total, should_update)
-            } else {
-                return; // Session was removed
-            }
-        };
-        
-        // Send progress update
-        let _ = tx.send(WsEvent::VotingProgress { 
-            completed, 
-            total 
-        });
-        
-        // Send updated page state periodically
-        if should_update_page {
-            let page_state = build_tag_detail_page_state(tag_id, &session_state);
-            let _ = tx.send(WsEvent::PageState { state: page_state });
-        }
+        // Loop continues: will check session status (paused, completed, removed) or process next.
     }
 }
 
@@ -761,99 +749,151 @@ async fn handle_command(
         }
         
         WsCommand::SortMissingPairs => {
-            let tag_id = {
+            let tag_id_opt = { // Renamed for clarity
                 let session = session_state.lock().unwrap();
                 session.current_tag_id
             };
             
-            if let Some(tag_id) = tag_id {
-                // Get selected voters and attributes
-                let (selected_voters, selected_attributes) = {
-                    let mut session = session_state.lock().unwrap();
-                    let selection = session.get_or_create_tag_selection(tag_id);
+            if let Some(tag_id) = tag_id_opt {
+                let (selected_voters_clone, selected_attributes_clone) = { // Cloned immediately
+                    let mut session_guard = session_state.lock().unwrap(); // mut for get_or_create
+                    let selection = session_guard.get_or_create_tag_selection(tag_id);
                     (selection.selected_voters.clone(), selection.selected_attributes.clone())
                 };
                 
-                if selected_voters.is_empty() || selected_attributes.is_empty() {
+                if selected_voters_clone.is_empty() || selected_attributes_clone.is_empty() {
                     let _ = tx.send(WsEvent::Error { 
                         message: "Please select at least one voter and one attribute".to_string() 
                     });
                     return;
                 }
                 
-                // Generate missing comparisons
-                let missing_comparisons = generate_missing_comparisons(tag_id, &selected_voters, &selected_attributes);
+                let missing_comparisons_vec = generate_missing_comparisons(tag_id, &selected_voters_clone, &selected_attributes_clone);
                 
-                if missing_comparisons.is_empty() {
+                if missing_comparisons_vec.is_empty() {
+                    // Send PageState to reflect no comparisons and not in progress
+                    let page_state_no_comparisons = build_tag_detail_page_state(tag_id, &session_state);
+                     let _ = tx.send(WsEvent::PageState { state: page_state_no_comparisons });
                     let _ = tx.send(WsEvent::Error { 
                         message: "No missing comparisons found".to_string() 
                     });
                     return;
                 }
                 
-                // Create voting session
-                let session_id = Uuid::new_v4();
-                let voting_session = VotingSession {
+                let new_session_id = Uuid::new_v4();
+                let voting_session_data = VotingSession {
                     tag_id,
-                    voter_ids: selected_voters,
-                    attribute_ids: selected_attributes,
-                    comparisons: missing_comparisons.clone(),
+                    voter_ids: selected_voters_clone,
+                    attribute_ids: selected_attributes_clone,
+                    comparisons: missing_comparisons_vec.clone(),
                     current_index: 0,
                     is_paused: false,
-                    total_comparisons: missing_comparisons.len(),
+                    total_comparisons: missing_comparisons_vec.len(),
                 };
                 
-                // Store voting session
-                VOTING_SESSIONS.lock().unwrap().insert(session_id, voting_session);
+                VOTING_SESSIONS.lock().unwrap().insert(new_session_id, voting_session_data);
                 
-                // Update session state
-                {
-                    let mut session = session_state.lock().unwrap();
-                    session.voting_session_id = Some(session_id);
+                { // Update client's SessionState with the new voting session ID
+                    let mut session_guard = session_state.lock().unwrap();
+                    session_guard.voting_session_id = Some(new_session_id);
                 }
                 
-                // Start voting process
+                // Send initial PageState to reflect voting has started
+                let initial_page_state = build_tag_detail_page_state(tag_id, &session_state);
+                if tx.send(WsEvent::PageState { state: initial_page_state }).is_err() {
+                    log::warn!("Client disconnected before voting session {} could fully start.", new_session_id);
+                    VOTING_SESSIONS.lock().unwrap().remove(&new_session_id); // Clean up if client gone
+                    return;
+                }
+                
+                log::info!("Starting voting session {} for tag {} with {} comparisons.", new_session_id, tag_id, missing_comparisons_vec.len());
                 let tx_clone = tx.clone();
                 let session_state_clone = session_state.clone();
                 tokio::spawn(async move {
-                    process_voting_session(session_id, tx_clone, session_state_clone).await;
+                    process_voting_session(new_session_id, tx_clone, session_state_clone).await;
                 });
-                
-                                 // Send initial progress
-                 let _ = tx.send(WsEvent::VotingProgress { 
-                     completed: 0, 
-                     total: missing_comparisons.len() 
-                 });
              }
          }
          
          WsCommand::PauseVoting => {
-             let session_id = {
+             let session_id_opt = {
                  let session = session_state.lock().unwrap();
                  session.voting_session_id
              };
              
-             if let Some(session_id) = session_id {
+             if let Some(session_id) = session_id_opt {
                  let mut sessions = VOTING_SESSIONS.lock().unwrap();
                  if let Some(session) = sessions.get_mut(&session_id) {
                      session.is_paused = true;
                      log::info!("Voting session {} paused", session_id);
+                     drop(sessions); // Release lock
+
+                     // Send updated PageState to reflect pause
+                     let tag_id_for_state = session_state.lock().unwrap().current_tag_id;
+                     if let Some(tid) = tag_id_for_state {
+                        // build_tag_detail_page_state will now reflect is_voting_in_progress (still true but session is paused)
+                        // and the current completed/total. The worker will terminate.
+                        let paused_page_state = build_tag_detail_page_state(tid, &session_state);
+                        let _ = tx.send(WsEvent::PageState { state: paused_page_state });
+                     }
+                 } else {
+                    log::warn!("Voting session {} not found for pausing.", session_id);
                  }
+             } else {
+                log::info!("No active voting session to pause.");
              }
          }
          
          WsCommand::ResumeVoting => {
-             let session_id = {
+             let session_id_opt = {
                  let session = session_state.lock().unwrap();
                  session.voting_session_id
              };
              
-             if let Some(session_id) = session_id {
-                 let mut sessions = VOTING_SESSIONS.lock().unwrap();
-                 if let Some(session) = sessions.get_mut(&session_id) {
-                     session.is_paused = false;
-                     log::info!("Voting session {} resumed", session_id);
+             if let Some(session_id) = session_id_opt {
+                 let should_respawn = {
+                    let mut sessions = VOTING_SESSIONS.lock().unwrap();
+                    if let Some(session) = sessions.get_mut(&session_id) {
+                        if session.is_paused {
+                            session.is_paused = false;
+                            log::info!("Voting session {} resumed", session_id);
+                            true // Indicate that respawning is needed
+                        } else {
+                            log::info!("Voting session {} was not paused. No action taken for resume.", session_id);
+                            false
+                        }
+                    } else {
+                        log::warn!("Voting session {} not found for resume.", session_id);
+                        false
+                    }
+                 }; // sessions lock released here
+
+                 if should_respawn {
+                    // Send PageState to reflect resumption and current progress
+                    let tag_id_for_state = session_state.lock().unwrap().current_tag_id;
+                    if let Some(tid) = tag_id_for_state {
+                       let resumed_page_state = build_tag_detail_page_state(tid, &session_state);
+                       if tx.send(WsEvent::PageState { state: resumed_page_state }).is_err() {
+                            log::warn!("Client disconnected on resume for session {}. Not respawning worker.", session_id);
+                            // Session remains unpaused in VOTING_SESSIONS but worker won't run for this client.
+                            // Consider if session should be re-paused or handled differently.
+                            return;
+                       }
+                    } else {
+                        log::warn!("No current_tag_id in session_state on resume for session {}, cannot send PageState or respawn.", session_id);
+                        return; // Cannot proceed without tag_id
+                    }
+                    
+                    // RESPAWN THE TASK
+                    log::info!("Respawning worker for resumed voting session {}", session_id);
+                    let tx_clone = tx.clone();
+                    let session_state_clone = session_state.clone();
+                    tokio::spawn(async move {
+                        process_voting_session(session_id, tx_clone, session_state_clone).await;
+                    });
                  }
+             } else {
+                 log::info!("No active voting session to resume or session not found/not paused.");
              }
          }
          
@@ -881,12 +921,11 @@ async fn handle_command(
 
 fn build_tag_detail_page_state(
     tag_id: Uuid,
-    session_state: &Arc<Mutex<SessionState>>,
+    session_state_arc: &Arc<Mutex<SessionState>>,
 ) -> PageState {
-    // Update session to track current tag
-    session_state.lock().unwrap().current_tag_id = Some(tag_id);
+    // Update session to track current tag (mut lock needed)
+    session_state_arc.lock().unwrap().current_tag_id = Some(tag_id);
     
-    // Get tag
     let tag = {
         let tags = TAGS.lock().unwrap();
         tags.get(&tag_id).cloned().unwrap_or_else(|| Tag {
@@ -896,7 +935,6 @@ fn build_tag_detail_page_state(
         })
     };
     
-    // Get items
     let items: Vec<Item> = {
         let items = ITEMS.lock().unwrap();
         items.values()
@@ -905,7 +943,6 @@ fn build_tag_detail_page_state(
             .collect()
     };
     
-    // Get attributes
     let attributes: Vec<Attribute> = {
         let attributes = ATTRIBUTES.lock().unwrap();
         attributes.values()
@@ -914,14 +951,12 @@ fn build_tag_detail_page_state(
             .collect()
     };
     
-    // Get voters
     let voters: Vec<Voter> = {
         let voters = VOTERS.lock().unwrap();
         voters.values().cloned().collect()
     };
     
-    // Get votes
-    let votes: Vec<Vote> = {
+    let all_votes_for_tag: Vec<Vote> = {
         let votes = VOTES.lock().unwrap();
         votes.iter()
             .filter(|vote| vote.tag_id == tag_id)
@@ -929,64 +964,95 @@ fn build_tag_detail_page_state(
             .collect()
     };
     
-    // Get selected state from session and check voting status
-    let (selected_voters, selected_attributes, is_voting_in_progress) = {
-        let mut session = session_state.lock().unwrap();
-        let selection = session.get_or_create_tag_selection(tag_id);
-        let selected_voters = selection.selected_voters.clone();
-        let selected_attributes = selection.selected_attributes.clone();
-        let voting_session_id = session.voting_session_id;
-        drop(session); // Release the lock before checking voting sessions
-        
-        let is_voting = if let Some(session_id) = voting_session_id {
-            VOTING_SESSIONS.lock().unwrap().contains_key(&session_id)
+    // Get selected state, voting status, and progress info
+    let (
+        current_selected_voters,
+        current_selected_attributes,
+        current_is_voting_in_progress,
+        current_completed_comparisons,
+        current_total_comparisons,
+    ) = {
+        let mut ss_guard = session_state_arc.lock().unwrap(); // mut for get_or_create
+        let selection_state = ss_guard.get_or_create_tag_selection(tag_id);
+        let sel_voters_clone = selection_state.selected_voters.clone();
+        let sel_attributes_clone = selection_state.selected_attributes.clone();
+        let voting_session_id_opt = ss_guard.voting_session_id;
+        drop(ss_guard); // Release SessionState lock before locking VOTING_SESSIONS
+
+        if let Some(active_session_id) = voting_session_id_opt {
+            let sessions_guard = VOTING_SESSIONS.lock().unwrap();
+            if let Some(session_data) = sessions_guard.get(&active_session_id) {
+                // Ensure session is for the current tag; should be by design but good check
+                if session_data.tag_id == tag_id {
+                     (
+                        sel_voters_clone,
+                        sel_attributes_clone,
+                        !session_data.is_paused, // is_voting_in_progress is true if not paused
+                        Some(session_data.current_index),
+                        Some(session_data.total_comparisons),
+                    )
+                } else {
+                    // Session ID in SessionState is for a different tag, treat as no active session for *this* tag
+                    log::warn!("Active session {} in SessionState is for tag {}, but current tag is {}. Treating as no active session for current tag.", active_session_id, session_data.tag_id, tag_id);
+                    (sel_voters_clone, sel_attributes_clone, false, None, None)
+                }
+            } else {
+                // Session ID in SessionState but not in VOTING_SESSIONS (e.g., just ended/stopped)
+                // Clear it from SessionState to prevent stale references
+                // This requires a write lock on session_state_arc again.
+                // For simplicity now, just report as not in progress.
+                // A more robust solution might clear ss_guard.voting_session_id here if locks allow.
+                // For now:
+                session_state_arc.lock().unwrap().voting_session_id = None; // Clear stale session ID
+                (sel_voters_clone, sel_attributes_clone, false, None, None)
+            }
         } else {
-            false
-        };
-        (selected_voters, selected_attributes, is_voting)
+            // No voting_session_id in SessionState
+            (sel_voters_clone, sel_attributes_clone, false, None, None)
+        }
     };
     
     // Filter votes by selected voters and attributes
-    let filtered_votes: Vec<Vote> = votes
+    let filtered_votes_list: Vec<Vote> = all_votes_for_tag // Use renamed variable
         .iter()
         .filter(|vote| {
-            (selected_voters.is_empty() || selected_voters.contains(&vote.voter_id)) &&
-            (selected_attributes.is_empty() || selected_attributes.contains(&vote.attribute_id))
+            (current_selected_voters.is_empty() || current_selected_voters.contains(&vote.voter_id)) &&
+            (current_selected_attributes.is_empty() || current_selected_attributes.contains(&vote.attribute_id))
         })
         .cloned()
         .collect();
     
-    // Calculate derived state using filtered votes
-    let voters_with_votes = calculate_voters_with_votes(&filtered_votes);
-    let rankings = calculate_rankings(&items, &filtered_votes);
+    let voters_with_filtered_votes = calculate_voters_with_votes(&filtered_votes_list);
+    let current_rankings = calculate_rankings(&items, &filtered_votes_list);
     
-    // Separate sorted and unsorted items based on filtered votes
-    let voted_item_ids: HashSet<Uuid> = filtered_votes
+    let voted_item_ids_from_filtered: HashSet<Uuid> = filtered_votes_list
         .iter()
         .flat_map(|vote| [vote.item_a_id, vote.item_b_id])
         .collect();
     
-    let unsorted_items: Vec<Item> = items
+    let current_unsorted_items: Vec<Item> = items
         .iter()
-        .filter(|item| !voted_item_ids.contains(&item.id))
+        .filter(|item| !voted_item_ids_from_filtered.contains(&item.id))
         .cloned()
         .collect();
     
-    let unvoted_item_count = unsorted_items.len();
+    let current_unvoted_item_count = current_unsorted_items.len();
     
     let state = TagDetailPageState {
         tag,
-        sorted_items: rankings.clone(), // Items with votes and rankings
-        unsorted_items, // Items without votes
+        sorted_items: current_rankings.clone(),
+        unsorted_items: current_unsorted_items,
         attributes,
         voters,
-        votes: filtered_votes.clone(),
-        rankings, // Keep for backward compatibility
-        unvoted_item_count, // Count of items without votes
-        voters_with_votes,
-        selected_attributes,
-        selected_voters,
-        is_voting_in_progress,
+        votes: filtered_votes_list.clone(), // Already updated to use filtered votes by selection
+        rankings: current_rankings, // Keep for backward compatibility
+        unvoted_item_count: current_unvoted_item_count,
+        voters_with_votes: voters_with_filtered_votes,
+        selected_attributes: current_selected_attributes,
+        selected_voters: current_selected_voters,
+        is_voting_in_progress: current_is_voting_in_progress,
+        completed_comparisons: current_completed_comparisons,
+        total_comparisons: current_total_comparisons,
     };
     
     PageState::TagDetail(state)
@@ -999,8 +1065,6 @@ fn calculate_voters_with_votes(votes: &[Vote]) -> Vec<Uuid> {
     }
     voter_ids.into_iter().collect()
 }
-
-
 
 fn calculate_rankings(items: &[Item], votes: &[Vote]) -> Vec<RankedItem> {
     if items.is_empty() || votes.is_empty() {
