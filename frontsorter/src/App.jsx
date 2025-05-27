@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './App.css'
 import OpenRouterModelSelector from './components/OpenRouterModelSelector';
+import { PROMPT_TEMPLATES, DEFAULT_PROMPT_TEMPLATE } from './constants/prompts';
 
 import { useWebSocketContext } from './contexts/WebSocketContext';
 
@@ -24,6 +25,17 @@ function App() {
                 console.log('Received page state:', lastMessage.state);
                 setCurrentPageState(lastMessage.state);
                 setIsLoading(false);
+                
+                // If this is a new tag detail page with no attributes, create a default one
+                if (lastMessage.state.page === 'tag_detail' && 
+                    lastMessage.state.attributes && 
+                    lastMessage.state.attributes.length === 0) {
+                    sendCommand({
+                        cmd: 'create_attribute',
+                        label: "Pure Preference",
+                        template: DEFAULT_PROMPT_TEMPLATE
+                    });
+                }
                 break;
 
             case 'voting_progress':
@@ -185,6 +197,7 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
     const [localNewItemText, setLocalNewItemText] = useState('');
     const [localNewAttributeLabel, setLocalNewAttributeLabel] = useState('');
     const [localNewAttributeTemplate, setLocalNewAttributeTemplate] = useState('');
+    const [selectedTemplateIndex, setSelectedTemplateIndex] = useState('');
 
     // Initialize local state from server state only once
     useEffect(() => {
@@ -194,6 +207,7 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
     useEffect(() => {
         setLocalNewAttributeLabel(pageState.new_attribute_label || '');
         setLocalNewAttributeTemplate(pageState.new_attribute_template || '');
+        setSelectedTemplateIndex(''); // Reset template selection when form opens/closes
     }, [pageState.show_new_attribute_form]); // Only reset when form opens/closes
 
     // Handle voting progress messages
@@ -231,6 +245,15 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
         sendCommand({ cmd: 'toggle_new_attribute_form' });
     };
 
+    const handleTemplateSelect = (templateIndex) => {
+        setSelectedTemplateIndex(templateIndex);
+        if (templateIndex !== '') {
+            const template = PROMPT_TEMPLATES[parseInt(templateIndex)];
+            setLocalNewAttributeLabel(template.label);
+            setLocalNewAttributeTemplate(template.template);
+        }
+    };
+
     const handleCreateAttribute = () => {
         if (!localNewAttributeLabel.trim() || !localNewAttributeTemplate.trim() || !isConnected) return;
         sendCommand({ 
@@ -241,6 +264,7 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
         // Clear form after creating
         setLocalNewAttributeLabel('');
         setLocalNewAttributeTemplate('');
+        setSelectedTemplateIndex('');
     };
 
     const handleCreateOrSelectVoter = (name) => {
@@ -399,6 +423,25 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected, lastMessage }) {
                     {pageState.show_new_attribute_form && (
                         <div className="job-control-panel" style={{ marginTop: '2em' }}>
                             <h3>Create new evaluation prompt:</h3>
+                            
+                            <div style={{ marginBottom: '1em' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5em', fontWeight: 'bold' }}>
+                                    Start with a template (optional):
+                                </label>
+                                <select
+                                    value={selectedTemplateIndex}
+                                    onChange={(e) => handleTemplateSelect(e.target.value)}
+                                    className="attribute-selector"
+                                    style={{ width: '100%', marginBottom: '0.5em' }}
+                                >
+                                    <option value="">Choose a template or write your own...</option>
+                                    {PROMPT_TEMPLATES.map((template, index) => (
+                                        <option key={index} value={index}>
+                                            {template.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
                             
                             <input
                                 type="text"

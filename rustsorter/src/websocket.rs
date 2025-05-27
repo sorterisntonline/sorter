@@ -587,18 +587,6 @@ async fn handle_command(
                 
                 TAGS.lock().unwrap().insert(tag_id, tag.clone());
                 
-                // Create default attribute
-                let attr_id = Uuid::new_v4();
-                let attribute = Attribute {
-                    id: attr_id,
-                    tag_id,
-                    label: "Pure Preference".to_string(),
-                    template: "Which do you prefer?\n\nA: {{A}}\nB: {{B}}\n\nRespond with a score from -50 to 50.".to_string(),
-                    created_by: Uuid::new_v4(),
-                    created_at: chrono::Utc::now().to_rfc3339(),
-                };
-                ATTRIBUTES.lock().unwrap().insert(attr_id, attribute);
-                
                 // Navigate to the new tag detail page
                 let page_state = build_tag_detail_page_state(tag_id, &session_state);
                 let _ = tx.send(WsEvent::PageState { state: page_state });
