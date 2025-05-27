@@ -1022,7 +1022,9 @@ fn build_tag_detail_page_state(
         .cloned()
         .collect();
     
-    let voters_with_filtered_votes = calculate_voters_with_votes(&filtered_votes_list);
+    // Calculate voters_with_votes from ALL votes for the tag, not just filtered ones
+    // This ensures the dropdown shows voters with votes even when no filters are applied
+    let voters_with_all_votes = calculate_voters_with_votes(&all_votes_for_tag);
     let current_rankings = calculate_rankings(&items, &filtered_votes_list);
     
     let voted_item_ids_from_filtered: HashSet<Uuid> = filtered_votes_list
@@ -1047,7 +1049,7 @@ fn build_tag_detail_page_state(
         votes: filtered_votes_list.clone(), // Already updated to use filtered votes by selection
         rankings: current_rankings, // Keep for backward compatibility
         unvoted_item_count: current_unvoted_item_count,
-        voters_with_votes: voters_with_filtered_votes,
+        voters_with_votes: voters_with_all_votes,
         selected_attributes: current_selected_attributes,
         selected_voters: current_selected_voters,
         is_voting_in_progress: current_is_voting_in_progress,
