@@ -1,0 +1,86 @@
+minimal example of advanced tags: mutual exclusion tag (read/notread).
+spells. can be cast once for setup, can be cast every night, can be cast on item add
+;; #tag and @user literals are baked into parser.
+(require '[sorter.perms :refer [view add vote can])
+
+(realm "ndaexpress"
+  (can #todo (user #charlton #matt) [view add [vote :priority]])
+  (can #todo (user #tommy) [view [vote :difficulty]])
+
+;;=> #ndaexpress.todo
+(def space (realm "tommy.youtube")
+(def towatch (tag space #towatch))
+(def watched (tag space #watched))
+
+(run-on watched :actions/add
+  (remove-items-from towatch (items-of watched)))
+(run :nightly
+   (add-items-to 
+      (tag #opinion)
+      (items-of (tag #opinion-ai-safety))))
+
+(realm "tommy"
+   (def mynews (tag #news))
+   (copy-items :to mynews :from (items news))
+   (remove-items :items (items news-gaza) :from mynews))
+;; umbrella structure
+(require '[sorter.perms :refer [view add vote can])
+
+(def ceo (user #stevejobs))
+(def execs (users #bob #sally))
+(def exec-reports {#bob (users #tommy #jake)
+                   #sally (users #greg)}
+
+
+(realm "bigcorp"
+   
+   (can #l1-down ceo [view add vote])
+   (can #l1-down execs [view [vote :difficulty]])
+
+   (can #l1-up ceo [view])
+   (can #l1-up execs [view add vote])
+   
+   (for [exec execs]
+      (def down (tag (str "#l2-" (name exec) "-down")))
+      (can down exec [view add vote])
+      (can down (exec-reports exec) [view [vote :difficulty]])
+
+
+      (def up (tag (str "#l2-" (name exec) "-up")))
+      (can up exec [view])
+      (can up ceo [view])
+      (can up (exec-reports exec) [view add vote]))
+
+;; monthly essay contest
+(require '[sorter.perms :refer [view add vote can])
+(require '[sorter.time :refer [last-month current-month current-year])
+(require '[sorter.rank :refer [winner])
+
+(can #winners @none [add])
+(can #winners @all [view vote])
+
+(def rlm (realm "opinion" :sorted-by :date))
+
+(run :monthly
+   (def old-tag (tag rlm (str "#" (current-year) "-" (last-month))))
+   (add-item winners (winner old-tag))
+   (admin/give-badge (authors winners) "you won the monthly contest!!!")
+
+   (def new-tag (tag rlm (str "#" (current-year) "-" (last-month)))))
+
+;; essay ladder
+(require '[sorter.rank :refer [winners]])
+
+
+(run :monthly
+   (can l1 (authors (winners l2 :count 3)) [add])
+
+;; diplomacy
+
+(can #red-ideas @@red [vote add view])
+(can #blu-ideas @@blu [vote add view])
+
+(on red-ideas :actions/vote
+   (clear-items #bridge)
+   (add-items :to #bridge :items (winners #blu-ideas :count 3))
+   (add-items :to #bridge :items (winners #red-ideas :count 3)))
