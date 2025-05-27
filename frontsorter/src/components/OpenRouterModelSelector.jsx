@@ -19,9 +19,7 @@ const OpenRouterModelSelector = ({
         const allModels = data.data
           .filter(model => model.id && (!inputValue || model.id.toLowerCase().includes(inputValue.toLowerCase())))
           .sort((a, b) => {
-            const priceA = a.pricing?.prompt ? parseFloat(a.pricing.prompt) : 999;
-            const priceB = b.pricing?.prompt ? parseFloat(b.pricing.prompt) : 999;
-            return priceA - priceB;
+            return b.created - a.created;
           });
         
         return allModels.slice(0, 50).map(model => ({
