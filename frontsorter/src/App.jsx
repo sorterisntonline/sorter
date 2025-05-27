@@ -186,6 +186,7 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected }) {
     const [showNewAttributeForm, setShowNewAttributeForm] = useState(false);
     const [activeTab, setActiveTab] = useState('ranking');
     const [expandedVotes, setExpandedVotes] = useState(null);
+    const [isVotesCopied, setIsVotesCopied] = useState(false);
 
     // Initialize local state from server state only once
     useEffect(() => {
@@ -265,6 +266,47 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected }) {
             e.preventDefault();
             handleAddItem();
         }
+    };
+
+    const handleCopyVotes = () => {
+        if (!pageState.votes || pageState.votes.length === 0) return;
+
+        // Create lookup maps for efficiency
+        const allItemsMap = new Map();
+        pageState.sorted_items.forEach(item => allItemsMap.set(item.item_id, item.text));
+        pageState.unsorted_items.forEach(item => allItemsMap.set(item.id, item.text));
+
+        const votersMap = new Map();
+        pageState.voters.forEach(voter => votersMap.set(voter.id, voter.name));
+
+        const attributesMap = new Map();
+        pageState.attributes.forEach(attr => attributesMap.set(attr.id, attr.label));
+
+        const rationalesStream = pageState.votes.map(vote => {
+            const voterName = votersMap.get(vote.voter_id) || 'Unknown Voter';
+            const attributeLabel = attributesMap.get(vote.attribute_id) || 'Unknown Attribute';
+            const itemAText = allItemsMap.get(vote.item_a_id) || 'Unknown Item A';
+            const itemBText = allItemsMap.get(vote.item_b_id) || 'Unknown Item B';
+
+            return [
+                `Voter: ${voterName}`,
+                `Attribute: ${attributeLabel}`,
+                `Comparing:`, 
+                `  Item A: ${itemAText}`,
+                `  Item B: ${itemBText}`,
+                `Score: ${vote.score}`,
+                `Rationale:`, 
+                `${vote.rationale || 'No rationale provided.'}`
+            ].join('\n');
+        }).join('\n\n------------------------------------\n\n');
+
+        navigator.clipboard.writeText(rationalesStream).then(() => {
+            setIsVotesCopied(true);
+            setTimeout(() => setIsVotesCopied(false), 2000); // Reset after 2 seconds
+        }).catch(err => {
+            console.error('Failed to copy votes: ', err);
+            // Consider adding user feedback for copy failure here
+        });
     };
 
     // Sort voters: those with votes first, then alphabetically
@@ -412,6 +454,7 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected }) {
                         >
                             {pageState.is_voting_in_progress ? '⏳ Sorting...' : `Vote on ${pageState.unvoted_item_count} unvoted items`}
                         </button>
+
                     </div>
 
                     {showNewAttributeForm && (
@@ -581,6 +624,16 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected }) {
                 ) : (
                     <>
                         <h2 style={{color: "black"}}>All Votes:</h2>
+                        {pageState.votes && pageState.votes.length > 0 && (
+                            <button
+                                onClick={handleCopyVotes}
+                                className="secondary-button"
+                                style={{ marginTop: '1em', width: '100%' }}
+                            >
+                                {isVotesCopied ? '✅ Copied!' : '📋 Copy All Votes to Clipboard'}
+                            </button>
+                        )}
+
                         {pageState.votes.length === 0 ? (
                             <div className="empty-state">
                                 <p>No votes recorded yet.</p>

@@ -249,7 +249,7 @@ async fn call_openrouter_api(
             role: "user".to_string(),
             content: prompt.to_string(),
         }],
-        max_tokens: Some(500),
+        max_tokens: Some(5000),
         temperature: Some(0.7),
     };
     
