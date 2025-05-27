@@ -27,7 +27,7 @@ export const PROMPT_TEMPLATES = [
 </B>
 
 Consider beauty, elegance, and emotional resonance. Express your preference from -50 (strongly A) to 50 (strongly B).
-Meditate on your choice and explain. Your score will be read by: /SCORE: (-?\\d+)/`
+Meditate on your choice and explain. Your score will be read by this regex: /SCORE: (-?\\d+)/`
   },
   {
     label: "Pragmatic Mind", 
@@ -41,7 +41,7 @@ Meditate on your choice and explain. Your score will be read by: /SCORE: (-?\\d+
 </B>
 
 Consider utility, efficiency, and real-world impact. Rate from -50 (strongly A) to 50 (strongly B).
-Explain your reasoning. Your score will be read by: /SCORE: (-?\\d+)/`
+Explain your reasoning. Your score will be read by this regex: /SCORE: (-?\\d+)/`
   },
   {
     label: "Innovative Spirit",
@@ -55,6 +55,6 @@ Explain your reasoning. Your score will be read by: /SCORE: (-?\\d+)/`
 </B>
 
 Consider originality, potential impact, and paradigm-shifting qualities. Rate from -50 (strongly A) to 50 (strongly B).
-Explain your analysis. Your score will be read by: /SCORE: (-?\\d+)/`
+Explain your analysis. Your score will be read by this regex: /SCORE: (-?\\d+)/`
   }
 ]; 

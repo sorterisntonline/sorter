@@ -426,6 +426,8 @@ async fn process_voting_session(
                 let prompt = attribute_template
                     .replace("{{A}}", &comparison.item_a_text)
                     .replace("{{B}}", &comparison.item_b_text);
+
+                log::debug!("Prompt: {}", prompt);
                 
                 // Call OpenRouter API
                 match call_openrouter_api(&voter_name, &prompt).await {
