@@ -1,0 +1,349 @@
+Below is a “field-guide” of organ-like patterns I keep seeing whenever I think about SorterDSL as *biology for cognition*. For each pattern I sketch (1) the biological metaphor, (2) the role it plays inside a distributed mind, and (3) a minimal SorterDSL sketch so you can see how the pieces wire together.  Treat them as Lego blocks—most will become *much* more interesting once you start nesting or composing them.
+
+---
+
+### 1. **Mouth → Stomach → Nutrient Stream**
+
+\| **Why** | Raw text in, structured knowledge out. |
+\| **How** |
+
+```clojure
+(def mouth   (tag "#mouth"))          ; anyone can dump text
+(def bolus   (tag "#bolus"))          ; chunks awaiting digestion
+(def chyme   (tag "#chyme"))          ; parsed + tokenised
+(def nutrients (tag "#nutrients"))    ; extracted claims/facts
+
+(on mouth :actions/add
+  (fn [_user post]
+    (add-item bolus (chunk post 4k))))     ; 4k-token bites
+
+(run :on-interval :every "5m"
+  (doseq [b bolus]
+    (let [parsed (ai.parse    b)
+          facts  (ai.extract parsed)]
+      (add-item chyme parsed)
+      (doseq [f facts] (add-item nutrients f)))
+    (remove-item bolus b)))
+```
+
+*Extensions*: vote for the best parsings; branch different “enzymes” specialised for code vs prose; downstream agents subscribe to `#nutrients`.
+
+---
+
+### 2. **Short-Term Memory (STM) Ring Buffer**
+
+Keeps a sliding window of *salient* recent items so later agents can reference “what we’re talking about right now”.
+
+```clojure
+(def stm (tag "#stm" :max-size 64))
+
+(on any-tag :actions/add
+  (fn [u item]
+    (when (> (salience item) 0.75)
+      (add-item stm item)))           ; moves to front, evicts old
+```
+
+Down-stream prompts can simply merge `stm` into their context:
+
+```clojure
+(defn with-stm [prompt]
+  (str prompt "\n\nRecent context:\n" (take 20 stm)))
+```
+
+---
+
+### 3. **Long-Term Memory (LTM) with Consolidation Voting**
+
+Only items that survive enough *sleep cycles* stay forever.
+
+```clojure
+(def ltm (tag "#ltm"))
+(def dreams (tag "#dreams"))
+
+(run :nightly
+  (doseq [chunk (sample stm 16)]
+    (let [summary (ai.summarise chunk)]
+      (add-item dreams summary)))
+
+  ;; Dreams fight for a place in LTM via pairwise scalar voting
+  (pairwise-vote dreams :criterion :usefulness)
+
+  (doseq [d (winners dreams :top 5)]
+    (add-item ltm d))
+  (clear-items dreams))
+```
+
+---
+
+### 4. **Attention Router / Priority Queue (The ‘Thalamus’)**
+
+Everything that wants CPU time competes here; votes decide what runs next.
+
+```clojure
+(def tasks (tag "#tasks"))
+(def queue (tag "#queue"))
+
+(on tasks :actions/add
+  (fn [_ item] (add-item queue item)))
+
+(run :on-interval :every "1m"
+  (let [next (winner queue :criterion :urgency)]
+    (execute next)
+    (remove-item queue next)))
+```
+
+> *Tip*: `:urgency` itself can be the running score of many sub-voters (deadlines, novelty, user up-votes, safety).
+
+---
+
+### 5. **Critic + Proposer Loop (Basal Ganglia)**
+
+A pattern for self-improving theories, designs, road-maps.
+
+```clojure
+(def proposals   (tag "#proposals"))
+(def critique    (tag "#critique"))
+(def approved    (tag "#approved"))
+
+(on proposals :actions/add
+  (fn [_ p]
+    (let [score (ai.criticise p)]
+      (add-item critique {:proposal p :score score})))
+
+(pairwise-vote critique :criterion :merit)
+
+(run :hourly
+  (doseq [c (winners critique :top 3)]
+    (add-item approved (:proposal c))))
+```
+
+Then another agent reads `#approved` and *implements*.
+
+---
+
+### 6. **Immune System / Content Police**
+
+Scans every new contribution; quarantines or deletes if *enough* distinct detectors fire.
+
+```clojure
+(def detectors [ai.toxicity ai.pii ai.malware])
+(def quarantine (tag "#quarantine"))
+
+(on any-tag :actions/add
+  (fn [u item]
+    (let [hits (count (filter #(% item) detectors))]
+      (when (>= hits 2)        ; configurable threshold
+        (move-to quarantine item)))))
+```
+
+---
+
+### 7. **Delegated Voting Layer (Liquid Democracy)**
+
+Users can delegate their vote weight on certain tags to agents they trust.
+
+```clojure
+(def delegations (tag "#delegations" :transitive true))
+
+(on votes :before-cast
+  (fn [user item score]
+    (doseq [delegate (delegation-chain user :max-depth 3)]
+      (cast-vote delegate item (* score (weight user delegate))))))
+```
+
+Great for *governance* across all other organs.
+
+---
+
+### 8. **Curriculum Builder (Hippocampus-to-Cortex Trainer)**
+
+Turns a messy pile of resources into a learning path, continuously refined by learners’ feedback.
+
+```clojure
+(def resources  (tag "#resources"))
+(def outlines   (tag "#outlines"))
+(def lessons    (tag "#lessons"))
+
+;; AI drafts outlines from best resources
+(run :daily
+  (doseq [topic (top-topics resources)]
+    (add-item outlines (ai.draft-outline topic))))
+
+;; Pairwise vote outlines by clarity & completeness
+(pairwise-vote outlines :criterion :clarity)
+
+;; For the winners, generate lesson chunks
+(run :daily
+  (doseq [o (winners outlines :top 3)]
+    (doseq [l (ai.chunk-lessons o)]
+      (add-item lessons l))))
+```
+
+---
+
+### 9. **Thought-Market (Prefrontal Cortex)**
+
+Agents publish *unfinished* thoughts; buyers (other agents or humans) spend “attention tokens” to expand the ones they consider promising. Votes allocate compute budget.
+
+```clojure
+(def thoughts (tag "#thoughts"))
+(def expanded (tag "#expanded"))
+
+(on thoughts :actions/buy
+  (fn [buyer thought tokens]
+    (spend buyer tokens)
+    (let [new (ai.expand thought tokens)]
+      (add-item expanded new)))
+```
+
+---
+
+### 10. **Goal Stack with Recursive Decomposition**
+
+Top-level OKRs break into sub-tasks via chain-of-thought + voting.
+
+```clojure
+(def goals  (tag "#goals"))
+(def tasks  (tag "#tasks"))
+
+(run :on-goal-added
+  (fn [g]
+    (doseq [t (ai.decompose g)]
+      (add-item tasks t)
+      (when (large? t) (add-item goals t))))  ; recursion!
+```
+
+---
+
+## Putting It Together
+
+The fun starts when you *compose* these organs:
+
+```
+#mouth ─▶ #nutrients ─▶ #stm
+                       │
+                       ▼
+          attention-router (#queue)
+                       │
+            ┌──────────┴─────────┐
+            ▼                    ▼
+   critic/proposer loop     immune-system
+            │
+            ▼
+     curriculum-builder ─▶ goal-stack ─▶ …
+```
+
+* Every arrow is literally “items landing in a tag”.
+* Any arrow can be **forked** (multiple consumers) or **swapped** (drop-in replacement agent).
+* Voting criteria (`:salience`, `:merit`, `:urgency`, …) evolve through the liquid-democracy layer, so humans + AIs co-govern *how* the superorganism thinks.
+
+---
+
+### Where to Experiment First?
+
+1. **Mouth → STM → Critic/Proposer** is the smallest loop that *feels alive*.
+2. Bolt on **Immune System** before you open it to the public internet.
+3. Add **Goal Stack** once you want the organism to *do* things for you.
+
+Pick two or three organs, wire them, watch the flows, and iterate.  Once you have even one tiny living loop, screenshots + a short write-up will sparkle on HN/Twitter—and you’ll know exactly which part to harden next.
+
+---
+
+**Curious which of these organs sparks the most energy for you right now?**  I can drill into the DSL details or sketch out a minimal Rust/Axum endpoint for any one of them—just point me to the one you’d like to prototype first.
+
+
+
+Ah, now this is a fascinating perspective! You're essentially describing a system for building AI cognitive architectures using tags, votes, and flows as the primitive building blocks. Let me explore some potential structures we could create:
+
+1. **Attention Mechanisms**
+```lisp
+(realm "cognitive.attention"
+  ;; Multiple agents scan input, vote on importance
+  (can #scanners @@attention-agents [view vote])
+  
+  (run :continuous
+    ;; Top voted items flow to higher processing
+    (add-items-to #working-memory 
+      (winners #input-buffer :by :salience :count 5))
+    ;; Decay old items
+    (remove-items-from #working-memory 
+      (items-older-than :hours 1))))
+```
+
+2. **Memory Networks**
+```lisp
+(realm "cognitive.memory"
+  ;; Short-term to long-term memory consolidation
+  (run :nightly
+    (def memories (winners #short-term :by :importance))
+    (for [memory memories]
+      ;; Abstract agents vote on categories
+      (let [categories (vote-results #categorizer-agents memory)]
+        (add-items-to (tag categories) memory))))
+  
+  ;; Associative recall
+  (on #query :actions/add
+    (def associations (items-similar-to it))
+    (add-items-to #response (winners associations :count 3))))
+```
+
+3. **Reasoning Pipelines**
+```lisp
+(realm "cognitive.reasoning"
+  ;; Chain of thought as a series of tags
+  (def stages [#parse #analyze #synthesize #conclude])
+  
+  (for [stage stages]
+    (def agents (agents-for stage))
+    (can stage agents [view add vote])
+    
+    (run-on stage :actions/add
+      ;; Each stage's output feeds into next
+      (add-items-to (next-stage stage) 
+        (winners stage :by :confidence :count 1)))))
+```
+
+4. **Collaborative Knowledge Synthesis**
+```lisp
+(realm "cognitive.synthesis"
+  ;; Different specialist agents contribute knowledge
+  (can #knowledge @@specialist-agents [add])
+  
+  ;; Integration agents vote on connections
+  (can #connections @@integrator-agents [vote add])
+  
+  (run :hourly
+    ;; Build knowledge graph from highest voted connections
+    (def new-concepts (winners #connections :by :coherence))
+    (add-items-to #knowledge-graph new-concepts)
+    ;; Feedback loop - knowledge graph influences future voting
+    (update-agent-context @@integrator-agents 
+      (items-of #knowledge-graph))))
+```
+
+5. **Self-Improvement Loops**
+```lisp
+(realm "cognitive.evolution"
+  ;; Agents propose improvements to their own prompts
+  (can #prompt-mutations @@agents [add vote])
+  
+  (run :daily
+    (def best-prompts (winners #prompt-mutations :by :performance))
+    ;; Deploy new prompts to agent pool
+    (update-agent-prompts @@agents best-prompts)
+    ;; Archive for learning
+    (add-items-to #prompt-history best-prompts)))
+```
+
+This is really exciting because you could:
+1. Create emergent behaviors through the interaction of simple voting/filtering rules
+2. Build hierarchical processing where higher-level agents operate on the filtered/processed output of lower-level agents
+3. Use the voting system to implement attention mechanisms, priority queues, and importance sampling
+4. Create feedback loops where agents can modify their own operating context
+5. Build self-organizing knowledge structures through collaborative voting and filtering
+
+Would you like to explore any of these patterns in more detail? We could also think about:
+- Meta-learning structures where agents vote on rule changes
+- Cross-realm communication patterns for different cognitive modules
+- Temporal structures for managing different timescales of processing
+- Self-reflection mechanisms where agents analyze their own outputs

@@ -7,29 +7,25 @@ spells. can be cast once for setup, can be cast every night, can be cast on item
   (can #todo (user #charlton #matt) [view add [vote :priority]])
   (can #todo (user #tommy) [view [vote :difficulty]])
 
-;;=> #ndaexpress.todo
-(def space (realm "tommy.youtube")
-(def towatch (tag space #towatch))
-(def watched (tag space #watched))
-
-(run-on watched :actions/add
+(run-on #watched :actions/add
   (remove-items-from towatch (items-of watched)))
+
 (run :nightly
    (add-items-to 
-      (tag #opinion)
-      (items-of (tag #opinion-ai-safety))))
+      #opinion
+      (items-of #opinion-ai-safety)))
 
 (realm "tommy"
-   (def mynews (tag #news))
-   (copy-items :to mynews :from (items news))
-   (remove-items :items (items news-gaza) :from mynews))
+   (copy-items :to #news :from (items #news))
+   (remove-items :items (items #news-gaza) :from #news))
+
 ;; umbrella structure
 (require '[sorter.perms :refer [view add vote can])
 
-(def ceo (user #stevejobs))
-(def execs (users #bob #sally))
-(def exec-reports {#bob (users #tommy #jake)
-                   #sally (users #greg)}
+(def ceo (user @stevejobs))
+(def execs (users @bob @sally))
+(def exec-reports {@bob (users @tommy @jake)
+                   @sally (users @greg)}
 
 
 (realm "bigcorp"
