@@ -80,3 +80,21 @@ spells. can be cast once for setup, can be cast every night, can be cast on item
    (clear-items #bridge)
    (add-items :to #bridge :items (winners #blu-ideas :count 3))
    (add-items :to #bridge :items (winners #red-ideas :count 3)))
+
+
+;; ai idea ingestor
+
+;; paste in long documents of my ideas
+#ingest-dump
+
+;; split long document pastes into discrete ideas
+(digest #ingest-dump -> #idea-atoms)
+
+;; triage ideas into #ideas and #progress
+(triage #idea-atoms
+  {#ideas "this atom is a speculative idea that I have" 
+   #todos "this atom is a discrete task that I need to do"
+   #progress "this atom is a piece of progress i've made"})
+
+(def :priority-attribute (prompt "given that i have this progress" (take 10 #progress) ", which idea should I focus on first"))
+(rank #todos :priority-attribute)
