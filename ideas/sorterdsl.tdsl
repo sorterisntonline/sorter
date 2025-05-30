@@ -4,8 +4,8 @@ spells. can be cast once for setup, can be cast every night, can be cast on item
 (require '[sorter.perms :refer [view add vote can])
 
 (realm "ndaexpress"
-  (can #todo (user #charlton #matt) [view add [vote :priority]])
-  (can #todo (user #tommy) [view [vote :difficulty]])
+  (can #todo (user @charlton @matt) [view add [vote :priority]])
+  (can #todo (user @tommy) [view [vote :difficulty]])
 
 (run-on #watched :actions/add
   (remove-items-from towatch (items-of watched)))
