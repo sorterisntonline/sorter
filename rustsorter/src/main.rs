@@ -75,8 +75,8 @@ async fn get_spotify_user(db: &sqlx::PgPool) -> Result<User> {
         User, 
         "SELECT id, auth0_sub, username, avatar_url, bio, is_ai, created_at FROM users WHERE auth0_sub = 'spotify'"
     )
-    .fetch_one(db)
-    .await?;
+        .fetch_one(db)
+        .await?;
     Ok(user)
 }
 

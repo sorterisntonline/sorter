@@ -100,11 +100,15 @@ pub struct Lens {
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Vote {
     pub id: Uuid,                           // votes.id
+    pub left_entity_pk_namespace: String,   // votes.left_entity_pk_namespace
     pub left_entity_pk: String,             // votes.left_entity_pk (item UUID as string)
+    pub right_entity_pk_namespace: String,  // votes.right_entity_pk_namespace
     pub right_entity_pk: String,            // votes.right_entity_pk (item UUID as string)
     pub voter_user_id: Uuid,                // votes.voter_user_id
     pub score: i32,                         // votes.score
+    pub lens_entity_pk_namespace: String,   // votes.lens_entity_pk_namespace
     pub lens_entity_pk: String,             // votes.lens_entity_pk (lens UUID as string)
+    pub tag_entity_pk_namespace: String,    // votes.tag_entity_pk_namespace
     pub tag_entity_pk: String,              // votes.tag_entity_pk (tag UUID as string)
     pub rationale: Option<String>,          // votes.rationale
     pub created_at: DateTime<Utc>,          // votes.created_at
@@ -387,141 +391,149 @@ async fn process_voting_session(
     session_id: Uuid,
     tx: mpsc::UnboundedSender<WsEvent>,
     session_state_arc: Arc<Mutex<SessionState>>,
+    db: &sqlx::PgPool,
 ) {
     loop {
-        let (tag_id_option, voter_ids_option, attribute_ids_option, comparison_option, action_str) = {
+        let session_action = {
             let mut sessions = VOTING_SESSIONS.lock().unwrap();
             if let Some(session) = sessions.get_mut(&session_id) {
                 if session.is_paused {
-                    drop(sessions); // Release lock
-                    // Task will end. ResumeVoting must restart it.
-                    log::info!("Voting session {} is paused. Worker terminating.", session_id);
-                    return;
+                    return; // Task will end. ResumeVoting must restart it.
                 }
 
                 if session.current_index >= session.comparisons.len() {
                     // Voting complete
                     let tag_id = session.tag_id;
                     sessions.remove(&session_id); // Remove session from global store
-                    drop(sessions); // Release lock before further actions
-
-                    { // Clear voting_session_id from the client's SessionState
-                        let mut ss_guard = session_state_arc.lock().unwrap();
-                        ss_guard.voting_session_id = None;
-                    }
-
-                    // Send final page state
-                    let final_page_state = build_tag_detail_page_state(tag_id, &session_state_arc);
-                    if tx.send(WsEvent::PageState { state: final_page_state }).is_err() {
-                        log::warn!("Client disconnected before final PageState for session {} could be sent.", session_id);
-                    }
-                    log::info!("Voting session {} completed.", session_id);
-                    return; // Voting complete, task ends
+                    Some(("complete", tag_id, Vec::new(), Vec::new(), None))
+                } else {
+                    // Prepare for processing the current comparison
+                    let comparison = session.comparisons[session.current_index].clone();
+                    Some(("process", session.tag_id, session.voter_ids.clone(), session.attribute_ids.clone(), Some(comparison)))
                 }
-
-                // Prepare for processing the current comparison
-                let comparison = session.comparisons[session.current_index].clone();
-                (Some(session.tag_id), Some(session.voter_ids.clone()), Some(session.attribute_ids.clone()), Some(comparison), "process")
             } else {
                 // Session was removed (e.g., by StopVoting or if it never existed), exit task
+                None
+            }
+        }; // sessions guard is dropped here
+
+        match session_action {
+            Some(("complete", tag_id, _, _, _)) => {
+                log::info!("Voting session {} completed. Worker terminating.", session_id);
+                
+                { // Clear voting_session_id from the client's SessionState
+                    let mut ss_guard = session_state_arc.lock().unwrap();
+                    ss_guard.voting_session_id = None;
+                }
+
+                // Send final page state
+                let final_page_state = build_tag_detail_page_state(tag_id, &session_state_arc, db).await;
+                if tx.send(WsEvent::PageState { state: final_page_state }).is_err() {
+                    log::warn!("Client disconnected before final PageState for session {} could be sent.", session_id);
+                }
+                log::info!("Voting session {} completed.", session_id);
+                return; // Voting complete, task ends
+            }
+            Some(("process", tag_id, voter_ids, attribute_ids, Some(comparison_to_process))) => {
+                // Process current comparison
+                for voter_id in &voter_ids {
+                    for attribute_id_val in &attribute_ids { // Renamed to avoid conflict
+                        let (voter_name, attribute_template) = {
+                            let voters_guard = VOTERS.lock().unwrap();
+                            let attributes_guard = ATTRIBUTES.lock().unwrap();
+                            let voter = voters_guard.get(voter_id);
+                            let attribute = attributes_guard.get(attribute_id_val);
+                            match (voter, attribute) {
+                                (Some(v), Some(a)) => (v.name.clone(), a.template.clone()),
+                                _ => {
+                                    log::error!("Missing voter {} or attribute {} for voting in session {}", voter_id, attribute_id_val, session_id);
+                                    continue;
+                                }
+                            }
+                        };
+
+                        let prompt = attribute_template
+                            .replace("{{A}}", &comparison_to_process.item_a_text)
+                            .replace("{{B}}", &comparison_to_process.item_b_text);
+
+                        match call_openrouter_api(&voter_name, &prompt).await {
+                            Ok(response) => {
+                                if let Some(score) = extract_score_from_response(&response) {
+                                    // Ensure left < right ordering for canonical pair
+                                    let (left_pk, right_pk, final_score) = if comparison_to_process.item_a_id.to_string() < comparison_to_process.item_b_id.to_string() {
+                                        (comparison_to_process.item_a_id.to_string(), comparison_to_process.item_b_id.to_string(), score)
+                                    } else {
+                                        (comparison_to_process.item_b_id.to_string(), comparison_to_process.item_a_id.to_string(), -score)
+                                    };
+
+                                    let vote = Vote {
+                                        id: Uuid::new_v4(),
+                                        left_entity_pk_namespace: "item".to_string(),
+                                        left_entity_pk: left_pk,
+                                        right_entity_pk_namespace: "item".to_string(),
+                                        right_entity_pk: right_pk,
+                                        voter_user_id: *voter_id,
+                                        score: final_score,
+                                        lens_entity_pk_namespace: "item".to_string(),
+                                        lens_entity_pk: attribute_id_val.to_string(),
+                                        tag_entity_pk_namespace: PK_NAMESPACE_TAG.to_string(),
+                                        tag_entity_pk: tag_id.to_string(),
+                                        rationale: Some(response),
+                                        created_at: chrono::Utc::now(),
+                                    };
+                                    VOTES.lock().unwrap().push(vote);
+                                    log::info!("Vote recorded for session {}: ItemA: {}, ItemB: {}, Score: {} by {}", session_id, comparison_to_process.item_a_text, comparison_to_process.item_b_text, final_score, voter_name);
+                                } else {
+                                    log::warn!("Could not extract score from response for session {}: {}", session_id, response);
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("OpenRouter API call failed for session {}: {}", session_id, e);
+                            }
+                        }
+                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await; // Delay between API calls
+                    }
+                }
+
+                // Increment progress AFTER processing the current comparison item
+                let session_active_and_updated = {
+                    let mut sessions_guard = VOTING_SESSIONS.lock().unwrap();
+                    if let Some(session) = sessions_guard.get_mut(&session_id) {
+                        if session.is_paused { // Re-check pause, could have been paused during API calls
+                            false // Treat as needing to stop for pause
+                        } else {
+                            session.current_index += 1;
+                            log::info!("Session {} progress: {}/{}", session_id, session.current_index, session.total_comparisons);
+                            true
+                        }
+                    } else {
+                        false // Session removed during processing
+                    }
+                };
+
+                if !session_active_and_updated {
+                    log::info!("Session {} paused or removed during processing. Worker terminating.", session_id);
+                    return; // Exit if paused or removed
+                }
+
+                // ALWAYS send updated page state
+                let page_state_update = build_tag_detail_page_state(tag_id, &session_state_arc, db).await;
+                if tx.send(WsEvent::PageState { state: page_state_update }).is_err() {
+                    log::warn!("Client disconnected during voting session {}. Worker terminating.", session_id);
+                    // Optionally, consider cleaning up the session from VOTING_SESSIONS if this worker was "owner"
+                    // VOTING_SESSIONS.lock().unwrap().remove(&session_id);
+                    return;
+                }
+            }
+            None => {
                 log::info!("Voting session {} not found or removed. Worker terminating.", session_id);
                 return;
             }
-        };
-
-        if action_str == "process" {
-            let tag_id = tag_id_option.unwrap();
-            let voter_ids = voter_ids_option.unwrap();
-            let attribute_ids = attribute_ids_option.unwrap();
-            let comparison_to_process = comparison_option.unwrap();
-
-            // Process current comparison
-            for voter_id in &voter_ids {
-                for attribute_id_val in &attribute_ids { // Renamed to avoid conflict
-                    let (voter_name, attribute_template) = {
-                        let voters_guard = VOTERS.lock().unwrap();
-                        let attributes_guard = ATTRIBUTES.lock().unwrap();
-                        let voter = voters_guard.get(voter_id);
-                        let attribute = attributes_guard.get(attribute_id_val);
-                        match (voter, attribute) {
-                            (Some(v), Some(a)) => (v.name.clone(), a.template.clone()),
-                            _ => {
-                                log::error!("Missing voter {} or attribute {} for voting in session {}", voter_id, attribute_id_val, session_id);
-                                continue;
-                            }
-                        }
-                    };
-
-                    let prompt = attribute_template
-                        .replace("{{A}}", &comparison_to_process.item_a_text)
-                        .replace("{{B}}", &comparison_to_process.item_b_text);
-
-                    match call_openrouter_api(&voter_name, &prompt).await {
-                        Ok(response) => {
-                            if let Some(score) = extract_score_from_response(&response) {
-                                // Ensure left < right ordering for canonical pair
-                                let (left_pk, right_pk, final_score) = if comparison_to_process.item_a_id.to_string() < comparison_to_process.item_b_id.to_string() {
-                                    (comparison_to_process.item_a_id.to_string(), comparison_to_process.item_b_id.to_string(), score)
-                                } else {
-                                    (comparison_to_process.item_b_id.to_string(), comparison_to_process.item_a_id.to_string(), -score)
-                                };
-
-                                let vote = Vote {
-                                    id: Uuid::new_v4(),
-                                    left_entity_pk: left_pk,
-                                    right_entity_pk: right_pk,
-                                    voter_user_id: *voter_id,
-                                    score: final_score,
-                                    lens_entity_pk: attribute_id_val.to_string(),
-                                    tag_entity_pk: tag_id.to_string(),
-                                    rationale: Some(response),
-                                    created_at: chrono::Utc::now(),
-                                };
-                                VOTES.lock().unwrap().push(vote);
-                                log::info!("Vote recorded for session {}: ItemA: {}, ItemB: {}, Score: {} by {}", session_id, comparison_to_process.item_a_text, comparison_to_process.item_b_text, final_score, voter_name);
-                            } else {
-                                log::warn!("Could not extract score from response for session {}: {}", session_id, response);
-                            }
-                        }
-                        Err(e) => {
-                            log::error!("OpenRouter API call failed for session {}: {}", session_id, e);
-                        }
-                    }
-                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await; // Delay between API calls
-                }
-            }
-
-            // Increment progress AFTER processing the current comparison item
-            let session_active_and_updated = {
-                let mut sessions_guard = VOTING_SESSIONS.lock().unwrap();
-                if let Some(session) = sessions_guard.get_mut(&session_id) {
-                    if session.is_paused { // Re-check pause, could have been paused during API calls
-                        false // Treat as needing to stop for pause
-                    } else {
-                        session.current_index += 1;
-                        log::info!("Session {} progress: {}/{}", session_id, session.current_index, session.total_comparisons);
-                        true
-                    }
-                } else {
-                    false // Session removed during processing
-                }
-            };
-
-            if !session_active_and_updated {
-                log::info!("Session {} paused or removed during processing. Worker terminating.", session_id);
-                return; // Exit if paused or removed
-            }
-
-            // ALWAYS send updated page state
-            let page_state_update = build_tag_detail_page_state(tag_id, &session_state_arc);
-            if tx.send(WsEvent::PageState { state: page_state_update }).is_err() {
-                log::warn!("Client disconnected during voting session {}. Worker terminating.", session_id);
-                // Optionally, consider cleaning up the session from VOTING_SESSIONS if this worker was "owner"
-                // VOTING_SESSIONS.lock().unwrap().remove(&session_id);
+            _ => {
+                log::warn!("Unexpected session action. Worker terminating.");
                 return;
             }
         }
-        // Loop continues: will check session status (paused, completed, removed) or process next.
     }
 }
 
@@ -595,25 +607,42 @@ async fn handle_command(
         }
         
         WsCommand::NavigateToTagDetail { tag_id } => {
-            let page_state = build_tag_detail_page_state(tag_id, &session_state);
+            let page_state = build_tag_detail_page_state(tag_id, &session_state, &_state.db).await;
             let _ = tx.send(WsEvent::PageState { state: page_state });
         }
         
         WsCommand::CreateTag { name } => {
             if !name.trim().is_empty() {
                 let tag_id = Uuid::new_v4();
-                let tag = Tag {
-                    id: tag_id,
-                    user_id: Uuid::new_v4(), // TODO: use actual authenticated user ID
-                    name: name.trim().to_string(),
-                    created_at: chrono::Utc::now(),
-                };
                 
-                TAGS.lock().unwrap().insert(tag_id, tag.clone());
+                // Insert tag into entities table
+                let insert_result = sqlx::query!(
+                    r#"
+                    INSERT INTO entities (pk_namespace, pk, user_id, title, created_at)
+                    VALUES ($1, $2, $3, $4, now())
+                    "#,
+                    PK_NAMESPACE_TAG,
+                    tag_id.to_string(),
+                    Uuid::new_v4(), // TODO: use actual authenticated user ID
+                    name.trim()
+                )
+                .execute(&_state.db)
+                .await;
                 
-                // Navigate to the new tag detail page
-                let page_state = build_tag_detail_page_state(tag_id, &session_state);
-                let _ = tx.send(WsEvent::PageState { state: page_state });
+                match insert_result {
+                    Ok(_) => {
+                        log::info!("Created tag '{}' with ID {}", name.trim(), tag_id);
+                        // Navigate to the new tag detail page
+                        let page_state = build_tag_detail_page_state(tag_id, &session_state, &_state.db).await;
+                        let _ = tx.send(WsEvent::PageState { state: page_state });
+                    }
+                    Err(e) => {
+                        log::error!("Failed to create tag '{}': {}", name.trim(), e);
+                        let _ = tx.send(WsEvent::Error { 
+                            message: format!("Failed to create tag: {}", e) 
+                        });
+                    }
+                }
             }
         }
         
@@ -631,7 +660,7 @@ async fn handle_command(
             };
             
             if let Some(tag_id) = tag_id {
-                let page_state = build_tag_detail_page_state(tag_id, &session_state);
+                let page_state = build_tag_detail_page_state(tag_id, &session_state, &_state.db).await;
                 let _ = tx.send(WsEvent::PageState { state: page_state });
             }
         }
@@ -649,7 +678,7 @@ async fn handle_command(
             };
             
             if let Some(tag_id) = tag_id {
-                let page_state = build_tag_detail_page_state(tag_id, &session_state);
+                let page_state = build_tag_detail_page_state(tag_id, &session_state, &_state.db).await;
                 let _ = tx.send(WsEvent::PageState { state: page_state });
             }
         }
@@ -674,7 +703,7 @@ async fn handle_command(
                     ITEMS.lock().unwrap().insert(item_id, item);
                 }
                 
-                let page_state = build_tag_detail_page_state(tag_id, &session_state);
+                let page_state = build_tag_detail_page_state(tag_id, &session_state, &_state.db).await;
                 let _ = tx.send(WsEvent::PageState { state: page_state });
             }
         }
@@ -700,7 +729,7 @@ async fn handle_command(
                     ATTRIBUTES.lock().unwrap().insert(attr_id, attribute);
                 }
                 
-                let page_state = build_tag_detail_page_state(tag_id, &session_state);
+                let page_state = build_tag_detail_page_state(tag_id, &session_state, &_state.db).await;
                 let _ = tx.send(WsEvent::PageState { state: page_state });
             }
         }
@@ -748,7 +777,7 @@ async fn handle_command(
                     }
                     
                     // Send back the updated page state
-                    let page_state = build_tag_detail_page_state(tag_id, &session_state);
+                    let page_state = build_tag_detail_page_state(tag_id, &session_state, &_state.db).await;
                     let _ = tx.send(WsEvent::PageState { state: page_state });
                 }
             }
@@ -763,7 +792,7 @@ async fn handle_command(
             };
             
             if let Some(tag_id) = tag_id {
-                let page_state = build_tag_detail_page_state(tag_id, &session_state);
+                let page_state = build_tag_detail_page_state(tag_id, &session_state, &_state.db).await;
                 let _ = tx.send(WsEvent::PageState { state: page_state });
             }
         }
@@ -777,7 +806,7 @@ async fn handle_command(
             };
             
             if let Some(tag_id) = tag_id {
-                let page_state = build_tag_detail_page_state(tag_id, &session_state);
+                let page_state = build_tag_detail_page_state(tag_id, &session_state, &_state.db).await;
                 let _ = tx.send(WsEvent::PageState { state: page_state });
             }
         }
@@ -806,7 +835,7 @@ async fn handle_command(
                 
                 if missing_comparisons_vec.is_empty() {
                     // Send PageState to reflect no comparisons and not in progress
-                    let page_state_no_comparisons = build_tag_detail_page_state(tag_id, &session_state);
+                    let page_state_no_comparisons = build_tag_detail_page_state(tag_id, &session_state, &_state.db).await;
                      let _ = tx.send(WsEvent::PageState { state: page_state_no_comparisons });
                     let _ = tx.send(WsEvent::Error { 
                         message: "No missing comparisons found".to_string() 
@@ -833,7 +862,7 @@ async fn handle_command(
                 }
                 
                 // Send initial PageState to reflect voting has started
-                let initial_page_state = build_tag_detail_page_state(tag_id, &session_state);
+                let initial_page_state = build_tag_detail_page_state(tag_id, &session_state, &_state.db).await;
                 if tx.send(WsEvent::PageState { state: initial_page_state }).is_err() {
                     log::warn!("Client disconnected before voting session {} could fully start.", new_session_id);
                     VOTING_SESSIONS.lock().unwrap().remove(&new_session_id); // Clean up if client gone
@@ -843,8 +872,9 @@ async fn handle_command(
                 log::info!("Starting voting session {} for tag {} with {} comparisons.", new_session_id, tag_id, missing_comparisons_vec.len());
                 let tx_clone = tx.clone();
                 let session_state_clone = session_state.clone();
+                let db_clone = _state.db.clone();
                 tokio::spawn(async move {
-                    process_voting_session(new_session_id, tx_clone, session_state_clone).await;
+                    process_voting_session(new_session_id, tx_clone, session_state_clone, &db_clone).await;
                 });
              }
          }
@@ -856,22 +886,25 @@ async fn handle_command(
              };
              
              if let Some(session_id) = session_id_opt {
-                 let mut sessions = VOTING_SESSIONS.lock().unwrap();
-                 if let Some(session) = sessions.get_mut(&session_id) {
-                     session.is_paused = true;
-                     log::info!("Voting session {} paused", session_id);
-                     drop(sessions); // Release lock
+                 let was_paused = {
+                     let mut sessions = VOTING_SESSIONS.lock().unwrap();
+                     if let Some(session) = sessions.get_mut(&session_id) {
+                         session.is_paused = true;
+                         log::info!("Voting session {} paused", session_id);
+                         true
+                     } else {
+                         log::warn!("Voting session {} not found for pausing.", session_id);
+                         false
+                     }
+                 }; // sessions guard dropped here
 
+                 if was_paused {
                      // Send updated PageState to reflect pause
                      let tag_id_for_state = session_state.lock().unwrap().current_tag_id;
                      if let Some(tid) = tag_id_for_state {
-                        // build_tag_detail_page_state will now reflect is_voting_in_progress (still true but session is paused)
-                        // and the current completed/total. The worker will terminate.
-                        let paused_page_state = build_tag_detail_page_state(tid, &session_state);
+                        let paused_page_state = build_tag_detail_page_state(tid, &session_state, &_state.db).await;
                         let _ = tx.send(WsEvent::PageState { state: paused_page_state });
                      }
-                 } else {
-                    log::warn!("Voting session {} not found for pausing.", session_id);
                  }
              } else {
                 log::info!("No active voting session to pause.");
@@ -906,7 +939,7 @@ async fn handle_command(
                     // Send PageState to reflect resumption and current progress
                     let tag_id_for_state = session_state.lock().unwrap().current_tag_id;
                     if let Some(tid) = tag_id_for_state {
-                       let resumed_page_state = build_tag_detail_page_state(tid, &session_state);
+                       let resumed_page_state = build_tag_detail_page_state(tid, &session_state, &_state.db).await;
                        if tx.send(WsEvent::PageState { state: resumed_page_state }).is_err() {
                             log::warn!("Client disconnected on resume for session {}. Not respawning worker.", session_id);
                             // Session remains unpaused in VOTING_SESSIONS but worker won't run for this client.
@@ -922,8 +955,9 @@ async fn handle_command(
                     log::info!("Respawning worker for resumed voting session {}", session_id);
                     let tx_clone = tx.clone();
                     let session_state_clone = session_state.clone();
+                    let db_clone = _state.db.clone();
                     tokio::spawn(async move {
-                        process_voting_session(session_id, tx_clone, session_state_clone).await;
+                        process_voting_session(session_id, tx_clone, session_state_clone, &db_clone).await;
                     });
                  }
              } else {
@@ -945,7 +979,7 @@ async fn handle_command(
                  
                  // Send updated page state
                  if let Some(tag_id) = tag_id {
-                     let page_state = build_tag_detail_page_state(tag_id, &session_state);
+                     let page_state = build_tag_detail_page_state(tag_id, &session_state, &_state.db).await;
                      let _ = tx.send(WsEvent::PageState { state: page_state });
                  }
              }
@@ -953,60 +987,190 @@ async fn handle_command(
     }
 }
 
-fn build_tag_detail_page_state(
+async fn build_tag_detail_page_state(
     tag_id: Uuid,
     session_state_arc: &Arc<Mutex<SessionState>>,
+    db: &sqlx::PgPool,
 ) -> PageState {
     // Update session to track current tag (mut lock needed)
     session_state_arc.lock().unwrap().current_tag_id = Some(tag_id);
     
+    // Fetch tag from database
     let tag = {
-        let tags = TAGS.lock().unwrap();
-        tags.get(&tag_id).cloned().unwrap_or_else(|| Tag {
-            id: tag_id,
-            user_id: Uuid::new_v4(), // TODO: use actual authenticated user ID
-            name: "Unknown".to_string(),
-            created_at: chrono::Utc::now(),
-        })
-    };
-    
-    let items: Vec<Item> = {
-        let items = ITEMS.lock().unwrap();
-        items.values()
-            .filter(|item| item.tag_id == tag_id)
-            .cloned()
-            .collect()
-    };
-    
-    let attributes: Vec<Lens> = {
-        let attributes = ATTRIBUTES.lock().unwrap();
-        attributes.values()
-            .filter(|attr| attr.tag_id == tag_id)
-            .cloned()
-            .collect()
-    };
-    
-    let voters: Vec<Voter> = {
-        let voters = VOTERS.lock().unwrap();
-        voters.values().cloned().collect()
-    };
-    
-    let all_votes_for_tag: Vec<Vote> = {
-        let votes = VOTES.lock().unwrap();
-        votes.iter()
-            .filter(|vote| {
-                // Parse tag UUID from string field
-                if let Ok(vote_tag_id) = Uuid::parse_str(&vote.tag_entity_pk) {
-                    vote_tag_id == tag_id
-                } else {
-                    false
+        let tag_result = sqlx::query!(
+            r#"
+            SELECT pk, user_id, title, created_at
+            FROM entities 
+            WHERE pk_namespace = $1 AND pk = $2
+            "#,
+            PK_NAMESPACE_TAG,
+            tag_id.to_string()
+        )
+        .fetch_optional(db)
+        .await;
+        
+        match tag_result {
+            Ok(Some(row)) => Tag {
+                id: tag_id,
+                user_id: row.user_id,
+                name: row.title.unwrap_or("Untitled".to_string()),
+                created_at: row.created_at.unwrap_or_else(|| chrono::Utc::now().naive_utc()).and_utc(),
+            },
+            _ => {
+                log::warn!("Tag {} not found in database, using fallback", tag_id);
+                Tag {
+                    id: tag_id,
+                    user_id: Uuid::new_v4(),
+                    name: "Unknown".to_string(),
+                    created_at: chrono::Utc::now(),
                 }
-            })
-            .cloned()
-            .collect()
+            }
+        }
     };
     
-    // Get selected state, voting status, and progress info
+    // Fetch items for this tag from database
+    let items: Vec<Item> = {
+        let items_result = sqlx::query!(
+            r#"
+            SELECT e.pk, e.user_id, e.title, e.created_at
+            FROM entities e
+            JOIN entity_relationships er ON e.pk_namespace = er.child_pk_namespace AND e.pk = er.child_pk
+            WHERE e.pk_namespace = $1 
+            AND er.parent_pk_namespace = $2 AND er.parent_pk = $3
+            "#,
+            PK_NAMESPACE_ITEM,
+            PK_NAMESPACE_TAG,
+            tag_id.to_string()
+        )
+        .fetch_all(db)
+        .await;
+        
+        match items_result {
+            Ok(rows) => rows.into_iter().filter_map(|row| {
+                if let Ok(item_id) = Uuid::parse_str(&row.pk) {
+                    Some(Item {
+                        id: item_id,
+                        user_id: row.user_id,
+                        tag_id,
+                        text: row.title.unwrap_or("Untitled".to_string()),
+                        created_at: row.created_at.unwrap_or_else(|| chrono::Utc::now().naive_utc()).and_utc(),
+                    })
+                } else {
+                    log::warn!("Invalid item UUID: {}", row.pk);
+                    None
+                }
+            }).collect(),
+            Err(e) => {
+                log::error!("Failed to fetch items for tag {}: {}", tag_id, e);
+                Vec::new()
+            }
+        }
+    };
+    
+    // Fetch lenses (attributes) for this tag from database
+    let attributes: Vec<Lens> = {
+        let lenses_result = sqlx::query!(
+            r#"
+            SELECT e.pk, e.user_id, e.title, e.metadata, e.created_at
+            FROM entities e
+            JOIN entity_relationships er ON e.pk_namespace = er.child_pk_namespace AND e.pk = er.child_pk
+            WHERE e.pk_namespace = $1 
+            AND er.parent_pk_namespace = $2 AND er.parent_pk = $3
+            "#,
+            PK_NAMESPACE_LENS,
+            PK_NAMESPACE_TAG,
+            tag_id.to_string()
+        )
+        .fetch_all(db)
+        .await;
+        
+        match lenses_result {
+            Ok(rows) => rows.into_iter().filter_map(|row| {
+                if let Ok(lens_id) = Uuid::parse_str(&row.pk) {
+                    let template = match row.metadata {
+                        Some(meta) => {
+                            meta.get("template")
+                                .and_then(|t| t.as_str())
+                                .map(|s| s.to_string())
+                                .unwrap_or_else(|| String::new())
+                        }
+                        None => String::new(),
+                    };
+                    
+                    Some(Lens {
+                        id: lens_id,
+                        user_id: row.user_id,
+                        tag_id,
+                        label: row.title.unwrap_or("Untitled".to_string()),
+                        template,
+                        created_at: row.created_at.unwrap_or_else(|| chrono::Utc::now().naive_utc()).and_utc(),
+                    })
+                } else {
+                    log::warn!("Invalid lens UUID: {}", row.pk);
+                    None
+                }
+            }).collect(),
+            Err(e) => {
+                log::error!("Failed to fetch lenses for tag {}: {}", tag_id, e);
+                Vec::new()
+            }
+        }
+    };
+    
+    // Fetch all AI voters from database
+    let voters: Vec<Voter> = {
+        let voters_result = sqlx::query!(
+            r#"
+            SELECT id, username, is_ai
+            FROM users 
+            WHERE is_ai = true
+            ORDER BY username
+            "#
+        )
+        .fetch_all(db)
+        .await;
+        
+        match voters_result {
+            Ok(rows) => rows.into_iter().map(|row| Voter {
+                id: row.id,
+                name: row.username,
+                is_ai: row.is_ai,
+            }).collect(),
+            Err(e) => {
+                log::error!("Failed to fetch voters: {}", e);
+                Vec::new()
+            }
+        }
+    };
+    
+    // Fetch all votes for this tag from database
+    let all_votes_for_tag: Vec<Vote> = {
+        let votes_result = sqlx::query_as!(
+            Vote,
+            r#"
+            SELECT id, left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, 
+                   voter_user_id, score, lens_entity_pk_namespace, lens_entity_pk, 
+                   tag_entity_pk_namespace, tag_entity_pk, rationale, created_at
+            FROM votes 
+            WHERE tag_entity_pk_namespace = $1 AND tag_entity_pk = $2
+            ORDER BY created_at DESC
+            "#,
+            PK_NAMESPACE_TAG,
+            tag_id.to_string()
+        )
+        .fetch_all(db)
+        .await;
+        
+        match votes_result {
+            Ok(votes) => votes,
+            Err(e) => {
+                log::error!("Failed to fetch votes for tag {}: {}", tag_id, e);
+                Vec::new()
+            }
+        }
+    };
+    
+    // Get selected state, voting status, and progress info (keeping session state logic)
     let (
         current_selected_voters,
         current_selected_attributes,
@@ -1014,48 +1178,39 @@ fn build_tag_detail_page_state(
         current_completed_comparisons,
         current_total_comparisons,
     ) = {
-        let mut ss_guard = session_state_arc.lock().unwrap(); // mut for get_or_create
+        let mut ss_guard = session_state_arc.lock().unwrap();
         let selection_state = ss_guard.get_or_create_tag_selection(tag_id);
         let sel_voters_clone = selection_state.selected_voters.clone();
         let sel_attributes_clone = selection_state.selected_attributes.clone();
         let voting_session_id_opt = ss_guard.voting_session_id;
-        drop(ss_guard); // Release SessionState lock before locking VOTING_SESSIONS
+        drop(ss_guard);
 
         if let Some(active_session_id) = voting_session_id_opt {
             let sessions_guard = VOTING_SESSIONS.lock().unwrap();
             if let Some(session_data) = sessions_guard.get(&active_session_id) {
-                // Ensure session is for the current tag; should be by design but good check
                 if session_data.tag_id == tag_id {
                      (
                         sel_voters_clone,
                         sel_attributes_clone,
-                        !session_data.is_paused, // is_voting_in_progress is true if not paused
+                        !session_data.is_paused,
                         Some(session_data.current_index),
                         Some(session_data.total_comparisons),
                     )
                 } else {
-                    // Session ID in SessionState is for a different tag, treat as no active session for *this* tag
-                    log::warn!("Active session {} in SessionState is for tag {}, but current tag is {}. Treating as no active session for current tag.", active_session_id, session_data.tag_id, tag_id);
+                    log::warn!("Active session {} in SessionState is for tag {}, but current tag is {}.", active_session_id, session_data.tag_id, tag_id);
                     (sel_voters_clone, sel_attributes_clone, false, None, None)
                 }
             } else {
-                // Session ID in SessionState but not in VOTING_SESSIONS (e.g., just ended/stopped)
-                // Clear it from SessionState to prevent stale references
-                // This requires a write lock on session_state_arc again.
-                // For simplicity now, just report as not in progress.
-                // A more robust solution might clear ss_guard.voting_session_id here if locks allow.
-                // For now:
-                session_state_arc.lock().unwrap().voting_session_id = None; // Clear stale session ID
+                session_state_arc.lock().unwrap().voting_session_id = None;
                 (sel_voters_clone, sel_attributes_clone, false, None, None)
             }
         } else {
-            // No voting_session_id in SessionState
             (sel_voters_clone, sel_attributes_clone, false, None, None)
         }
     };
     
     // Filter votes by selected voters and attributes
-    let filtered_votes_list: Vec<Vote> = all_votes_for_tag // Use renamed variable
+    let filtered_votes_list: Vec<Vote> = all_votes_for_tag
         .iter()
         .filter(|vote| {
             let voter_match = if current_selected_voters.is_empty() {
@@ -1079,15 +1234,13 @@ fn build_tag_detail_page_state(
         .cloned()
         .collect();
     
-    // Calculate voters_with_votes from ALL votes for the tag, not just filtered ones
-    // This ensures the dropdown shows voters with votes even when no filters are applied
+    // Calculate voters_with_votes from ALL votes for the tag
     let voters_with_all_votes = calculate_voters_with_votes(&all_votes_for_tag);
     let current_rankings = calculate_rankings(&items, &filtered_votes_list);
     
     let voted_item_ids_from_filtered: HashSet<Uuid> = filtered_votes_list
         .iter()
         .filter_map(|vote| {
-            // Parse item UUIDs from the new string fields
             let left_item = Uuid::parse_str(&vote.left_entity_pk).ok();
             let right_item = Uuid::parse_str(&vote.right_entity_pk).ok();
             match (left_item, right_item) {
@@ -1112,8 +1265,8 @@ fn build_tag_detail_page_state(
         unsorted_items: current_unsorted_items,
         attributes,
         voters,
-        votes: filtered_votes_list.clone(), // Already updated to use filtered votes by selection
-        rankings: current_rankings, // Keep for backward compatibility
+        votes: filtered_votes_list.clone(),
+        rankings: current_rankings,
         unvoted_item_count: current_unvoted_item_count,
         voters_with_votes: voters_with_all_votes,
         selected_attributes: current_selected_attributes,

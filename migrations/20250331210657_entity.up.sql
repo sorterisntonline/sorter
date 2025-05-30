@@ -74,9 +74,9 @@ DROP TABLE IF EXISTS votes; -- Clean slate for development
 CREATE TABLE votes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- New UUID primary key
     left_entity_pk_namespace TEXT NOT NULL DEFAULT 'sorter.item',
-    left_entity_pk TEXT NOT NULL,
+  left_entity_pk TEXT NOT NULL,
     right_entity_pk_namespace TEXT NOT NULL DEFAULT 'sorter.item',
-    right_entity_pk TEXT NOT NULL,
+  right_entity_pk TEXT NOT NULL,
     voter_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, -- User ID of the Voter (human or AI)
     score INT NOT NULL,
     lens_entity_pk_namespace TEXT NOT NULL DEFAULT 'sorter.lens',
