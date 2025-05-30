@@ -303,53 +303,90 @@ fn extract_score_from_response(response: &str) -> Option<i32> {
     }
 }
 
-// Generate missing comparisons for voting
-fn generate_missing_comparisons(
+// Generate missing comparisons for voting using database queries
+async fn generate_missing_comparisons(
     tag_id: Uuid,
     selected_voters: &[Uuid],
     selected_attributes: &[Uuid],
+    db: &sqlx::PgPool,
 ) -> Vec<MissingComparison> {
-    let items: Vec<Item> = {
-        let items = ITEMS.lock().unwrap();
-        items.values()
-            .filter(|item| item.tag_id == tag_id)
-            .cloned()
-            .collect()
+    // Fetch items for this tag from database
+    let items_result = sqlx::query!(
+        r#"
+        SELECT e.pk, e.user_id, e.title, e.created_at
+        FROM entities e
+        JOIN entity_relationships er ON e.pk_namespace = er.child_pk_namespace AND e.pk = er.child_pk
+        WHERE e.pk_namespace = $1 
+        AND er.parent_pk_namespace = $2 AND er.parent_pk = $3
+        "#,
+        PK_NAMESPACE_ITEM,
+        PK_NAMESPACE_TAG,
+        tag_id.to_string()
+    )
+    .fetch_all(db)
+    .await;
+    
+    let items: Vec<Item> = match items_result {
+        Ok(rows) => rows.into_iter().filter_map(|row| {
+            if let Ok(item_id) = Uuid::parse_str(&row.pk) {
+                Some(Item {
+                    id: item_id,
+                    user_id: row.user_id,
+                    tag_id,
+                    text: row.title.unwrap_or("Untitled".to_string()),
+                    created_at: row.created_at.unwrap_or_else(|| chrono::Utc::now().naive_utc()).and_utc(),
+                })
+            } else {
+                log::warn!("Invalid item UUID: {}", row.pk);
+                None
+            }
+        }).collect(),
+        Err(e) => {
+            log::error!("Failed to fetch items for missing comparisons: {}", e);
+            return Vec::new();
+        }
     };
     
     if items.len() < 2 {
         return Vec::new();
     }
     
-    let votes = VOTES.lock().unwrap();
-    let existing_votes: HashSet<(Uuid, Uuid, Uuid, Uuid)> = votes
-        .iter()
-        .filter(|vote| {
-            // Parse UUIDs from the new string fields and check tag context
-            if let (Ok(vote_tag_id), vote_voter_id, Ok(vote_lens_id)) = (
-                Uuid::parse_str(&vote.tag_entity_pk),
-                vote.voter_user_id,
-                Uuid::parse_str(&vote.lens_entity_pk)
+    // Fetch existing votes for this tag and selected voters/attributes from database
+    let votes_result = sqlx::query!(
+        r#"
+        SELECT left_entity_pk, right_entity_pk, voter_user_id, lens_entity_pk
+        FROM votes 
+        WHERE tag_entity_pk_namespace = $1 AND tag_entity_pk = $2
+        AND voter_user_id = ANY($3)
+        AND lens_entity_pk = ANY($4)
+        "#,
+        PK_NAMESPACE_TAG,
+        tag_id.to_string(),
+        &selected_voters,
+        &selected_attributes.iter().map(|id| id.to_string()).collect::<Vec<_>>()
+    )
+    .fetch_all(db)
+    .await;
+    
+    let existing_votes: HashSet<(Uuid, Uuid, Uuid, Uuid)> = match votes_result {
+        Ok(rows) => rows.into_iter().filter_map(|row| {
+            // Parse item UUIDs and construct the key
+            if let (Ok(item_a_id), Ok(item_b_id), Ok(lens_id)) = (
+                Uuid::parse_str(&row.left_entity_pk),
+                Uuid::parse_str(&row.right_entity_pk),
+                Uuid::parse_str(&row.lens_entity_pk)
             ) {
-                vote_tag_id == tag_id && 
-                selected_voters.contains(&vote_voter_id) && 
-                selected_attributes.contains(&vote_lens_id)
+                Some((row.voter_user_id, lens_id, item_a_id, item_b_id))
             } else {
-                false
-            }
-        })
-        .filter_map(|vote| {
-            // Parse item UUIDs from string fields
-            if let (Ok(item_a_id), Ok(item_b_id)) = (
-                Uuid::parse_str(&vote.left_entity_pk),
-                Uuid::parse_str(&vote.right_entity_pk)
-            ) {
-                Some((vote.voter_user_id, Uuid::parse_str(&vote.lens_entity_pk).unwrap(), item_a_id, item_b_id))
-            } else {
+                log::warn!("Invalid UUID in vote record");
                 None
             }
-        })
-        .collect();
+        }).collect(),
+        Err(e) => {
+            log::error!("Failed to fetch existing votes for missing comparisons: {}", e);
+            HashSet::new()
+        }
+    };
     
     let mut missing_comparisons = Vec::new();
     
@@ -466,23 +503,35 @@ async fn process_voting_session(
                                         (comparison_to_process.item_b_id.to_string(), comparison_to_process.item_a_id.to_string(), -score)
                                     };
 
-                                    let vote = Vote {
-                                        id: Uuid::new_v4(),
-                                        left_entity_pk_namespace: "item".to_string(),
-                                        left_entity_pk: left_pk,
-                                        right_entity_pk_namespace: "item".to_string(),
-                                        right_entity_pk: right_pk,
-                                        voter_user_id: *voter_id,
-                                        score: final_score,
-                                        lens_entity_pk_namespace: "item".to_string(),
-                                        lens_entity_pk: attribute_id_val.to_string(),
-                                        tag_entity_pk_namespace: PK_NAMESPACE_TAG.to_string(),
-                                        tag_entity_pk: tag_id.to_string(),
-                                        rationale: Some(response),
-                                        created_at: chrono::Utc::now(),
-                                    };
-                                    VOTES.lock().unwrap().push(vote);
-                                    log::info!("Vote recorded for session {}: ItemA: {}, ItemB: {}, Score: {} by {}", session_id, comparison_to_process.item_a_text, comparison_to_process.item_b_text, final_score, voter_name);
+                                    // Insert vote into database
+                                    let insert_result = sqlx::query!(
+                                        r#"
+                                        INSERT INTO votes (left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, voter_user_id, score, lens_entity_pk_namespace, lens_entity_pk, tag_entity_pk_namespace, tag_entity_pk, rationale, created_at)
+                                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
+                                        "#,
+                                        PK_NAMESPACE_ITEM,
+                                        left_pk,
+                                        PK_NAMESPACE_ITEM,
+                                        right_pk,
+                                        *voter_id,
+                                        final_score,
+                                        PK_NAMESPACE_LENS,
+                                        attribute_id_val.to_string(),
+                                        PK_NAMESPACE_TAG,
+                                        tag_id.to_string(),
+                                        response
+                                    )
+                                    .execute(db)
+                                    .await;
+                                    
+                                    match insert_result {
+                                        Ok(_) => {
+                                            log::info!("Vote recorded for session {}: ItemA: {}, ItemB: {}, Score: {} by {}", session_id, comparison_to_process.item_a_text, comparison_to_process.item_b_text, final_score, voter_name);
+                                        }
+                                        Err(e) => {
+                                            log::error!("Failed to insert vote for session {}: {}", session_id, e);
+                                        }
+                                    }
                                 } else {
                                     log::warn!("Could not extract score from response for session {}: {}", session_id, response);
                                 }
@@ -593,9 +642,39 @@ async fn handle_command(
     log::info!("handle_command: {:?}", cmd);
     match cmd {
         WsCommand::NavigateToTagsList => {
+            // Fetch tags from database
             let tags = {
-                let tags = TAGS.lock().unwrap();
-                tags.values().cloned().collect()
+                let tags_result = sqlx::query!(
+                    r#"
+                    SELECT pk, user_id, title, created_at
+                    FROM entities 
+                    WHERE pk_namespace = $1
+                    ORDER BY created_at DESC
+                    "#,
+                    PK_NAMESPACE_TAG
+                )
+                .fetch_all(&_state.db)
+                .await;
+                
+                match tags_result {
+                    Ok(rows) => rows.into_iter().filter_map(|row| {
+                        if let Ok(tag_id) = Uuid::parse_str(&row.pk) {
+                            Some(Tag {
+                                id: tag_id,
+                                user_id: row.user_id,
+                                name: row.title.unwrap_or("Untitled".to_string()),
+                                created_at: row.created_at.unwrap_or_else(|| chrono::Utc::now().naive_utc()).and_utc(),
+                            })
+                        } else {
+                            log::warn!("Invalid tag UUID: {}", row.pk);
+                            None
+                        }
+                    }).collect(),
+                    Err(e) => {
+                        log::error!("Failed to fetch tags: {}", e);
+                        Vec::new()
+                    }
+                }
             };
             
             let mut session = session_state.lock().unwrap();
@@ -692,15 +771,58 @@ async fn handle_command(
             if let Some(tag_id) = tag_id {
                 if !text.trim().is_empty() {
                     let item_id = Uuid::new_v4();
-                    let item = Item {
-                        id: item_id,
-                        user_id: Uuid::new_v4(), // TODO: use actual authenticated user ID
-                        tag_id,
-                        text: text.trim().to_string(),
-                        created_at: chrono::Utc::now(),
-                    };
                     
-                    ITEMS.lock().unwrap().insert(item_id, item);
+                    // Insert item into entities table
+                    let insert_result = sqlx::query!(
+                        r#"
+                        INSERT INTO entities (pk_namespace, pk, user_id, title, created_at)
+                        VALUES ($1, $2, $3, $4, now())
+                        "#,
+                        PK_NAMESPACE_ITEM,
+                        item_id.to_string(),
+                        Uuid::new_v4(), // TODO: use actual authenticated user ID
+                        text.trim()
+                    )
+                    .execute(&_state.db)
+                    .await;
+                    
+                    match insert_result {
+                        Ok(_) => {
+                            // Create relationship between item and tag
+                            let relationship_result = sqlx::query!(
+                                r#"
+                                INSERT INTO entity_relationships (parent_pk_namespace, parent_pk, child_pk_namespace, child_pk)
+                                VALUES ($1, $2, $3, $4)
+                                "#,
+                                PK_NAMESPACE_TAG,
+                                tag_id.to_string(),
+                                PK_NAMESPACE_ITEM,
+                                item_id.to_string()
+                            )
+                            .execute(&_state.db)
+                            .await;
+                            
+                            match relationship_result {
+                                Ok(_) => {
+                                    log::info!("Created item '{}' with ID {} for tag {}", text.trim(), item_id, tag_id);
+                                }
+                                Err(e) => {
+                                    log::error!("Failed to create item-tag relationship: {}", e);
+                                    let _ = tx.send(WsEvent::Error { 
+                                        message: format!("Failed to link item to tag: {}", e) 
+                                    });
+                                    return;
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("Failed to create item '{}': {}", text.trim(), e);
+                            let _ = tx.send(WsEvent::Error { 
+                                message: format!("Failed to create item: {}", e) 
+                            });
+                            return;
+                        }
+                    }
                 }
                 
                 let page_state = build_tag_detail_page_state(tag_id, &session_state, &_state.db).await;
@@ -717,16 +839,63 @@ async fn handle_command(
             if let Some(tag_id) = tag_id {
                 if !label.trim().is_empty() && !template.trim().is_empty() {
                     let attr_id = Uuid::new_v4();
-                    let attribute = Lens {
-                        id: attr_id,
-                        user_id: Uuid::new_v4(), // TODO: use actual authenticated user ID
-                        tag_id,
-                        label: label.trim().to_string(),
-                        template: template.trim().to_string(),
-                        created_at: chrono::Utc::now(),
-                    };
                     
-                    ATTRIBUTES.lock().unwrap().insert(attr_id, attribute);
+                    // Insert lens into entities table with template metadata
+                    let metadata = json!({
+                        "template": template.trim()
+                    });
+                    
+                    let insert_result = sqlx::query!(
+                        r#"
+                        INSERT INTO entities (pk_namespace, pk, user_id, title, metadata, created_at)
+                        VALUES ($1, $2, $3, $4, $5, now())
+                        "#,
+                        PK_NAMESPACE_LENS,
+                        attr_id.to_string(),
+                        Uuid::new_v4(), // TODO: use actual authenticated user ID
+                        label.trim(),
+                        metadata
+                    )
+                    .execute(&_state.db)
+                    .await;
+                    
+                    match insert_result {
+                        Ok(_) => {
+                            // Create relationship between lens and tag
+                            let relationship_result = sqlx::query!(
+                                r#"
+                                INSERT INTO entity_relationships (parent_pk_namespace, parent_pk, child_pk_namespace, child_pk)
+                                VALUES ($1, $2, $3, $4)
+                                "#,
+                                PK_NAMESPACE_TAG,
+                                tag_id.to_string(),
+                                PK_NAMESPACE_LENS,
+                                attr_id.to_string()
+                            )
+                            .execute(&_state.db)
+                            .await;
+                            
+                            match relationship_result {
+                                Ok(_) => {
+                                    log::info!("Created lens '{}' with ID {} for tag {}", label.trim(), attr_id, tag_id);
+                                }
+                                Err(e) => {
+                                    log::error!("Failed to create lens-tag relationship: {}", e);
+                                    let _ = tx.send(WsEvent::Error { 
+                                        message: format!("Failed to link lens to tag: {}", e) 
+                                    });
+                                    return;
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("Failed to create lens '{}': {}", label.trim(), e);
+                            let _ = tx.send(WsEvent::Error { 
+                                message: format!("Failed to create lens: {}", e) 
+                            });
+                            return;
+                        }
+                    }
                 }
                 
                 let page_state = build_tag_detail_page_state(tag_id, &session_state, &_state.db).await;
@@ -738,26 +907,62 @@ async fn handle_command(
             if !name.trim().is_empty() {
                 let voter_name = name.trim().to_string();
                 
-                // Check if voter already exists
-                let existing_voter_id = {
-                    let voters = VOTERS.lock().unwrap();
-                    voters.values()
-                        .find(|v| v.name == voter_name)
-                        .map(|v| v.id)
-                };
+                // Check if AI voter already exists in database
+                let existing_voter_result = sqlx::query!(
+                    r#"
+                    SELECT id, username, is_ai
+                    FROM users 
+                    WHERE username = $1 AND is_ai = true
+                    "#,
+                    voter_name
+                )
+                .fetch_optional(&_state.db)
+                .await;
                 
-                let voter_id = if let Some(id) = existing_voter_id {
-                    id
-                } else {
-                    // Create new voter
-                    let new_id = Uuid::new_v4();
-                    let voter = Voter {
-                        id: new_id,
-                        name: voter_name,
-                        is_ai: true,
-                    };
-                    VOTERS.lock().unwrap().insert(new_id, voter);
-                    new_id
+                let voter_id = match existing_voter_result {
+                    Ok(Some(row)) => {
+                        log::info!("Found existing AI voter: {}", voter_name);
+                        row.id
+                    }
+                    Ok(None) => {
+                        // Create new AI voter
+                        let new_voter_id = Uuid::new_v4();
+                        let synthetic_auth0_sub = format!("ai_model|{}", voter_name);
+                        
+                        let insert_result = sqlx::query!(
+                            r#"
+                            INSERT INTO users (id, auth0_sub, username, is_ai, created_at)
+                            VALUES ($1, $2, $3, true, now())
+                            RETURNING id
+                            "#,
+                            new_voter_id,
+                            synthetic_auth0_sub,
+                            voter_name
+                        )
+                        .fetch_one(&_state.db)
+                        .await;
+                        
+                        match insert_result {
+                            Ok(row) => {
+                                log::info!("Created new AI voter: {} with ID {}", voter_name, row.id);
+                                row.id
+                            }
+                            Err(e) => {
+                                log::error!("Failed to create AI voter '{}': {}", voter_name, e);
+                                let _ = tx.send(WsEvent::Error { 
+                                    message: format!("Failed to create voter: {}", e) 
+                                });
+                                return;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("Failed to check for existing voter '{}': {}", voter_name, e);
+                        let _ = tx.send(WsEvent::Error { 
+                            message: format!("Failed to check for existing voter: {}", e) 
+                        });
+                        return;
+                    }
                 };
                 
                 // Get current tag_id
@@ -784,7 +989,33 @@ async fn handle_command(
         }
 
         WsCommand::DeleteItem { item_id } => {
-            ITEMS.lock().unwrap().remove(&item_id);
+            // Delete item from database
+            let delete_result = sqlx::query!(
+                r#"
+                DELETE FROM entities 
+                WHERE pk_namespace = $1 AND pk = $2
+                "#,
+                PK_NAMESPACE_ITEM,
+                item_id.to_string()
+            )
+            .execute(&_state.db)
+            .await;
+            
+            match delete_result {
+                Ok(result) => {
+                    if result.rows_affected() > 0 {
+                        log::info!("Deleted item with ID {}", item_id);
+                    } else {
+                        log::warn!("Item with ID {} not found for deletion", item_id);
+                    }
+                }
+                Err(e) => {
+                    log::error!("Failed to delete item {}: {}", item_id, e);
+                    let _ = tx.send(WsEvent::Error { 
+                        message: format!("Failed to delete item: {}", e) 
+                    });
+                }
+            }
             
             let tag_id = {
                 let session = session_state.lock().unwrap();
@@ -798,7 +1029,33 @@ async fn handle_command(
         }
         
         WsCommand::DeleteAttribute { attribute_id } => {
-            ATTRIBUTES.lock().unwrap().remove(&attribute_id);
+            // Delete lens from database
+            let delete_result = sqlx::query!(
+                r#"
+                DELETE FROM entities 
+                WHERE pk_namespace = $1 AND pk = $2
+                "#,
+                PK_NAMESPACE_LENS,
+                attribute_id.to_string()
+            )
+            .execute(&_state.db)
+            .await;
+            
+            match delete_result {
+                Ok(result) => {
+                    if result.rows_affected() > 0 {
+                        log::info!("Deleted lens with ID {}", attribute_id);
+                    } else {
+                        log::warn!("Lens with ID {} not found for deletion", attribute_id);
+                    }
+                }
+                Err(e) => {
+                    log::error!("Failed to delete lens {}: {}", attribute_id, e);
+                    let _ = tx.send(WsEvent::Error { 
+                        message: format!("Failed to delete lens: {}", e) 
+                    });
+                }
+            }
             
             let tag_id = {
                 let session = session_state.lock().unwrap();
@@ -831,7 +1088,7 @@ async fn handle_command(
                     return;
                 }
                 
-                let missing_comparisons_vec = generate_missing_comparisons(tag_id, &selected_voters_clone, &selected_attributes_clone);
+                let missing_comparisons_vec = generate_missing_comparisons(tag_id, &selected_voters_clone, &selected_attributes_clone, &_state.db).await;
                 
                 if missing_comparisons_vec.is_empty() {
                     // Send PageState to reflect no comparisons and not in progress
