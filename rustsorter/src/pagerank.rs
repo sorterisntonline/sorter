@@ -34,7 +34,7 @@ pub struct RankingResponse {
 }
 
 // Represents a vote relevant to the input entities
-#[derive(sqlx::FromRow, Debug, Clone)]
+#[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
 pub struct RelevantVote {
     pub left_entity_pk_namespace: String,
     pub left_entity_pk: String,
@@ -230,12 +230,12 @@ async fn rank_children_handler(
         SELECT
             left_entity_pk_namespace, left_entity_pk,
             right_entity_pk_namespace, right_entity_pk,
-            magnitude
+            score as magnitude
         FROM votes
         WHERE (left_entity_pk_namespace || ':' || left_entity_pk) = ANY($1)
           AND (right_entity_pk_namespace || ':' || right_entity_pk) = ANY($1)
-        -- Optional: Add user_id filter if needed
-        -- AND user_id = $2
+        -- Optional: Add voter_user_id filter if needed
+        -- AND voter_user_id = $2
         "#,
         &entity_keys
         // user.id // Example if user needed

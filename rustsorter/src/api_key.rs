@@ -236,6 +236,7 @@ SELECT auth0_sub,
     username,
     avatar_url,
     bio,
+    is_ai,
     created_at,
     id
 FROM users

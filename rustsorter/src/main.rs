@@ -71,9 +71,12 @@ async fn get_spotify_client() -> Result<ClientCredsSpotify> {
 use crate::models::User;
 
 async fn get_spotify_user(db: &sqlx::PgPool) -> Result<User> {
-    let user = sqlx::query_as!(User, "SELECT * FROM users WHERE auth0_sub = 'spotify'")
-        .fetch_one(db)
-        .await?;
+    let user = sqlx::query_as!(
+        User, 
+        "SELECT id, auth0_sub, username, avatar_url, bio, is_ai, created_at FROM users WHERE auth0_sub = 'spotify'"
+    )
+    .fetch_one(db)
+    .await?;
     Ok(user)
 }
 

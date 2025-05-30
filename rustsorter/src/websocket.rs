@@ -13,6 +13,13 @@ use tokio::sync::mpsc;
 use reqwest;
 use regex::Regex;
 use rand::seq::SliceRandom;
+use chrono::{DateTime, Utc};
+use serde_json::{json, Value as JsonValue};
+
+// Namespace constants for sorter entities
+pub const PK_NAMESPACE_TAG: &str = "sorter.tag";
+pub const PK_NAMESPACE_ITEM: &str = "sorter.item";
+pub const PK_NAMESPACE_LENS: &str = "sorter.lens";
 
 // OpenRouter API structures
 #[derive(Debug, Serialize)]
@@ -56,52 +63,62 @@ struct VotingSession {
     total_comparisons: usize,
 }
 
-// Core data structures
-#[derive(Debug, Clone, Serialize, Deserialize)]
+// ===== DATABASE-ALIGNED CORE DATA STRUCTURES =====
+
+// Tag entity view (maps to entities table with pk_namespace = 'sorter.tag')
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Tag {
-    pub id: Uuid,
-    pub name: String,
-    pub created_at: String,
+    pub id: Uuid,                    // Parsed from entities.pk
+    pub user_id: Uuid,               // From entities.user_id
+    pub name: String,                // From entities.title
+    pub created_at: DateTime<Utc>,   // From entities.created_at
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+// Item entity view (maps to entities table with pk_namespace = 'sorter.item')
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Item {
-    pub id: Uuid,
-    pub tag_id: Uuid,
-    pub text: String,
-    pub created_at: String,
+    pub id: Uuid,                    // Parsed from entities.pk
+    pub user_id: Uuid,               // From entities.user_id
+    pub tag_id: Uuid,                // From parent relationship
+    pub text: String,                // From entities.title or metadata
+    pub created_at: DateTime<Utc>,   // From entities.created_at
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Attribute {
-    pub id: Uuid,
-    pub tag_id: Uuid,
-    pub label: String,
-    pub template: String,
-    pub created_by: Uuid,
-    pub created_at: String,
+// Lens entity view (maps to entities table with pk_namespace = 'sorter.lens')
+// Renamed from Attribute to match the lens concept
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct Lens {
+    pub id: Uuid,                    // Parsed from entities.pk
+    pub user_id: Uuid,               // From entities.user_id
+    pub tag_id: Uuid,                // From parent relationship
+    pub label: String,               // From entities.title
+    pub template: String,            // From entities.metadata.template
+    pub created_at: DateTime<Utc>,   // From entities.created_at
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+// Vote struct aligned with new votes table schema
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Vote {
-    pub id: i64,
-    pub tag_id: Uuid,
-    pub attribute_id: Uuid,
-    pub voter_id: Uuid,
-    pub item_a_id: Uuid,
-    pub item_b_id: Uuid,
-    pub score: i32,
-    pub rationale: Option<String>,
-    pub created_at: String,
+    pub id: Uuid,                           // votes.id
+    pub left_entity_pk: String,             // votes.left_entity_pk (item UUID as string)
+    pub right_entity_pk: String,            // votes.right_entity_pk (item UUID as string)
+    pub voter_user_id: Uuid,                // votes.voter_user_id
+    pub score: i32,                         // votes.score
+    pub lens_entity_pk: String,             // votes.lens_entity_pk (lens UUID as string)
+    pub tag_entity_pk: String,              // votes.tag_entity_pk (tag UUID as string)
+    pub rationale: Option<String>,          // votes.rationale
+    pub created_at: DateTime<Utc>,          // votes.created_at
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+// Voter struct (maps to users table where is_ai = true)
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Voter {
-    pub id: Uuid,
-    pub name: String,
-    pub is_ai: bool,
+    pub id: Uuid,                    // users.id
+    pub name: String,                // users.username (model name for AI)
+    pub is_ai: bool,                 // users.is_ai
 }
 
+// Helper structs for WebSocket responses (keeping these for compatibility)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RankedItem {
     pub item_id: Uuid,
@@ -118,8 +135,6 @@ pub struct MissingComparison {
     pub item_b_text: String,
 }
 
-
-
 // Page-specific state structures
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TagsListPageState {
@@ -131,7 +146,7 @@ pub struct TagDetailPageState {
     pub tag: Tag,
     pub sorted_items: Vec<RankedItem>, // Items with votes and rankings
     pub unsorted_items: Vec<Item>, // Items without votes
-    pub attributes: Vec<Attribute>,
+    pub attributes: Vec<Lens>,
     pub voters: Vec<Voter>,
     pub votes: Vec<Vote>,
     pub rankings: Vec<RankedItem>, // Keep for backward compatibility
@@ -190,10 +205,9 @@ pub enum WsEvent {
 lazy_static::lazy_static! {
     static ref TAGS: Arc<Mutex<HashMap<Uuid, Tag>>> = Arc::new(Mutex::new(HashMap::new()));
     static ref ITEMS: Arc<Mutex<HashMap<Uuid, Item>>> = Arc::new(Mutex::new(HashMap::new()));
-    static ref ATTRIBUTES: Arc<Mutex<HashMap<Uuid, Attribute>>> = Arc::new(Mutex::new(HashMap::new()));
+    static ref ATTRIBUTES: Arc<Mutex<HashMap<Uuid, Lens>>> = Arc::new(Mutex::new(HashMap::new()));
     static ref VOTES: Arc<Mutex<Vec<Vote>>> = Arc::new(Mutex::new(Vec::new()));
     static ref VOTERS: Arc<Mutex<HashMap<Uuid, Voter>>> = Arc::new(Mutex::new(HashMap::new()));
-    static ref VOTE_ID_COUNTER: Arc<Mutex<i64>> = Arc::new(Mutex::new(1));
     static ref VOTING_SESSIONS: Arc<Mutex<HashMap<Uuid, VotingSession>>> = Arc::new(Mutex::new(HashMap::new()));
 }
 
@@ -306,12 +320,31 @@ fn generate_missing_comparisons(
     let votes = VOTES.lock().unwrap();
     let existing_votes: HashSet<(Uuid, Uuid, Uuid, Uuid)> = votes
         .iter()
-        .filter(|vote| vote.tag_id == tag_id)
         .filter(|vote| {
-            // Only consider votes from selected voters and attributes when determining missing comparisons
-            selected_voters.contains(&vote.voter_id) && selected_attributes.contains(&vote.attribute_id)
+            // Parse UUIDs from the new string fields and check tag context
+            if let (Ok(vote_tag_id), vote_voter_id, Ok(vote_lens_id)) = (
+                Uuid::parse_str(&vote.tag_entity_pk),
+                vote.voter_user_id,
+                Uuid::parse_str(&vote.lens_entity_pk)
+            ) {
+                vote_tag_id == tag_id && 
+                selected_voters.contains(&vote_voter_id) && 
+                selected_attributes.contains(&vote_lens_id)
+            } else {
+                false
+            }
         })
-        .map(|vote| (vote.voter_id, vote.attribute_id, vote.item_a_id, vote.item_b_id))
+        .filter_map(|vote| {
+            // Parse item UUIDs from string fields
+            if let (Ok(item_a_id), Ok(item_b_id)) = (
+                Uuid::parse_str(&vote.left_entity_pk),
+                Uuid::parse_str(&vote.right_entity_pk)
+            ) {
+                Some((vote.voter_user_id, Uuid::parse_str(&vote.lens_entity_pk).unwrap(), item_a_id, item_b_id))
+            } else {
+                None
+            }
+        })
         .collect();
     
     let mut missing_comparisons = Vec::new();
@@ -426,25 +459,26 @@ async fn process_voting_session(
                     match call_openrouter_api(&voter_name, &prompt).await {
                         Ok(response) => {
                             if let Some(score) = extract_score_from_response(&response) {
-                                let vote_id = {
-                                    let mut counter = VOTE_ID_COUNTER.lock().unwrap();
-                                    let id = *counter;
-                                    *counter += 1;
-                                    id
+                                // Ensure left < right ordering for canonical pair
+                                let (left_pk, right_pk, final_score) = if comparison_to_process.item_a_id.to_string() < comparison_to_process.item_b_id.to_string() {
+                                    (comparison_to_process.item_a_id.to_string(), comparison_to_process.item_b_id.to_string(), score)
+                                } else {
+                                    (comparison_to_process.item_b_id.to_string(), comparison_to_process.item_a_id.to_string(), -score)
                                 };
+
                                 let vote = Vote {
-                                    id: vote_id,
-                                    tag_id,
-                                    attribute_id: *attribute_id_val,
-                                    voter_id: *voter_id,
-                                    item_a_id: comparison_to_process.item_a_id,
-                                    item_b_id: comparison_to_process.item_b_id,
-                                    score,
+                                    id: Uuid::new_v4(),
+                                    left_entity_pk: left_pk,
+                                    right_entity_pk: right_pk,
+                                    voter_user_id: *voter_id,
+                                    score: final_score,
+                                    lens_entity_pk: attribute_id_val.to_string(),
+                                    tag_entity_pk: tag_id.to_string(),
                                     rationale: Some(response),
-                                    created_at: chrono::Utc::now().to_rfc3339(),
+                                    created_at: chrono::Utc::now(),
                                 };
                                 VOTES.lock().unwrap().push(vote);
-                                log::info!("Vote recorded for session {}: ItemA: {}, ItemB: {}, Score: {} by {}", session_id, comparison_to_process.item_a_text, comparison_to_process.item_b_text, score, voter_name);
+                                log::info!("Vote recorded for session {}: ItemA: {}, ItemB: {}, Score: {} by {}", session_id, comparison_to_process.item_a_text, comparison_to_process.item_b_text, final_score, voter_name);
                             } else {
                                 log::warn!("Could not extract score from response for session {}: {}", session_id, response);
                             }
@@ -570,8 +604,9 @@ async fn handle_command(
                 let tag_id = Uuid::new_v4();
                 let tag = Tag {
                     id: tag_id,
+                    user_id: Uuid::new_v4(), // TODO: use actual authenticated user ID
                     name: name.trim().to_string(),
-                    created_at: chrono::Utc::now().to_rfc3339(),
+                    created_at: chrono::Utc::now(),
                 };
                 
                 TAGS.lock().unwrap().insert(tag_id, tag.clone());
@@ -630,9 +665,10 @@ async fn handle_command(
                     let item_id = Uuid::new_v4();
                     let item = Item {
                         id: item_id,
+                        user_id: Uuid::new_v4(), // TODO: use actual authenticated user ID
                         tag_id,
                         text: text.trim().to_string(),
-                        created_at: chrono::Utc::now().to_rfc3339(),
+                        created_at: chrono::Utc::now(),
                     };
                     
                     ITEMS.lock().unwrap().insert(item_id, item);
@@ -652,13 +688,13 @@ async fn handle_command(
             if let Some(tag_id) = tag_id {
                 if !label.trim().is_empty() && !template.trim().is_empty() {
                     let attr_id = Uuid::new_v4();
-                    let attribute = Attribute {
+                    let attribute = Lens {
                         id: attr_id,
+                        user_id: Uuid::new_v4(), // TODO: use actual authenticated user ID
                         tag_id,
                         label: label.trim().to_string(),
                         template: template.trim().to_string(),
-                        created_by: Uuid::new_v4(), // TODO: use actual user ID
-                        created_at: chrono::Utc::now().to_rfc3339(),
+                        created_at: chrono::Utc::now(),
                     };
                     
                     ATTRIBUTES.lock().unwrap().insert(attr_id, attribute);
@@ -718,8 +754,6 @@ async fn handle_command(
             }
         }
 
-
-        
         WsCommand::DeleteItem { item_id } => {
             ITEMS.lock().unwrap().remove(&item_id);
             
@@ -930,8 +964,9 @@ fn build_tag_detail_page_state(
         let tags = TAGS.lock().unwrap();
         tags.get(&tag_id).cloned().unwrap_or_else(|| Tag {
             id: tag_id,
+            user_id: Uuid::new_v4(), // TODO: use actual authenticated user ID
             name: "Unknown".to_string(),
-            created_at: chrono::Utc::now().to_rfc3339(),
+            created_at: chrono::Utc::now(),
         })
     };
     
@@ -943,7 +978,7 @@ fn build_tag_detail_page_state(
             .collect()
     };
     
-    let attributes: Vec<Attribute> = {
+    let attributes: Vec<Lens> = {
         let attributes = ATTRIBUTES.lock().unwrap();
         attributes.values()
             .filter(|attr| attr.tag_id == tag_id)
@@ -959,7 +994,14 @@ fn build_tag_detail_page_state(
     let all_votes_for_tag: Vec<Vote> = {
         let votes = VOTES.lock().unwrap();
         votes.iter()
-            .filter(|vote| vote.tag_id == tag_id)
+            .filter(|vote| {
+                // Parse tag UUID from string field
+                if let Ok(vote_tag_id) = Uuid::parse_str(&vote.tag_entity_pk) {
+                    vote_tag_id == tag_id
+                } else {
+                    false
+                }
+            })
             .cloned()
             .collect()
     };
@@ -1016,8 +1058,23 @@ fn build_tag_detail_page_state(
     let filtered_votes_list: Vec<Vote> = all_votes_for_tag // Use renamed variable
         .iter()
         .filter(|vote| {
-            (current_selected_voters.is_empty() || current_selected_voters.contains(&vote.voter_id)) &&
-            (current_selected_attributes.is_empty() || current_selected_attributes.contains(&vote.attribute_id))
+            let voter_match = if current_selected_voters.is_empty() {
+                true
+            } else {
+                current_selected_voters.contains(&vote.voter_user_id)
+            };
+            
+            let attribute_match = if current_selected_attributes.is_empty() {
+                true
+            } else {
+                if let Ok(vote_lens_id) = Uuid::parse_str(&vote.lens_entity_pk) {
+                    current_selected_attributes.contains(&vote_lens_id)
+                } else {
+                    false
+                }
+            };
+            
+            voter_match && attribute_match
         })
         .cloned()
         .collect();
@@ -1029,7 +1086,16 @@ fn build_tag_detail_page_state(
     
     let voted_item_ids_from_filtered: HashSet<Uuid> = filtered_votes_list
         .iter()
-        .flat_map(|vote| [vote.item_a_id, vote.item_b_id])
+        .filter_map(|vote| {
+            // Parse item UUIDs from the new string fields
+            let left_item = Uuid::parse_str(&vote.left_entity_pk).ok();
+            let right_item = Uuid::parse_str(&vote.right_entity_pk).ok();
+            match (left_item, right_item) {
+                (Some(left), Some(right)) => Some(vec![left, right]),
+                _ => None,
+            }
+        })
+        .flatten()
         .collect();
     
     let current_unsorted_items: Vec<Item> = items
@@ -1063,7 +1129,7 @@ fn build_tag_detail_page_state(
 fn calculate_voters_with_votes(votes: &[Vote]) -> Vec<Uuid> {
     let mut voter_ids: HashSet<Uuid> = HashSet::new();
     for vote in votes {
-        voter_ids.insert(vote.voter_id);
+        voter_ids.insert(vote.voter_user_id);
     }
     voter_ids.into_iter().collect()
 }
@@ -1076,7 +1142,16 @@ fn calculate_rankings(items: &[Item], votes: &[Vote]) -> Vec<RankedItem> {
     // Find items that have votes
     let voted_item_ids: HashSet<Uuid> = votes
         .iter()
-        .flat_map(|vote| [vote.item_a_id, vote.item_b_id])
+        .filter_map(|vote| {
+            // Parse item UUIDs from the new string fields
+            let left_item = Uuid::parse_str(&vote.left_entity_pk).ok();
+            let right_item = Uuid::parse_str(&vote.right_entity_pk).ok();
+            match (left_item, right_item) {
+                (Some(left), Some(right)) => Some(vec![left, right]),
+                _ => None,
+            }
+        })
+        .flatten()
         .collect();
 
     // Only include items that have votes
@@ -1101,12 +1176,18 @@ fn calculate_rankings(items: &[Item], votes: &[Vote]) -> Vec<RankedItem> {
     // Convert votes to RelevantVote format
     let pagerank_votes: Vec<RelevantVote> = votes
         .iter()
-        .map(|vote| RelevantVote {
-            left_entity_pk_namespace: "item".to_string(),
-            left_entity_pk: vote.item_a_id.to_string(),
-            right_entity_pk_namespace: "item".to_string(),
-            right_entity_pk: vote.item_b_id.to_string(),
-            magnitude: vote.score,
+        .filter_map(|vote| {
+            // Parse item UUIDs from string fields
+            match (Uuid::parse_str(&vote.left_entity_pk), Uuid::parse_str(&vote.right_entity_pk)) {
+                (Ok(left_id), Ok(right_id)) => Some(RelevantVote {
+                    left_entity_pk_namespace: "item".to_string(),
+                    left_entity_pk: left_id.to_string(),
+                    right_entity_pk_namespace: "item".to_string(),
+                    right_entity_pk: right_id.to_string(),
+                    magnitude: vote.score,
+                }),
+                _ => None,
+            }
         })
         .collect();
 

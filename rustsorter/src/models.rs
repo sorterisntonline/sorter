@@ -61,12 +61,13 @@ impl From<sqlx::Error> for ErrorResponse {
     }
 }
 
-#[derive(sqlx::FromRow, serde::Serialize, Debug, Clone)]
+#[derive(sqlx::FromRow, serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct User {
     pub id: Uuid,
     pub auth0_sub: String,
     pub username: String,
     pub avatar_url: Option<String>,
     pub bio: Option<String>,
+    pub is_ai: bool,
     pub created_at: Option<NaiveDateTime>,
 }
