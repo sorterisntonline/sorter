@@ -72,17 +72,14 @@ INSERT INTO attributes (id, slug, description) VALUES
 -- Stores AI/human votes using specific lenses on pairs of items within tag contexts
 DROP TABLE IF EXISTS votes; -- Clean slate for development
 CREATE TABLE votes (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- New UUID primary key
-    left_entity_pk_namespace TEXT NOT NULL DEFAULT 'sorter.item',
-  left_entity_pk TEXT NOT NULL,
-    right_entity_pk_namespace TEXT NOT NULL DEFAULT 'sorter.item',
-  right_entity_pk TEXT NOT NULL,
+    left_entity_pk_namespace TEXT NOT NULL,
+    left_entity_pk TEXT NOT NULL,
+    right_entity_pk_namespace TEXT NOT NULL,
+    right_entity_pk TEXT NOT NULL,
     voter_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, -- User ID of the Voter (human or AI)
     score INT NOT NULL,
-    lens_entity_pk_namespace TEXT NOT NULL DEFAULT 'sorter.lens',
-    lens_entity_pk TEXT NOT NULL,         -- UUID of the Lens entity
-    tag_entity_pk_namespace TEXT NOT NULL DEFAULT 'sorter.tag',
-    tag_entity_pk TEXT NOT NULL,          -- UUID of the parent Tag entity
+    lens_entity_pk_namespace TEXT NOT NULL,
+    lens_entity_pk TEXT NOT NULL,
     rationale TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, -- Use TIMESTAMPTZ
 
@@ -90,13 +87,12 @@ CREATE TABLE votes (
     FOREIGN KEY (left_entity_pk_namespace, left_entity_pk) REFERENCES entities(pk_namespace, pk) ON DELETE CASCADE,
     FOREIGN KEY (right_entity_pk_namespace, right_entity_pk) REFERENCES entities(pk_namespace, pk) ON DELETE CASCADE,
     FOREIGN KEY (lens_entity_pk_namespace, lens_entity_pk) REFERENCES entities(pk_namespace, pk) ON DELETE CASCADE,
-    FOREIGN KEY (tag_entity_pk_namespace, tag_entity_pk) REFERENCES entities(pk_namespace, pk) ON DELETE CASCADE,
 
     -- Ensure canonical pair order for the voted items (left < right)
     CHECK ((left_entity_pk_namespace, left_entity_pk) < (right_entity_pk_namespace, right_entity_pk)),
 
-    -- Business key uniqueness: One vote per voter, per lens, per specific pair, per tag
-    UNIQUE (left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, voter_user_id, lens_entity_pk_namespace, lens_entity_pk, tag_entity_pk_namespace, tag_entity_pk)
+    -- Business key uniqueness: One vote per voter, per specific pair
+    UNIQUE (left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, voter_user_id)
 );
 
 -- === GLOBAL SLUGS (PUBLIC URLs) ===
@@ -140,7 +136,6 @@ CREATE INDEX ON entity_relationships (child_pk_namespace, child_pk);
 -- Vote indexes for efficient querying
 CREATE INDEX idx_votes_voter_user_id ON votes (voter_user_id);
 CREATE INDEX idx_votes_lens_entity ON votes (lens_entity_pk_namespace, lens_entity_pk);
-CREATE INDEX idx_votes_tag_entity ON votes (tag_entity_pk_namespace, tag_entity_pk);
 CREATE INDEX idx_votes_items_pair ON votes (left_entity_pk, right_entity_pk);
 CREATE INDEX idx_votes_created_at ON votes (created_at);
 

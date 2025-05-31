@@ -99,7 +99,6 @@ pub struct Lens {
 // Vote struct aligned with new votes table schema
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Vote {
-    pub id: Uuid,                           // votes.id
     pub left_entity_pk_namespace: String,   // votes.left_entity_pk_namespace
     pub left_entity_pk: String,             // votes.left_entity_pk (item UUID as string)
     pub right_entity_pk_namespace: String,  // votes.right_entity_pk_namespace
@@ -108,8 +107,6 @@ pub struct Vote {
     pub score: i32,                         // votes.score
     pub lens_entity_pk_namespace: String,   // votes.lens_entity_pk_namespace
     pub lens_entity_pk: String,             // votes.lens_entity_pk (lens UUID as string)
-    pub tag_entity_pk_namespace: String,    // votes.tag_entity_pk_namespace
-    pub tag_entity_pk: String,              // votes.tag_entity_pk (tag UUID as string)
     pub rationale: Option<String>,          // votes.rationale
     pub created_at: DateTime<Utc>,          // votes.created_at
 }
@@ -354,11 +351,15 @@ async fn generate_missing_comparisons(
     // Fetch existing votes for this tag and selected voters/attributes from database
     let votes_result = sqlx::query!(
         r#"
-        SELECT left_entity_pk, right_entity_pk, voter_user_id, lens_entity_pk
-        FROM votes 
-        WHERE tag_entity_pk_namespace = $1 AND tag_entity_pk = $2
-        AND voter_user_id = ANY($3)
-        AND lens_entity_pk = ANY($4)
+        SELECT v.left_entity_pk, v.right_entity_pk, v.voter_user_id, v.lens_entity_pk
+        FROM votes v
+        JOIN entity_relationships er ON 
+            (v.left_entity_pk = er.child_pk AND v.left_entity_pk_namespace = er.child_pk_namespace)
+            OR (v.right_entity_pk = er.child_pk AND v.right_entity_pk_namespace = er.child_pk_namespace)
+        WHERE er.parent_pk_namespace = $1 
+        AND er.parent_pk = $2
+        AND v.voter_user_id = ANY($3)
+        AND v.lens_entity_pk = ANY($4)
         "#,
         PK_NAMESPACE_TAG,
         tag_id.to_string(),
@@ -506,8 +507,8 @@ async fn process_voting_session(
                                     // Insert vote into database
                                     let insert_result = sqlx::query!(
                                         r#"
-                                        INSERT INTO votes (left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, voter_user_id, score, lens_entity_pk_namespace, lens_entity_pk, tag_entity_pk_namespace, tag_entity_pk, rationale, created_at)
-                                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
+                                        INSERT INTO votes (left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, voter_user_id, score, lens_entity_pk_namespace, lens_entity_pk, rationale, created_at)
+                                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
                                         "#,
                                         PK_NAMESPACE_ITEM,
                                         left_pk,
@@ -517,8 +518,6 @@ async fn process_voting_session(
                                         final_score,
                                         PK_NAMESPACE_LENS,
                                         attribute_id_val.to_string(),
-                                        PK_NAMESPACE_TAG,
-                                        tag_id.to_string(),
                                         response
                                     )
                                     .execute(db)
@@ -1401,29 +1400,31 @@ async fn build_tag_detail_page_state(
     };
     
     // Fetch all votes for this tag from database
-    let all_votes_for_tag: Vec<Vote> = {
-        let votes_result = sqlx::query_as!(
-            Vote,
-            r#"
-            SELECT id, left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, 
-                   voter_user_id, score, lens_entity_pk_namespace, lens_entity_pk, 
-                   tag_entity_pk_namespace, tag_entity_pk, rationale, created_at
-            FROM votes 
-            WHERE tag_entity_pk_namespace = $1 AND tag_entity_pk = $2
-            ORDER BY created_at DESC
-            "#,
-            PK_NAMESPACE_TAG,
-            tag_id.to_string()
-        )
-        .fetch_all(db)
-        .await;
-        
-        match votes_result {
-            Ok(votes) => votes,
-            Err(e) => {
-                log::error!("Failed to fetch votes for tag {}: {}", tag_id, e);
-                Vec::new()
-            }
+    let votes_result = sqlx::query_as!(
+        Vote,
+        r#"
+        SELECT DISTINCT v.left_entity_pk_namespace, v.left_entity_pk, v.right_entity_pk_namespace, v.right_entity_pk, 
+               v.voter_user_id, v.score, v.lens_entity_pk_namespace, v.lens_entity_pk, 
+               v.rationale, v.created_at
+        FROM votes v
+        JOIN entity_relationships er ON 
+            (v.left_entity_pk = er.child_pk AND v.left_entity_pk_namespace = er.child_pk_namespace)
+            OR (v.right_entity_pk = er.child_pk AND v.right_entity_pk_namespace = er.child_pk_namespace)
+        WHERE er.parent_pk_namespace = $1 
+        AND er.parent_pk = $2
+        ORDER BY v.created_at DESC
+        "#,
+        PK_NAMESPACE_TAG,
+        tag_id.to_string()
+    )
+    .fetch_all(db)
+    .await;
+    
+    let votes: Vec<Vote> = match votes_result {
+        Ok(votes) => votes,
+        Err(e) => {
+            log::error!("Failed to fetch votes for tag {}: {}", tag_id, e);
+            Vec::new()
         }
     };
     
@@ -1467,7 +1468,7 @@ async fn build_tag_detail_page_state(
     };
     
     // Filter votes by selected voters and attributes
-    let filtered_votes_list: Vec<Vote> = all_votes_for_tag
+    let filtered_votes_list: Vec<Vote> = votes
         .iter()
         .filter(|vote| {
             let voter_match = if current_selected_voters.is_empty() {
@@ -1492,7 +1493,7 @@ async fn build_tag_detail_page_state(
         .collect();
     
     // Calculate voters_with_votes from ALL votes for the tag
-    let voters_with_all_votes = calculate_voters_with_votes(&all_votes_for_tag);
+    let voters_with_all_votes = calculate_voters_with_votes(&votes);
     let current_rankings = calculate_rankings(&items, &filtered_votes_list);
     
     let voted_item_ids_from_filtered: HashSet<Uuid> = filtered_votes_list

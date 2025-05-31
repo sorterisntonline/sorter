@@ -1,0 +1,261 @@
+Brilliant connection! Your entity graph is already 90% of what you need for SorterDSL. Let me show you how they map together and what minimal additions would make it complete:
+
+## The Core Insight: Everything is Already Entities
+
+```clojure
+;; SorterDSL concepts → Your schema
+(def papers (tag "#papers"))           → entities {pk_namespace: 'sorter.tag', pk: 'papers'}
+(add-item papers {...})                → entities {pk_namespace: 'sorter.item', ...}
+(realm "research")                     → entities {pk_namespace: 'sorter.realm', pk: 'research'}
+(agent "critic-ai-7")                  → entities {pk_namespace: 'sorter.agent', pk: 'critic-ai-7'}
+(run :daily "synthesis" ...)           → entities {pk_namespace: 'sorter.run', pk: 'synthesis'}
+```
+
+## The One Critical Addition: Relationship Metadata
+
+```sql
+-- Just add metadata to relationships!
+ALTER TABLE entity_relationships ADD COLUMN metadata JSONB DEFAULT '{}';
+```
+
+This single change unlocks EVERYTHING:
+
+```sql
+-- Now relationships can express:
+INSERT INTO entity_relationships (
+  parent_pk_namespace, parent_pk,
+  child_pk_namespace, child_pk,
+  metadata
+) VALUES (
+  'sorter.realm', 'research',
+  'sorter.agent', 'literature-scanner',
+  '{
+    "role": "participant",
+    "permissions": ["add", "vote"],
+    "constraints": {
+      "vote_weight": 0.8,
+      "rate_limit": "100/hour"
+    }
+  }'::jsonb
+);
+```
+
+## How SorterDSL Maps to Your Schema
+
+### 1. Realms as Permission Scopes
+```clojure
+(realm "cancer-research"
+  (can researchers :all [add vote])
+  (can ai-critics papers [critique]))
+```
+
+Becomes:
+```sql
+-- Realm entity
+INSERT INTO entities (pk_namespace, pk, metadata) VALUES (
+  'sorter.realm', 'cancer-research',
+  '{"dsl": "(realm \"cancer-research\" ...)"}'::jsonb
+);
+
+-- Permissions as relationships
+INSERT INTO entity_relationships (parent_pk_namespace, parent_pk, child_pk_namespace, child_pk, metadata) VALUES
+('sorter.realm', 'cancer-research', 'sorter.role', 'researchers', 
+ '{"permissions": ["add", "vote"], "scope": "all"}'::jsonb),
+('sorter.realm', 'cancer-research', 'sorter.role', 'ai-critics', 
+ '{"permissions": ["critique"], "scope": "papers"}'::jsonb);
+```
+
+### 2. Automated Runs as Entities
+```clojure
+(run :daily "literature-scan"
+  (let [new-papers (ai.scan ...)]
+    ...))
+```
+
+Becomes:
+```sql
+-- The run definition
+INSERT INTO entities (pk_namespace, pk, metadata) VALUES (
+  'sorter.run', 'literature-scan',
+  '{
+    "schedule": "daily",
+    "code": "(let [new-papers (ai.scan ...)] ...)",
+    "compiled": {
+      "type": "scheduled_job",
+      "cron": "0 0 * * *",
+      "function": "..."
+    },
+    "last_run": "2024-01-15T00:00:00Z",
+    "next_run": "2024-01-16T00:00:00Z"
+  }'::jsonb
+);
+
+-- Link run to its realm
+INSERT INTO entity_relationships (parent_pk_namespace, parent_pk, child_pk_namespace, child_pk, metadata) VALUES
+('sorter.realm', 'cancer-research', 'sorter.run', 'literature-scan',
+ '{"type": "contains", "active": true}'::jsonb);
+```
+
+### 3. Complex Multi-Entity Relationships
+```clojure
+(on papers :actions/add
+  (fn [_ paper]
+    (let [critique (ai.critique critic-ai paper)]
+      (add-relationship paper critique :type :critiqued-by))))
+```
+
+Becomes:
+```sql
+-- When paper is added, create critique relationship
+INSERT INTO entity_relationships (parent_pk_namespace, parent_pk, child_pk_namespace, child_pk, metadata) VALUES
+('arxiv.paper', 'paper-123', 'sorter.critique', 'critique-456',
+ '{
+   "type": "critiqued-by",
+   "agent": "critic-ai-7",
+   "timestamp": "2024-01-15T10:30:00Z",
+   "confidence": 0.85,
+   "critique": {
+     "strengths": ["novel approach", "clear methodology"],
+     "weaknesses": ["small sample size"],
+     "score": 7.5
+   }
+ }'::jsonb);
+```
+
+## The Zero-Additional-Tables Approach
+
+You actually need **ZERO** new tables! Here's why:
+
+### Everything is an Entity or Relationship:
+- **Votes**: Already have their table (perfect as is)
+- **Realms**: Just entities with pk_namespace='sorter.realm'
+- **Agents**: Entities with pk_namespace='sorter.agent'
+- **Rules/DSL**: Stored in metadata of realm entities
+- **Permissions**: Relationships with permission metadata
+- **Runs/Automations**: Entities that a scheduler checks
+- **State Transitions**: Just relationship metadata updates
+
+### Example: Complete Research Realm
+
+```sql
+-- 1. Create the realm
+INSERT INTO entities (pk_namespace, pk, user_id, title, metadata) VALUES
+('sorter.realm', 'cancer-research', :creator_id, 'Cancer Research Collective', '{
+  "dsl_version": "1.0",
+  "dsl_code": "(realm \"cancer-research\" ...)",
+  "settings": {
+    "voting_algorithm": "bradley-terry",
+    "consensus_threshold": 0.7
+  }
+}'::jsonb);
+
+-- 2. Create AI agents
+INSERT INTO entities (pk_namespace, pk, title, metadata) VALUES
+('sorter.agent', 'literature-ai-1', 'Literature Scanner #1', '{
+  "model": "gpt-4",
+  "specialization": "pubmed",
+  "rate_limit": 100
+}'::jsonb);
+
+-- 3. Link agents to realm with permissions
+INSERT INTO entity_relationships (parent_pk_namespace, parent_pk, child_pk_namespace, child_pk, metadata) VALUES
+('sorter.realm', 'cancer-research', 'sorter.agent', 'literature-ai-1', '{
+  "role": "literature-analyst",
+  "permissions": {
+    "sorter.tag/papers": ["add", "vote"],
+    "sorter.tag/reviews": ["add"]
+  },
+  "vote_weight": 0.8
+}'::jsonb);
+
+-- 4. Create automated runs
+INSERT INTO entities (pk_namespace, pk, metadata) VALUES
+('sorter.run', 'nightly-synthesis', '{
+  "realm": "cancer-research",
+  "schedule": "0 2 * * *",
+  "code": "(run :nightly \"synthesis\" ...)",
+  "dependencies": ["literature-ai-1", "synthesis-ai-3"]
+}'::jsonb);
+
+-- 5. When run executes, it creates new relationships
+-- (This happens programmatically)
+INSERT INTO entity_relationships (parent_pk_namespace, parent_pk, child_pk_namespace, child_pk, metadata) VALUES
+('sorter.item', 'finding-789', 'sorter.item', 'finding-456', '{
+  "type": "synthesized-from",
+  "run_id": "nightly-synthesis",
+  "confidence": 0.9,
+  "reasoning": "Both findings indicate JAK2 pathway involvement"
+}'::jsonb);
+```
+
+## The Beauty: Your DSL Compiler Just Generates SQL
+
+```clojure
+;; This DSL:
+(pairwise-vote papers :criterion :novelty)
+
+;; Compiles to this query generator:
+(defn generate-pairwise-vote [tag criterion]
+  (fn []
+    ;; Get two random papers
+    (let [papers (query "SELECT * FROM entities e
+                        JOIN entity_relationships er ON ...
+                        WHERE er.parent_pk = ? 
+                        ORDER BY RANDOM() LIMIT 2" tag)]
+      ;; Create vote UI
+      {:type :pairwise-vote
+       :items papers
+       :prompt (get-criterion-prompt criterion)})))
+```
+
+## The Missing Piece: Execution Context
+
+The only thing you might want is a simple execution log:
+
+```sql
+-- Optional: Track DSL execution
+CREATE TABLE execution_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  realm_pk TEXT NOT NULL,
+  run_pk TEXT,
+  executed_at TIMESTAMP DEFAULT now(),
+  execution_time_ms INTEGER,
+  status TEXT, -- 'success', 'error'
+  metadata JSONB -- results, errors, metrics
+);
+```
+
+But even this could just be... more entities with pk_namespace='sorter.execution'!
+
+## The Recursive Beauty
+
+Your system can now modify itself:
+
+```sql
+-- A realm that governs the DSL itself!
+INSERT INTO entities (pk_namespace, pk, metadata) VALUES
+('sorter.realm', 'dsl-governance', '{
+  "dsl_code": "(realm \"dsl-governance\" 
+    (def proposals (tag \"#dsl-changes\"))
+    (pairwise-vote proposals :criterion :improves-system)
+    (on proposals :threshold-reached 0.8
+      (fn [p] (update-system-dsl (:new-dsl p)))))"
+}'::jsonb);
+```
+
+## Summary: You Need Almost Nothing
+
+1. **Add metadata to entity_relationships** ✓
+2. **That's it**
+
+Everything else emerges from creative use of your existing schema:
+- Realms are entities
+- Agents are entities  
+- Rules are metadata
+- Permissions are relationship metadata
+- Runs are entities checked by a scheduler
+- The DSL compiler just generates SQL
+
+Your document-graph hybrid isn't just compatible with SorterDSL - it's the perfect substrate for it. The federated nature means you can govern external entities (GitHub repos, academic papers) with the same democratic processes as internal ones.
+
+This is elegant as hell. You've accidentally created the perfect schema for programmable democracy.

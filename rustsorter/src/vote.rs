@@ -20,7 +20,6 @@ use crate::{
 // Represents a vote fetched from the database, matching the refactored 'votes' table schema
 #[derive(Serialize, Debug, sqlx::FromRow)]
 pub struct Vote {
-    pub id: Uuid,                           // votes.id
     pub left_entity_pk_namespace: String,   // votes.left_entity_pk_namespace  
     pub left_entity_pk: String,             // votes.left_entity_pk
     pub right_entity_pk_namespace: String,  // votes.right_entity_pk_namespace
@@ -29,8 +28,6 @@ pub struct Vote {
     pub score: i32,                         // votes.score (renamed from magnitude)
     pub lens_entity_pk_namespace: String,   // votes.lens_entity_pk_namespace
     pub lens_entity_pk: String,             // votes.lens_entity_pk
-    pub tag_entity_pk_namespace: String,    // votes.tag_entity_pk_namespace  
-    pub tag_entity_pk: String,              // votes.tag_entity_pk
     pub rationale: Option<String>,          // votes.rationale
     pub created_at: DateTime<Utc>,          // votes.created_at
 }
@@ -45,8 +42,6 @@ pub struct VotePayload {
     score: i32,                          // renamed from magnitude
     lens_entity_pk_namespace: String,    // new field
     lens_entity_pk: String,              // replaces attribute_id
-    tag_entity_pk_namespace: String,     // new field
-    tag_entity_pk: String,               // new field for tag context
     rationale: Option<String>,           // new optional field
 }
 
@@ -84,9 +79,9 @@ async fn create_vote(
     match sqlx::query_as!(
         Vote,
         r#"
-        INSERT INTO votes (left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, score, lens_entity_pk_namespace, lens_entity_pk, tag_entity_pk_namespace, tag_entity_pk, rationale, voter_user_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-        RETURNING id, left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, score, lens_entity_pk_namespace, lens_entity_pk, tag_entity_pk_namespace, tag_entity_pk, rationale, voter_user_id, created_at
+        INSERT INTO votes (left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, score, lens_entity_pk_namespace, lens_entity_pk, rationale, voter_user_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        RETURNING left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, score, lens_entity_pk_namespace, lens_entity_pk, rationale, voter_user_id, created_at
         "#,
         left_ns, // Use potentially swapped values
         left_pk,
@@ -95,8 +90,6 @@ async fn create_vote(
         magnitude, // Use potentially inverted magnitude
         payload.lens_entity_pk_namespace,
         payload.lens_entity_pk,
-        payload.tag_entity_pk_namespace,
-        payload.tag_entity_pk,
         payload.rationale,
         state.spotify_user.id // TODO: Use authenticated user @chris
     )
@@ -141,17 +134,16 @@ async fn create_vote(
     }
 }
 
-// GET /:left_ns/:left_pk/:right_ns/:right_pk/:user_id/:lens_pk/:tag_pk - Get a specific vote *instance*
+// GET /:left_ns/:left_pk/:right_ns/:right_pk/:user_id/:lens_pk - Get a specific vote *instance*
 async fn get_vote(
     State(state): State<AppState>,
-    Path((left_ns, left_pk, right_ns, right_pk, user_id, lens_pk, tag_pk)): Path<(
+    Path((left_ns, left_pk, right_ns, right_pk, user_id, lens_pk)): Path<(
         String,
         String,
         String,
         String,
         Uuid,   // Path param for voter_user_id
         String, // Path param for lens_entity_pk
-        String, // Path param for tag_entity_pk
     )>,
 ) -> Result<impl IntoResponse, impl IntoResponse> {
      // Ensure the path parameters are ordered correctly for the query
@@ -169,7 +161,7 @@ async fn get_vote(
     match sqlx::query_as!(
         Vote,
         r#"
-        SELECT id, left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, score, lens_entity_pk_namespace, lens_entity_pk, tag_entity_pk_namespace, tag_entity_pk, rationale, voter_user_id, created_at
+        SELECT left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, score, lens_entity_pk_namespace, lens_entity_pk, rationale, voter_user_id, created_at
         FROM votes
         WHERE left_entity_pk_namespace = $1
           AND left_entity_pk = $2
@@ -177,7 +169,6 @@ async fn get_vote(
           AND right_entity_pk = $4
           AND voter_user_id = $5
           AND lens_entity_pk = $6
-          AND tag_entity_pk = $7
         ORDER BY created_at DESC -- If multiple votes match, return the latest
         LIMIT 1 -- Return only one (the latest)
         "#,
@@ -186,8 +177,7 @@ async fn get_vote(
         query_right_ns,
         query_right_pk,
         user_id,
-        lens_pk,
-        tag_pk
+        lens_pk
     )
     .fetch_optional(&state.db)
     .await
@@ -237,7 +227,7 @@ async fn list_votes(
     let votes = sqlx::query_as!(
         Vote,
         r#"
-        SELECT id, left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, score, lens_entity_pk_namespace, lens_entity_pk, tag_entity_pk_namespace, tag_entity_pk, rationale, voter_user_id, created_at
+        SELECT left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, score, lens_entity_pk_namespace, lens_entity_pk, rationale, voter_user_id, created_at
         FROM votes 
         WHERE true 
         ORDER BY created_at DESC
@@ -261,7 +251,7 @@ pub fn routes() -> Router<AppState> {
         // Route for getting a specific vote (or the latest instance of it)
         // Uses the composite key fields as path parameters
         .route(
-            "/:left_ns/:left_pk/:right_ns/:right_pk/:user_id/:lens_pk/:tag_pk",
+            "/:left_ns/:left_pk/:right_ns/:right_pk/:user_id/:lens_pk",
             get(get_vote), // Only GET is supported now
                            // REMOVED: .put(update_vote).delete(delete_vote)
         )
