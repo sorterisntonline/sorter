@@ -476,17 +476,36 @@ async fn process_voting_session(
                 // Process current comparison
                 for voter_id in &voter_ids {
                     for attribute_id_val in &attribute_ids { // Renamed to avoid conflict
-                        let (voter_name, attribute_template) = {
-                            let voters_guard = VOTERS.lock().unwrap();
-                            let attributes_guard = ATTRIBUTES.lock().unwrap();
-                            let voter = voters_guard.get(voter_id);
-                            let attribute = attributes_guard.get(attribute_id_val);
-                            match (voter, attribute) {
-                                (Some(v), Some(a)) => (v.name.clone(), a.template.clone()),
-                                _ => {
-                                    log::error!("Missing voter {} or attribute {} for voting in session {}", voter_id, attribute_id_val, session_id);
-                                    continue;
-                                }
+                        // Query database for voter and attribute information
+                        let voter_result = sqlx::query!(
+                            "SELECT username FROM users WHERE id = $1 AND is_ai = true",
+                            *voter_id
+                        )
+                        .fetch_optional(db)
+                        .await;
+                        
+                        let attribute_result = sqlx::query!(
+                            "SELECT title, metadata FROM entities WHERE pk_namespace = $1 AND pk = $2",
+                            PK_NAMESPACE_LENS,
+                            attribute_id_val.to_string()
+                        )
+                        .fetch_optional(db)
+                        .await;
+                        
+                        let (voter_name, attribute_template) = match (voter_result, attribute_result) {
+                            (Ok(Some(voter)), Ok(Some(attribute))) => {
+                                let template = attribute.metadata
+                                    .as_ref()
+                                    .and_then(|meta| meta.get("template"))
+                                    .and_then(|t| t.as_str())
+                                    .map(|s| s.to_string())
+                                    .unwrap_or_else(|| String::new());
+                                
+                                (voter.username, template)
+                            }
+                            _ => {
+                                log::error!("Failed to fetch voter {} or attribute {} for voting in session {}", voter_id, attribute_id_val, session_id);
+                                continue;
                             }
                         };
 
@@ -701,7 +720,7 @@ async fn handle_command(
                     "#,
                     PK_NAMESPACE_TAG,
                     tag_id.to_string(),
-                    Uuid::new_v4(), // TODO: use actual authenticated user ID
+                    _state.spotify_user.id, // Use spotify_user.id instead of generating new UUID
                     name.trim()
                 )
                 .execute(&_state.db)
@@ -779,7 +798,7 @@ async fn handle_command(
                         "#,
                         PK_NAMESPACE_ITEM,
                         item_id.to_string(),
-                        Uuid::new_v4(), // TODO: use actual authenticated user ID
+                        _state.spotify_user.id, // Use spotify_user.id instead of generating new UUID
                         text.trim()
                     )
                     .execute(&_state.db)
@@ -790,13 +809,14 @@ async fn handle_command(
                             // Create relationship between item and tag
                             let relationship_result = sqlx::query!(
                                 r#"
-                                INSERT INTO entity_relationships (parent_pk_namespace, parent_pk, child_pk_namespace, child_pk)
-                                VALUES ($1, $2, $3, $4)
+                                INSERT INTO entity_relationships (parent_pk_namespace, parent_pk, child_pk_namespace, child_pk, user_id)
+                                VALUES ($1, $2, $3, $4, $5)
                                 "#,
                                 PK_NAMESPACE_TAG,
                                 tag_id.to_string(),
                                 PK_NAMESPACE_ITEM,
-                                item_id.to_string()
+                                item_id.to_string(),
+                                _state.spotify_user.id
                             )
                             .execute(&_state.db)
                             .await;
@@ -851,7 +871,7 @@ async fn handle_command(
                         "#,
                         PK_NAMESPACE_LENS,
                         attr_id.to_string(),
-                        Uuid::new_v4(), // TODO: use actual authenticated user ID
+                        _state.spotify_user.id, // Use spotify_user.id instead of generating new UUID
                         label.trim(),
                         metadata
                     )
@@ -863,13 +883,14 @@ async fn handle_command(
                             // Create relationship between lens and tag
                             let relationship_result = sqlx::query!(
                                 r#"
-                                INSERT INTO entity_relationships (parent_pk_namespace, parent_pk, child_pk_namespace, child_pk)
-                                VALUES ($1, $2, $3, $4)
+                                INSERT INTO entity_relationships (parent_pk_namespace, parent_pk, child_pk_namespace, child_pk, user_id)
+                                VALUES ($1, $2, $3, $4, $5)
                                 "#,
                                 PK_NAMESPACE_TAG,
                                 tag_id.to_string(),
                                 PK_NAMESPACE_LENS,
-                                attr_id.to_string()
+                                attr_id.to_string(),
+                                _state.spotify_user.id
                             )
                             .execute(&_state.db)
                             .await;
