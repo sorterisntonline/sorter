@@ -302,10 +302,10 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected }) {
         pageState.attributes.forEach(attr => attributesMap.set(attr.id, attr.label));
 
         const rationalesStream = pageState.votes.map(vote => {
-            const voterName = votersMap.get(vote.voter_id) || 'Unknown Voter';
-            const attributeLabel = attributesMap.get(vote.attribute_id) || 'Unknown Attribute';
-            const itemAText = allItemsMap.get(vote.item_a_id) || 'Unknown Item A';
-            const itemBText = allItemsMap.get(vote.item_b_id) || 'Unknown Item B';
+            const voterName = votersMap.get(vote.voter_user_id) || 'Unknown Voter';
+            const attributeLabel = attributesMap.get(vote.lens_entity_pk) || 'Unknown Attribute';
+            const itemAText = allItemsMap.get(vote.left_entity_pk) || 'Unknown Item A';
+            const itemBText = allItemsMap.get(vote.right_entity_pk) || 'Unknown Item B';
 
             return [
                 `Voter: ${voterName}`,
@@ -426,6 +426,7 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected }) {
                                             handleCreateOrSelectVoter(modelName);
                                         });
                                     }}
+                                    existingVoters={voterOptions}
                                 />
                             </div>
                         </div>
@@ -568,10 +569,10 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected }) {
                                 {pageState.sorted_items.map((item, index) => {
                                     // Calculate votes for this item dynamically
                                     const itemVotes = pageState.votes.filter(vote => 
-                                        vote.item_a_id === item.item_id || vote.item_b_id === item.item_id
+                                        vote.left_entity_pk === item.item_id || vote.right_entity_pk === item.item_id
                                     ).map(vote => {
-                                        const isItemA = vote.item_a_id === item.item_id;
-                                        const againstId = isItemA ? vote.item_b_id : vote.item_a_id;
+                                        const isItemA = vote.left_entity_pk === item.item_id;
+                                        const againstId = isItemA ? vote.right_entity_pk : vote.left_entity_pk;
                                         const againstItem = [...pageState.sorted_items, ...pageState.unsorted_items]
                                             .find(i => (i.item_id || i.id) === againstId);
                                         return {
@@ -672,11 +673,11 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected }) {
                             <div className="votes-list">
                                 {pageState.votes.map((vote, index) => {
                                     const itemA = [...pageState.sorted_items, ...pageState.unsorted_items]
-                                        .find(item => (item.item_id || item.id) === vote.item_a_id);
+                                        .find(item => (item.item_id || item.id) === vote.left_entity_pk);
                                     const itemB = [...pageState.sorted_items, ...pageState.unsorted_items]
-                                        .find(item => (item.item_id || item.id) === vote.item_b_id);
-                                    const voter = pageState.voters.find(v => v.id === vote.voter_id);
-                                    const attribute = pageState.attributes.find(a => a.id === vote.attribute_id);
+                                        .find(item => (item.item_id || item.id) === vote.right_entity_pk);
+                                    const voter = pageState.voters.find(v => v.id === vote.voter_user_id);
+                                    const attribute = pageState.attributes.find(a => a.id === vote.lens_entity_pk);
                                     
                                     return (
                                         <div key={index} className="vote-card">

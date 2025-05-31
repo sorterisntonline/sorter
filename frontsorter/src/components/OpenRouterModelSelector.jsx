@@ -7,7 +7,8 @@ const OpenRouterModelSelector = ({
   isMulti = true, 
   placeholder = "Type to search AI models...",
   styles,
-  className = "model-selector"
+  className = "model-selector",
+  existingVoters = []
 }) => {
   // Models loader for AsyncSelect
   const loadModelOptions = async (inputValue) => {
@@ -22,11 +23,49 @@ const OpenRouterModelSelector = ({
             return b.created - a.created;
           });
         
-        return allModels.slice(0, 50).map(model => ({
-          value: model.id,
-          label: `@${model.id}`,
-          data: model
-        }));
+        const apiModelOptions = allModels.slice(0, 50).map(model => {
+          // Check if this model exists in existing voters
+          const existingVoter = existingVoters.find(voter => 
+            voter.label === `@${model.id}`
+          );
+          
+          return {
+            value: model.id,
+            label: `@${model.id}`,
+            data: model,
+            hasVotes: existingVoter ? existingVoter.hasVotes : false
+          };
+        });
+        
+        // Also include existing voters that might not be in the API results
+        const existingVoterOptions = existingVoters
+          .filter(voter => !inputValue || voter.label.toLowerCase().includes(inputValue.toLowerCase()))
+          .map(voter => ({
+            ...voter,
+            // Ensure we have the right structure for the dropdown
+            value: voter.label.startsWith('@') ? voter.label.substring(1) : voter.value,
+            label: voter.label
+          }));
+        
+        // Merge and deduplicate based on label
+        const allOptions = [...apiModelOptions, ...existingVoterOptions];
+        const uniqueOptions = allOptions.reduce((acc, option) => {
+          const existing = acc.find(item => item.label === option.label);
+          if (!existing) {
+            acc.push(option);
+          } else if (option.hasVotes) {
+            // Prefer the option with hasVotes if there's a duplicate
+            acc[acc.indexOf(existing)] = option;
+          }
+          return acc;
+        }, []);
+        
+        // Sort so that options with votes appear first
+        return uniqueOptions.sort((a, b) => {
+          if (a.hasVotes && !b.hasVotes) return -1;
+          if (!a.hasVotes && b.hasVotes) return 1;
+          return 0;
+        });
       }
       
       return [];
