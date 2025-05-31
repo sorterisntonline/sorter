@@ -3,6 +3,7 @@ import './App.css'
 import OpenRouterModelSelector from './components/OpenRouterModelSelector';
 import LensSelector from './components/LensSelector';
 import { PROMPT_TEMPLATES, DEFAULT_PROMPT_TEMPLATE } from './constants/prompts';
+import { motion, AnimatePresence } from 'framer-motion';
 
 import { useWebSocketContext } from './contexts/WebSocketContext';
 
@@ -566,76 +567,125 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected }) {
                             </div>
                         ) : (
                             <ol className="ranked-list">
-                                {pageState.sorted_items.map((item, index) => {
-                                    // Calculate votes for this item dynamically
-                                    const itemVotes = pageState.votes.filter(vote => 
-                                        vote.left_entity_pk === item.item_id || vote.right_entity_pk === item.item_id
-                                    ).map(vote => {
-                                        const isItemA = vote.left_entity_pk === item.item_id;
-                                        const againstId = isItemA ? vote.right_entity_pk : vote.left_entity_pk;
-                                        const againstItem = [...pageState.sorted_items, ...pageState.unsorted_items]
-                                            .find(i => (i.item_id || i.id) === againstId);
-                                        return {
-                                            against_item_id: againstId,
-                                            against_item_text: againstItem?.text || 'Unknown item',
-                                            score: isItemA ? -vote.score : vote.score,
-                                            rationale: vote.rationale
-                                        };
-                                    });
+                                <AnimatePresence mode="popLayout">
+                                    {pageState.sorted_items.map((item, index) => {
+                                        // Calculate votes for this item dynamically
+                                        const itemVotes = pageState.votes.filter(vote => 
+                                            vote.left_entity_pk === item.item_id || vote.right_entity_pk === item.item_id
+                                        ).map(vote => {
+                                            const isItemA = vote.left_entity_pk === item.item_id;
+                                            const againstId = isItemA ? vote.right_entity_pk : vote.left_entity_pk;
+                                            const againstItem = [...pageState.sorted_items, ...pageState.unsorted_items]
+                                                .find(i => (i.item_id || i.id) === againstId);
+                                            return {
+                                                against_item_id: againstId,
+                                                against_item_text: againstItem?.text || 'Unknown item',
+                                                score: isItemA ? -vote.score : vote.score,
+                                                rationale: vote.rationale
+                                            };
+                                        });
 
-                                    return (
-                                        <li key={item.item_id} className="ranked-item">
-                                            <p>{item.text}</p>
-                                            <div className="item-meta">
-                                                <span className="score">
-                                                    Score: {item.score.toFixed(1)}
-                                                </span>
-                                                <a
-                                                    href="#"
-                                                    className={expandedVotes === index ? 'visited' : ''}
-                                                    onClick={(e) => {
-                                                        e.preventDefault();
-                                                        if (itemVotes.length > 0) {
-                                                            setExpandedVotes(expandedVotes === index ? null : index);
+                                        return (
+                                            <motion.li 
+                                                key={item.item_id}
+                                                layout
+                                                initial={{ opacity: 0, y: 50 }}
+                                                animate={{ 
+                                                    opacity: 1, 
+                                                    y: 0,
+                                                    transition: {
+                                                        type: "spring",
+                                                        stiffness: 350,
+                                                        damping: 25
+                                                    }
+                                                }}
+                                                exit={{ opacity: 0, y: -50 }}
+                                                className="ranked-item"
+                                            >
+                                                <motion.div
+                                                    layout="position"
+                                                    transition={{
+                                                        layout: {
+                                                            type: "spring",
+                                                            stiffness: 350,
+                                                            damping: 25
                                                         }
                                                     }}
                                                 >
-                                                    [{itemVotes.length} votes]
-                                                </a>
-                                            </div>
-                                            {expandedVotes === index && itemVotes.length > 0 && (
-                                                <div className="vote-history">
-                                                    <h4 className="vote-history-title">Vote Details:</h4>
-                                                    {itemVotes.map((vote, voteIndex) => (
-                                                        <div 
-                                                            key={voteIndex} 
-                                                            className="vote-record"
-                                                            style={{
-                                                                backgroundColor: vote.score > 0 ? 'rgba(34, 197, 94, 0.1)' : 
-                                                                               vote.score < 0 ? 'rgba(239, 68, 68, 0.1)' : 
-                                                                               'transparent'
+                                                    <p>{item.text}</p>
+                                                    <div className="item-meta">
+                                                        <motion.span 
+                                                            className="score"
+                                                            animate={{ 
+                                                                scale: [1, 1.1, 1],
+                                                            }}
+                                                            transition={{ 
+                                                                duration: 0.3,
+                                                                times: [0, 0.5, 1]
+                                                            }}
+                                                            key={`${item.item_id}-${item.score}`}
+                                                        >
+                                                            Score: {item.score.toFixed(1)}
+                                                        </motion.span>
+                                                        <a
+                                                            href="#"
+                                                            className={expandedVotes === index ? 'visited' : ''}
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                if (itemVotes.length > 0) {
+                                                                    setExpandedVotes(expandedVotes === index ? null : index);
+                                                                }
                                                             }}
                                                         >
-                                                            <div className="vote-opponent">
-                                                                compared to: "{vote.against_item_text.length > 50 ? 
-                                                                    vote.against_item_text.substring(0, 50) + '...' : 
-                                                                    vote.against_item_text}"
-                                                            </div>
-                                                            <div className="vote-score">
-                                                                {vote.score > 0 ? 'WON' : vote.score < 0 ? 'LOST' : 'TIED'}
-                                                            </div>
-                                                            {vote.rationale && (
-                                                                <div className="vote-reasoning">
-                                                                    <em>"{vote.rationale}"</em>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </li>
-                                    );
-                                })}
+                                                            [{itemVotes.length} votes]
+                                                        </a>
+                                                    </div>
+                                                </motion.div>
+                                                <AnimatePresence>
+                                                    {expandedVotes === index && itemVotes.length > 0 && (
+                                                        <motion.div 
+                                                            className="vote-history"
+                                                            initial={{ opacity: 0, height: 0 }}
+                                                            animate={{ opacity: 1, height: "auto" }}
+                                                            exit={{ opacity: 0, height: 0 }}
+                                                            transition={{ duration: 0.2 }}
+                                                        >
+                                                            <h4 className="vote-history-title">Vote Details:</h4>
+                                                            {itemVotes.map((vote, voteIndex) => (
+                                                                <motion.div 
+                                                                    key={voteIndex} 
+                                                                    className="vote-record"
+                                                                    initial={{ opacity: 0, x: -20 }}
+                                                                    animate={{ opacity: 1, x: 0 }}
+                                                                    transition={{ delay: voteIndex * 0.05 }}
+                                                                    style={{
+                                                                        backgroundColor: vote.score > 0 ? 'rgba(34, 197, 94, 0.1)' : 
+                                                                                       vote.score < 0 ? 'rgba(239, 68, 68, 0.1)' : 
+                                                                                       'transparent'
+                                                                    }}
+                                                                >
+                                                                    <div className="vote-opponent">
+                                                                        compared to: "{vote.against_item_text.length > 50 ? 
+                                                                            vote.against_item_text.substring(0, 50) + '...' : 
+                                                                            vote.against_item_text}"
+                                                                    </div>
+                                                                    <div className="vote-score">
+                                                                        {vote.score > 0 ? 'WON' : vote.score < 0 ? 'LOST' : 'TIED'}
+                                                                    </div>
+                                                                    {vote.rationale && (
+                                                                        <div className="vote-reasoning">
+                                                                            <em>"{vote.rationale}"</em>
+                                                                        </div>
+                                                                    )}
+                                                                </motion.div>
+                                                            ))}
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
+                                            </motion.li>
+                                        );
+                                    })}
+                                </AnimatePresence>
                             </ol>
                         )}
 
@@ -643,11 +693,25 @@ function TagDetailPageV2({ pageState, sendCommand, isConnected }) {
                             <>
                                 <h3 style={{color: "black", marginTop: "2em"}}>Unvoted Items:</h3>
                                 <ul className="unranked-list">
-                                    {pageState.unsorted_items.map((item) => (
-                                        <li key={item.id} className="unranked-item">
-                                            <p>{item.text}</p>
-                                        </li>
-                                    ))}
+                                    <AnimatePresence>
+                                        {pageState.unsorted_items.map((item) => (
+                                            <motion.li 
+                                                key={item.id} 
+                                                className="unranked-item"
+                                                layout
+                                                initial={{ opacity: 0, x: -50 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                exit={{ opacity: 0, x: 50 }}
+                                                transition={{
+                                                    type: "spring",
+                                                    stiffness: 300,
+                                                    damping: 20
+                                                }}
+                                            >
+                                                <p>{item.text}</p>
+                                            </motion.li>
+                                        ))}
+                                    </AnimatePresence>
                                 </ul>
                             </>
                         )}
