@@ -35,7 +35,7 @@ pub struct VotePayload {
     left_entity_pk: String,
     right_entity_pk_namespace: String,
     right_entity_pk: String,
-    _voter_user_id: Uuid,
+    voter_user_id: Uuid,
     magnitude: i32,
     attribute_id: i32,
 }
@@ -82,7 +82,7 @@ async fn create_vote(
         right_pk,
         magnitude,
         payload.attribute_id,
-        state.spotify_user.id
+        payload.voter_user_id
     )
     .fetch_one(&state.db)
     .await
