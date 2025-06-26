@@ -265,6 +265,7 @@ async fn put_route(
 
 async fn delete_entity(
     State(state): State<AppState>,
+    AuthenticatedUser(_user): AuthenticatedUser,
     Path((pk_namespace, pk)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, Error> {
     // TODO only delete entity if user is the owner

@@ -17,6 +17,8 @@ use dotenv::dotenv;
 use serde_json::json;
 use tower_http::trace::TraceLayer;
 
+use crate::{extractors::maybe_user::MaybeUser, models::Error};
+
 async fn health() -> impl IntoResponse {
     (
         StatusCode::OK,
@@ -27,13 +29,18 @@ async fn health() -> impl IntoResponse {
     )
 }
 
-async fn protected_route() -> impl IntoResponse {
-    (
-        StatusCode::OK,
-        Json(json!({
-            "message": "Hello! This is a protected route.",
-        })),
-    )
+async fn protected_route(MaybeUser(maybe_user): MaybeUser) -> impl IntoResponse {
+    match maybe_user {
+        None => Error::NoCredentials.into_response(),
+        Some(user) => (
+            StatusCode::OK,
+            Json(json!({
+                "message": format!("Hello, {}! This is a protected route.", user.auth0_sub),
+                "authenticated_user": user.auth0_sub
+            })),
+        )
+            .into_response(),
+    }
 }
 
 #[tokio::main]

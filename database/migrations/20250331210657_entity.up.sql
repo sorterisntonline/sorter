@@ -84,15 +84,6 @@ CREATE TABLE scoped_slugs(
   FOREIGN KEY (pk_namespace, pk) REFERENCES entities(pk_namespace, pk)
 );
 
-CREATE TABLE entity_permissions(
-  entity_pk_namespace text NOT NULL,
-  entity_pk text NOT NULL,
-  action text NOT NULL,
-  grantee_type text NOT NULL CHECK (grantee_type IN ('public', 'user', 'group', 'auth0_sub')),
-  grantee_id text,
-  PRIMARY KEY (entity_pk_namespace, entity_pk, action, grantee_type, grantee_id)
-);
-
 CREATE INDEX idx_api_keys_hashed_key ON api_keys(hashed_key);
 
 CREATE INDEX idx_api_keys_key_identifier ON api_keys(key_identifier);
@@ -104,8 +95,6 @@ WHERE
 CREATE INDEX ON entity_relationships(parent_pk_namespace, parent_pk);
 
 CREATE INDEX ON entity_relationships(child_pk_namespace, child_pk);
-
-CREATE INDEX ON entity_permissions(entity_pk_namespace, entity_pk, action);
 
 CREATE INDEX ON users(auth0_sub);
 
