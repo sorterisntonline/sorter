@@ -215,7 +215,16 @@ async fn post_route(
     AuthenticatedUser(user): AuthenticatedUser,
     Json(payload): Json<EntityPayload>,
 ) -> Result<impl IntoResponse, Error> {
-    let entity = update_entity(&state.db, &payload, user.id).await?;
+    let entity = create_entity(
+        &state.db,
+        &payload.pk_namespace,
+        &payload.pk,
+        payload.title.as_deref(),
+        payload.profile_picture_url.as_deref(),
+        payload.metadata.as_ref(),
+        user.id,
+    )
+    .await?;
 
     Ok((StatusCode::CREATED, Json(entity)))
 }

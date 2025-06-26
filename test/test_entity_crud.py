@@ -250,7 +250,7 @@ class TestEntityCrud:
         assert response.status_code == 400 # Bad Request (due to the check added in the handler)
         assert "must match payload primary key" in response.json().get("error", "").lower()
 
-    @pytest.mark.dependency()
+    @pytest.mark.dependency(depends=["TestEntityCrud::test_create_entity_success"])
     async def test_update_entity_no_auth(self):
         """Tests updating an entity without authentication."""
         assert TestEntityCrud.created_entity_ns is not None
