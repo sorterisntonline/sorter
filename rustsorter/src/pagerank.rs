@@ -247,7 +247,7 @@ async fn rank_children_handler(
     let node_count = graph.node_count();
 
     if node_count == 0 {
-        error!("Graph is empty despite non-empty ranked_payload.");
+        error!("graph is empty despite non-empty ranked_payload");
 
         return Ok(Json(RankingResponse {
             unsorted: unsorted_list,
