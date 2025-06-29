@@ -1,6 +1,7 @@
 import uuid
 
 import pytest
+
 from util import USER_ID, make_request
 
 # --- Configuration ---
@@ -20,19 +21,20 @@ async def setup_entities():
             if entity_left["pk"] == entity_right["pk"]:
                 continue
 
-            await vote_pair(entity_left["pk"], entity_left["title"], entity_right["pk"], entity_right["title"])
-    
+            await vote_pair(
+                entity_left["pk"],
+                entity_left["title"],
+                entity_right["pk"],
+                entity_right["title"],
+            )
+
     return entities
 
 
 async def get_entities():
     entity_list = (await make_request("GET", "/entity")).json()
 
-    return [
-        entity
-        for entity in entity_list
-        if entity["pk_namespace"] == NAMESPACE
-    ]
+    return [entity for entity in entity_list if entity["pk_namespace"] == NAMESPACE]
 
 
 async def create_entities():
@@ -45,16 +47,18 @@ async def create_entities():
             "profile_picture_url": None,
         }
 
-        await make_request("POST", "/entity", json_payload=payload, is_authenticated=True, assert_status_code=201)
+        await make_request(
+            "POST",
+            "/entity",
+            json_payload=payload,
+            is_authenticated=True,
+            assert_status_code=201,
+        )
 
 
 async def delete_entities():
     entity_list = (await make_request("GET", "/entity")).json()
-    entities = [
-        entity
-        for entity in entity_list
-        if entity["pk_namespace"] == NAMESPACE
-    ]
+    entities = [entity for entity in entity_list if entity["pk_namespace"] == NAMESPACE]
 
     for entity in entities:
         await make_request(
@@ -74,10 +78,7 @@ async def vote_pair(left_pk, left_title, right_pk, right_title):
     base_weight = 50
     adjustment = (dist / max_dist) * 50
 
-    if a < b:
-        magnitude = base_weight - adjustment
-    else:
-        magnitude = base_weight + adjustment
+    magnitude = base_weight - adjustment if a < b else base_weight + adjustment
     magnitude = round(magnitude)
 
     payload = {
@@ -90,35 +91,52 @@ async def vote_pair(left_pk, left_title, right_pk, right_title):
         "attribute_id": 1,
     }
 
-    await make_request("POST", "/vote", json_payload=payload, is_authenticated=True, assert_status_code=201)
+    await make_request(
+        "POST",
+        "/vote",
+        json_payload=payload,
+        is_authenticated=True,
+        assert_status_code=201,
+    )
 
 
 # --- Test Suite Marker ---
 # Use a class to group related tests and manage state if needed
 @pytest.mark.asyncio
-@pytest.mark.dependency()
+@pytest.mark.dependency
 class TestRank:
-    @pytest.mark.dependency()
+    @pytest.mark.dependency
     async def test_rank_correct(self):
         """Tests correctness of the ranking algorithm."""
         entities = await setup_entities()
 
         payload = [
-            {
-                "pk_namespace": entity["pk_namespace"],
-                "pk": entity["pk"],
-            }
+            {"pk_namespace": entity["pk_namespace"], "pk": entity["pk"]}
             for entity in entities
         ]
 
-        data = (await make_request("POST", "/rank", json_payload=payload, is_authenticated=True, assert_status_code=200)).json()
+        data = (
+            await make_request(
+                "POST",
+                "/rank",
+                json_payload=payload,
+                is_authenticated=True,
+                assert_status_code=200,
+            )
+        ).json()
         assert len(data["unsorted"]) == 0
         assert len(data["sorted"]) == 20
 
         data["sorted"].sort(key=lambda entity: entity["score"])
 
         expected_next_entity = 20
-        for entity in data["sorted"]:
-            entity = (await make_request("GET", f"/entity/{NAMESPACE}/{entity['identifier']['pk']}", is_authenticated=True)).json()
+        for entity_partial in data["sorted"]:
+            entity = (
+                await make_request(
+                    "GET",
+                    f"/entity/{NAMESPACE}/{entity_partial['identifier']['pk']}",
+                    is_authenticated=True,
+                )
+            ).json()
             assert int(entity["entity"]["title"]) == expected_next_entity
             expected_next_entity -= 1

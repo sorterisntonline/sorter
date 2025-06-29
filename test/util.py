@@ -1,8 +1,8 @@
-from typing import Any, Dict
+import json
+from typing import Any
 
 import httpx
 import pytest
-
 
 BASE_URL = "http://localhost:8081/api"
 # This MUST match the static key defined in your Rust auth_middleware.rs
@@ -14,9 +14,10 @@ USER_ID = "f14eb2b5-127b-4a88-94bd-536b8766023d"
 async def make_request(
     method: str,
     endpoint: str,
-    headers: Dict[str, str] | None = None,
-    json_payload: Dict[str, Any] | None = None,
-    params: Dict[str, Any] | None = None,
+    *,
+    headers: dict[str, str] | None = None,
+    params: dict[str, Any] | None = None,
+    json_payload: dict[str, Any] | None = None,
     is_authenticated: bool = False,
     assert_status_code: int | list[int] | None = 200,
 ) -> httpx.Response:
@@ -29,12 +30,17 @@ async def make_request(
     """Helper function to make HTTP requests."""
     async with httpx.AsyncClient(base_url=BASE_URL) as client:
         print(f"\nRequest: {method} {endpoint}")
-        if headers: print(f"Headers: {headers}")
-        if params: print(f"Params: {params}")
-        if json_payload: print(f"Payload: {json_payload}")
+        if headers:
+            print(f"Headers: {headers}")
+        if params:
+            print(f"Params: {params}")
+        if json_payload:
+            print(f"Payload: {json_payload}")
 
         try:
-            response = await client.request(method, endpoint, headers=headers, json=json_payload, params=params)
+            response = await client.request(
+                method, endpoint, headers=headers, json=json_payload, params=params
+            )
         except httpx.RequestError as e:
             pytest.fail(f"HTTP request failed: {e}")
 
@@ -46,8 +52,8 @@ async def make_request(
 
         print(f"Response Status: {response.status_code}")
         try:
-            # Attempt to log JSON, but handle cases where it's not JSON
             print(f"Response Body: {response.json()}")
-        except Exception:
+        except json.JSONDecodeError:
             print(f"Response Body (non-JSON): {response.text}")
+
         return response
