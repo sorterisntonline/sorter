@@ -86,7 +86,7 @@ async fn create_vote(
     )
     .fetch_one(&state.db)
     .await
-    .map_error("incorrect entity pair ordering")?;
+    .map_error("entity pair")?;
 
     Ok((StatusCode::CREATED, Json(vote)))
 }
