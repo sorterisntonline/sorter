@@ -84,7 +84,7 @@ fn router(app_state: AppState) -> Router {
         .nest("/rank", pagerank::routes())
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
-            auth_middleware::auth,
+            auth_middleware::try_auth,
         ));
 
     Router::new()

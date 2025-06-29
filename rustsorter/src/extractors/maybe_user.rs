@@ -14,15 +14,7 @@ where
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         let user = parts.extensions.get::<User>().cloned();
-
-        if user.is_some() {
-            log::debug!("MaybeUser extractor found authenticated user in request extensions.");
-        } else {
-            log::debug!(
-                "MaybeUser extractor did not find authenticated user in request extensions."
-            );
-        }
-
+        log::debug!("MaybeUser extractor found user: {:?}", user);
         Ok(MaybeUser(user))
     }
 }

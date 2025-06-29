@@ -49,7 +49,7 @@ class TestApiKeyFlow:
         # Key doesn't match sort_identifier_secret
         headers = {"Authorization": "Bearer invalid-key-123"}
         response = await make_request("GET", "/protected", headers=headers, assert_status_code=401)
-        assert "Invalid API key format" in response.json().get("error", "")
+        assert "Unauthorized" in response.json().get("error", "")
 
     @pytest.mark.dependency()
     @pytest.mark.dependency(depends=["test_health_endpoint"])
