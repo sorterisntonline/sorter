@@ -55,9 +55,6 @@ impl<T> MapErrorSqlx<T> for Result<T, sqlx::Error> {
             sqlx::Error::Database(e) if e.is_foreign_key_violation() => Error::NotFound {
                 object: object.into(),
             },
-            sqlx::Error::Database(e) if e.is_foreign_key_violation() => Error::NotFound {
-                object: object.into(),
-            },
             _ => Error::Internal(err.into()),
         })
     }
