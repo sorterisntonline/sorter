@@ -95,7 +95,7 @@ fn build_rank_graph(
     })
 }
 
-fn calculate_tommy_rank(
+fn calculate_rank_centrality(
     graph: &DirectedCsrGraph<usize, (), f32>,
     max_iters: usize,
     tol: f32,
@@ -255,7 +255,7 @@ async fn rank_children_handler(
         }));
     }
 
-    let scores = calculate_tommy_rank(graph, 100000, 1e-8);
+    let scores = calculate_rank_centrality(graph, 100000, 1e-8);
 
     let mut ranked_entities_list: Vec<RankedEntity> = Vec::with_capacity(node_count);
     for index in 0..node_count {
