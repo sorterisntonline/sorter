@@ -1,5 +1,0 @@
-run migrations
-fix the admin user script
-delete all code that doesn't compile anymore because of lack of sqlx types
-fix the api key tests
-adapt/redo the tag crud to be entity crud 

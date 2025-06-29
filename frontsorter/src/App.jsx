@@ -5,10 +5,7 @@ import Layout from "./Layout";
 import VotePage from "./pages/VotePage";
 import ProfilePage from "./pages/ProfilePage";
 
-import RecentSongsFlow from "./pages/RecentSongsFlow";
-
 function App() {
-  return <RecentSongsFlow />;
   return (
     <Routes>
       {/* Wrap all main pages within the Layout */}
