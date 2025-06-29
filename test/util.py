@@ -40,9 +40,9 @@ async def make_request(
 
         if assert_status_code is not None:
             if isinstance(assert_status_code, list):
-                assert response.status_code in assert_status_code
+                assert response.status_code in assert_status_code, f"Expected {assert_status_code}, got {response.status_code}"
             else:
-                assert response.status_code == assert_status_code
+                assert response.status_code == assert_status_code, f"Expected {assert_status_code}, got {response.status_code}"
 
         print(f"Response Status: {response.status_code}")
         try:

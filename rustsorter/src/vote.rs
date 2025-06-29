@@ -12,8 +12,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
 
 use crate::{
-    app_state::AppState,
-    models::{Error, IntoNotFound, MapErrorSqlx},
+    app_state::AppState, extractors::maybe_user::AuthenticatedUser, models::{Error, IntoNotFound, MapErrorSqlx}
 };
 
 #[derive(Serialize, Debug, sqlx::FromRow)]
@@ -47,6 +46,7 @@ pub struct UpdateVotePayload {
 
 async fn create_vote(
     State(state): State<AppState>,
+    AuthenticatedUser(user): AuthenticatedUser,
     Json(payload): Json<VotePayload>,
 ) -> Result<impl IntoResponse, Error> {
     let (left_ns, left_pk, right_ns, right_pk, magnitude) = if (
@@ -82,7 +82,7 @@ async fn create_vote(
         right_pk,
         magnitude,
         payload.attribute_id,
-        payload.voter_user_id
+        user.id,
     )
     .fetch_one(&state.db)
     .await
