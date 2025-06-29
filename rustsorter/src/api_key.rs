@@ -1,22 +1,20 @@
-use std::fmt;
-
-use anyhow::{Context, Result};
 use axum::{
     Router,
     extract::{Extension, Json, State},
     http::StatusCode,
-    response::{IntoResponse, Response},
+    response::IntoResponse,
     routing::{get, post},
 };
 use bcrypt::{DEFAULT_COST, hash, verify};
 use chrono::{NaiveDateTime, Utc};
+use log::{debug, info, warn};
 use rand::{Rng, distributions::Alphanumeric};
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, PgPool, Postgres, Transaction};
+use sqlx::{FromRow, PgExecutor, PgPool};
 
 use crate::{
     app_state::AppState,
-    models::{ErrorResponse, User},
+    models::{Error, IntoNotFound, MapErrorAnyhow, MapErrorSqlx, User},
 };
 
 const API_KEY_PREFIX: &str = "sort";
@@ -62,8 +60,7 @@ impl From<ApiKeyDb> for ApiKeyResponse {
 #[derive(Serialize, Debug)]
 pub struct NewApiKeyResponse {
     pub name: String,
-    pub full_key: String, /* The plain text key (identifier + secret), ONLY sent on
-                           * creation/regeneration */
+    pub full_key: String,
     pub message: String,
 }
 
@@ -72,114 +69,19 @@ pub struct CreateKeyRequest {
     pub name: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct KeyNameRequest {
     pub name: String,
 }
 
-#[derive(Debug)]
-pub enum ApiKeyError {
-    DatabaseError(sqlx::Error),
-    HashingError(anyhow::Error),
-    VerificationError(bcrypt::BcryptError),
-    Conflict(String),
-    NotFound(String),
-    Unauthorized,
-    BadRequest(String),
-    InvalidKeyFormat,
-    InternalError(String),
-}
-
-impl fmt::Display for ApiKeyError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ApiKeyError::DatabaseError(e) => write!(f, "Database error: {}", e),
-            ApiKeyError::HashingError(e) => write!(f, "Hashing error: {}", e),
-            ApiKeyError::VerificationError(e) => write!(f, "Verification failed: {}", e),
-            ApiKeyError::Conflict(msg) => write!(f, "Conflict: {}", msg),
-            ApiKeyError::NotFound(msg) => write!(f, "Not Found: {}", msg),
-            ApiKeyError::Unauthorized => write!(f, "Unauthorized"),
-            ApiKeyError::BadRequest(msg) => write!(f, "Bad Request: {}", msg),
-            ApiKeyError::InvalidKeyFormat => write!(f, "Invalid API key format"),
-            ApiKeyError::InternalError(msg) => write!(f, "Internal server error: {}", msg),
-        }
+pub fn validate_key_name(name: &str) -> Result<(), Error> {
+    if name.trim().is_empty() || name.len() > 255 {
+        return Err(Error::BadRequest {
+            message: "invalid key name".into(),
+        });
     }
-}
 
-impl From<ApiKeyError> for ErrorResponse {
-    fn from(error: ApiKeyError) -> Self {
-        let (status, error_message) = match &error {
-            ApiKeyError::DatabaseError(_)
-            | ApiKeyError::HashingError(_)
-            | ApiKeyError::InternalError(_)
-            | ApiKeyError::VerificationError(_) => {
-                log::error!("Internal API Key Error: {}", error);
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "Internal server error".to_string(),
-                )
-            }
-            ApiKeyError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
-            ApiKeyError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
-            ApiKeyError::Unauthorized | ApiKeyError::InvalidKeyFormat => {
-                (StatusCode::UNAUTHORIZED, error.to_string())
-            }
-            ApiKeyError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
-        };
-
-        if status != StatusCode::INTERNAL_SERVER_ERROR {
-            log::warn!(
-                "API Key Response: status={}, message='{}'",
-                status,
-                error_message
-            );
-        }
-
-        Self::new(status, error_message)
-    }
-}
-
-// temporary impl for ApiKeyError to return ErrorResponse until FRI-373 is fixed
-impl IntoResponse for ApiKeyError {
-    fn into_response(self) -> Response {
-        ErrorResponse::from(self).into_response()
-    }
-}
-
-impl From<sqlx::Error> for ApiKeyError {
-    fn from(err: sqlx::Error) -> Self {
-        if let sqlx::Error::Database(db_err) = &err {
-            if db_err.is_unique_violation() {
-                if db_err.constraint() == Some("api_keys_auth0_sub_name_active_key_idx") {
-                    return ApiKeyError::Conflict(
-                        "An active key with this name already exists.".to_string(),
-                    );
-                }
-                if db_err.constraint() == Some("api_keys_key_identifier_key") {
-                    log::error!(
-                        "Duplicate key identifier generated and attempted insert: {}",
-                        db_err
-                    );
-                    return ApiKeyError::InternalError(
-                        "Failed to generate unique key identifier. Please try again.".to_string(),
-                    );
-                }
-            }
-        }
-        ApiKeyError::DatabaseError(err)
-    }
-}
-
-impl From<anyhow::Error> for ApiKeyError {
-    fn from(err: anyhow::Error) -> Self {
-        ApiKeyError::HashingError(err)
-    }
-}
-
-impl From<bcrypt::BcryptError> for ApiKeyError {
-    fn from(err: bcrypt::BcryptError) -> Self {
-        ApiKeyError::VerificationError(err)
-    }
+    Ok(())
 }
 
 pub fn generate_api_key() -> (String, String) {
@@ -211,163 +113,168 @@ pub fn create_key_preview(identifier: &str) -> String {
     )
 }
 
-pub fn hash_api_key(full_key: &str) -> Result<String> {
-    hash(full_key, DEFAULT_COST).context("Failed to hash API key")
+pub fn hash_api_key(full_key: &str) -> Result<String, Error> {
+    hash(full_key, DEFAULT_COST).map_internal()
 }
 
-fn parse_key_identifier(full_key: &str) -> Result<String, ApiKeyError> {
+fn parse_key_identifier(full_key: &str) -> Result<String, Error> {
     if !full_key.starts_with(&format!("{}{}", API_KEY_PREFIX, KEY_SEPARATOR)) {
-        return Err(ApiKeyError::InvalidKeyFormat);
+        return Err(Error::InvalidKeyFormat);
     }
 
     let parts: Vec<&str> = full_key.splitn(3, KEY_SEPARATOR).collect();
     if parts.len() != 3 || parts[0] != API_KEY_PREFIX || parts[1].len() != IDENTIFIER_LENGTH {
-        Err(ApiKeyError::InvalidKeyFormat)
-    } else {
-        Ok(parts[1].to_string())
+        return Err(Error::InvalidKeyFormat);
     }
+
+    Ok(parts[1].to_string())
 }
 
-pub async fn get_user_by_auth0_sub(pool: &PgPool, auth0_sub: &str) -> Result<User, ApiKeyError> {
-    sqlx::query_as!(
-        User,
-        "
-SELECT auth0_sub,
-    username,
-    avatar_url,
-    bio,
-    created_at,
-    id
-FROM users
-WHERE auth0_sub = $1",
-        auth0_sub
+pub async fn get_user_by_auth0_sub(pool: &PgPool, auth0_sub: &str) -> Result<User, Error> {
+    sqlx::query_file_as!(User, "../database/sql/user/select.sql", auth0_sub)
+        .fetch_one(pool)
+        .await
+        .map_error(&format!("user '{auth0_sub}'"))
+}
+
+async fn create_key<'e, E: PgExecutor<'e>>(
+    executor: E,
+    name: String,
+    auth0_sub: &str,
+) -> Result<NewApiKeyResponse, Error> {
+    debug!(name, auth0_sub; "create_key called");
+
+    validate_key_name(&name)?;
+
+    let (identifier, full_key) = generate_api_key();
+    let hashed_key = hash_api_key(&full_key)?;
+    let preview = create_key_preview(&identifier);
+
+    debug!(identifier, preview; "generated identifier and preview");
+
+    sqlx::query_file!(
+        "../database/sql/key/insert.sql",
+        auth0_sub,
+        name,
+        &identifier,
+        &hashed_key,
+        Utc::now().naive_utc()
     )
-    .fetch_one(pool)
+    .execute(executor)
     .await
-    .map_err(|e| match e {
-        sqlx::Error::RowNotFound => {
-            ApiKeyError::NotFound(format!("User '{}' not found", auth0_sub))
-        }
-        _ => ApiKeyError::DatabaseError(e),
+    .map_error("key")?;
+
+    info!(name, auth0_sub; "created API key");
+
+    Ok(NewApiKeyResponse {
+        name,
+        full_key,
+        message: "API key created successfully. Store it securely, it will not be shown again."
+            .to_owned(),
     })
 }
 
 pub async fn verify_api_key(
     pool: &PgPool,
     provided_full_key: &str,
-) -> Result<(ApiKeyDb, User), ApiKeyError> {
-    log::debug!("Attempting to verify API key");
+) -> Result<(ApiKeyDb, User), Error> {
+    debug!("attempting to verify API key");
     let identifier = parse_key_identifier(provided_full_key)?;
-    log::debug!("Parsed identifier: {}", identifier);
+    debug!(identifier; "parsed identifier");
 
-    let key_candidate = sqlx::query_as!(
-        ApiKeyDb,
-        "
-SELECT id,
-    auth0_sub,
-    name,
-    key_identifier,
-    hashed_key,
-    created_at,
-    last_used_at,
-    active
-FROM api_keys
-WHERE key_identifier = $1
-    AND active = TRUE",
-        &identifier
-    )
-    .fetch_optional(pool)
-    .await?;
+    let key = sqlx::query_file_as!(ApiKeyDb, "../database/sql/key/select.sql", &identifier)
+        .fetch_optional(pool)
+        .await
+        .map_error("key")?
+        .ok_or_else(|| {
+            warn!(identifier = *identifier; "no active API key found");
+            Error::Unauthorized
+        })?;
 
-    match key_candidate {
-        Some(key) => {
-            log::debug!(
-                "Found active key record with id: {} for identifier: {}",
-                key.id,
-                identifier
-            );
+    let key_id = key.id;
 
-            let is_valid = verify(provided_full_key, &key.hashed_key).map_err(ApiKeyError::from)?;
+    debug!(
+        key_id, identifier; "found active key record"
+    );
 
-            if is_valid {
-                log::debug!("API key verification successful for key id: {}", key.id);
+    let is_valid = verify(provided_full_key, &key.hashed_key).map_internal()?;
 
-                let user = get_user_by_auth0_sub(pool, &key.auth0_sub).await?;
-                log::debug!(
-                    "Found user: {} associated with key id: {}",
-                    user.auth0_sub,
-                    key.id
-                );
+    if is_valid {
+        debug!(key_id; "API key verification successful");
 
-                Ok((key, user))
-            } else {
-                log::warn!(
-                    "API key verification failed (hash mismatch) for key id: {}",
-                    key.id
-                );
-                Err(ApiKeyError::Unauthorized)
-            }
-        }
-        None => {
-            log::warn!("No active API key found for identifier: {}", identifier);
-            Err(ApiKeyError::Unauthorized)
-        }
+        let user = get_user_by_auth0_sub(pool, &key.auth0_sub).await?;
+        debug!(
+            user_id:% = user.id, user = user.auth0_sub; "found user"
+        );
+
+        Ok((key, user))
+    } else {
+        warn!(
+            key_id = key.id; "API key verification failed due to hash mismatch",
+        );
+
+        Err(Error::Unauthorized)
     }
 }
 
-pub async fn update_last_used(pool: &PgPool, key_id: i32) -> Result<()> {
-    sqlx::query!(
-        "
-UPDATE api_keys
-SET last_used_at = $1
-WHERE id = $2",
+pub async fn update_last_used(pool: &PgPool, key_id: i32) -> Result<(), Error> {
+    sqlx::query_file!(
+        "../database/sql/key/update_last_used.sql",
         Utc::now().naive_utc(),
         key_id
     )
     .execute(pool)
     .await
-    .context("Failed to update last_used_at for API key")?;
-    log::debug!("Updated last_used_at for key id: {}", key_id);
+    .map_internal()?;
+
+    debug!(key_id; "updated last_used_at for key");
+
+    Ok(())
+}
+
+async fn revoke_key<'e, E: PgExecutor<'e>>(
+    executor: E,
+    name: &str,
+    auth0_sub: &str,
+) -> Result<(), Error> {
+    debug!(name; "revoke_key called");
+
+    let object = format!("active API key named '{}'", name);
+
+    sqlx::query_file!(
+        "../database/sql/key/revoke.sql",
+        Utc::now().naive_utc(),
+        auth0_sub,
+        name
+    )
+    .execute(executor)
+    .await
+    .map_error(&object)?
+    .catch_not_found(&object)?;
+
+    info!(
+        name, auth0_sub; "revoked API key"
+    );
+
     Ok(())
 }
 
 async fn list_keys(
     State(state): State<AppState>,
     Extension(user): Extension<User>,
-) -> Result<impl IntoResponse, ApiKeyError> {
-    log::debug!("Handler: list_keys called");
+) -> Result<impl IntoResponse, Error> {
+    debug!("list_keys called");
 
-    log::debug!("Authenticated user for list_keys: {}", user.auth0_sub);
+    debug!(user = user.auth0_sub; "authenticated user for list_keys");
 
-    let keys = sqlx::query_as!(
-        ApiKeyDb,
-        "
-SELECT id,
-    auth0_sub,
-    name,
-    key_identifier,
-    hashed_key,
-    created_at,
-    last_used_at,
-    active
-FROM api_keys
-WHERE auth0_sub = $1
-ORDER BY created_at DESC",
-        user.auth0_sub
-    )
-    .fetch_all(&state.db)
-    .await?;
+    let keys = sqlx::query_file_as!(ApiKeyDb, "../database/sql/key/list.sql", user.auth0_sub)
+        .fetch_all(&state.db)
+        .await
+        .map_error("key")?;
 
     let response_keys: Vec<ApiKeyResponse> = keys.into_iter().map(ApiKeyResponse::from).collect();
-    log::debug!(
-        "Found {} keys for user {}",
-        response_keys.len(),
-        user.auth0_sub
-    );
-    log::debug!(
-        "Found {} keys for user {}",
-        response_keys.len(),
-        user.auth0_sub
+    debug!(
+        user = user.auth0_sub, key_count = response_keys.len(); "found keys for user"
     );
 
     Ok((
@@ -376,245 +283,44 @@ ORDER BY created_at DESC",
     ))
 }
 
-async fn create_key(
+async fn post_route(
     State(state): State<AppState>,
     Extension(user): Extension<User>,
     Json(payload): Json<CreateKeyRequest>,
-) -> Result<impl IntoResponse, ApiKeyError> {
-    log::debug!("Handler: create_key called for name: {}", payload.name);
+) -> Result<(StatusCode, Json<NewApiKeyResponse>), Error> {
+    let key = create_key(&state.db, payload.name, &user.auth0_sub).await?;
 
-    log::debug!("Authenticated user for create_key: {}", user.auth0_sub);
-
-    if payload.name.trim().is_empty() || payload.name.len() > 255 {
-        return Err(ApiKeyError::BadRequest(
-            "Invalid key name provided.".to_string(),
-        ));
-    }
-
-    let (identifier, full_key) = generate_api_key();
-    let hashed_key = hash_api_key(&full_key)?;
-    let preview = create_key_preview(&identifier);
-
-    log::debug!("Generated identifier: {}, preview: {}", identifier, preview);
-
-    sqlx::query!(
-        "
-INSERT INTO api_keys (
-        auth0_sub,
-        name,
-        key_identifier,
-        hashed_key,
-        active,
-        created_at
-    )
-VALUES ($1, $2, $3, $4, TRUE, $5)",
-        user.auth0_sub,
-        payload.name,
-        &identifier,
-        &hashed_key,
-        Utc::now().naive_utc()
-    )
-    .execute(&state.db)
-    .await?;
-
-    log::info!(
-        "Successfully created API key named '{}' for user '{}'",
-        payload.name,
-        user.auth0_sub
-    );
-
-    Ok((
-        StatusCode::CREATED,
-        axum::Json(NewApiKeyResponse {
-            name: payload.name.clone(),
-            full_key,
-            message: "API key created successfully. Store it securely, it will not be shown again."
-                .to_string(),
-        }),
-    ))
+    Ok((StatusCode::CREATED, axum::Json(key)))
 }
-async fn revoke_key(
+
+async fn revoke_route(
     State(state): State<AppState>,
     Extension(user): Extension<User>,
     Json(payload): Json<KeyNameRequest>,
-) -> Result<impl IntoResponse, ApiKeyError> {
-    log::debug!("Handler: revoke_key called for name: {}", payload.name);
+) -> Result<impl IntoResponse, Error> {
+    revoke_key(&state.db, &payload.name, &user.auth0_sub).await?;
 
-    let execution_result = sqlx::query!(
-        "
-UPDATE api_keys
-SET active = FALSE,
-    last_used_at = $1
-WHERE auth0_sub = $2
-    AND name = $3 AND active = TRUE",
-        Utc::now().naive_utc(),
-        user.auth0_sub,
-        payload.name
-    )
-    .execute(&state.db)
-    .await;
-
-    match execution_result {
-        Ok(result) => {
-            if result.rows_affected() == 0 {
-                log::warn!(
-                    "Attempted to revoke non-existent or inactive key named '{}' for user '{}'",
-                    payload.name,
-                    user.auth0_sub
-                );
-                Err(ApiKeyError::NotFound(format!(
-                    "Active API key named '{}' not found.",
-                    payload.name
-                )))
-            } else {
-                log::info!(
-                    "Successfully revoked API key named '{}' for user '{}'",
-                    payload.name,
-                    user.auth0_sub
-                );
-                Ok(axum::Json(
-                    serde_json::json!({ "message": "API key revoked successfully." }),
-                ))
-            }
-        }
-        Err(sqlx_err) => {
-            if let sqlx::Error::Database(db_err) = &sqlx_err {
-                if db_err.is_unique_violation()
-                    && db_err.constraint() == Some("api_keys_user_name_name_active_key_idx")
-                {
-                    log::error!(
-                        "Unexpected unique constraint violation ('{}') during key revocation for \
-                         user '{}', name '{}'. This likely indicates a DB schema issue or \
-                         inconsistent state. DB Error: {}",
-                        db_err.constraint().unwrap_or("unknown"),
-                        user.auth0_sub,
-                        payload.name,
-                        db_err
-                    );
-
-                    return Err(ApiKeyError::InternalError(format!(
-                        "Unexpected database error while revoking key '{}'. Please contact \
-                         support or try again later.",
-                        payload.name
-                    )));
-                }
-            }
-
-            log::error!(
-                "Database error during key revocation for user '{}', name '{}': {}",
-                user.auth0_sub,
-                payload.name,
-                sqlx_err
-            );
-            Err(sqlx_err.into())
-        }
-    }
+    Ok(axum::Json(
+        serde_json::json!({ "message": "API key revoked successfully." }),
+    ))
 }
 
 async fn regenerate_key(
     State(state): State<AppState>,
     Extension(user): Extension<User>,
     Json(payload): Json<KeyNameRequest>,
-) -> Result<impl IntoResponse, ApiKeyError> {
-    if payload.name.trim().is_empty() || payload.name.len() > 255 {
-        return Err(ApiKeyError::BadRequest(
-            "Invalid key name provided.".to_string(),
-        ));
-    }
+) -> Result<impl IntoResponse, Error> {
+    validate_key_name(&payload.name)?;
 
-    let mut tx: Transaction<Postgres> = state.db.begin().await?;
+    let _ = revoke_key(&state.db, &payload.name, &user.auth0_sub).await;
+    let key = create_key(&state.db, payload.name, &user.auth0_sub).await?;
 
-    let revoke_result = sqlx::query!(
-        "
-UPDATE api_keys
-SET active = FALSE,
-    last_used_at = $1
-WHERE auth0_sub = $2
-    AND name = $3
-    AND active = TRUE",
-        Utc::now().naive_utc(),
-        user.auth0_sub,
-        payload.name
-    )
-    .execute(&mut *tx)
-    .await?;
-
-    if revoke_result.rows_affected() == 0 {
-        log::warn!(
-            "No active key found named '{}' for user '{}' during regeneration. Proceeding to \
-             create a new one.",
-            payload.name,
-            user.auth0_sub
-        );
-    } else {
-        log::debug!(
-            "Revoked {} old key(s) named '{}' for user '{}'",
-            revoke_result.rows_affected(),
-            payload.name,
-            user.auth0_sub
-        );
-        log::debug!(
-            "Revoked {} old key(s) named '{}' for user '{}'",
-            revoke_result.rows_affected(),
-            payload.name,
-            user.auth0_sub
-        );
-    }
-
-    let (new_identifier, new_full_key) = generate_api_key();
-    let new_hashed_key = hash_api_key(&new_full_key)?;
-    let new_preview = create_key_preview(&new_identifier);
-
-    log::debug!(
-        "Generated new identifier: {}, preview: {}",
-        new_identifier,
-        new_preview
-    );
-    log::debug!(
-        "Generated new identifier: {}, preview: {}",
-        new_identifier,
-        new_preview
-    );
-
-    sqlx::query!(
-        "
-INSERT INTO api_keys (
-        auth0_sub,
-        name,
-        key_identifier,
-        hashed_key,
-        active,
-        created_at
-    )
-VALUES ($1, $2, $3, $4, TRUE, $5)",
-        user.auth0_sub,
-        payload.name,
-        &new_identifier,
-        &new_hashed_key,
-        Utc::now().naive_utc()
-    )
-    .execute(&mut *tx)
-    .await?;
-
-    tx.commit().await?;
-
-    log::info!(
-        "Successfully regenerated API key named '{}' for user '{}'",
-        payload.name,
-        user.auth0_sub
-    );
-
-    Ok(axum::Json(NewApiKeyResponse {
-        name: payload.name.clone(),
-        full_key: new_full_key,
-        message: "API key regenerated successfully. Store it securely.".to_string(),
-    }))
+    Ok((StatusCode::OK, axum::Json(key)))
 }
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/", get(list_keys).post(create_key))
-        .route("/revoke", post(revoke_key)) // TODO
+        .route("/", get(list_keys).post(post_route))
+        .route("/revoke", post(revoke_route))
         .route("/regenerate", post(regenerate_key))
 }
-

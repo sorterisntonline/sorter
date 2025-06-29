@@ -1,1 +1,1 @@
-sqlx migrate run --source ../migrations
+sqlx migrate run --source ../database/migrations

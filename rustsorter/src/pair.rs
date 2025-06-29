@@ -1,11 +1,17 @@
-use std::collections::HashSet;
-
-use axum::{extract::{Query, State}, http::StatusCode, response::IntoResponse, routing::get, Json, Router};
-use rand::seq::{IteratorRandom, SliceRandom};
+use axum::{
+    Json,
+    Router,
+    extract::{Query, State},
+    response::IntoResponse,
+    routing::get,
+};
+use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 
-use crate::{app_state::AppState};
+use crate::{
+    app_state::AppState,
+    models::{Error, MapErrorSqlx},
+};
 
 #[derive(Debug, Clone)]
 struct Item {
@@ -48,37 +54,36 @@ struct _Vote {
     _magnitude: i32,
 }
 
-// --- New Structures for API ---
-
 #[derive(Deserialize, Debug)]
 pub struct PairQueryParams {
-    // for when you have a specific pair in mind
-    left_ns: Option<String>, 
+    left_ns: Option<String>,
     left_pk: Option<String>,
     right_ns: Option<String>,
     right_pk: Option<String>,
-
-    // for when you want _children_ of this pair
     pk_namespace: Option<String>,
     pk: Option<String>,
 }
 
-// Placeholder response structure - adjust according to your actual Entity model
 #[derive(Serialize, Debug)]
 pub struct PairResponse {
-    left_entity: crate::entity::Entity, // Use your actual Entity model
-    right_entity: crate::entity::Entity, // Use your actual Entity model
+    left_entity: crate::entity::Entity,
+    right_entity: crate::entity::Entity,
 }
 
-async fn get_entity(state: &AppState, ns: String, pk: String) -> Result<crate::entity::Entity, sqlx::Error> {
-    let entity = sqlx::query_as!(
+async fn get_entity(
+    state: &AppState,
+    ns: String,
+    pk: String,
+) -> Result<crate::entity::Entity, Error> {
+    let entity = sqlx::query_file_as!(
         crate::entity::Entity,
-        "SELECT * FROM entities WHERE pk_namespace = $1 AND pk = $2",
+        "../database/sql/entity/select.sql",
         ns,
         pk
     )
     .fetch_one(&state.db)
-    .await?;
+    .await
+    .map_error("entity")?;
 
     Ok(entity)
 }
@@ -87,42 +92,42 @@ async fn get_children_entities(
     state: &AppState,
     parent_ns: String,
     parent_pk: String,
-) -> Result<Vec<crate::entity::Entity>, sqlx::Error> {
-    let children = sqlx::query_as!(
+) -> Result<Vec<crate::entity::Entity>, Error> {
+    let children = sqlx::query_file_as!(
         crate::entity::Entity,
-        r#"
-        SELECT e.* 
-        FROM entities e
-        JOIN entity_relationships er ON e.pk_namespace = er.child_pk_namespace AND e.pk = er.child_pk
-        WHERE er.parent_pk_namespace = $1 AND er.parent_pk = $2
-        "#,
+        "../database/sql/entity/select_children.sql",
         parent_ns,
         parent_pk
     )
     .fetch_all(&state.db)
-    .await?;
+    .await
+    .map_error("entity")?;
 
     Ok(children)
 }
 
-// --- Handler Function ---
-
 async fn get_pair_handler(
     State(state): State<AppState>,
     Query(params): Query<PairQueryParams>,
-) -> Result<impl IntoResponse, impl IntoResponse> {
-    match (params.left_ns, params.left_pk, params.right_ns, params.right_pk, params.pk_namespace, params.pk) {
+) -> Result<impl IntoResponse, Error> {
+    match (
+        params.left_ns,
+        params.left_pk,
+        params.right_ns,
+        params.right_pk,
+        params.pk_namespace,
+        params.pk,
+    ) {
         (Some(left_ns), Some(left_pk), Some(right_ns), Some(right_pk), None, None) => {
             let left_entity = get_entity(&state, left_ns, left_pk).await?;
             let right_entity = get_entity(&state, right_ns, right_pk).await?;
-            let response: Result<Json<PairResponse>, crate::models::ErrorResponse> = Ok(Json(PairResponse { 
-                left_entity: left_entity, right_entity: right_entity 
-            }));
-            response
+
+            Ok(Json(PairResponse {
+                left_entity,
+                right_entity,
+            }))
         }
         (None, None, None, None, Some(pk_namespace), Some(pk)) => {
-
-            // get the children entities
             let children_entities = get_children_entities(&state, pk_namespace, pk).await?;
 
             // TODO more advanced pair choosing logic
@@ -132,22 +137,17 @@ async fn get_pair_handler(
                 right_entity = children_entities.choose(&mut rand::thread_rng()).unwrap();
             }
 
-            // return the parent and children entities  
-            let response: Result<Json<PairResponse>, crate::models::ErrorResponse> = Ok(Json(PairResponse { 
-                left_entity: left_entity.clone(), right_entity: right_entity.clone()
-            }));
-            response
+            Ok(Json(PairResponse {
+                left_entity: left_entity.clone(),
+                right_entity: right_entity.clone(),
+            }))
         }
-
-        _ => {
-            return Err(crate::models::ErrorResponse::new(StatusCode::BAD_REQUEST, "Invalid query parameters".to_string()));
-        }
+        _ => Err(Error::BadRequest {
+            message: "invalid query parameters".into(),
+        }),
     }
 }
 
-
-// --- Router Function ---
 pub fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/", get(get_pair_handler))
+    Router::new().route("/", get(get_pair_handler))
 }

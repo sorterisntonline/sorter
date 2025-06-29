@@ -4,45 +4,14 @@ import uuid
 import time
 from typing import Dict, Any, Optional, Tuple
 
-# --- Configuration ---
-BASE_URL = "http://localhost:8081/api"
-# This MUST match the static key defined in your Rust auth_middleware.rs
-STATIC_ADMIN_KEY = "STATIC_TEST_KEY_FOR_ADMIN_USER_123"
-STATIC_ADMIN_AUTH_HEADER = {"Authorization": f"Bearer {STATIC_ADMIN_KEY}"}
+from util import make_request
 
 # --- Helper Functions ---
-
-async def make_request(
-    method: str,
-    endpoint: str,
-    headers: Dict[str, str] | None = None,
-    json_payload: Dict[str, Any] | None = None,
-    params: Dict[str, Any] | None = None,
-) -> httpx.Response:
-    """Helper function to make HTTP requests."""
-    async with httpx.AsyncClient(base_url=BASE_URL) as client:
-        print(f"\nRequest: {method} {endpoint}")
-        if headers: print(f"Headers: {headers}")
-        if params: print(f"Params: {params}")
-        if json_payload: print(f"Payload: {json_payload}")
-
-        try:
-            response = await client.request(method, endpoint, headers=headers, json=json_payload, params=params)
-        except httpx.RequestError as e:
-            pytest.fail(f"HTTP request failed: {e}")
-
-        print(f"Response Status: {response.status_code}")
-        try:
-            # Attempt to log JSON, but handle cases where it's not JSON
-            print(f"Response Body: {response.json()}")
-        except Exception:
-            print(f"Response Body (non-JSON): {response.text}")
-        return response
 
 async def cleanup_entity(ns: str, pk: str):
     """Attempts to delete an entity, ignoring errors if it's already gone."""
     print(f"Cleanup Attempt: Deleting entity {ns}/{pk}")
-    await make_request("DELETE", f"/entity/{ns}/{pk}", headers=STATIC_ADMIN_AUTH_HEADER)
+    await make_request("DELETE", f"/entity/{ns}/{pk}", is_authenticated=True, assert_status_code=204)
 
 async def cleanup_relationship(parent_ns: str, parent_pk: str, child_ns: str, child_pk: str):
     """Attempts to delete a relationship, ignoring errors."""
@@ -53,7 +22,7 @@ async def cleanup_relationship(parent_ns: str, parent_pk: str, child_ns: str, ch
         "child_pk": child_pk,
     }
     print(f"Cleanup Attempt: Deleting relationship {parent_ns}/{parent_pk} -> {child_ns}/{child_pk}")
-    await make_request("DELETE", "/relationships", headers=STATIC_ADMIN_AUTH_HEADER, params=params)
+    await make_request("DELETE", "/relationships", params=params, is_authenticated=True)
 
 
 # --- Test Suite Marker ---
@@ -76,10 +45,8 @@ class TestEntityCrud:
             "title": "My Test Entity",
             "metadata": {"key": "value", "num": 123}
         }
-        response = await make_request("POST", "/entity", headers=STATIC_ADMIN_AUTH_HEADER, json_payload=payload)
+        data = (await make_request("POST", "/entity", json_payload=payload, is_authenticated=True, assert_status_code=201)).json()
 
-        assert response.status_code == 201 # Created
-        data = response.json()
         assert data["pk_namespace"] == ns
         assert data["pk"] == pk
         assert data["title"] == "My Test Entity"
@@ -102,9 +69,8 @@ class TestEntityCrud:
             "title": "Attempt to duplicate",
             "metadata": {}
         }
-        response = await make_request("POST", "/entity", headers=STATIC_ADMIN_AUTH_HEADER, json_payload=payload)
-        assert response.status_code == 409 # Conflict
-        assert "already exists" in response.json().get("error", "").lower()
+        data = (await make_request("POST", "/entity", json_payload=payload, is_authenticated=True, assert_status_code=409)).json()
+        assert "already exists" in data.get("error", "").lower()
 
     @pytest.mark.dependency()
     async def test_create_entity_no_auth(self):
@@ -115,8 +81,7 @@ class TestEntityCrud:
             "title": "No Auth Test",
             "metadata": None
         }
-        response = await make_request("POST", "/entity", json_payload=payload) # No headers
-        assert response.status_code == 401 # Unauthorized
+        await make_request("POST", "/entity", json_payload=payload, assert_status_code=401)
 
     @pytest.mark.dependency()
     async def test_create_entity_invalid_payload(self):
@@ -128,9 +93,8 @@ class TestEntityCrud:
         }
         # Axum's Json extractor usually returns 400 for missing fields in strict structs
         # or 422 if using specific validation layers
-        response = await make_request("POST", "/entity", headers=STATIC_ADMIN_AUTH_HEADER, json_payload=payload)
-        assert response.status_code in [400, 422] # Bad Request or Unprocessable Entity
-        assert "error" in response.json()
+        data = (await make_request("POST", "/entity", json_payload=payload, is_authenticated=True, assert_status_code=[400, 422])).json()
+        assert "error" in data
 
     # --- Read Tests ---
     @pytest.mark.dependency(depends=["TestEntityCrud::test_create_entity_success"])
@@ -141,9 +105,7 @@ class TestEntityCrud:
         ns = TestEntityCrud.created_entity_ns
         pk = TestEntityCrud.created_entity_pk
 
-        response = await make_request("GET", f"/entity/{ns}/{pk}", headers=STATIC_ADMIN_AUTH_HEADER)
-        assert response.status_code == 200
-        data = response.json()
+        data = (await make_request("GET", f"/entity/{ns}/{pk}", is_authenticated=True, assert_status_code=200)).json()
         data = data["entity"]
         assert data["pk_namespace"] == ns
         assert data["pk"] == pk
@@ -155,9 +117,8 @@ class TestEntityCrud:
         """Tests retrieving a non-existent entity."""
         ns = "nonexistent.ns"
         pk = f"nonexistent_pk_{uuid.uuid4()}"
-        response = await make_request("GET", f"/entity/{ns}/{pk}", headers=STATIC_ADMIN_AUTH_HEADER)
-        assert response.status_code == 404 # Not Found
-        assert "not found" in response.json().get("error", "").lower()
+        data = (await make_request("GET", f"/entity/{ns}/{pk}", is_authenticated=True, assert_status_code=404)).json()
+        assert "not found" in data.get("error", "").lower()
 
     # --- List Tests ---
     @pytest.mark.dependency(depends=["TestEntityCrud::test_create_entity_success"])
@@ -168,9 +129,7 @@ class TestEntityCrud:
         ns = TestEntityCrud.created_entity_ns
         pk = TestEntityCrud.created_entity_pk
 
-        response = await make_request("GET", "/entity", headers=STATIC_ADMIN_AUTH_HEADER)
-        assert response.status_code == 200
-        data = response.json()
+        data = (await make_request("GET", "/entity", is_authenticated=True, assert_status_code=200)).json()
         assert isinstance(data, list)
 
         found = False
@@ -185,9 +144,7 @@ class TestEntityCrud:
     @pytest.mark.dependency()
     async def test_list_entities_no_auth(self):
         """Tests listing entities without authentication."""
-        response = await make_request("GET", "/entity") # No headers
-        assert response.status_code == 200
-        data = response.json()
+        data = (await make_request("GET", "/entity", assert_status_code=200)).json()
         assert isinstance(data, list)
         assert len(data) > 0 # Should have at least one entity
 
@@ -206,19 +163,14 @@ class TestEntityCrud:
             "title": "Updated Test Entity Title",
             "metadata": {"new_key": "new_value"}
         }
-        response = await make_request("PUT", f"/entity/{ns}/{pk}", headers=STATIC_ADMIN_AUTH_HEADER, json_payload=payload)
-        assert response.status_code == 200
-        data = response.json()
+        data = (await make_request("PUT", f"/entity/{ns}/{pk}", json_payload=payload, is_authenticated=True, assert_status_code=200)).json()
         assert data["pk_namespace"] == ns
         assert data["pk"] == pk
         assert data["title"] == "Updated Test Entity Title"
         assert data["metadata"] == {"new_key": "new_value"}
 
         # Verify update by GETting again
-        response_get = await make_request("GET", f"/entity/{ns}/{pk}", headers=STATIC_ADMIN_AUTH_HEADER)
-        assert response_get.status_code == 200
-        data_get = response_get.json()
-        data_get = data_get["entity"]
+        data_get = (await make_request("GET", f"/entity/{ns}/{pk}", is_authenticated=True, assert_status_code=200)).json()["entity"]
         assert data_get["title"] == "Updated Test Entity Title"
         assert data_get["metadata"] == {"new_key": "new_value"}
 
@@ -231,8 +183,7 @@ class TestEntityCrud:
             "pk_namespace": ns, "pk": pk,
             "title": "Update Non Existent", "metadata": {}
         }
-        response = await make_request("PUT", f"/entity/{ns}/{pk}", headers=STATIC_ADMIN_AUTH_HEADER, json_payload=payload)
-        assert response.status_code == 404 # Not Found
+        await make_request("PUT", f"/entity/{ns}/{pk}", json_payload=payload, is_authenticated=True, assert_status_code=404)
 
     @pytest.mark.dependency(depends=["TestEntityCrud::test_update_entity_success"]) # Needs an existing entity
     async def test_update_entity_mismatched_pk(self):
@@ -246,11 +197,10 @@ class TestEntityCrud:
             "pk": "mismatch.pk",         # Different from path
             "title": "Mismatch Test", "metadata": {}
         }
-        response = await make_request("PUT", f"/entity/{ns}/{pk}", headers=STATIC_ADMIN_AUTH_HEADER, json_payload=payload)
-        assert response.status_code == 400 # Bad Request (due to the check added in the handler)
-        assert "must match payload primary key" in response.json().get("error", "").lower()
+        data = (await make_request("PUT", f"/entity/{ns}/{pk}", json_payload=payload, is_authenticated=True, assert_status_code=400)).json()
+        assert "must match payload primary key" in data.get("error", "").lower()
 
-    @pytest.mark.dependency()
+    @pytest.mark.dependency(depends=["TestEntityCrud::test_create_entity_success"])
     async def test_update_entity_no_auth(self):
         """Tests updating an entity without authentication."""
         assert TestEntityCrud.created_entity_ns is not None
@@ -258,8 +208,7 @@ class TestEntityCrud:
         ns = TestEntityCrud.created_entity_ns
         pk = TestEntityCrud.created_entity_pk
         payload = {"pk_namespace": ns, "pk": pk, "title": "No Auth Update"}
-        response = await make_request("PUT", f"/entity/{ns}/{pk}", json_payload=payload) # No headers
-        assert response.status_code == 401 # Unauthorized
+        await make_request("PUT", f"/entity/{ns}/{pk}", json_payload=payload, assert_status_code=401)
 
     # --- Delete Tests ---
     @pytest.mark.dependency(depends=["TestEntityCrud::test_update_entity_success"]) # Depends on entity existing
@@ -270,12 +219,10 @@ class TestEntityCrud:
         ns = TestEntityCrud.created_entity_ns
         pk = TestEntityCrud.created_entity_pk
 
-        response = await make_request("DELETE", f"/entity/{ns}/{pk}", headers=STATIC_ADMIN_AUTH_HEADER)
-        assert response.status_code == 204 # No Content
+        await make_request("DELETE", f"/entity/{ns}/{pk}", is_authenticated=True, assert_status_code=204)
 
         # Verify deletion by trying to GET it again
-        response_get = await make_request("GET", f"/entity/{ns}/{pk}", headers=STATIC_ADMIN_AUTH_HEADER)
-        assert response_get.status_code == 404 # Not Found
+        await make_request("GET", f"/entity/{ns}/{pk}", is_authenticated=True, assert_status_code=404)
 
         # Clear class variables as entity is gone
         TestEntityCrud.created_entity_ns = None
@@ -286,8 +233,7 @@ class TestEntityCrud:
         """Tests deleting a non-existent entity."""
         ns = "nonexistent.ns"
         pk = f"nonexistent_pk_{uuid.uuid4()}"
-        response = await make_request("DELETE", f"/entity/{ns}/{pk}", headers=STATIC_ADMIN_AUTH_HEADER)
-        assert response.status_code == 404 # Not Found
+        await make_request("DELETE", f"/entity/{ns}/{pk}", is_authenticated=True, assert_status_code=404)
 
     @pytest.mark.dependency()
     async def test_delete_entity_no_auth(self):
@@ -296,12 +242,10 @@ class TestEntityCrud:
         temp_ns = "tempdel.ns"
         temp_pk = f"tempdel_pk_{uuid.uuid4()}"
         payload = {"pk_namespace": temp_ns, "pk": temp_pk, "title": "Temp Delete"}
-        create_res = await make_request("POST", "/entity", headers=STATIC_ADMIN_AUTH_HEADER, json_payload=payload)
-        assert create_res.status_code == 201
+        await make_request("POST", "/entity", json_payload=payload, is_authenticated=True, assert_status_code=201)
 
         # Attempt delete without auth
-        response = await make_request("DELETE", f"/entity/{temp_ns}/{temp_pk}") # No headers
-        assert response.status_code == 401 # Unauthorized
+        await make_request("DELETE", f"/entity/{temp_ns}/{temp_pk}", assert_status_code=401)
 
         # Cleanup the temporary entity
         await cleanup_entity(temp_ns, temp_pk)
