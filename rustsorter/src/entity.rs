@@ -52,12 +52,8 @@ pub struct EntityWithParentsAndChildren {
     children: Option<Vec<Entity>>,
 }
 
-pub fn public_routes() -> Router<AppState> {
-    Router::new().route("/", get(list_entities))
-}
-
-pub fn protected_routes() -> Router<AppState> {
-    Router::new().route("/", post(post_route)).route(
+pub fn routes() -> Router<AppState> {
+    Router::new().route("/", get(list_entities).post(post_route)).route(
         "/:pk_namespace/:pk",
         get(get_route).put(put_route).delete(delete_entity),
     )

@@ -71,14 +71,12 @@ async fn main() -> Result<(), anyhow::Error> {
 }
 
 fn router(app_state: AppState) -> Router {
-    let public_routes = Router::new()
-        .route("/health", get(health))
-        .nest("/entity", entity::public_routes());
 
-    let protected_routes = Router::new()
+    let routes = Router::new()
+        .route("/health", get(health))
         .route("/protected", get(protected_route))
         .nest("/keys", api_key::routes())
-        .nest("/entity", entity::protected_routes())
+        .nest("/entity", entity::routes())
         .nest("/entity_relationships", entity_relationships::routes())
         .nest("/vote", vote::routes())
         .nest("/rank", pagerank::routes())
@@ -88,8 +86,7 @@ fn router(app_state: AppState) -> Router {
         ));
 
     Router::new()
-        .nest("/api", public_routes)
-        .nest("/api", protected_routes)
+        .nest("/api", routes)
         .with_state(app_state)
         .layer(TraceLayer::new_for_http())
 }
