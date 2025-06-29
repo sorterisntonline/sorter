@@ -10,9 +10,6 @@ CREATE TABLE users(
 INSERT INTO users(auth0_sub, username)
   VALUES ('admin', 'admin');
 
-INSERT INTO users(auth0_sub, username)
-  VALUES ('spotify', 'spotify');
-
 CREATE TABLE api_keys(
   id serial PRIMARY KEY,
   auth0_sub text NOT NULL,
