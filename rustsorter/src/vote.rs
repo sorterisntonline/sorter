@@ -34,14 +34,8 @@ pub struct VotePayload {
     left_entity_pk: String,
     right_entity_pk_namespace: String,
     right_entity_pk: String,
-    voter_user_id: Uuid,
     magnitude: i32,
     attribute_id: i32,
-}
-
-#[derive(Deserialize, Debug)]
-pub struct UpdateVotePayload {
-    _magnitude: i32,
 }
 
 async fn create_vote(
@@ -154,7 +148,7 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/", post(create_vote).get(list_votes))
         .route(
-            "/:left_ns/:left_pk/:right_ns/:right_pk/:user_id/:attr_id",
+            "/:left_ns/:left_pk/:right_ns/:right_pk/:attr_id",
             get(get_vote),
         )
 }
