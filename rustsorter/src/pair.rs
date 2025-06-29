@@ -56,12 +56,8 @@ struct _Vote {
 
 #[derive(Deserialize, Debug)]
 pub struct PairQueryParams {
-    left_ns: Option<String>,
-    left_pk: Option<String>,
-    right_ns: Option<String>,
-    right_pk: Option<String>,
-    pk_namespace: Option<String>,
-    pk: Option<String>,
+    pk_namespace: String,
+    pk: String,
 }
 
 #[derive(Serialize, Debug)]
@@ -110,42 +106,18 @@ async fn get_pair_handler(
     State(state): State<AppState>,
     Query(params): Query<PairQueryParams>,
 ) -> Result<impl IntoResponse, Error> {
-    match (
-        params.left_ns,
-        params.left_pk,
-        params.right_ns,
-        params.right_pk,
-        params.pk_namespace,
-        params.pk,
-    ) {
-        (Some(left_ns), Some(left_pk), Some(right_ns), Some(right_pk), None, None) => {
-            let left_entity = get_entity(&state, left_ns, left_pk).await?;
-            let right_entity = get_entity(&state, right_ns, right_pk).await?;
+    let children_entities = get_children_entities(&state, params.pk_namespace, params.pk).await?;
 
-            Ok(Json(PairResponse {
-                left_entity,
-                right_entity,
-            }))
-        }
-        (None, None, None, None, Some(pk_namespace), Some(pk)) => {
-            let children_entities = get_children_entities(&state, pk_namespace, pk).await?;
-
-            // TODO more advanced pair choosing logic
-            let left_entity = children_entities.choose(&mut rand::thread_rng()).unwrap();
-            let mut right_entity = children_entities.choose(&mut rand::thread_rng()).unwrap();
-            while left_entity.pk == right_entity.pk {
-                right_entity = children_entities.choose(&mut rand::thread_rng()).unwrap();
-            }
-
-            Ok(Json(PairResponse {
-                left_entity: left_entity.clone(),
-                right_entity: right_entity.clone(),
-            }))
-        }
-        _ => Err(Error::BadRequest {
-            message: "invalid query parameters".into(),
-        }),
+    let left_entity = children_entities.choose(&mut rand::thread_rng()).unwrap();
+    let mut right_entity = children_entities.choose(&mut rand::thread_rng()).unwrap();
+    while left_entity.pk == right_entity.pk {
+        right_entity = children_entities.choose(&mut rand::thread_rng()).unwrap();
     }
+
+    Ok(Json(PairResponse {
+        left_entity: left_entity.clone(),
+        right_entity: right_entity.clone(),
+    }))
 }
 
 pub fn routes() -> Router<AppState> {
