@@ -4,11 +4,10 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-use log::{debug, error, warn};
 use tokio;
 
 use crate::{
-    api_key::{self, get_user_by_auth0_sub, verify_api_key},
+    api_key::{self},
     app_state::AppState,
     models::Error,
 };
@@ -37,15 +36,10 @@ pub async fn try_auth(
     };
 
     // If a header is present, it MUST be valid
-    let token = if header.starts_with("Bearer ") {
-        &header["Bearer ".len()..]
-    } else {
+    let Some(token) = header.strip_prefix("Bearer ") else {
         // Header present but malformed
         return Err(Error::InvalidHeader);
     };
-
-    const STATIC_ADMIN_KEY: &str = "STATIC_TEST_KEY_FOR_ADMIN_USER_123";
-    const ADMIN_USERNAME: &str = "admin";
 
     if token == STATIC_ADMIN_KEY {
         log::warn!("Using static debug API key for user: {}", ADMIN_USERNAME);

@@ -1,18 +1,21 @@
+use aide::axum::{
+    ApiRouter,
+    routing::{get, post},
+};
 use axum::{
-    Json,
-    Router,
     extract::{Path, State},
     http::StatusCode,
-    response::IntoResponse,
-    routing::{get, post},
 };
 use chrono::NaiveDateTime;
 use log::warn;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
 
 use crate::{
-    app_state::AppState, extractors::maybe_user::AuthenticatedUser, models::{Error, IntoNotFound, MapErrorSqlx}
+    app_state::AppState,
+    extractors::maybe_user::AuthenticatedUser,
+    models::{Error, IntoNotFound, Json, MapErrorSqlx},
 };
 
 #[derive(Serialize, Debug, sqlx::FromRow)]
@@ -28,7 +31,7 @@ pub struct Vote {
     pub deleted_at: Option<NaiveDateTime>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, JsonSchema)]
 pub struct VotePayload {
     left_entity_pk_namespace: String,
     left_entity_pk: String,
@@ -42,7 +45,7 @@ async fn create_vote(
     State(state): State<AppState>,
     AuthenticatedUser(user): AuthenticatedUser,
     Json(payload): Json<VotePayload>,
-) -> Result<impl IntoResponse, Error> {
+) -> Result<(StatusCode, Json<Vote>), Error> {
     let (left_ns, left_pk, right_ns, right_pk, magnitude) = if (
         payload.left_entity_pk_namespace.clone(),
         payload.left_entity_pk.clone(),
@@ -95,7 +98,7 @@ async fn get_vote(
         Uuid,
         i32,
     )>,
-) -> Result<impl IntoResponse, Error> {
+) -> Result<(StatusCode, Json<Vote>), Error> {
     let (query_left_ns, query_left_pk, query_right_ns, query_right_pk) = if (
         left_ns.clone(),
         left_pk.clone(),
@@ -135,7 +138,7 @@ struct VoteFilterParams {
     _parent_entity_pk: Option<String>,
 }
 
-async fn list_votes(State(state): State<AppState>) -> Result<impl IntoResponse, Error> {
+async fn list_votes(State(state): State<AppState>) -> Result<(StatusCode, Json<Vec<Vote>>), Error> {
     let votes = sqlx::query_file_as!(Vote, "../database/sql/vote/list.sql",)
         .fetch_all(&state.db)
         .await
@@ -144,11 +147,11 @@ async fn list_votes(State(state): State<AppState>) -> Result<impl IntoResponse, 
     Ok((StatusCode::OK, Json(votes)))
 }
 
-pub fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/", post(create_vote).get(list_votes))
-        .route(
-            "/:left_ns/:left_pk/:right_ns/:right_pk/:attr_id",
+pub fn routes() -> ApiRouter<AppState> {
+    ApiRouter::new()
+        .api_route("/", post(create_vote).get(list_votes))
+        .api_route(
+            "/{left_ns}/{left_pk}/{right_ns}/{right_pk}/{attr_id}",
             get(get_vote),
         )
 }

@@ -1,11 +1,11 @@
-use async_trait::async_trait;
+use aide::OperationIo;
 use axum::{extract::FromRequestParts, http::request::Parts};
 
 use crate::models::{Error, User};
 
+#[derive(OperationIo)]
 pub struct MaybeUser(pub Option<User>);
 
-#[async_trait]
 impl<S> FromRequestParts<S> for MaybeUser
 where
     S: Send + Sync,
@@ -19,9 +19,9 @@ where
     }
 }
 
+#[derive(OperationIo)]
 pub struct AuthenticatedUser(pub User);
 
-#[async_trait]
 impl<S> FromRequestParts<S> for AuthenticatedUser
 where
     S: Send + Sync,

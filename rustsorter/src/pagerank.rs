@@ -1,28 +1,30 @@
 use std::collections::{HashMap, HashSet};
 
-use axum::{Json, Router, extract::State, response::IntoResponse, routing::post};
+use aide::axum::{ApiRouter, routing::post};
+use axum::extract::State;
 use graph::prelude::*;
 use log::{error, info, warn};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     app_state::AppState,
-    models::{Error, MapErrorSqlx},
+    models::{Error, Json, MapErrorSqlx},
 };
 
-#[derive(Deserialize, Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq, Hash, Serialize, JsonSchema)]
 pub struct EntityIdentifier {
     pub pk_namespace: String,
     pub pk: String,
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Debug, Clone, JsonSchema)]
 pub struct RankedEntity {
     pub identifier: EntityIdentifier,
     pub score: f32,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, JsonSchema)]
 pub struct RankingResponse {
     unsorted: Vec<EntityIdentifier>,
     sorted: Vec<RankedEntity>,
@@ -178,7 +180,7 @@ fn calculate_rank_centrality(
 async fn rank_children_handler(
     State(state): State<AppState>,
     Json(payload): Json<Vec<EntityIdentifier>>,
-) -> Result<impl IntoResponse, Error> {
+) -> Result<Json<RankingResponse>, Error> {
     if payload.is_empty() {
         return Ok(Json(RankingResponse {
             unsorted: vec![],
@@ -286,6 +288,6 @@ async fn rank_children_handler(
     }))
 }
 
-pub fn routes() -> Router<AppState> {
-    Router::new().route("/", post(rank_children_handler))
+pub fn routes() -> ApiRouter<AppState> {
+    ApiRouter::new().api_route("/", post(rank_children_handler))
 }

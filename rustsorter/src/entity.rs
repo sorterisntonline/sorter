@@ -1,12 +1,11 @@
+use aide::axum::{ApiRouter, routing::get};
 use axum::{
-    Router,
     extract::{Path, Query, State},
     http::StatusCode,
-    response::IntoResponse,
-    routing::{get, post},
 };
 use chrono::NaiveDateTime;
 use log::debug;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use sqlx::{PgExecutor, query_file_as};
@@ -18,7 +17,7 @@ use crate::{
     models::{Error, IntoNotFound, Json, MapErrorAnyhow, MapErrorSqlx, PgAcquire},
 };
 
-#[derive(Serialize, Debug, sqlx::FromRow, Clone)]
+#[derive(Serialize, Debug, sqlx::FromRow, Clone, JsonSchema)]
 pub struct Entity {
     pub user_id: Uuid,
     pub pk_namespace: String,
@@ -30,7 +29,7 @@ pub struct Entity {
     pub created_at: Option<NaiveDateTime>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, JsonSchema)]
 pub struct EntityPayload {
     pub pk_namespace: String,
     pub pk: String,
@@ -39,24 +38,26 @@ pub struct EntityPayload {
     pub profile_picture_url: Option<String>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, JsonSchema)]
 pub struct EntityQueryParams {
     parents: Option<bool>,
     children: Option<bool>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, JsonSchema)]
 pub struct EntityWithParentsAndChildren {
     pub entity: Entity,
     parents: Option<Vec<Entity>>,
     children: Option<Vec<Entity>>,
 }
 
-pub fn routes() -> Router<AppState> {
-    Router::new().route("/", get(list_entities).post(post_route)).route(
-        "/:pk_namespace/:pk",
-        get(get_route).put(put_route).delete(delete_entity),
-    )
+pub fn routes() -> ApiRouter<AppState> {
+    ApiRouter::new()
+        .api_route("/", get(list_entities).post(post_route))
+        .api_route(
+            "/{pk_namespace}/{pk}",
+            get(get_route).put(put_route).delete(delete_entity),
+        )
 }
 
 pub async fn get_entity<'a, A: PgAcquire<'a>>(
@@ -210,7 +211,7 @@ async fn post_route(
     State(state): State<AppState>,
     AuthenticatedUser(user): AuthenticatedUser,
     Json(payload): Json<EntityPayload>,
-) -> Result<impl IntoResponse, Error> {
+) -> Result<(StatusCode, Json<Entity>), Error> {
     let entity = create_entity(
         &state.db,
         &payload.pk_namespace,
@@ -229,7 +230,7 @@ async fn get_route(
     State(state): State<AppState>,
     Path((pk_namespace, pk)): Path<(String, String)>,
     Query(params): Query<EntityQueryParams>,
-) -> Result<impl IntoResponse, Error> {
+) -> Result<Json<EntityWithParentsAndChildren>, Error> {
     Ok(Json(
         get_entity(
             &state.db,
@@ -242,7 +243,9 @@ async fn get_route(
     ))
 }
 
-async fn list_entities(State(state): State<AppState>) -> Result<impl IntoResponse, Error> {
+async fn list_entities(
+    State(state): State<AppState>,
+) -> Result<(StatusCode, Json<Vec<Entity>>), Error> {
     let entities = query_file_as!(Entity, "../database/sql/entity/list.sql")
         .fetch_all(&state.db)
         .await
@@ -256,7 +259,7 @@ async fn put_route(
     Path((pk_namespace, pk)): Path<(String, String)>,
     AuthenticatedUser(user): AuthenticatedUser,
     Json(payload): Json<EntityPayload>,
-) -> Result<impl IntoResponse, Error> {
+) -> Result<(StatusCode, Json<Entity>), Error> {
     if pk_namespace != payload.pk_namespace || pk != payload.pk {
         return Err(Error::BadRequest {
             message: "path parameters must match payload primary key".into(),
@@ -272,7 +275,7 @@ async fn delete_entity(
     State(state): State<AppState>,
     AuthenticatedUser(_user): AuthenticatedUser,
     Path((pk_namespace, pk)): Path<(String, String)>,
-) -> Result<impl IntoResponse, Error> {
+) -> Result<StatusCode, Error> {
     // TODO only delete entity if user is the owner
     sqlx::query_file!("../database/sql/entity/delete.sql", pk_namespace, pk)
         .execute(&state.db)

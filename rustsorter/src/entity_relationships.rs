@@ -1,21 +1,20 @@
+use aide::axum::{ApiRouter, routing::post};
 use axum::{
-    Router,
     extract::{Extension, Query, State},
     http::StatusCode,
-    response::{IntoResponse, Json},
-    routing::post,
 };
 use chrono::NaiveDateTime;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sqlx::PgExecutor;
 use uuid::Uuid;
 
 use crate::{
     app_state::AppState,
-    models::{Error, IntoNotFound, MapErrorAnyhow, MapErrorSqlx, User},
+    models::{Error, IntoNotFound, Json, MapErrorAnyhow, MapErrorSqlx, User},
 };
 
-#[derive(Serialize, Debug, sqlx::FromRow)]
+#[derive(Serialize, Debug, sqlx::FromRow, JsonSchema)]
 pub struct EntityRelationship {
     pub user_id: Uuid,
     pub parent_pk_namespace: String,
@@ -25,7 +24,7 @@ pub struct EntityRelationship {
     pub created_at: Option<NaiveDateTime>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, JsonSchema)]
 pub struct CreateRelationshipPayload {
     pub parent_pk_namespace: String,
     pub parent_pk: String,
@@ -33,7 +32,7 @@ pub struct CreateRelationshipPayload {
     pub child_pk: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, JsonSchema)]
 pub struct ListRelationshipsQuery {
     parent_pk_namespace: Option<String>,
     parent_pk: Option<String>,
@@ -42,7 +41,7 @@ pub struct ListRelationshipsQuery {
     submitter_user_id: Option<Uuid>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, JsonSchema)]
 pub struct DeleteRelationshipQuery {
     parent_pk_namespace: String,
     parent_pk: String,
@@ -50,8 +49,8 @@ pub struct DeleteRelationshipQuery {
     child_pk: String,
 }
 
-pub fn routes() -> Router<AppState> {
-    Router::new().route(
+pub fn routes() -> ApiRouter<AppState> {
+    ApiRouter::new().api_route(
         "/",
         post(post_route)
             .get(list_relationships)
@@ -101,7 +100,7 @@ async fn post_route(
     State(state): State<AppState>,
     Extension(user): Extension<User>,
     Json(payload): Json<CreateRelationshipPayload>,
-) -> Result<impl IntoResponse, Error> {
+) -> Result<(StatusCode, Json<EntityRelationship>), Error> {
     // TODO: Add validation: Check if parent and child entities actually exist?
 
     Ok((
@@ -113,7 +112,7 @@ async fn post_route(
 async fn list_relationships(
     State(state): State<AppState>,
     Query(params): Query<ListRelationshipsQuery>,
-) -> Result<impl IntoResponse, Error> {
+) -> Result<(StatusCode, Json<Vec<EntityRelationship>>), Error> {
     let relationships = sqlx::query_file_as!(
         EntityRelationship,
         "../database/sql/entity_relationship/list.sql",
@@ -134,7 +133,7 @@ async fn delete_relationship(
     State(state): State<AppState>,
     Extension(_user): Extension<User>,
     Query(params): Query<DeleteRelationshipQuery>,
-) -> Result<impl IntoResponse, Error> {
+) -> Result<StatusCode, Error> {
     // TODO: Implement actual permission check.
 
     sqlx::query_file!(

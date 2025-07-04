@@ -1,20 +1,22 @@
-use axum::{
-    Router,
-    extract::{Extension, Json, State},
-    http::StatusCode,
-    response::IntoResponse,
+use aide::axum::{
+    ApiRouter,
     routing::{get, post},
+};
+use axum::{
+    extract::{Extension, State},
+    http::StatusCode,
 };
 use bcrypt::{DEFAULT_COST, hash, verify};
 use chrono::{NaiveDateTime, Utc};
 use log::{debug, info, warn};
 use rand::{Rng, distributions::Alphanumeric};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgExecutor, PgPool};
 
 use crate::{
     app_state::AppState,
-    models::{Error, IntoNotFound, MapErrorAnyhow, MapErrorSqlx, User},
+    models::{Error, IntoNotFound, Json, MapErrorAnyhow, MapErrorSqlx, User},
 };
 
 const API_KEY_PREFIX: &str = "sort";
@@ -64,12 +66,12 @@ pub struct NewApiKeyResponse {
     pub message: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, JsonSchema)]
 pub struct CreateKeyRequest {
     pub name: String,
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone, JsonSchema)]
 pub struct KeyNameRequest {
     pub name: String,
 }
@@ -262,7 +264,7 @@ async fn revoke_key<'e, E: PgExecutor<'e>>(
 async fn list_keys(
     State(state): State<AppState>,
     Extension(user): Extension<User>,
-) -> Result<impl IntoResponse, Error> {
+) -> Result<(StatusCode, Json<serde_json::Value>), Error> {
     debug!("list_keys called");
 
     debug!(user = user.auth0_sub; "authenticated user for list_keys");
@@ -279,7 +281,7 @@ async fn list_keys(
 
     Ok((
         StatusCode::OK,
-        axum::Json(serde_json::json!({ "api_keys": response_keys })),
+        Json(serde_json::json!({ "api_keys": response_keys })),
     ))
 }
 
@@ -290,17 +292,17 @@ async fn post_route(
 ) -> Result<(StatusCode, Json<NewApiKeyResponse>), Error> {
     let key = create_key(&state.db, payload.name, &user.auth0_sub).await?;
 
-    Ok((StatusCode::CREATED, axum::Json(key)))
+    Ok((StatusCode::CREATED, Json(key)))
 }
 
 async fn revoke_route(
     State(state): State<AppState>,
     Extension(user): Extension<User>,
     Json(payload): Json<KeyNameRequest>,
-) -> Result<impl IntoResponse, Error> {
+) -> Result<Json<serde_json::Value>, Error> {
     revoke_key(&state.db, &payload.name, &user.auth0_sub).await?;
 
-    Ok(axum::Json(
+    Ok(Json(
         serde_json::json!({ "message": "API key revoked successfully." }),
     ))
 }
@@ -309,18 +311,18 @@ async fn regenerate_key(
     State(state): State<AppState>,
     Extension(user): Extension<User>,
     Json(payload): Json<KeyNameRequest>,
-) -> Result<impl IntoResponse, Error> {
+) -> Result<(StatusCode, Json<NewApiKeyResponse>), Error> {
     validate_key_name(&payload.name)?;
 
     let _ = revoke_key(&state.db, &payload.name, &user.auth0_sub).await;
     let key = create_key(&state.db, payload.name, &user.auth0_sub).await?;
 
-    Ok((StatusCode::OK, axum::Json(key)))
+    Ok((StatusCode::OK, Json(key)))
 }
 
-pub fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/", get(list_keys).post(post_route))
-        .route("/revoke", post(revoke_route))
-        .route("/regenerate", post(regenerate_key))
+pub fn routes() -> ApiRouter<AppState> {
+    ApiRouter::new()
+        .api_route("/", get(list_keys).post(post_route))
+        .api_route("/revoke", post(revoke_route))
+        .api_route("/regenerate", post(regenerate_key))
 }

@@ -1,16 +1,12 @@
-use axum::{
-    Json,
-    Router,
-    extract::{Query, State},
-    response::IntoResponse,
-    routing::get,
-};
+use aide::axum::{ApiRouter, routing::get};
+use axum::extract::{Query, State};
 use rand::seq::SliceRandom;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     app_state::AppState,
-    models::{Error, MapErrorSqlx},
+    models::{Error, Json, MapErrorSqlx},
 };
 
 #[derive(Debug, Clone)]
@@ -54,19 +50,19 @@ struct _Vote {
     _magnitude: i32,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, JsonSchema)]
 pub struct PairQueryParams {
     pk_namespace: String,
     pk: String,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, JsonSchema)]
 pub struct PairResponse {
     left_entity: crate::entity::Entity,
     right_entity: crate::entity::Entity,
 }
 
-async fn get_entity(
+async fn _get_entity(
     state: &AppState,
     ns: String,
     pk: String,
@@ -105,7 +101,7 @@ async fn get_children_entities(
 async fn get_pair_handler(
     State(state): State<AppState>,
     Query(params): Query<PairQueryParams>,
-) -> Result<impl IntoResponse, Error> {
+) -> Result<Json<PairResponse>, Error> {
     let children_entities = get_children_entities(&state, params.pk_namespace, params.pk).await?;
 
     let left_entity = children_entities.choose(&mut rand::thread_rng()).unwrap();
@@ -120,6 +116,6 @@ async fn get_pair_handler(
     }))
 }
 
-pub fn routes() -> Router<AppState> {
-    Router::new().route("/", get(get_pair_handler))
+pub fn routes() -> ApiRouter<AppState> {
+    ApiRouter::new().api_route("/", get(get_pair_handler))
 }

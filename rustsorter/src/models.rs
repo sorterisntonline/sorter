@@ -1,5 +1,6 @@
 use std::fmt::{self, Display};
 
+use aide::OperationIo;
 use axum::{
     extract::{FromRequest, rejection::JsonRejection},
     http::StatusCode,
@@ -16,7 +17,8 @@ pub trait PgAcquire<'a>: Acquire<'a, Database = Postgres> {}
 
 impl<'a, A: Acquire<'a, Database = Postgres>> PgAcquire<'a> for A {}
 
-#[derive(FromRequest)]
+#[derive(FromRequest, OperationIo)]
+#[aide(json_schema)]
 #[from_request(via(axum::Json), rejection(Error))]
 pub struct Json<T>(pub T);
 
@@ -111,7 +113,7 @@ impl Display for CapitalizedString {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, OperationIo)]
 pub enum Error {
     #[error("{message}")]
     BadRequest { message: CapitalizedString },
