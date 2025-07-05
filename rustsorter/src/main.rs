@@ -13,10 +13,13 @@ use std::env;
 use aide::{
     axum::{ApiRouter, routing::get},
     openapi::{self, OpenApi},
+    swagger::Swagger,
 };
 use anyhow::Result;
 use app_state::AppState;
 use axum::{
+    Extension,
+    Router,
     http::StatusCode,
     middleware,
     response::{IntoResponse, Response},
@@ -38,6 +41,10 @@ async fn health() -> (StatusCode, Json<serde_json::Value>) {
             "version": env!("CARGO_PKG_VERSION")
         })),
     )
+}
+
+async fn api_json(Extension(api): Extension<OpenApi>) -> Json<OpenApi> {
+    Json(api)
 }
 
 async fn protected_route(MaybeUser(maybe_user): MaybeUser) -> Response {
@@ -70,14 +77,13 @@ async fn main() -> Result<(), anyhow::Error> {
     let app_state = AppState { db: pool.clone() };
 
     let router = router(app_state);
-    let mut api = api();
 
     let addr = "127.0.0.1:8081";
     log::info!("Starting server on {}", addr);
 
     axum::serve(
         tokio::net::TcpListener::bind(addr).await.unwrap(),
-        router.finish_api(&mut api).into_make_service(),
+        router.into_make_service(),
     )
     .await
     .expect("Failed to start server");
@@ -85,35 +91,15 @@ async fn main() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-fn router(app_state: AppState) -> ApiRouter {
-    let routes = ApiRouter::new()
-        .api_route("/health", get(health))
-        .api_route("/protected", get(protected_route))
-        .nest("/keys", api_key::routes())
-        .nest("/entity", entity::routes())
-        .nest("/entity_relationships", entity_relationships::routes())
-        .nest("/vote", vote::routes())
-        .nest("/rank", pagerank::routes())
-        .layer(middleware::from_fn_with_state(
-            app_state.clone(),
-            auth_middleware::try_auth,
-        ));
-
-    ApiRouter::new()
-        .nest("/api", routes)
-        .with_state(app_state)
-        .layer(TraceLayer::new_for_http())
-}
-
-fn api() -> OpenApi {
-    OpenApi {
+fn router(app_state: AppState) -> Router {
+    let mut api = OpenApi {
         info: openapi::Info {
             title: "sorter.social".to_owned(),
             description: Some("HTTP API for sorter.social".to_string()),
             summary: None,
             terms_of_service: None,
             contact: Some(openapi::Contact {
-                name: Some("Sorter Support".to_owned()),
+                name: Some("support".to_owned()),
                 url: None,
                 email: Some("hi@sorter.social".to_owned()),
                 extensions: Default::default(),
@@ -132,5 +118,27 @@ fn api() -> OpenApi {
         tags: vec![],
         external_docs: None,
         extensions: Default::default(),
-    }
+    };
+
+    let routes = ApiRouter::new()
+        .api_route("/docs", Swagger::new("/api.json").axum_route())
+        .api_route("/health", get(health))
+        .api_route("/protected", get(protected_route))
+        .nest("/keys", api_key::routes())
+        .nest("/entity", entity::routes())
+        .nest("/entity_relationships", entity_relationships::routes())
+        .nest("/vote", vote::routes())
+        .nest("/rank", pagerank::routes())
+        .layer(middleware::from_fn_with_state(
+            app_state.clone(),
+            auth_middleware::try_auth,
+        ));
+
+    ApiRouter::new()
+        .nest("/api", routes)
+        .route("/api.json", get(api_json))
+        .finish_api(&mut api)
+        .with_state(app_state)
+        .layer(TraceLayer::new_for_http())
+        .layer(Extension(api))
 }
