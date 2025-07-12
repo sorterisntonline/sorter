@@ -16,7 +16,7 @@ use aide::{
         IntoApiResponse,
         routing::{get, get_with},
     },
-    openapi::{self, OpenApi},
+    openapi::{self, OpenApi, SecurityScheme},
     swagger::Swagger,
     transform::TransformOpenApi,
 };
@@ -161,4 +161,13 @@ fn api_transform(api: TransformOpenApi) -> TransformOpenApi {
             url: None,
             extensions: Default::default(),
         })
+        .security_scheme(
+            "ApiKey",
+            SecurityScheme::ApiKey {
+                location: openapi::ApiKeyLocation::Header,
+                name: "Authorization".to_owned(),
+                description: Some("API key for authentication, starts with `Bearer `".to_owned()),
+                extensions: Default::default(),
+            },
+        )
 }

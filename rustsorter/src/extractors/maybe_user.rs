@@ -1,4 +1,4 @@
-use aide::OperationIo;
+use aide::{OperationInput, OperationIo, transform::TransformOperation};
 use axum::{extract::FromRequestParts, http::request::Parts};
 
 use crate::models::{Error, User};
@@ -19,8 +19,16 @@ where
     }
 }
 
-#[derive(OperationIo)]
 pub struct AuthenticatedUser(pub User);
+
+impl OperationInput for AuthenticatedUser {
+    fn operation_input(
+        _ctx: &mut aide::generate::GenContext,
+        operation: &mut aide::openapi::Operation,
+    ) {
+        let _ = TransformOperation::new(operation).security_requirement("ApiKey");
+    }
+}
 
 impl<S> FromRequestParts<S> for AuthenticatedUser
 where
