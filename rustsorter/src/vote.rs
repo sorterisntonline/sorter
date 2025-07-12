@@ -1,6 +1,6 @@
 use aide::axum::{
     ApiRouter,
-    routing::{get, post},
+    routing::{get_with, post_with},
 };
 use axum::{
     extract::{Path, State},
@@ -18,7 +18,7 @@ use crate::{
     models::{Error, IntoNotFound, Json, MapErrorSqlx},
 };
 
-#[derive(Serialize, Debug, sqlx::FromRow)]
+#[derive(Serialize, Debug, sqlx::FromRow, JsonSchema)]
 pub struct Vote {
     pub left_entity_pk_namespace: String,
     pub left_entity_pk: String,
@@ -29,6 +29,16 @@ pub struct Vote {
     pub attribute_id: i32,
     pub created_at: NaiveDateTime,
     pub deleted_at: Option<NaiveDateTime>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct VotePath {
+    left_ns: String,
+    left_pk: String,
+    right_ns: String,
+    right_pk: String,
+    user_id: Uuid,
+    attr_id: i32,
 }
 
 #[derive(Deserialize, Debug, JsonSchema)]
@@ -90,26 +100,19 @@ async fn create_vote(
 
 async fn get_vote(
     State(state): State<AppState>,
-    Path((left_ns, left_pk, right_ns, right_pk, user_id, attr_id)): Path<(
-        String,
-        String,
-        String,
-        String,
-        Uuid,
-        i32,
-    )>,
+    Path(path): Path<VotePath>,
 ) -> Result<(StatusCode, Json<Vote>), Error> {
     let (query_left_ns, query_left_pk, query_right_ns, query_right_pk) = if (
-        left_ns.clone(),
-        left_pk.clone(),
+        path.left_ns.clone(),
+        path.left_pk.clone(),
     ) < (
-        right_ns.clone(),
-        right_pk.clone(),
+        path.right_ns.clone(),
+        path.right_pk.clone(),
     ) {
-        (left_ns, left_pk, right_ns, right_pk)
+        (path.left_ns, path.left_pk, path.right_ns, path.right_pk)
     } else {
-        warn!(left_ns, left_pk, right_ns, right_pk; "request path for get_vote received non-canonical order for pair");
-        (left_ns, left_pk, right_ns, right_pk)
+        warn!(left_ns = path.left_ns, left_pk = path.left_pk, right_ns = path.right_ns, right_pk = path.right_pk; "request path for get_vote received non-canonical order for pair");
+        (path.left_ns, path.left_pk, path.right_ns, path.right_pk)
     };
 
     let vote = sqlx::query_file_as!(
@@ -119,8 +122,8 @@ async fn get_vote(
         query_left_pk,
         query_right_ns,
         query_right_pk,
-        user_id,
-        attr_id
+        path.user_id,
+        path.attr_id
     )
     .fetch_optional(&state.db)
     .await
@@ -149,9 +152,21 @@ async fn list_votes(State(state): State<AppState>) -> Result<(StatusCode, Json<V
 
 pub fn routes() -> ApiRouter<AppState> {
     ApiRouter::new()
-        .api_route("/", post(create_vote).get(list_votes))
+        .api_route(
+            "/",
+            post_with(create_vote, |op| {
+                op.description("Create a new vote.")
+                    .response::<201, Json<Vote>>()
+            })
+            .get_with(list_votes, |op| {
+                op.description("List all votes.")
+                    .response::<200, Json<Vec<Vote>>>()
+            }),
+        )
         .api_route(
             "/{left_ns}/{left_pk}/{right_ns}/{right_pk}/{attr_id}",
-            get(get_vote),
+            get_with(get_vote, |op| {
+                op.description("Get a vote.").response::<200, Json<Vote>>()
+            }),
         )
 }

@@ -8,12 +8,17 @@ pub mod models;
 pub mod pagerank;
 pub mod pair;
 pub mod vote;
-use std::env;
+use std::{env, sync::Arc};
 
 use aide::{
-    axum::{ApiRouter, routing::get},
+    axum::{
+        ApiRouter,
+        IntoApiResponse,
+        routing::{get, get_with},
+    },
     openapi::{self, OpenApi},
     swagger::Swagger,
+    transform::TransformOpenApi,
 };
 use anyhow::Result;
 use app_state::AppState;
@@ -25,7 +30,8 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use dotenv::dotenv;
-use serde_json::json;
+use schemars::JsonSchema;
+use serde::Serialize;
 use tower_http::trace::TraceLayer;
 
 use crate::{
@@ -33,18 +39,30 @@ use crate::{
     models::{Error, Json},
 };
 
-async fn health() -> (StatusCode, Json<serde_json::Value>) {
+#[derive(Serialize, JsonSchema)]
+struct HealthResponse {
+    status: String,
+    version: String,
+}
+
+async fn health() -> (StatusCode, Json<HealthResponse>) {
     (
         StatusCode::OK,
-        Json(json!({
-            "status": "healthy",
-            "version": env!("CARGO_PKG_VERSION")
-        })),
+        Json(HealthResponse {
+            status: "healthy".to_string(),
+            version: env!("CARGO_PKG_VERSION").to_string(),
+        }),
     )
 }
 
-async fn api_json(Extension(api): Extension<OpenApi>) -> Json<OpenApi> {
-    Json(api)
+async fn api_json(Extension(api): Extension<Arc<OpenApi>>) -> impl IntoApiResponse {
+    Json(api).into_response()
+}
+
+#[derive(Serialize, JsonSchema)]
+struct ProtectedResponse {
+    message: String,
+    authenticated_user: String,
 }
 
 async fn protected_route(MaybeUser(maybe_user): MaybeUser) -> Response {
@@ -52,10 +70,10 @@ async fn protected_route(MaybeUser(maybe_user): MaybeUser) -> Response {
         None => Error::NoCredentials.into_response(),
         Some(user) => (
             StatusCode::OK,
-            Json(json!({
-                "message": format!("Hello, {}! This is a protected route.", user.auth0_sub),
-                "authenticated_user": user.auth0_sub
-            })),
+            Json(ProtectedResponse {
+                message: format!("Hello, {}! This is a protected route.", user.auth0_sub),
+                authenticated_user: user.auth0_sub,
+            }),
         )
             .into_response(),
     }
@@ -92,38 +110,27 @@ async fn main() -> Result<(), anyhow::Error> {
 }
 
 fn router(app_state: AppState) -> Router {
-    let mut api = OpenApi {
-        info: openapi::Info {
-            title: "sorter.social".to_owned(),
-            description: Some("HTTP API for sorter.social".to_string()),
-            summary: None,
-            terms_of_service: None,
-            contact: Some(openapi::Contact {
-                name: Some("support".to_owned()),
-                url: None,
-                email: Some("hi@sorter.social".to_owned()),
-                extensions: Default::default(),
-            }),
-            license: None,
-            version: env!("CARGO_PKG_VERSION").to_owned(),
-            extensions: Default::default(),
-        },
-        openapi: "".into(),
-        json_schema_dialect: None,
-        servers: vec![],
-        paths: None,
-        webhooks: Default::default(),
-        components: None,
-        security: vec![],
-        tags: vec![],
-        external_docs: None,
-        extensions: Default::default(),
-    };
-
     let routes = ApiRouter::new()
-        .api_route("/docs", Swagger::new("/api.json").axum_route())
-        .api_route("/health", get(health))
-        .api_route("/protected", get(protected_route))
+        .api_route(
+            "/docs",
+            get_with(Swagger::new("/api.json").axum_handler(), |op| {
+                op.description("Show this page.")
+            }),
+        )
+        .api_route(
+            "/health",
+            get_with(health, |op| {
+                op.description("Check health of the server.")
+                    .response::<200, Json<HealthResponse>>()
+            }),
+        )
+        .api_route(
+            "/protected",
+            get_with(protected_route, |op| {
+                op.description("Get authenticated user information.")
+                    .response::<200, Json<ProtectedResponse>>()
+            }),
+        )
         .nest("/keys", api_key::routes())
         .nest("/entity", entity::routes())
         .nest("/entity_relationships", entity_relationships::routes())
@@ -134,11 +141,24 @@ fn router(app_state: AppState) -> Router {
             auth_middleware::try_auth,
         ));
 
+    let mut api = OpenApi::default();
     ApiRouter::new()
         .nest("/api", routes)
         .route("/api.json", get(api_json))
-        .finish_api(&mut api)
+        .finish_api_with(&mut api, api_transform)
         .with_state(app_state)
         .layer(TraceLayer::new_for_http())
-        .layer(Extension(api))
+        .layer(Extension(Arc::new(api)))
+}
+
+fn api_transform(api: TransformOpenApi) -> TransformOpenApi {
+    api.title("sorter.social")
+        .description("HTTP API for sorter.social")
+        .version(env!("CARGO_PKG_VERSION"))
+        .contact(openapi::Contact {
+            name: Some("support".to_owned()),
+            email: Some("hi@sorter.social".to_owned()),
+            url: None,
+            extensions: Default::default(),
+        })
 }

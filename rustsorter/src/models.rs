@@ -1,6 +1,6 @@
 use std::fmt::{self, Display};
 
-use aide::OperationIo;
+use aide::{OperationInput, OperationIo, OperationOutput};
 use axum::{
     extract::{FromRequest, rejection::JsonRejection},
     http::StatusCode,
@@ -8,6 +8,7 @@ use axum::{
 };
 use chrono::NaiveDateTime;
 use log::{error, warn};
+use schemars::JsonSchema;
 use serde::Serialize;
 use serde_json::json;
 use sqlx::{Acquire, Postgres, postgres::PgQueryResult};
@@ -17,14 +18,40 @@ pub trait PgAcquire<'a>: Acquire<'a, Database = Postgres> {}
 
 impl<'a, A: Acquire<'a, Database = Postgres>> PgAcquire<'a> for A {}
 
-#[derive(FromRequest, OperationIo)]
-#[aide(json_schema)]
+#[derive(FromRequest)]
 #[from_request(via(axum::Json), rejection(Error))]
 pub struct Json<T>(pub T);
 
 impl<T: Serialize> IntoResponse for Json<T> {
     fn into_response(self) -> Response {
         axum::Json(self.0).into_response()
+    }
+}
+
+impl<T: JsonSchema> OperationInput for Json<T> {
+    fn operation_input(
+        ctx: &mut aide::generate::GenContext,
+        operation: &mut aide::openapi::Operation,
+    ) {
+        axum::Json::<T>::operation_input(ctx, operation);
+    }
+}
+
+impl<T: JsonSchema> OperationOutput for Json<T> {
+    type Inner = T;
+
+    fn operation_response(
+        ctx: &mut aide::generate::GenContext,
+        operation: &mut aide::openapi::Operation,
+    ) -> Option<aide::openapi::Response> {
+        axum::Json::<T>::operation_response(ctx, operation)
+    }
+
+    fn inferred_responses(
+        ctx: &mut aide::generate::GenContext,
+        operation: &mut aide::openapi::Operation,
+    ) -> Vec<(Option<u16>, aide::openapi::Response)> {
+        axum::Json::<T>::inferred_responses(ctx, operation)
     }
 }
 

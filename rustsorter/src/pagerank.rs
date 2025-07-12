@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use aide::axum::{ApiRouter, routing::post};
+use aide::axum::{ApiRouter, routing::post_with};
 use axum::extract::State;
 use graph::prelude::*;
 use log::{error, info, warn};
@@ -289,5 +289,11 @@ async fn rank_children_handler(
 }
 
 pub fn routes() -> ApiRouter<AppState> {
-    ApiRouter::new().api_route("/", post(rank_children_handler))
+    ApiRouter::new().api_route(
+        "/",
+        post_with(rank_children_handler, |op| {
+            op.description("Rank children of a given entity.")
+                .response::<200, Json<RankingResponse>>()
+        }),
+    )
 }

@@ -1,6 +1,6 @@
 use aide::axum::{
     ApiRouter,
-    routing::{get, post},
+    routing::{get_with, post_with},
 };
 use axum::{
     extract::{Extension, State},
@@ -36,7 +36,7 @@ pub struct ApiKeyDb {
     pub active: bool,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, JsonSchema)]
 pub struct ApiKeyResponse {
     pub id: i32,
     pub auth0_sub: String,
@@ -59,10 +59,20 @@ impl From<ApiKeyDb> for ApiKeyResponse {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, JsonSchema)]
+pub struct ListKeysResponse {
+    pub api_keys: Vec<ApiKeyResponse>,
+}
+
+#[derive(Serialize, Debug, JsonSchema)]
 pub struct NewApiKeyResponse {
     pub name: String,
     pub full_key: String,
+    pub message: String,
+}
+
+#[derive(Serialize, Debug, JsonSchema)]
+pub struct RevokeKeyResponse {
     pub message: String,
 }
 
@@ -264,7 +274,7 @@ async fn revoke_key<'e, E: PgExecutor<'e>>(
 async fn list_keys(
     State(state): State<AppState>,
     Extension(user): Extension<User>,
-) -> Result<(StatusCode, Json<serde_json::Value>), Error> {
+) -> Result<(StatusCode, Json<ListKeysResponse>), Error> {
     debug!("list_keys called");
 
     debug!(user = user.auth0_sub; "authenticated user for list_keys");
@@ -281,7 +291,9 @@ async fn list_keys(
 
     Ok((
         StatusCode::OK,
-        Json(serde_json::json!({ "api_keys": response_keys })),
+        Json(ListKeysResponse {
+            api_keys: response_keys,
+        }),
     ))
 }
 
@@ -299,11 +311,14 @@ async fn revoke_route(
     State(state): State<AppState>,
     Extension(user): Extension<User>,
     Json(payload): Json<KeyNameRequest>,
-) -> Result<Json<serde_json::Value>, Error> {
+) -> Result<(StatusCode, Json<RevokeKeyResponse>), Error> {
     revoke_key(&state.db, &payload.name, &user.auth0_sub).await?;
 
-    Ok(Json(
-        serde_json::json!({ "message": "API key revoked successfully." }),
+    Ok((
+        StatusCode::OK,
+        Json(RevokeKeyResponse {
+            message: "API key revoked successfully.".to_owned(),
+        }),
     ))
 }
 
@@ -322,7 +337,29 @@ async fn regenerate_key(
 
 pub fn routes() -> ApiRouter<AppState> {
     ApiRouter::new()
-        .api_route("/", get(list_keys).post(post_route))
-        .api_route("/revoke", post(revoke_route))
-        .api_route("/regenerate", post(regenerate_key))
+        .api_route(
+            "/",
+            get_with(list_keys, |op| {
+                op.description("List all API keys for the authenticated user.")
+                    .response::<200, Json<ListKeysResponse>>()
+            })
+            .post_with(post_route, |op| {
+                op.description("Create a new API key.")
+                    .response::<201, Json<NewApiKeyResponse>>()
+            }),
+        )
+        .api_route(
+            "/revoke",
+            post_with(revoke_route, |op| {
+                op.description("Revoke an API key.")
+                    .response::<200, Json<RevokeKeyResponse>>()
+            }),
+        )
+        .api_route(
+            "/regenerate",
+            post_with(regenerate_key, |op| {
+                op.description("Regenerate an API key.")
+                    .response::<200, Json<NewApiKeyResponse>>()
+            }),
+        )
 }

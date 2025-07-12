@@ -1,4 +1,4 @@
-use aide::axum::{ApiRouter, routing::post};
+use aide::axum::{ApiRouter, routing::post_with};
 use axum::{
     extract::{Extension, Query, State},
     http::StatusCode,
@@ -52,9 +52,18 @@ pub struct DeleteRelationshipQuery {
 pub fn routes() -> ApiRouter<AppState> {
     ApiRouter::new().api_route(
         "/",
-        post(post_route)
-            .get(list_relationships)
-            .delete(delete_relationship),
+        post_with(post_route, |op| {
+            op.description("Create a new relationship.")
+                .response::<201, Json<EntityRelationship>>()
+        })
+        .get_with(list_relationships, |op| {
+            op.description("List all relationships.")
+                .response::<200, Json<Vec<EntityRelationship>>>()
+        })
+        .delete_with(delete_relationship, |op| {
+            op.description("Delete a relationship.")
+                .response::<204, ()>()
+        }),
     )
 }
 
