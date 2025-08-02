@@ -3,7 +3,7 @@ use axum::{
     response::Response,
 };
 use axum::extract::ws::{Message, WebSocket};
-use futures_util::stream::StreamExt;
+
 
 
 use schemars::JsonSchema;
@@ -11,7 +11,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     app_state::AppState,
-    extractors::ui::{UIResponse, SearchResult, EntityType, ParsedUrl, RedditPath, YouTubeContent},
+    ui::types::{UIResponse, SearchResult, EntityType},
+    ui::url_parser::{ParsedUrl, RedditPath, YouTubeContent},
 };
 
 #[derive(Deserialize, Serialize, JsonSchema, Debug, Clone)]
@@ -184,7 +185,7 @@ async fn handle_search_command(query: String) -> UIResponse {
     }
 }
 
-fn handle_reddit_url(reddit_url: crate::extractors::ui::url_parser::RedditUrl, original_query: &str) -> UIResponse {
+fn handle_reddit_url(reddit_url: crate::ui::url_parser::RedditUrl, original_query: &str) -> UIResponse {
     match reddit_url.path {
         RedditPath::Subreddit { name } => {
             let results = vec![
@@ -276,7 +277,7 @@ fn handle_reddit_url(reddit_url: crate::extractors::ui::url_parser::RedditUrl, o
     }
 }
 
-fn handle_youtube_url(youtube_url: crate::extractors::ui::url_parser::YouTubeUrl, original_query: &str) -> UIResponse {
+fn handle_youtube_url(youtube_url: crate::ui::url_parser::YouTubeUrl, original_query: &str) -> UIResponse {
     match youtube_url.content {
         YouTubeContent::Video { id } => {
             let results = vec![
@@ -348,7 +349,7 @@ fn handle_youtube_url(youtube_url: crate::extractors::ui::url_parser::YouTubeUrl
     }
 }
 
-fn handle_twitter_url(twitter_url: crate::extractors::ui::url_parser::TwitterUrl, original_query: &str) -> UIResponse {
+fn handle_twitter_url(twitter_url: crate::ui::url_parser::TwitterUrl, original_query: &str) -> UIResponse {
     let mut results = vec![
         SearchResult {
             title: format!("@{} on Twitter", twitter_url.username),
@@ -372,7 +373,7 @@ fn handle_twitter_url(twitter_url: crate::extractors::ui::url_parser::TwitterUrl
     UIResponse::search_results(original_query.to_string(), results)
 }
 
-fn handle_github_url(github_url: crate::extractors::ui::url_parser::GitHubUrl, original_query: &str) -> UIResponse {
+fn handle_github_url(github_url: crate::ui::url_parser::GitHubUrl, original_query: &str) -> UIResponse {
     let mut results = vec![
         SearchResult {
             title: format!("GitHub: {}", github_url.username),
@@ -396,7 +397,7 @@ fn handle_github_url(github_url: crate::extractors::ui::url_parser::GitHubUrl, o
     UIResponse::search_results(original_query.to_string(), results)
 }
 
-fn handle_generic_url(generic_url: crate::extractors::ui::url_parser::GenericUrl, original_query: &str) -> UIResponse {
+fn handle_generic_url(generic_url: crate::ui::url_parser::GenericUrl, original_query: &str) -> UIResponse {
     let mut base_url = generic_url.domain.clone();
     if let Some(path) = &generic_url.path {
         base_url.push_str(path);

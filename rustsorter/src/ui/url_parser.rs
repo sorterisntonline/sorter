@@ -4,7 +4,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 #[derive(Parser)]
-#[grammar = "extractors/ui/url.pest"]
+#[grammar = "ui/url.pest"]
 pub struct UrlParser;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]

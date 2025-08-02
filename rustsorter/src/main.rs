@@ -8,6 +8,7 @@ pub mod models;
 pub mod pagerank;
 pub mod pair;
 pub mod vote;
+pub mod ui;
 use std::{env, sync::Arc};
 
 use aide::{
@@ -137,7 +138,7 @@ fn router(app_state: AppState) -> Router {
         .nest("/entity_relationships", entity_relationships::routes())
         .nest("/vote", vote::routes())
         .nest("/rank", pagerank::routes())
-        .nest("/search", extractors::ui::search::routes())
+        .nest("/search", ui::search::routes())
 
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
@@ -155,7 +156,7 @@ fn router(app_state: AppState) -> Router {
 
     // Create separate WebSocket router using regular axum routing
     let ws_router = Router::new()
-        .route("/api/ws", axum_get(extractors::ui::websocket::websocket_handler))
+        .route("/api/ws", axum_get(ui::websocket::websocket_handler))
         .with_state(app_state);
 
     // Merge the routers

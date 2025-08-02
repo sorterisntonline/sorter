@@ -9,7 +9,7 @@ use serde::Deserialize;
 use crate::{
     app_state::AppState, 
     models::Json,
-    extractors::ui::{UIResponse, SearchResult, EntityType},
+    ui::types::{UIResponse, SearchResult, EntityType},
 };
 
 #[derive(Deserialize, JsonSchema)]
