@@ -1,6 +1,16 @@
 // In the future, we will build a robust parser here using nom.
 // For now, this is a placeholder to get the project compiling.
 
+// The parser will follow the following properties:
+// r -> reddit.com/
+// re -> reddit.com/
+// reddit.com/ -> {show infographic explaining that u (sort user posts) and r (sort subreddit posts)} -> reddit.com/r/
+// reddit.com/r/ -> reddit.com/r/{randomly chose sub from list}
+// reddit.com/r/{sub} -> {show subrdedit view} -> reddit.com/r/{sub}/
+// reddit.com/r/{sub}/ -> {show infographic or something} -> reddit.com/r/{sub}/comments/{randomly chose comment from sql}
+
+
+
 use crate::ui::types::{UIResponse, Suggestion};
 
 pub fn parse_for_autocomplete(query: &str) -> UIResponse {
