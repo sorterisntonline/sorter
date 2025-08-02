@@ -8,6 +8,7 @@ pub mod models;
 pub mod pagerank;
 pub mod pair;
 pub mod search;
+pub mod ui_types;
 pub mod vote;
 use std::{env, sync::Arc};
 
