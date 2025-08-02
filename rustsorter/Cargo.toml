@@ -27,6 +27,7 @@ tokio-tungstenite = "0.20"
 pest = "2.7"
 pest_derive = "2.7"
 urlencoding = "2.1"
+fuzzy-matcher = "0.3"
 graph = "0.3.1"
 graph_builder = "0.4.0"
 log = { version = "0.4", features = ["kv", "kv_std"] }

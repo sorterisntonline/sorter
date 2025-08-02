@@ -25,6 +25,10 @@ const SearchResultsPanel = ({ isLoading, searchResults, error }) => {
         return <EntityViewComponent data={uiResponse.data} />;
       case 'ErrorPage':
         return <ErrorPageView data={uiResponse.data} />;
+      case 'NotYetImplemented':
+        return <NotYetImplementedView data={uiResponse.data} />;
+      case 'Suggestions':
+        return <SuggestionsView data={uiResponse.data} />;
       default:
         return (
           <div className="text-orange-600">
@@ -168,6 +172,23 @@ const ErrorPageView = ({ data }) => (
           ))}
         </ul>
       </div>
+    )}
+  </div>
+);
+
+const NotYetImplementedView = ({ data }) => (
+  <div className="bg-yellow-50 border border-yellow-200 p-4 rounded text-center">
+    <h4 className="font-semibold text-yellow-800 text-lg mb-2">{data.feature_name}</h4>
+    <p className="text-yellow-700 mb-4">{data.description}</p>
+    {data.issue_url && (
+      <a 
+        href={data.issue_url} 
+        target="_blank" 
+        rel="noopener noreferrer"
+        className="text-sm text-blue-600 hover:underline"
+      >
+        Track progress on GitHub
+      </a>
     )}
   </div>
 );

@@ -9,9 +9,12 @@ use axum::extract::ws::{Message, WebSocket};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use fuzzy_matcher::FuzzyMatcher;
+use fuzzy_matcher::skim::SkimMatcherV2;
+
 use crate::{
     app_state::AppState,
-    ui::types::{UIResponse, SearchResult, EntityType},
+    ui::types::{UIResponse, SearchResult, EntityType, Suggestion},
     ui::url_parser::{ParsedUrl, RedditPath, YouTubeContent},
 };
 
@@ -19,6 +22,7 @@ use crate::{
 #[serde(tag = "type", content = "data")]
 pub enum ClientCommand {
     Search { query: String },
+    Autocomplete { query: String },
     Vote { item_a_id: String, item_b_id: String, preference: VotePreference },
     NavigateToEntity { entity_id: String },
     FetchVotingPairs { context: String },
@@ -111,6 +115,9 @@ async fn handle_client_message(
     let response = match command {
         ClientCommand::Search { query } => {
             handle_search_command(query).await
+        }
+        ClientCommand::Autocomplete { query } => {
+            handle_autocomplete_command(query).await
         }
         ClientCommand::Vote { item_a_id, item_b_id, preference } => {
             handle_vote_command(item_a_id, item_b_id, preference, app_state).await
@@ -277,147 +284,113 @@ fn handle_reddit_url(reddit_url: crate::ui::url_parser::RedditUrl, original_quer
     }
 }
 
-fn handle_youtube_url(youtube_url: crate::ui::url_parser::YouTubeUrl, original_query: &str) -> UIResponse {
-    match youtube_url.content {
-        YouTubeContent::Video { id } => {
-            let results = vec![
-                SearchResult {
-                    title: format!("YouTube Video: {}", id),
-                    url: format!("https://youtube.com/watch?v={}", id),
-                    snippet: Some("Watch this YouTube video".to_string()),
-                    score: Some(95.0),
-                    entity_type: EntityType::YouTubeVideo,
-                },
-                SearchResult {
-                    title: "Video Comments".to_string(),
-                    url: format!("https://youtube.com/watch?v={}", id),
-                    snippet: Some("View comments and discussions about this video".to_string()),
-                    score: Some(80.0),
-                    entity_type: EntityType::Generic,
-                },
-            ];
-            UIResponse::search_results(original_query.to_string(), results)
-        }
-        YouTubeContent::Channel { id } => {
-            let results = vec![
-                SearchResult {
-                    title: format!("YouTube Channel: {}", id),
-                    url: format!("https://youtube.com/channel/{}", id),
-                    snippet: Some("Browse this YouTube channel's videos".to_string()),
-                    score: Some(95.0),
-                    entity_type: EntityType::Generic,
-                },
-            ];
-            UIResponse::search_results(original_query.to_string(), results)
-        }
-        YouTubeContent::ChannelByName { name } => {
-            let results = vec![
-                SearchResult {
-                    title: format!("YouTube Channel: {}", name),
-                    url: format!("https://youtube.com/c/{}", name),
-                    snippet: Some("Browse this YouTube channel's content".to_string()),
-                    score: Some(95.0),
-                    entity_type: EntityType::Generic,
-                },
-            ];
-            UIResponse::search_results(original_query.to_string(), results)
-        }
-        YouTubeContent::ChannelByHandle { handle } => {
-            let results = vec![
-                SearchResult {
-                    title: format!("YouTube @{}", handle),
-                    url: format!("https://youtube.com/@{}", handle),
-                    snippet: Some("Browse this YouTube channel's content".to_string()),
-                    score: Some(95.0),
-                    entity_type: EntityType::Generic,
-                },
-            ];
-            UIResponse::search_results(original_query.to_string(), results)
-        }
-        YouTubeContent::Playlist { id } => {
-            let results = vec![
-                SearchResult {
-                    title: format!("YouTube Playlist: {}", id),
-                    url: format!("https://youtube.com/playlist?list={}", id),
-                    snippet: Some("View all videos in this playlist".to_string()),
-                    score: Some(95.0),
-                    entity_type: EntityType::Generic,
-                },
-            ];
-            UIResponse::search_results(original_query.to_string(), results)
-        }
-    }
+fn handle_youtube_url(_youtube_url: crate::ui::url_parser::YouTubeUrl, _original_query: &str) -> UIResponse {
+    UIResponse::not_yet_implemented(
+        "YouTube Integration".to_string(),
+        "Full support for YouTube URLs is coming soon. You'll be able to rank videos, comments, and channels.".to_string(),
+        Some("https://github.com/sorter/sorter/issues/124".to_string()),
+    )
 }
 
-fn handle_twitter_url(twitter_url: crate::ui::url_parser::TwitterUrl, original_query: &str) -> UIResponse {
-    let mut results = vec![
-        SearchResult {
-            title: format!("@{} on Twitter", twitter_url.username),
-            url: format!("https://twitter.com/{}", twitter_url.username),
-            snippet: Some(format!("View {}'s Twitter profile and tweets", twitter_url.username)),
-            score: Some(95.0),
-            entity_type: EntityType::TwitterPost,
-        },
-    ];
-
-    if let Some(tweet_id) = twitter_url.tweet_id {
-        results.insert(0, SearchResult {
-            title: format!("Tweet by @{}", twitter_url.username),
-            url: format!("https://twitter.com/{}/status/{}", twitter_url.username, tweet_id),
-            snippet: Some("View this specific tweet and its replies".to_string()),
-            score: Some(98.0),
-            entity_type: EntityType::TwitterPost,
-        });
-    }
-
-    UIResponse::search_results(original_query.to_string(), results)
+fn handle_twitter_url(_twitter_url: crate::ui::url_parser::TwitterUrl, _original_query: &str) -> UIResponse {
+    UIResponse::not_yet_implemented(
+        "Twitter/X Integration".to_string(),
+        "Full support for Twitter/X URLs is in the works. You'll be able to rank tweets and user profiles.".to_string(),
+        Some("https://github.com/sorter/sorter/issues/125".to_string()),
+    )
 }
 
-fn handle_github_url(github_url: crate::ui::url_parser::GitHubUrl, original_query: &str) -> UIResponse {
-    let mut results = vec![
-        SearchResult {
-            title: format!("GitHub: {}", github_url.username),
-            url: format!("https://github.com/{}", github_url.username),
-            snippet: Some(format!("View {}'s GitHub profile and repositories", github_url.username)),
-            score: Some(90.0),
-            entity_type: EntityType::Generic,
-        },
-    ];
-
-    if let Some(repo) = github_url.repo {
-        results.insert(0, SearchResult {
-            title: format!("{}/{}", github_url.username, repo),
-            url: format!("https://github.com/{}/{}", github_url.username, repo),
-            snippet: Some("Browse this GitHub repository".to_string()),
-            score: Some(95.0),
-            entity_type: EntityType::Generic,
-        });
-    }
-
-    UIResponse::search_results(original_query.to_string(), results)
+fn handle_github_url(_github_url: crate::ui::url_parser::GitHubUrl, _original_query: &str) -> UIResponse {
+    UIResponse::not_yet_implemented(
+        "GitHub Integration".to_string(),
+        "Full support for GitHub URLs is planned. You'll be able to rank repositories, issues, and pull requests.".to_string(),
+        Some("https://github.com/sorter/sorter/issues/126".to_string()),
+    )
 }
 
-fn handle_generic_url(generic_url: crate::ui::url_parser::GenericUrl, original_query: &str) -> UIResponse {
-    let mut base_url = generic_url.domain.clone();
-    if let Some(path) = &generic_url.path {
-        base_url.push_str(path);
+fn handle_generic_url(_generic_url: crate::ui::url_parser::GenericUrl, _original_query: &str) -> UIResponse {
+    UIResponse::not_yet_implemented(
+        "Generic URL Support".to_string(),
+        "Full support for arbitrary URLs is not yet available. We're working on a system to scrape and rank any web page.".to_string(),
+        Some("https://github.com/sorter/sorter/issues/127".to_string()),
+    )
+}
+
+async fn handle_autocomplete_command(query: String) -> UIResponse {
+    let query = query.trim();
+    
+    if query.is_empty() {
+        return UIResponse::suggestions(query.to_string(), vec![]);
     }
 
-    let results = vec![
-        SearchResult {
-            title: format!("Website: {}", generic_url.domain),
-            url: if let Some(scheme) = generic_url.scheme {
-                format!("{}://{}", scheme, base_url)
-            } else {
-                format!("https://{}", base_url)
-            },
-            snippet: Some("Visit this website".to_string()),
-            score: Some(75.0),
-            entity_type: EntityType::WebPage,
-        },
+    // URL patterns with their completions and descriptions
+    const URL_PATTERNS: &[(&str, &str, &str)] = &[
+        // Reddit patterns
+        ("r/", "reddit.com/r/", "Browse a subreddit"),
+        ("u/", "reddit.com/u/", "View a Reddit user profile"),
+        ("reddit", "reddit.com/r/", "Browse Reddit"),
+        ("reddit.com", "reddit.com/r/", "Browse Reddit"),
+        
+        // YouTube patterns  
+        ("y/", "youtube.com/", "Search YouTube"),
+        ("yt", "youtube.com/", "Search YouTube"),
+        ("youtu", "youtube.com/", "Search YouTube"),
+        ("youtube", "youtube.com/", "Search YouTube"),
+        
+        // GitHub patterns
+        ("gh/", "github.com/", "Browse GitHub"),
+        ("github", "github.com/", "Browse GitHub"),
+        ("git", "github.com/", "Browse GitHub"),
+        
+        // Twitter patterns
+        ("tw/", "twitter.com/", "Browse Twitter/X"),
+        ("x/", "x.com/", "Browse Twitter/X"),
+        ("twitter", "twitter.com/", "Browse Twitter/X"),
+        
+        // Common full domains
+        ("reddit.com/r/programming", "reddit.com/r/programming", "Programming subreddit"),
+        ("reddit.com/r/askreddit", "reddit.com/r/askreddit", "AskReddit subreddit"),
+        ("youtube.com/watch", "youtube.com/watch?v=", "Watch a YouTube video"),
+        ("github.com/microsoft/vscode", "github.com/microsoft/vscode", "Visual Studio Code repository"),
     ];
 
-    UIResponse::search_results(original_query.to_string(), results)
+    let matcher = SkimMatcherV2::default();
+    let mut suggestions = Vec::new();
+
+    // Exact prefix matches (highest priority)
+    for (pattern, completion, description) in URL_PATTERNS {
+        if pattern.starts_with(query.to_lowercase().as_str()) {
+            suggestions.push(Suggestion {
+                text: completion.to_string(),
+                completion: completion.to_string(),
+                description: Some(description.to_string()),
+                score: 100.0 - (pattern.len() as f64 - query.len() as f64), // Shorter remaining = higher score
+            });
+        }
+    }
+
+    // Fuzzy matches (lower priority)
+    for (pattern, completion, description) in URL_PATTERNS {
+        if let Some(score) = matcher.fuzzy_match(pattern, query) {
+            // Avoid duplicates from exact matches
+            if !suggestions.iter().any(|s| s.completion == *completion) {
+                suggestions.push(Suggestion {
+                    text: completion.to_string(),
+                    completion: completion.to_string(),
+                    description: Some(description.to_string()),
+                    score: score as f64,
+                });
+            }
+        }
+    }
+
+    // Sort by score (descending)
+    suggestions.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    
+    // Limit to top 5 suggestions
+    suggestions.truncate(5);
+
+    UIResponse::suggestions(query.to_string(), suggestions)
 }
 
 async fn handle_vote_command(

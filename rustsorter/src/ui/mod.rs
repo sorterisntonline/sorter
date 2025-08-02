@@ -1,4 +1,3 @@
-pub mod search;
 pub mod types;
 pub mod url_parser;
 pub mod websocket;

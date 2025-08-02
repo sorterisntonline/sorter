@@ -138,7 +138,6 @@ fn router(app_state: AppState) -> Router {
         .nest("/entity_relationships", entity_relationships::routes())
         .nest("/vote", vote::routes())
         .nest("/rank", pagerank::routes())
-        .nest("/search", ui::search::routes())
 
         .layer(middleware::from_fn_with_state(
             app_state.clone(),

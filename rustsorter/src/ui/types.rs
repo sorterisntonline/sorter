@@ -9,6 +9,8 @@ pub enum UIResponse {
     VotingPairs(VotingPairsData),
     EntityView(EntityViewData),
     ErrorPage(ErrorPageData),
+    NotYetImplemented(NotYetImplementedData),
+    Suggestions(SuggestionsData),
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
@@ -44,6 +46,27 @@ pub struct ErrorPageData {
     pub error_type: String,
     pub message: String,
     pub suggestions: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct NotYetImplementedData {
+    pub feature_name: String,
+    pub description: String,
+    pub issue_url: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct SuggestionsData {
+    pub query: String,
+    pub suggestions: Vec<Suggestion>,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct Suggestion {
+    pub text: String,
+    pub completion: String,
+    pub description: Option<String>,
+    pub score: f64,
 }
 
 // Supporting types
@@ -157,6 +180,21 @@ impl UIResponse {
                 "Try a different URL".to_string(),
                 "Check your internet connection".to_string(),
             ],
+        })
+    }
+
+    pub fn not_yet_implemented(feature_name: String, description: String, issue_url: Option<String>) -> Self {
+        UIResponse::NotYetImplemented(NotYetImplementedData {
+            feature_name,
+            description,
+            issue_url,
+        })
+    }
+
+    pub fn suggestions(query: String, suggestions: Vec<Suggestion>) -> Self {
+        UIResponse::Suggestions(SuggestionsData {
+            query,
+            suggestions,
         })
     }
 }
