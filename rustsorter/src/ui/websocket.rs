@@ -11,7 +11,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     app_state::AppState,
-    ui::types::{UIResponse, SearchResult, EntityType, Suggestion},
+    ui::types::{UIResponse, Suggestion},
+    ui::parser,
 };
 
 #[derive(Deserialize, Serialize, JsonSchema, Debug, Clone)]
@@ -141,52 +142,11 @@ async fn handle_client_message(
 }
 
 async fn handle_search_command(query: String) -> UIResponse {
-    let query = query.trim();
-    
-    if query.is_empty() {
-        return UIResponse::home_page(None);
-    }
-
-    if query.contains("reddit.com") {
-        let results = vec![
-            SearchResult {
-                title: "Reddit URL".to_string(),
-                url: query.to_string(),
-                snippet: Some("Reddit integration is a work in progress.".to_string()),
-                score: Some(90.0),
-                entity_type: EntityType::RedditSubreddit,
-            },
-        ];
-        UIResponse::search_results(query.to_string(), results)
-    } else {
-        UIResponse::not_yet_implemented(
-            "URL Parsing".to_string(),
-            format!("Parsing for '{}' is not yet supported.", query),
-            None,
-        )
-    }
+    parser::parse_for_search(&query)
 }
 
 async fn handle_autocomplete_command(query: String) -> UIResponse {
-    let query = query.trim();
-    
-    if query.is_empty() {
-        return UIResponse::suggestions(query.to_string(), None);
-    }
-
-    // Simplified autocomplete logic for now
-    let suggestion = if "reddit.com/r/".starts_with(query) {
-        Some(Suggestion {
-            text: "reddit.com/r/".to_string(),
-            completion: "reddit.com/r/".to_string(),
-            description: Some("Browse a subreddit".to_string()),
-            score: 100.0,
-        })
-    } else {
-        None
-    };
-
-    UIResponse::suggestions(query.to_string(), suggestion)
+    parser::parse_for_autocomplete(&query)
 }
 
 async fn handle_vote_command(

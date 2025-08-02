@@ -25,6 +25,7 @@ env_logger = { version = "0.11", features = ["kv"] }
 futures-util = "0.3"
 tokio-tungstenite = "0.20"
 urlencoding = "2.1"
+nom = "7.1"
 graph = "0.3.1"
 graph_builder = "0.4.0"
 log = { version = "0.4", features = ["kv", "kv_std"] }
