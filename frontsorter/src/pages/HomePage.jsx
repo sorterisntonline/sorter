@@ -1,10 +1,15 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useDebouncedCallback } from "use-debounce";
+import { searchAPI } from "../services/api.js";
+import SearchResultsPanel from "../components/SearchResultsPanel.jsx";
 
 const HomePage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [inputValue, setInputValue] = useState("");
+  const [searchResults, setSearchResults] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   // Initialize input value from URL query parameter on mount
   useEffect(() => {
@@ -13,11 +18,35 @@ const HomePage = () => {
       // URL decode the parameter value
       const decodedValue = decodeURIComponent(qParam);
       setInputValue(decodedValue);
+      // Also perform search for existing query
+      performSearch(decodedValue);
     }
   }, [searchParams]);
 
-  // Debounced function to update URL query parameter
-  const debouncedUpdateUrl = useDebouncedCallback((value) => {
+  // Function to perform search
+  const performSearch = async (query) => {
+    if (!query.trim()) {
+      setSearchResults(null);
+      setError(null);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const results = await searchAPI.search(query);
+      setSearchResults(results);
+    } catch (err) {
+      setError(err.message);
+      setSearchResults(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Debounced function to update URL query parameter and perform search
+  const debouncedUpdateUrlAndSearch = useDebouncedCallback((value) => {
     const newSearchParams = new URLSearchParams(searchParams);
     
     if (value.trim()) {
@@ -29,13 +58,14 @@ const HomePage = () => {
     }
     
     setSearchParams(newSearchParams);
-  }, 10); // 300ms debounce delay
+    performSearch(value);
+  }, 10); // 10ms debounce delay
 
   // Handle input change
   const handleInputChange = (e) => {
     const value = e.target.value;
     setInputValue(value);
-    debouncedUpdateUrl(value);
+    debouncedUpdateUrlAndSearch(value);
   };
 
   return (
@@ -55,6 +85,13 @@ const HomePage = () => {
             className="w-96 px-4 py-2 text-base border border-gray-300 focus:border-blue-500 focus:outline-none hover:shadow-sm transition-shadow" 
           />
         </div>
+
+        {/* Search Results Panel */}
+        <SearchResultsPanel 
+          isLoading={isLoading}
+          searchResults={searchResults}
+          error={error}
+        />
       </div>
     </div>
   );
