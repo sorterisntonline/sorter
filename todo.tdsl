@@ -1,4 +1,9 @@
 lets use a pest parser/grammar to fully parse the url properly. 
+{
+  on reddit.com/r/programm  (unfinished) -> show "import subrdedit" ui.
+    where unfinished = sql query misses the ns=reddit.sub&pk=programm 
+    where ui = <div> always import reddit hot (not top) </div>
+}
 pk_namespace => ns
 
 append only log arcitecture

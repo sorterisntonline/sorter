@@ -28,6 +28,7 @@ use axum::{
     http::StatusCode,
     middleware,
     response::{IntoResponse, Response},
+    routing::get as axum_get,
 };
 use dotenv::dotenv;
 use schemars::JsonSchema;
@@ -137,19 +138,28 @@ fn router(app_state: AppState) -> Router {
         .nest("/vote", vote::routes())
         .nest("/rank", pagerank::routes())
         .nest("/search", extractors::ui::search::routes())
+
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
             auth_middleware::try_auth,
         ));
 
     let mut api = OpenApi::default();
-    ApiRouter::new()
+    let api_router = ApiRouter::new()
         .nest("/api", routes)
         .route("/api.json", get(api_json))
         .finish_api_with(&mut api, api_transform)
-        .with_state(app_state)
+        .with_state(app_state.clone())
         .layer(TraceLayer::new_for_http())
-        .layer(Extension(Arc::new(api)))
+        .layer(Extension(Arc::new(api)));
+
+    // Create separate WebSocket router using regular axum routing
+    let ws_router = Router::new()
+        .route("/api/ws", axum_get(extractors::ui::websocket::websocket_handler))
+        .with_state(app_state);
+
+    // Merge the routers
+    api_router.merge(ws_router)
 }
 
 fn api_transform(api: TransformOpenApi) -> TransformOpenApi {
