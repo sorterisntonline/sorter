@@ -7,8 +7,6 @@ pub mod extractors;
 pub mod models;
 pub mod pagerank;
 pub mod pair;
-pub mod search;
-pub mod ui_types;
 pub mod vote;
 use std::{env, sync::Arc};
 
@@ -138,7 +136,7 @@ fn router(app_state: AppState) -> Router {
         .nest("/entity_relationships", entity_relationships::routes())
         .nest("/vote", vote::routes())
         .nest("/rank", pagerank::routes())
-        .nest("/search", search::routes())
+        .nest("/search", extractors::ui::search::routes())
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
             auth_middleware::try_auth,

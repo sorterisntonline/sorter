@@ -1,3 +1,4 @@
+lets use a pest parser/grammar to fully parse the url properly. 
 pk_namespace => ns
 
 append only log arcitecture
