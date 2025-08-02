@@ -27,9 +27,10 @@ const HomePage = () => {
           
           if (uiResponse.type === 'Suggestions') {
             setSuggestion(uiResponse.data.suggestion);
+            // Don't hide search results when showing suggestions
           } else {
             setSearchResults(uiResponse);
-            setSuggestion(null);
+            setSuggestion(null); // Hide suggestion when a search result is shown
           }
           
           setIsLoading(false);
@@ -60,86 +61,40 @@ const HomePage = () => {
     };
   }, []);
 
-  // Function to perform search via WebSocket
-  const performSearch = useCallback((query) => {
-    if (!isConnected) {
-      console.log('WebSocket not connected, skipping search');
-      return;
-    }
-
-    if (!query.trim()) {
-      // Send empty search to get homepage
-      wsAPI.search("");
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-    wsAPI.search(query);
-  }, [isConnected]);
-
-  // Initialize input value from URL query parameter
+  // Initialize from URL on first load
   useEffect(() => {
-    const qParam = searchParams.get("q");
+    const qParam = new URLSearchParams(window.location.search).get("q");
     if (qParam && isConnected) {
-      // URL decode the parameter value
       const decodedValue = decodeURIComponent(qParam);
       setInputValue(decodedValue);
-      // Perform search via WebSocket
-      performSearch(decodedValue);
+      wsAPI.updateQuery(decodedValue);
     }
-  }, [searchParams, isConnected, performSearch]);
+  }, [isConnected]);
 
-  // Debounced function for autocomplete (fast)
-  const debouncedAutocomplete = useDebouncedCallback((value) => {
+  // Debounced function to send query updates to the backend
+  const debouncedUpdateQuery = useDebouncedCallback((value) => {
     if (!isConnected) return;
-    
-    if (value.trim().length > 0) {
-      wsAPI.autocomplete(value);
-    } else {
-      setSuggestion(null);
-    }
-  }, 150); // 150ms debounce for autocomplete
+    wsAPI.updateQuery(value);
 
-  // Debounced function to update URL query parameter and perform search (slower)
-  const debouncedUpdateUrlAndSearch = useDebouncedCallback((value) => {
+    // Also update the URL in the background
     const newSearchParams = new URLSearchParams(searchParams);
-    
     if (value.trim()) {
-      // URL encode the value before setting it
-      newSearchParams.set("q", encodeURIComponent(value));
+        newSearchParams.set("q", encodeURIComponent(value));
     } else {
-      // Remove the parameter if the input is empty
-      newSearchParams.delete("q");
+        newSearchParams.delete("q");
     }
-    
-    setSearchParams(newSearchParams);
-    performSearch(value);
-  }, 800); // 800ms debounce delay for search
+    // Use replace to avoid polluting browser history on every keystroke
+    const newUrl = value.trim() ? `?${newSearchParams.toString()}` : window.location.pathname;
+    window.history.replaceState({}, '', newUrl);
+
+  }, 150); // Send updates quickly
 
   // Handle input change
   const handleInputChange = (e) => {
     const value = e.target.value;
     setInputValue(value);
-    
-    // Trigger autocomplete quickly
-    debouncedAutocomplete(value);
-    // Trigger search after a pause
-    debouncedSearch(value);
+    debouncedUpdateQuery(value);
   };
-
-  const debouncedSearch = useDebouncedCallback((value) => {
-    performSearch(value);
-    
-    // Update URL
-    const newSearchParams = new URLSearchParams(searchParams);
-    if (value.trim()) {
-      newSearchParams.set("q", encodeURIComponent(value));
-    } else {
-      newSearchParams.delete("q");
-    }
-    setSearchParams(newSearchParams);
-  }, 800);
 
   const handleKeyDown = (e) => {
     if (e.key === 'Tab' && suggestion) {
@@ -148,13 +103,14 @@ const HomePage = () => {
       setInputValue(completion);
       setSuggestion(null);
       
-      // Immediately perform search and update URL
-      debouncedSearch.cancel(); // Cancel any pending search
-      performSearch(completion);
-      
-      const newSearchParams = new URLSearchParams(searchParams);
+      // Send the completed query to the backend immediately
+      debouncedUpdateQuery.cancel();
+      wsAPI.updateQuery(completion);
+
+      // Update URL
+      const newSearchParams = new URLSearchParams();
       newSearchParams.set("q", encodeURIComponent(completion));
-      setSearchParams(newSearchParams);
+      window.history.pushState({}, '', `?${newSearchParams.toString()}`);
     }
   };
 
@@ -183,7 +139,7 @@ const HomePage = () => {
                 className="absolute top-0 left-0 w-96 px-4 py-2 text-base text-gray-400 pointer-events-none"
                 style={{ zIndex: 1 }}
               >
-                {suggestion.completion}
+                <span className="text-transparent">{inputValue}</span>{suggestion.completion.substring(inputValue.length)}
               </div>
             )}
             {/* Connection status indicator */}

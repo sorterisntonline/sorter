@@ -18,8 +18,7 @@ use crate::{
 #[derive(Deserialize, Serialize, JsonSchema, Debug, Clone)]
 #[serde(tag = "type", content = "data")]
 pub enum ClientCommand {
-    Search { query: String },
-    Autocomplete { query: String },
+    UpdateQuery { query: String },
     Vote { item_a_id: String, item_b_id: String, preference: VotePreference },
     NavigateToEntity { entity_id: String },
     FetchVotingPairs { context: String },
@@ -110,11 +109,8 @@ async fn handle_client_message(
     log::info!("Received WebSocket command: {:?}", command);
 
     let response = match command {
-        ClientCommand::Search { query } => {
-            handle_search_command(query).await
-        }
-        ClientCommand::Autocomplete { query } => {
-            handle_autocomplete_command(query).await
+        ClientCommand::UpdateQuery { query } => {
+            handle_update_query_command(query).await
         }
         ClientCommand::Vote { item_a_id, item_b_id, preference } => {
             handle_vote_command(item_a_id, item_b_id, preference, app_state).await
@@ -141,11 +137,9 @@ async fn handle_client_message(
     Ok(())
 }
 
-async fn handle_search_command(query: String) -> UIResponse {
-    parser::parse_for_search(&query)
-}
-
-async fn handle_autocomplete_command(query: String) -> UIResponse {
+async fn handle_update_query_command(query: String) -> UIResponse {
+    // This will eventually hold the unified parsing logic.
+    // For now, it will just call the autocomplete parser.
     parser::parse_for_autocomplete(&query)
 }
 

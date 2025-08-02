@@ -92,16 +92,9 @@ class WebSocketAPI {
     }
   }
 
-  search(query) {
+  updateQuery(query) {
     this.sendCommand({
-      type: 'Search',
-      data: { query }
-    });
-  }
-
-  autocomplete(query) {
-    this.sendCommand({
-      type: 'Autocomplete',
+      type: 'UpdateQuery',
       data: { query }
     });
   }
