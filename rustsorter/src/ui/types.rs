@@ -11,6 +11,8 @@ pub enum UIResponse {
     ErrorPage(ErrorPageData),
     NotYetImplemented(NotYetImplementedData),
     Suggestions(SuggestionsData),
+    Guide(GuideData),
+    Selection(SelectionData),
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
@@ -59,6 +61,38 @@ pub struct NotYetImplementedData {
 pub struct SuggestionsData {
     pub query: String,
     pub suggestion: Option<Suggestion>,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct GuideData {
+    pub query: String,
+    pub title: String,
+    pub description: String,
+    pub options: Vec<GuideOption>,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct SelectionData {
+    pub query: String,
+    pub title: String,
+    pub description: String,
+    pub items: Vec<SelectionItem>,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct GuideOption {
+    pub key: String,
+    pub label: String,
+    pub description: String,
+    pub completion: String,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct SelectionItem {
+    pub id: String,
+    pub title: String,
+    pub description: Option<String>,
+    pub completion: String,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
@@ -195,6 +229,24 @@ impl UIResponse {
         UIResponse::Suggestions(SuggestionsData {
             query,
             suggestion,
+        })
+    }
+
+    pub fn guide(query: String, title: String, description: String, options: Vec<GuideOption>) -> Self {
+        UIResponse::Guide(GuideData {
+            query,
+            title,
+            description,
+            options,
+        })
+    }
+
+    pub fn selection(query: String, title: String, description: String, items: Vec<SelectionItem>) -> Self {
+        UIResponse::Selection(SelectionData {
+            query,
+            title,
+            description,
+            items,
         })
     }
 }

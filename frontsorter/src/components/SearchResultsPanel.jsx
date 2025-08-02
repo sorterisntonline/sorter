@@ -1,3 +1,5 @@
+import { wsAPI } from '../services/api.js';
+
 const SearchResultsPanel = ({ isLoading, searchResults, error }) => {
   // Don't render anything if there's nothing to show
   if (!isLoading && !searchResults && !error) {
@@ -29,6 +31,10 @@ const SearchResultsPanel = ({ isLoading, searchResults, error }) => {
         return <NotYetImplementedView data={uiResponse.data} />;
       case 'Suggestions':
         return <SuggestionsView data={uiResponse.data} />;
+      case 'Guide':
+        return <GuideView data={uiResponse.data} />;
+      case 'Selection':
+        return <SelectionView data={uiResponse.data} />;
       default:
         return (
           <div className="text-orange-600">
@@ -192,5 +198,91 @@ const NotYetImplementedView = ({ data }) => (
     )}
   </div>
 );
+
+const GuideView = ({ data }) => {
+  const handleOptionClick = (completion) => {
+    wsAPI.updateQuery(completion);
+  };
+
+  return (
+    <div className="bg-blue-50 border border-blue-200 p-6 rounded-lg">
+      <h4 className="font-semibold text-blue-800 text-xl mb-2">{data.title}</h4>
+      <p className="text-blue-700 mb-6">{data.description}</p>
+      
+      <div className="space-y-3">
+        {data.options.map((option, index) => (
+          <button
+            key={option.key}
+            onClick={() => handleOptionClick(option.completion)}
+            className="w-full text-left p-4 bg-white border border-blue-300 rounded-lg hover:bg-blue-50 hover:border-blue-400 transition-colors group"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-mono bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                    {index + 1}
+                  </span>
+                  <span className="font-medium text-gray-900">{option.label}</span>
+                </div>
+                <p className="text-sm text-gray-600 mt-1 ml-8">{option.description}</p>
+              </div>
+              <span className="text-xs text-gray-400 font-mono group-hover:text-gray-600">
+                {option.completion}
+              </span>
+            </div>
+          </button>
+        ))}
+      </div>
+      
+      <p className="text-xs text-blue-600 mt-4">
+        Press the number keys (1-{data.options.length}) or click an option to continue
+      </p>
+    </div>
+  );
+};
+
+const SelectionView = ({ data }) => {
+  const handleItemClick = (completion) => {
+    wsAPI.updateQuery(completion);
+  };
+
+  return (
+    <div className="bg-green-50 border border-green-200 p-6 rounded-lg">
+      <h4 className="font-semibold text-green-800 text-xl mb-2">{data.title}</h4>
+      <p className="text-green-700 mb-6">{data.description}</p>
+      
+      <div className="grid gap-3">
+        {data.items.map((item, index) => (
+          <button
+            key={item.id}
+            onClick={() => handleItemClick(item.completion)}
+            className="text-left p-4 bg-white border border-green-300 rounded-lg hover:bg-green-50 hover:border-green-400 transition-colors group"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-mono bg-green-100 text-green-800 px-2 py-1 rounded">
+                    {index + 1}
+                  </span>
+                  <span className="font-medium text-gray-900">{item.title}</span>
+                </div>
+                {item.description && (
+                  <p className="text-sm text-gray-600 mt-1 ml-8">{item.description}</p>
+                )}
+              </div>
+              <span className="text-xs text-gray-400 font-mono group-hover:text-gray-600">
+                {item.completion}
+              </span>
+            </div>
+          </button>
+        ))}
+      </div>
+      
+      <p className="text-xs text-green-600 mt-4">
+        Press the number keys (1-{data.items.length}) or click an item to select
+      </p>
+    </div>
+  );
+};
 
 export default SearchResultsPanel;

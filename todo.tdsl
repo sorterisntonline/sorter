@@ -1,4 +1,4 @@
-lets use a pest parser/grammar to fully parse the url properly. 
+random subreddit suggestion from list (rust, programming, askreddit, amitheasshole)
 {
   on reddit.com/r/programm  (unfinished) -> show "import subrdedit" ui.
     where unfinished = sql query misses the ns=reddit.sub&pk=programm 

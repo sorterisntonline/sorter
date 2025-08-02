@@ -6,7 +6,7 @@ use nom::{
     IResult,
 };
 
-use crate::ui::types::{UIResponse, Suggestion};
+use crate::ui::types::{UIResponse, Suggestion, GuideOption, SelectionItem};
 
 // --- Data Structures ---
 
@@ -81,8 +81,7 @@ pub fn parse_for_autocomplete(query: &str) -> UIResponse {
 
     match reddit_url_parser(query) {
         Ok((remaining, parsed_url)) if remaining.is_empty() => {
-            let suggestion = get_next_step_suggestion(&parsed_url);
-            UIResponse::suggestions(query.to_string(), suggestion)
+            get_next_step_response(&parsed_url, query)
         }
         _ => {
             UIResponse::suggestions(query.to_string(), None)
@@ -90,17 +89,98 @@ pub fn parse_for_autocomplete(query: &str) -> UIResponse {
     }
 }
 
-fn get_next_step_suggestion(url: &ParsedUrl) -> Option<Suggestion> {
+fn get_next_step_response(url: &ParsedUrl, query: &str) -> UIResponse {
     match url {
         ParsedUrl::Reddit(path) => {
-            let (completion, description) = match path {
-                RedditPath::Root => ("reddit.com/r/".to_string(), "Browse subreddits".to_string()),
-                RedditPath::SubredditRoot => ("reddit.com/r/rust".to_string(), "Example subreddit".to_string()),
-                RedditPath::Subreddit(sub) => (format!("reddit.com/r/{}/", sub), "View subreddit".to_string()),
-                RedditPath::SubredditWithSlash(sub) => (format!("reddit.com/r/{}/comments/", sub), "View comments".to_string()),
-                RedditPath::Comments(_) => return None,
-            };
-            Some(Suggestion::new(&completion, &description))
+            match path {
+                RedditPath::Root => {
+                    // Show guide explaining u vs r options
+                    UIResponse::guide(
+                        query.to_string(),
+                        "Choose Reddit Content Type".to_string(),
+                        "What type of Reddit content would you like to explore?".to_string(),
+                        vec![
+                            GuideOption {
+                                key: "r".to_string(),
+                                label: "Subreddits (r/)".to_string(),
+                                description: "Browse and sort subreddit posts".to_string(),
+                                completion: "reddit.com/r/".to_string(),
+                            },
+                            GuideOption {
+                                key: "u".to_string(),
+                                label: "Users (u/)".to_string(),
+                                description: "Browse and sort user posts".to_string(),
+                                completion: "reddit.com/u/".to_string(),
+                            },
+                        ],
+                    )
+                }
+                RedditPath::SubredditRoot => {
+                    // Show selection of popular subreddits
+                    UIResponse::selection(
+                        query.to_string(),
+                        "Choose a Subreddit".to_string(),
+                        "Select a subreddit to explore, or continue typing to search for a specific one.".to_string(),
+                        vec![
+                            SelectionItem {
+                                id: "rust".to_string(),
+                                title: "r/rust".to_string(),
+                                description: Some("Systems programming language focused on safety and performance".to_string()),
+                                completion: "reddit.com/r/rust".to_string(),
+                            },
+                            SelectionItem {
+                                id: "programming".to_string(),
+                                title: "r/programming".to_string(),
+                                description: Some("General programming discussions and news".to_string()),
+                                completion: "reddit.com/r/programming".to_string(),
+                            },
+                            SelectionItem {
+                                id: "askreddit".to_string(),
+                                title: "r/AskReddit".to_string(),
+                                description: Some("Ask and answer thought-provoking questions".to_string()),
+                                completion: "reddit.com/r/AskReddit".to_string(),
+                            },
+                        ],
+                    )
+                }
+                RedditPath::Subreddit(sub) => {
+                    UIResponse::suggestions(
+                        query.to_string(),
+                        Some(Suggestion::new(&format!("reddit.com/r/{}/", sub), "View subreddit"))
+                    )
+                }
+                RedditPath::SubredditWithSlash(sub) => {
+                    // Show guide for subreddit options
+                    UIResponse::guide(
+                        query.to_string(),
+                        format!("Explore r/{}", sub),
+                        format!("Choose how you want to browse r/{}", sub),
+                        vec![
+                            GuideOption {
+                                key: "comments".to_string(),
+                                label: "Comments".to_string(),
+                                description: "Browse and sort individual comments".to_string(),
+                                completion: format!("reddit.com/r/{}/comments/", sub),
+                            },
+                            GuideOption {
+                                key: "hot".to_string(),
+                                label: "Hot Posts".to_string(),
+                                description: "View the hottest posts in this subreddit".to_string(),
+                                completion: format!("reddit.com/r/{}/hot", sub),
+                            },
+                            GuideOption {
+                                key: "top".to_string(),
+                                label: "Top Posts".to_string(),
+                                description: "View the top-rated posts".to_string(),
+                                completion: format!("reddit.com/r/{}/top", sub),
+                            },
+                        ],
+                    )
+                }
+                RedditPath::Comments(_) => {
+                    UIResponse::suggestions(query.to_string(), None)
+                }
+            }
         }
     }
 }
@@ -128,10 +208,17 @@ mod tests {
 
     fn get_suggestion(query: &str) -> Option<String> {
         let response = parse_for_autocomplete(query);
-        if let UIResponse::Suggestions(data) = response {
-            data.suggestion.map(|s| s.completion)
-        } else {
-            None
+        match response {
+            UIResponse::Suggestions(data) => data.suggestion.map(|s| s.completion),
+            UIResponse::Guide(data) => {
+                // For guide responses, return the first option's completion
+                data.options.first().map(|opt| opt.completion.clone())
+            },
+            UIResponse::Selection(data) => {
+                // For selection responses, return the first item's completion
+                data.items.first().map(|item| item.completion.clone())
+            },
+            _ => None,
         }
     }
 
