@@ -72,9 +72,9 @@ pub fn parse_for_autocomplete(query: &str) -> UIResponse {
     }
     
     // Handle incomplete cases that nom struggles with by default
-    if "reddit.com/".starts_with(query) {
+    if "reddit.com/".starts_with(query) && query != "reddit.com/" {
         return UIResponse::suggestions(query.to_string(), Some(Suggestion::new("reddit.com/", "Go to Reddit")));
-    } else if "reddit.com/r/".starts_with(query) {
+    } else if "reddit.com/r/".starts_with(query) && query != "reddit.com/r/" {
         return UIResponse::suggestions(query.to_string(), Some(Suggestion::new("reddit.com/r/", "Browse subreddits")));
     }
 
