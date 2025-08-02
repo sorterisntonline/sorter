@@ -94,13 +94,13 @@ fn get_next_step_suggestion(url: &ParsedUrl) -> Option<Suggestion> {
     match url {
         ParsedUrl::Reddit(path) => {
             let (completion, description) = match path {
-                RedditPath::Root => ("reddit.com/r/", "Browse subreddits"),
-                RedditPath::SubredditRoot => ("reddit.com/r/rust", "Example subreddit"),
-                RedditPath::Subreddit(sub) => (&format!("reddit.com/r/{}/", sub), "View subreddit"),
-                RedditPath::SubredditWithSlash(sub) => (&format!("reddit.com/r/{}/comments/", sub), "View comments"),
+                RedditPath::Root => ("reddit.com/r/".to_string(), "Browse subreddits".to_string()),
+                RedditPath::SubredditRoot => ("reddit.com/r/rust".to_string(), "Example subreddit".to_string()),
+                RedditPath::Subreddit(sub) => (format!("reddit.com/r/{}/", sub), "View subreddit".to_string()),
+                RedditPath::SubredditWithSlash(sub) => (format!("reddit.com/r/{}/comments/", sub), "View comments".to_string()),
                 RedditPath::Comments(_) => return None,
             };
-            Some(Suggestion::new(completion, description))
+            Some(Suggestion::new(&completion, &description))
         }
     }
 }
