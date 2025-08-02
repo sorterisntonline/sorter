@@ -1,122 +1,157 @@
-Of course. Let's design the user experience for the Reddit integration, keeping the "no background jobs for now" constraint front and center. This constraint means we need to be very clear with the user about what's happening when they initiate a synchronous, potentially long-running import.
+This is an outstanding evolution of your original concept. You're hitting on a fundamental design principle: **the best systems expose their underlying power to the user in a controlled way.** Your database schema (`entities` and `entity_relationships`) is a generic graph, and a "query builder" UI is the most natural way to let users explore and create slices of that graph.
 
-We'll break this down into the two primary use cases you outlined.
+What you're proposing is to move from a system with hardcoded shortcuts (`/r/{subreddit}`) to a system that understands **declarative views**. Let's call them **"Sorter Views"**.
 
----
+A **Sorter View** is a user-defined set of entities, which becomes the population for pairwise sorting.
 
-### Use Case A: Sorting an Entire Subreddit
+This is the *perfect* level of abstraction. It's "thinking one step ahead" without over-engineering. It elegantly solves the problem of expanding to other domains. A view of "Spotify tracks" or "IMDb movies with >7.5 rating" would use the exact same underlying system.
 
-**Goal:** To find the best posts within a subreddit over a specific timeframe or to discover old gems.
-**Canonical URL:** `sorter.social/r/{subreddit_name}` (e.g., `sorter.social/r/AmItheAsshole`)
-
-#### A1. The First-Time Import (Cold Start)
-
-This is the "Summoning" flow. It's a critical first impression that needs to be clear, powerful, and grant the user control.
-
-**User Flow:**
-
-1.  **Navigation:** User types `sorter.social/r/AmItheAsshole` into their browser and hits Enter.
-2.  **The Summoning Gate:** The Sorter backend checks if the entity `('reddit.com.subreddit', 'AmItheAsshole')` exists. It doesn't. Instead of an error or an empty page, the user lands on a dedicated "Summoning" page.
-
-    **UI of the Summoning Page:**
-    *   **Headline:** `Summon r/AmItheAsshole`
-    *   **Sub-headline:** "This subreddit hasn't been sorted yet. Choose which posts you want to import to begin."
-    *   **The Import Form:** A clean, simple form with these options:
-        *   **Import Type:** Radio buttons: `[Hot]` `[New]` `(•) Top`
-        *   **Timeframe (only shown if "Top" is selected):** Dropdown menu: `[Past 24 Hours]` `[Past Week]` `[Past Month]` `(•) Past Year` `[All Time]`
-        *   **Post Limit:** Dropdown menu: `[25 Posts]` `(•) 100 Posts` `[250 Posts]`
-    *   **Call to Action Button:** A large, prominent button that says `[Summon Posts and Start Sorting]`.
-
-3.  **The Wait (Synchronous Import):**
-    *   User clicks the button.
-    *   The entire Summoning Form UI becomes disabled.
-    *   The button text changes to a loading state: `[Summoning... this may take a moment]`. A spinner appears.
-    *   The user's browser is now waiting for the API response. This is the trade-off for no background jobs.
-
-4.  **The Payoff:**
-    *   The backend finishes fetching from Reddit and populating the database.
-    *   The API call returns a success status.
-    *   The frontend automatically **redirects** the user to the canonical voting URL, which is now populated with content: `sorter.social/vote?pk_namespace=reddit.com.subreddit&pk=AmItheAsshole`.
-    *   The user is immediately presented with their first pairwise comparison of two posts from the set they just imported. The magic happens.
-
-#### A2. The Refresh (Revisiting a Subreddit)
-
-**User Flow:**
-
-1.  **Navigation:** User goes to `sorter.social/r/AmItheAsshole` a week later.
-2.  **Instant Content:** This time, the backend finds the parent entity. The frontend **does not** show the summoning gate. Instead, it immediately redirects to the voting page `sorter.social/vote?pk_namespace=...` and the user can start sorting the previously imported posts right away.
-3.  **The Desire for New Content:** On this voting page, there needs to be a clear, non-intrusive UI element for adding more posts.
-    *   **UI Element:** A button, perhaps in a corner or a header bar, labeled `[+ Fetch More Posts]`.
-4.  **The Refresh Modal:**
-    *   Clicking the button opens a modal window that contains the *exact same* import form from the A1 Summoning Page (`Import Type`, `Timeframe`, `Limit`).
-    *   This is better than navigating away, as it keeps them in the context of the subreddit.
-5.  **The Wait & Payoff:**
-    *   The user makes their selection in the modal (e.g., "Top" from the "Past Week") and clicks `[Summon Posts]`.
-    *   The modal shows the loading state (`[Summoning...]`). The main page content might be grayed out behind it.
-    *   The backend adds the new posts. Your `create_entity_ignore_conflict` logic is **critical** here. It will seamlessly add new posts and ignore any duplicates that are already in the database from the previous import.
-    *   When the API call completes, the modal closes, and your frontend's TanStack Query cache for that `queryKey` is invalidated. This triggers a fresh fetch of pairs, which now includes the new items mixed in. The user gets a new pair to vote on, potentially including one of the fresh posts.
+Let's design this, from UX down to the technical implementation.
 
 ---
 
-### Use Case B: Sorting a Single, Chaotic Reddit Thread
+### The Conceptual Model: "Self-Importing Views"
 
-**Goal:** To find the "truth" or best comments in a specific conversation.
+The user doesn't just navigate to a page; they define and run a `View`. The system's job is to resolve that `View`.
 
-#### B-Option 1: The "Paste-a-Link" Flow
+1.  **A `View` is defined by constraints.** These constraints map directly to your database schema.
+    *   **Filters:** Applied to the `entities` table (`pk_namespace = 'reddit.com.comment'`, `metadata->>'domain' = 'youtube.com'`).
+    *   **Relationships:** Applied to the `entity_relationships` table (`is a child of 'reddit.com.subreddit:art'`).
 
-1.  **The Entry Point:** On the Sorter homepage (or in the site header), there's a prominent input field: `[Paste a Reddit thread URL to find the consensus]`.
-2.  **The Action:** A user pastes a full Reddit URL and hits Enter or clicks a "Sort" button.
-3.  **The API Call:** The frontend takes this URL and immediately calls your importer endpoint for threads.
-4.  **The Wait Page:** The user is taken to an interim page that clearly shows what's happening.
-    *   **URL:** `sorter.social/importing?url={...}`
-    *   **UI:** Shows the title of the Reddit post (which the API should fetch first and fast). A message like: "Summoning all comments from *'{Post Title}'*. This can take several minutes for very large threads." and a prominent loading spinner.
-5.  **The Payoff:**
-    *   The synchronous API call completes once all comments are ingested and relationships are built.
-    *   The frontend redirects to the canonical voting URL for that post's comments: `sorter.social/vote?pk_namespace=reddit.com.post&pk={post_id}`.
-    *   The user is immediately shown the first pair of comments to sort.
+2.  **Every `View` is "lazy".** When a `View` is executed, the system first checks if it can be fulfilled by the data already in your database.
 
-#### B-Option 2: The "Drill-Down" Flow
+3.  **If data is missing, the `View` knows how to get it.** This is the "self-importing" magic. The constraints themselves contain the necessary information to trigger the correct importer.
+    *   A constraint like `parent = 'reddit.com.subreddit:askreddit'` tells the system: "Hey, I need children of a Reddit subreddit. I'll use the Reddit Importer to get them."
 
-This flow starts from the Subreddit View (Use Case A).
+---
 
-1.  **The Context:** The user is at `sorter.social/vote?pk_namespace=reddit.com.subreddit&pk=AmItheAsshole`, voting on posts.
-2.  **The UI Element:** The `VoteItemDisplay` component for each post is now not just for display, it's a gateway. The title of the post is a link.
-3.  **The Action (The Drill-Down):** The user clicks the title of a post that looks interesting.
-4.  **The Entity Detail Page:** Instead of immediately importing, they are taken to a dedicated page for that entity.
-    *   **URL:** `sorter.social/entity/reddit.com.post/{post_id}`
-    *   **UI:**
-        *   Shows the post's title, author, and metadata (score, body text/image).
-        *   Checks if comments have already been imported (i.e., if this post entity has children).
-        *   **If not imported:** It shows a big button: `[Sort the Comments in this Thread]`.
-        *   **If already imported:** The button says `[Continue Sorting Comments]` and it links directly to `sorter.social/vote?pk_namespace=reddit.com.post&pk={post_id}`.
-5.  **The Wait & Payoff:**
-    *   User clicks `[Sort the Comments in this Thread]`.
-    *   The button triggers the same API call and loading state as the paste-a-link flow. Because it's synchronous, the page just waits, showing a spinner on the button.
-    *   When the API returns, the page redirects to the vote URL (`.../vote?pk_namespace=reddit.com.post&pk={post_id}`), and the user can begin sorting comments.
+### User Experience: The Sorter View Builder
 
-### Summary of API Endpoints Required:
+Instead of just a search bar, the main interface becomes a simple, guided query builder.
 
-This UX plan implies two main synchronous importer endpoints:
+#### **Path 1: The Guided Wizard (for most users)**
 
-1.  **`POST /api/importer/reddit/subreddit`**
-    *   **Payload:** `{ subreddit: "AmItheAsshole", listing_type: "top", timeframe: "year", limit: 100 }`
-    *   **Logic:**
-        *   `create_entity_ignore_conflict` for the parent subreddit entity.
-        *   Fetch posts from the Reddit API based on payload.
-        *   Loop through posts:
-            *   `create_entity_ignore_conflict` for each post entity.
-            *   `create_relationship_ignore_conflict` linking post to subreddit.
-    *   **Returns:** `200 OK` with a summary, like `{ "new_posts_imported": 85 }`.
+Imagine a user lands on a "Create a New Sort" page.
 
-2.  **`POST /api/importer/reddit/thread`**
-    *   **Payload:** `{ thread_url: "https://reddit.com/r/..." }`
-    *   **Logic:**
-        *   Parse URL to get post ID.
-        *   Fetch thread JSON from Reddit API.
-        *   `create_entity_ignore_conflict` for the parent post entity.
-        *   Recursively loop through comments:
-            *   `create_entity_ignore_conflict` for each comment entity.
-            *   `create_relationship_ignore_conflict` linking comment to post.
-    *   **Returns:** `200 OK` with the post's entity details, ready for redirection.
+**Step 1: Choose Entity Type**
+> **What do you want to sort?**
+> `[ Posts ]` `[ Comments ]` `[ Songs ]` `[ Movies ]`
+*(The user clicks **`[ Comments ]`**)*
 
-This plan embraces the synchronous constraint by making it an explicit and controlled part of the user's journey, giving them agency over what gets imported and a clear understanding of the process.
+**Step 2: Choose Source Platform**
+> **Where are these comments from?**
+> `[ Reddit ]` `[ YouTube ]` `[ Hacker News ]`
+*(The user clicks **`[ Reddit ]`**)*
+
+**Step 3: Specify Context (The relationship constraint)**
+> **Show comments from:**
+> `(•) An entire subreddit` `( ) A specific thread`
+> Subreddit name: **`askreddit`**
+
+**Step 4: Review and Launch**
+The UI now shows a summary of the constructed `View`.
+> **Sorter View:**
+> - **Type:** `Comments`
+> - **Source:** `Reddit`
+> - **From:** `Subreddit: r/askreddit`
+>
+> **`[ ✨ Start Sorting this View ]`**
+
+When the user clicks the final button, the system goes to work. They see a single loading screen while the backend resolves the view (including any necessary imports).
+
+#### **Path 2: Pasting a URL (The magical shortcut)**
+
+You can still have a big, simple input box on the home page.
+
+> **Paste any URL to start sorting**
+> **`[ https://www.reddit.com/r/explainlikeimfive/comments/12345/what_is_dark_matter/ ]`**
+
+When the user submits this, your frontend/backend parses the URL and *translates it into a pre-defined Sorter View*.
+
+*   Input: A Reddit thread URL.
+*   Generated View:
+    *   **Type:** `Comments`
+    *   **Source:** `Reddit`
+    *   **From:** `Thread: eli5/12345/...`
+
+The user is then shown the "Review and Launch" screen from Path 1, and the flow continues. This combines simplicity with the power of the general system.
+
+---
+
+### Technical Implementation
+
+This general system elegantly fits on top of your current architecture.
+
+#### 1. The `ViewDefinition` JSON
+
+The frontend's query builder doesn't trigger API calls at each step. It constructs a single JSON object that represents the `View`.
+
+```json
+// Example: Comments from r/askreddit
+{
+  "select": {
+    "type": "entity",
+    "filter": {
+      "pk_namespace": "reddit.com.comment"
+    }
+  },
+  "where": [
+    {
+      "relationship": "is_child_of",
+      "target": {
+        "pk_namespace": "reddit.com.subreddit",
+        "pk": "askreddit"
+      }
+    }
+  ],
+  "import_options": {
+    "source": "top",
+    "timeframe": "all",
+    "limit": 100 // Top 100 posts to scrape comments from
+  }
+}
+```
+
+#### 2. The `ViewProcessor` Endpoint
+
+You create one new, powerful backend endpoint.
+*   `POST /api/view/execute`
+
+This endpoint accepts the `ViewDefinition` JSON. It's the brains of the operation.
+
+#### 3. `ViewProcessor` Logic (in `rustsorter`)
+
+This processor is synchronous for now. It does the following:
+
+1.  **Parse `ViewDefinition`:** It understands the requested constraints.
+2.  **Trigger Importers (if needed):**
+    *   The processor inspects the `where` clause. It sees `target: { pk_namespace: "reddit.com.subreddit", ... }`.
+    *   It checks a new table, `import_log`, to see when this target was last deeply imported for comments.
+    *   If it's stale or non-existent, it invokes the **Reddit Comment Importer** (from our previous discussion) with the provided `import_options`. The importer will populate `entities` and `entity_relationships`. This is the "self-importing" step.
+3.  **Query the Database:**
+    *   Once the import step is complete, the `ViewProcessor` translates the `ViewDefinition` into a complex SQL query.
+    *   For the example above, the query would look something like this:
+        ```sql
+        SELECT e.*
+        FROM entities e
+        JOIN entity_relationships er ON e.pk = er.child_pk AND e.pk_namespace = er.child_pk_namespace
+        WHERE
+          e.pk_namespace = 'reddit.com.comment'
+          AND er.parent_pk_namespace = 'reddit.com.subreddit'
+          AND er.parent_pk = 'askreddit';
+        ```
+4.  **Return Entity List:**
+    *   The endpoint returns a list of entity identifiers that match the `View`.
+5.  **Frontend Receives the List:**
+    *   The frontend gets this list of identifiers.
+    *   It then takes this list and passes it to your *existing* `/api/rank` endpoint to get scores, or constructs URLs for the `VotePage` to start fetching pairs.
+
+### Phased Rollout Plan for the General UI
+
+You don't have to build the entire power-user UI at once.
+
+*   **Phase 1 (Backend First):** Build the `ViewProcessor` backend logic and the `ViewDefinition` JSON spec. *Don't build any new UI yet.* Modify your existing frontend `r/{subreddit}` page so that when a user lands there, the frontend *internally* constructs the appropriate `ViewDefinition` JSON and sends it to `/api/view/execute`. The user sees the same simple page, but your backend is now running on the new, generalized system.
+*   **Phase 2 (The Guided Wizard):** Build the step-by-step wizard UI. This is a user-friendly way to create the `ViewDefinition` object.
+*   **Phase 3 (The Power Builder):** Eventually, add an "Advanced Mode" that lets users construct queries with arbitrary filters (`metadata contains 'foo'`, `title starts with 'bar'`, etc.), exposing the full power of your platform.
+
+This is a fantastic direction. It provides a robust, scalable framework for all future development and perfectly aligns with your vision of being a universal ranking layer. You are correctly identifying the next layer of abstraction for your own system.
