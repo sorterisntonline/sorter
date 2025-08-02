@@ -8,6 +8,7 @@ const HomePage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [inputValue, setInputValue] = useState("");
   const [searchResults, setSearchResults] = useState(null);
+  const [suggestion, setSuggestion] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -23,7 +24,14 @@ const HomePage = () => {
         // Set up UI update handler
         wsAPI.onUIUpdate((uiResponse) => {
           console.log('Received UI update:', uiResponse);
-          setSearchResults(uiResponse);
+          
+          if (uiResponse.type === 'Suggestions') {
+            setSuggestion(uiResponse.data.suggestion);
+          } else {
+            setSearchResults(uiResponse);
+            setSuggestion(null);
+          }
+          
           setIsLoading(false);
           setError(null);
         });
@@ -82,7 +90,18 @@ const HomePage = () => {
     }
   }, [searchParams, isConnected, performSearch]);
 
-  // Debounced function to update URL query parameter and perform search
+  // Debounced function for autocomplete (fast)
+  const debouncedAutocomplete = useDebouncedCallback((value) => {
+    if (!isConnected) return;
+    
+    if (value.trim().length > 0) {
+      wsAPI.autocomplete(value);
+    } else {
+      setSuggestion(null);
+    }
+  }, 150); // 150ms debounce for autocomplete
+
+  // Debounced function to update URL query parameter and perform search (slower)
   const debouncedUpdateUrlAndSearch = useDebouncedCallback((value) => {
     const newSearchParams = new URLSearchParams(searchParams);
     
@@ -96,13 +115,47 @@ const HomePage = () => {
     
     setSearchParams(newSearchParams);
     performSearch(value);
-  }, 10); // 10ms debounce delay
+  }, 800); // 800ms debounce delay for search
 
   // Handle input change
   const handleInputChange = (e) => {
     const value = e.target.value;
     setInputValue(value);
-    debouncedUpdateUrlAndSearch(value);
+    
+    // Trigger autocomplete quickly
+    debouncedAutocomplete(value);
+    // Trigger search after a pause
+    debouncedSearch(value);
+  };
+
+  const debouncedSearch = useDebouncedCallback((value) => {
+    performSearch(value);
+    
+    // Update URL
+    const newSearchParams = new URLSearchParams(searchParams);
+    if (value.trim()) {
+      newSearchParams.set("q", encodeURIComponent(value));
+    } else {
+      newSearchParams.delete("q");
+    }
+    setSearchParams(newSearchParams);
+  }, 800);
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Tab' && suggestion) {
+      e.preventDefault();
+      const completion = suggestion.completion;
+      setInputValue(completion);
+      setSuggestion(null);
+      
+      // Immediately perform search and update URL
+      debouncedSearch.cancel(); // Cancel any pending search
+      performSearch(completion);
+      
+      const newSearchParams = new URLSearchParams(searchParams);
+      newSearchParams.set("q", encodeURIComponent(completion));
+      setSearchParams(newSearchParams);
+    }
   };
 
   return (
@@ -120,15 +173,23 @@ const HomePage = () => {
               placeholder="Enter a URL" 
               value={inputValue}
               onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
               disabled={!isConnected}
-              className={`w-96 px-4 py-2 text-base border border-gray-300 focus:border-blue-500 focus:outline-none hover:shadow-sm transition-shadow ${
-                !isConnected ? 'bg-gray-100 cursor-not-allowed' : ''
-              }`} 
+              className="w-96 px-4 py-2 text-base border border-gray-300 focus:border-blue-500 focus:outline-none hover:shadow-sm transition-shadow bg-transparent" 
+              style={{ position: 'relative', zIndex: 2 }}
             />
+            {suggestion && inputValue && suggestion.completion.startsWith(inputValue) && (
+              <div 
+                className="absolute top-0 left-0 w-96 px-4 py-2 text-base text-gray-400 pointer-events-none"
+                style={{ zIndex: 1 }}
+              >
+                {suggestion.completion}
+              </div>
+            )}
             {/* Connection status indicator */}
             <div className={`absolute right-2 top-1/2 transform -translate-y-1/2 w-2 h-2 rounded-full ${
               isConnected ? 'bg-green-500' : 'bg-red-500'
-            }`} title={isConnected ? 'Connected' : 'Disconnected'} />
+            }`} title={isConnected ? 'Connected' : 'Disconnected'} style={{ zIndex: 3 }} />
           </div>
         </div>
 

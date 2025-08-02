@@ -99,6 +99,13 @@ class WebSocketAPI {
     });
   }
 
+  autocomplete(query) {
+    this.sendCommand({
+      type: 'Autocomplete',
+      data: { query }
+    });
+  }
+
   vote(itemAId, itemBId, preference) {
     this.sendCommand({
       type: 'Vote',

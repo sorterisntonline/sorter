@@ -58,7 +58,7 @@ pub struct NotYetImplementedData {
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct SuggestionsData {
     pub query: String,
-    pub suggestions: Vec<Suggestion>,
+    pub suggestion: Option<Suggestion>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
@@ -191,10 +191,10 @@ impl UIResponse {
         })
     }
 
-    pub fn suggestions(query: String, suggestions: Vec<Suggestion>) -> Self {
+    pub fn suggestions(query: String, suggestion: Option<Suggestion>) -> Self {
         UIResponse::Suggestions(SuggestionsData {
             query,
-            suggestions,
+            suggestion,
         })
     }
 }

@@ -320,7 +320,7 @@ async fn handle_autocomplete_command(query: String) -> UIResponse {
     let query = query.trim();
     
     if query.is_empty() {
-        return UIResponse::suggestions(query.to_string(), vec![]);
+        return UIResponse::suggestions(query.to_string(), None);
     }
 
     // URL patterns with their completions and descriptions
@@ -390,7 +390,8 @@ async fn handle_autocomplete_command(query: String) -> UIResponse {
     // Limit to top 5 suggestions
     suggestions.truncate(5);
 
-    UIResponse::suggestions(query.to_string(), suggestions)
+    // Return only the best suggestion, if any
+    UIResponse::suggestions(query.to_string(), suggestions.into_iter().next())
 }
 
 async fn handle_vote_command(
