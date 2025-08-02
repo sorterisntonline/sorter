@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     app_state::AppState,
-    ui::types::{UIResponse, Suggestion},
+    ui::types::UIResponse,
     ui::parser,
 };
 

@@ -1,7 +1,7 @@
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_while1},
-    combinator::{map, opt, recognize},
+    combinator::map,
     sequence::{preceded, tuple},
     IResult,
 };
@@ -106,7 +106,7 @@ fn get_next_step_suggestion(url: &ParsedUrl) -> Option<Suggestion> {
 }
 
 
-pub fn parse_for_search(query: &str) -> UIResponse {
+pub fn parse_for_search(_query: &str) -> UIResponse {
     unimplemented!()
 }
 
