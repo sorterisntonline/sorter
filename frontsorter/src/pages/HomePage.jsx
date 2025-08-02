@@ -39,15 +39,22 @@ const HomePage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      <div className="container mx-auto px-4 py-16">
-        <input 
-          type="text" 
-          placeholder="Enter a URL" 
-          value={inputValue}
-          onChange={handleInputChange}
-          className="w-full px-6 py-4 pr-16 text-lg border-2 border-gray-300 focus:border-blue-500 focus:outline-none font-serif" 
-        />
+    <div className="min-h-screen bg-white">
+      {/* Space for future voting pairs */}
+      <div className="h-64"></div>
+      
+      {/* Google-style search interface */}
+      <div className="flex flex-col items-center px-4">
+        <div className="flex items-center gap-3 mb-8">
+          <span className="text-4xl font-serif text-gray-800">sorter</span>
+          <input 
+            type="text" 
+            placeholder="Enter a URL" 
+            value={inputValue}
+            onChange={handleInputChange}
+            className="w-96 px-4 py-2 text-base border border-gray-300 focus:border-blue-500 focus:outline-none hover:shadow-sm transition-shadow" 
+          />
+        </div>
       </div>
     </div>
   );
