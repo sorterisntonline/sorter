@@ -1,10 +1,7 @@
-// This module will contain the `nom`-based parser.
-// We will build it up piece by piece, following TDD.
-
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_while1},
-    combinator::{map, opt},
+    combinator::{map, opt, recognize},
     sequence::{preceded, tuple},
     IResult,
 };
@@ -15,13 +12,8 @@ use crate::ui::types::{UIResponse, Suggestion};
 
 #[derive(Debug, PartialEq)]
 pub enum ParsedUrl {
-    Reddit(RedditUrl),
-    // Other URL types will go here
-}
-
-#[derive(Debug, PartialEq)]
-pub struct RedditUrl {
-    pub path: RedditPath,
+    Reddit(RedditPath),
+    // In the future: YouTube, GitHub, etc.
 }
 
 #[derive(Debug, PartialEq)]
@@ -33,118 +25,100 @@ pub enum RedditPath {
     Comments(String),
 }
 
-// --- Parsers ---
+// --- Parser Implementation ---
 
-fn is_alphanumeric(c: char) -> bool {
-    c.is_alphanumeric()
+fn is_subreddit_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
 }
 
-fn parse_subreddit(input: &str) -> IResult<&str, String> {
-    map(take_while1(is_alphanumeric), |s: &str| s.to_string())(input)
+fn subreddit_parser(input: &str) -> IResult<&str, String> {
+    map(take_while1(is_subreddit_char), |s: &str| s.to_string())(input)
 }
 
-fn parse_reddit_path(input: &str) -> IResult<&str, RedditPath> {
+fn reddit_path_parser(input: &str) -> IResult<&str, RedditPath> {
     alt((
         map(
-            tuple((tag("r/"), parse_subreddit, tag("/comments/"))),
+            tuple((tag("r/"), subreddit_parser, tag("/comments/"))),
             |(_, sub, _)| RedditPath::Comments(sub),
         ),
         map(
-            tuple((tag("r/"), parse_subreddit, tag("/"))),
+            tuple((tag("r/"), subreddit_parser, tag("/"))),
             |(_, sub, _)| RedditPath::SubredditWithSlash(sub),
         ),
         map(
-            tuple((tag("r/"), parse_subreddit)),
+            tuple((tag("r/"), subreddit_parser)),
             |(_, sub)| RedditPath::Subreddit(sub),
         ),
         map(tag("r/"), |_| RedditPath::SubredditRoot),
-        map(tag(""), |_| RedditPath::Root),
+        map(tag(""), |_| RedditPath::Root), // Base case: matches an empty path
     ))(input)
 }
 
-fn parse_reddit_url(input: &str) -> IResult<&str, RedditUrl> {
+fn reddit_url_parser(input: &str) -> IResult<&str, ParsedUrl> {
     map(
-        preceded(opt(tag("reddit.com/")), parse_reddit_path),
-        |path| RedditUrl { path },
+        preceded(tag("reddit.com/"), reddit_path_parser),
+        ParsedUrl::Reddit,
     )(input)
 }
-
 
 // --- Public API ---
 
 pub fn parse_for_autocomplete(query: &str) -> UIResponse {
     let query = query.trim();
-    if query.is_empty() {
-        // We could suggest "r" here if we wanted to be proactive.
-        return UIResponse::suggestions(query.to_string(), None);
+
+    // Handle initial shortcuts that aren't full URLs yet
+    if query.eq_ignore_ascii_case("r") || query.eq_ignore_ascii_case("re") {
+        return UIResponse::suggestions(query.to_string(), Some(Suggestion::new("reddit.com/", "Go to Reddit")));
     }
     
-    // Suggest "reddit.com/" for "r" and "re"
-    if query == "r" || query == "re" {
-        return UIResponse::suggestions(
-            query.to_string(),
-            Some(Suggestion {
-                text: "reddit.com/".to_string(),
-                completion: "reddit.com/".to_string(),
-                description: Some("Go to Reddit root".to_string()),
-                score: 100.0,
-            }),
-        );
+    // Handle incomplete cases that nom struggles with by default
+    if "reddit.com/".starts_with(query) {
+        return UIResponse::suggestions(query.to_string(), Some(Suggestion::new("reddit.com/", "Go to Reddit")));
+    } else if "reddit.com/r/".starts_with(query) {
+        return UIResponse::suggestions(query.to_string(), Some(Suggestion::new("reddit.com/r/", "Browse subreddits")));
     }
 
-    let result = parse_reddit_url(query);
 
-    let suggestion = match result {
+    match reddit_url_parser(query) {
         Ok((remaining, parsed_url)) if remaining.is_empty() => {
-            // We have a full, valid parse. Suggest the next logical step.
-            get_next_step_suggestion(&parsed_url.path)
+            let suggestion = get_next_step_suggestion(&parsed_url);
+            UIResponse::suggestions(query.to_string(), suggestion)
         }
-        Err(nom::Err::Incomplete(_)) => {
-            // The input is a valid *prefix* of a complete parse.
-            // This is the ideal case for autocomplete.
-            get_incomplete_suggestion(query)
+        _ => {
+            UIResponse::suggestions(query.to_string(), None)
         }
-        _ => None, // It's either a failed parse or a partial parse with extra characters
-    };
-
-    UIResponse::suggestions(query.to_string(), suggestion)
+    }
 }
 
-fn get_next_step_suggestion(path: &RedditPath) -> Option<Suggestion> {
-    let (completion, description) = match path {
-        RedditPath::Root => ("reddit.com/r/".to_string(), "Browse subreddits".to_string()),
-        RedditPath::SubredditRoot => ("reddit.com/r/rust".to_string(), "Example subreddit".to_string()),
-        RedditPath::Subreddit(sub) => (format!("reddit.com/r/{}/", sub), "Complete subreddit path".to_string()),
-        RedditPath::SubredditWithSlash(sub) => (format!("reddit.com/r/{}/comments/", sub), "Browse subreddit posts".to_string()),
-        RedditPath::Comments(_) => return None, // No suggestion after comments/
-    };
-
-    Some(Suggestion {
-        text: completion.clone(),
-        completion,
-        description: Some(description),
-        score: 100.0,
-    })
-}
-
-fn get_incomplete_suggestion(query: &str) -> Option<Suggestion> {
-    // This is a simplified version. A more robust implementation would look at
-    // what `nom` needs next. For now, we can use a heuristic.
-    if query.ends_with("r/") {
-        Some(Suggestion {
-            text: "reddit.com/r/rust".to_string(),
-            completion: "reddit.com/r/rust".to_string(),
-            description: Some("Example subreddit".to_string()),
-            score: 100.0,
-        })
-    } else {
-        None
+fn get_next_step_suggestion(url: &ParsedUrl) -> Option<Suggestion> {
+    match url {
+        ParsedUrl::Reddit(path) => {
+            let (completion, description) = match path {
+                RedditPath::Root => ("reddit.com/r/", "Browse subreddits"),
+                RedditPath::SubredditRoot => ("reddit.com/r/rust", "Example subreddit"),
+                RedditPath::Subreddit(sub) => (&format!("reddit.com/r/{}/", sub), "View subreddit"),
+                RedditPath::SubredditWithSlash(sub) => (&format!("reddit.com/r/{}/comments/", sub), "View comments"),
+                RedditPath::Comments(_) => return None,
+            };
+            Some(Suggestion::new(completion, description))
+        }
     }
 }
 
 
 pub fn parse_for_search(query: &str) -> UIResponse {
     unimplemented!()
+}
+
+impl Suggestion {
+    fn new(completion: &str, description: &str) -> Self {
+        Suggestion {
+            text: completion.to_string(),
+            completion: completion.to_string(),
+            description: Some(description.to_string()),
+            score: 100.0,
+        }
+    }
 }
 
 
@@ -165,6 +139,17 @@ mod tests {
     fn test_initial_prompts() {
         assert_eq!(get_suggestion("r"), Some("reddit.com/".to_string()));
         assert_eq!(get_suggestion("re"), Some("reddit.com/".to_string()));
+        assert_eq!(get_suggestion("red"), Some("reddit.com/".to_string()));
+        assert_eq!(get_suggestion("redd"), Some("reddit.com/".to_string()));
+        assert_eq!(get_suggestion("reddi"), Some("reddit.com/".to_string()));
+        assert_eq!(get_suggestion("reddit"), Some("reddit.com/".to_string()));
+        assert_eq!(get_suggestion("reddit."), Some("reddit.com/".to_string()));
+        assert_eq!(get_suggestion("reddit.c"), Some("reddit.com/".to_string()));
+        assert_eq!(get_suggestion("reddit.co"), Some("reddit.com/".to_string()));
+        assert_eq!(get_suggestion("reddit.com"), Some("reddit.com/".to_string()));
+        assert_eq!(get_suggestion("reddit.com/"), Some("reddit.com/r/".to_string()));
+        assert_eq!(get_suggestion("reddit.com/r/"), Some("reddit.com/r/rust".to_string()));
+        assert_eq!(get_suggestion("reddit.com/r/rust"), Some("reddit.com/r/rust/".to_string()));
     }
 
     #[test]
