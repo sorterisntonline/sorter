@@ -1,22 +1,11 @@
 import { Routes, Route } from "react-router-dom";
+import HomePage from "./pages/HomePage";
 import "./App.css";
-
-import Layout from "./Layout";
-import VotePage from "./pages/VotePage";
-import ProfilePage from "./pages/ProfilePage";
 
 function App() {
   return (
     <Routes>
-      {/* Wrap all main pages within the Layout */}
-      <Route path="/" element={<Layout />}>
-        <Route path="vote" element={<VotePage />} />{" "}
-        {/* Keep existing vote page */}
-        <Route path="profile" element={<ProfilePage />} />
-        {/* Add a catch-all or Not Found route if desired */}
-        <Route path="*" element={<div className="p-4">Page Not Found</div>} />
-      </Route>
-      {/* Routes outside the main layout (e.g., login) could go here */}
+      <Route path="/" element={<HomePage />} />
     </Routes>
   );
 }

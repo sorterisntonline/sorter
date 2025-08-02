@@ -1,6 +1,11 @@
 /* Existing CSS can remain if needed, or be removed if fully handled by Tailwind */
 @tailwind base;
 
+/* Make all text use serif fonts */
+body {
+  font-family: Georgia, 'Times New Roman', Times, serif;
+}
+
 
 /* h3 styling is handled inline via Tailwind in EntityDetailsDisplay, but you could define it here if preferred */
 /* h3   { @apply text-2xl font-semibold; } */

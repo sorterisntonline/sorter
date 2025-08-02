@@ -1,3 +1,5 @@
+pk_namespace => ns
+
 append only log arcitecture
 ranking histories
 reddit import api requests + ui
