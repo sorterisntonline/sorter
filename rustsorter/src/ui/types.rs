@@ -13,6 +13,7 @@ pub enum UIResponse {
     Suggestions(SuggestionsData),
     Guide(GuideData),
     Selection(SelectionData),
+    Multiple(MultipleResponseData),
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
@@ -77,6 +78,11 @@ pub struct SelectionData {
     pub title: String,
     pub description: String,
     pub items: Vec<SelectionItem>,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct MultipleResponseData {
+    pub responses: Vec<UIResponse>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
@@ -247,6 +253,12 @@ impl UIResponse {
             title,
             description,
             items,
+        })
+    }
+
+    pub fn multiple(responses: Vec<UIResponse>) -> Self {
+        UIResponse::Multiple(MultipleResponseData {
+            responses,
         })
     }
 }

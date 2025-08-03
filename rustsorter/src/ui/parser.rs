@@ -247,7 +247,34 @@ fn handle_partial_parse(partial: PartialParse, query: &str) -> UIResponse {
 
 fn handle_complete_parse(parsed: ParsedUrl, query: &str) -> UIResponse {
     match parsed {
-        ParsedUrl::Reddit(path) => handle_reddit_path(path, query),
+        ParsedUrl::Reddit(path) => handle_reddit_path_with_suggestion(path, query),
+    }
+}
+
+fn handle_reddit_path_with_suggestion(path: RedditPath, query: &str) -> UIResponse {
+    let main_response = handle_reddit_path_single(path.clone(), query);
+    
+    // Check if we should also provide a suggestion for the next step
+    let suggestion = match &path {
+        RedditPath::Root => {
+            Some(UIResponse::suggestions(
+                query.to_string(),
+                Some(Suggestion::new("reddit.com/r/", "Browse subreddits"))
+            ))
+        }
+        RedditPath::Subreddit(sub) => {
+            Some(UIResponse::suggestions(
+                query.to_string(),
+                Some(Suggestion::new(&format!("reddit.com/r/{}/", sub), "View subreddit"))
+            ))
+        }
+        _ => None,
+    };
+    
+    if let Some(suggestion_response) = suggestion {
+        UIResponse::multiple(vec![suggestion_response, main_response])
+    } else {
+        main_response
     }
 }
 
@@ -274,7 +301,7 @@ fn handle_parse_error(error: ParseError, _query: &str) -> UIResponse {
     }
 }
 
-fn handle_reddit_path(path: RedditPath, query: &str) -> UIResponse {
+fn handle_reddit_path_single(path: RedditPath, query: &str) -> UIResponse {
     match path {
         RedditPath::Root => {
             UIResponse::guide(
