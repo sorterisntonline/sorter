@@ -1,67 +1,4 @@
 import { wsAPI } from '../services/api.js';
-
-const SearchResultsPanel = ({ isLoading, searchResults, error }) => {
-  // Don't render anything if there's nothing to show
-  if (!isLoading && !searchResults && !error) {
-    return null;
-  }
-
-  const renderUIResponse = (uiResponse) => {
-    if (!uiResponse || !uiResponse.type) {
-      // Fallback to JSON display for malformed responses
-      return (
-        <pre className="bg-white p-4 rounded border text-sm overflow-auto max-h-96">
-          {JSON.stringify(uiResponse, null, 2)}
-        </pre>
-      );
-    }
-
-    switch (uiResponse.type) {
-      case 'HomePage':
-        return <HomePageView data={uiResponse.data} />;
-      case 'SearchResults':
-        return <SearchResultsView data={uiResponse.data} />;
-      case 'VotingPairs':
-        return <VotingPairsView data={uiResponse.data} />;
-      case 'EntityView':
-        return <EntityViewComponent data={uiResponse.data} />;
-      case 'ErrorPage':
-        return <ErrorPageView data={uiResponse.data} />;
-      case 'NotYetImplemented':
-        return <NotYetImplementedView data={uiResponse.data} />;
-      case 'Suggestions':
-        return <SuggestionsView data={uiResponse.data} />;
-      case 'Guide':
-        return <GuideView data={uiResponse.data} />;
-      case 'Selection':
-        return <SelectionView data={uiResponse.data} />;
-      default:
-        return (
-          <div className="text-orange-600">
-            Unknown UI response type: {uiResponse.type}
-            <pre className="bg-white p-4 rounded border text-sm overflow-auto max-h-96 mt-2">
-              {JSON.stringify(uiResponse, null, 2)}
-            </pre>
-          </div>
-        );
-    }
-  };
-
-  return (
-    <div>
-      {isLoading && (
-        <div className="text-gray-600">Loading...</div>
-      )}
-      
-      {error && (
-        <div className="text-red-600">Error: {error}</div>
-      )}
-      
-      {searchResults && renderUIResponse(searchResults)}
-    </div>
-  );
-};
-
 // UI Component Renderers
 const HomePageView = ({ data }) => (
   <div className="bg-white p-4 rounded border">
@@ -279,6 +216,21 @@ const SelectionView = ({ data }) => {
       <p className="text-xs text-green-600 mt-4">
         Press the number keys (1-{data.items.length}) or click an item to select
       </p>
+    </div>
+  );
+};
+
+const MultipleResponseView = ({ data }) => {
+  return (
+    <div className="space-y-4">
+      {data.responses.map((response, index) => (
+        <SearchResultsPanel 
+          key={index}
+          searchResults={response}
+          isLoading={false}
+          error={null}
+        />
+      ))}
     </div>
   );
 };

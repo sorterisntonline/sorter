@@ -2,22 +2,33 @@ import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useDebouncedCallback } from "use-debounce";
 import { wsAPI } from "../services/api.js";
-import SearchResultsPanel from "../components/SearchResultsPanel.jsx";
+import UIView from "../components/UIView.jsx";
+import useUIStore from "../store/uiStore.js";
 
 const HomePage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [inputValue, setInputValue] = useState("");
-  const [searchResults, setSearchResults] = useState(null);
-  const [suggestion, setSuggestion] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
+  
+  // Get state and actions from the store
+  const { 
+    suggestion, 
+    guide, 
+    selection, 
+    searchResults, 
+    error, 
+    notYetImplemented,
+    isLoading,
+    handleUIResponse,
+    setLoading,
+    setError 
+  } = useUIStore();
 
   // Initialize WebSocket connection on mount
   useEffect(() => {
     const initializeWebSocket = async () => {
       try {
-        setIsLoading(true);
+        setLoading(true);
         await wsAPI.connect();
         setIsConnected(true);
         
@@ -25,37 +36,21 @@ const HomePage = () => {
         wsAPI.onUIUpdate((uiResponse) => {
           console.log('Received UI update:', uiResponse);
           
-          if (uiResponse.type === 'Suggestions') {
-            setSuggestion(uiResponse.data.suggestion);
-            // Clear search results when showing just suggestions
-            if (!uiResponse.data.suggestion) {
-              setSearchResults(null);
-            }
-          } else {
-            setSearchResults(uiResponse);
-            // Keep suggestions visible alongside other UI responses
-            // Only clear suggestions if this is an empty/error state
-            if (uiResponse.type === 'ErrorPage') {
-              setSuggestion(null);
-            }
-          }
-          
-          setIsLoading(false);
-          setError(null);
+          // Dispatch to the store
+          handleUIResponse(uiResponse);
         });
 
         // Set up error handler
         wsAPI.onError((errorMessage) => {
           console.error('WebSocket error:', errorMessage);
           setError(errorMessage);
-          setIsLoading(false);
         });
 
-        setIsLoading(false);
+        setLoading(false);
       } catch (err) {
         console.error('Failed to connect to WebSocket:', err);
         setError('Failed to connect to server');
-        setIsLoading(false);
+        setLoading(false);
         setIsConnected(false);
       }
     };
@@ -108,7 +103,6 @@ const HomePage = () => {
       e.preventDefault();
       const completion = suggestion.completion;
       setInputValue(completion);
-      setSuggestion(null);
       
       // Send the completed query to the backend immediately
       debouncedUpdateQuery.cancel();
@@ -163,11 +157,18 @@ const HomePage = () => {
           </div>
         )}
 
-        {/* Search Results Panel */}
-        <SearchResultsPanel 
-          isLoading={isLoading}
-          searchResults={searchResults}
-          error={error}
+        {/* UI View - renders based on global state */}
+        <UIView 
+          onCompletionSelect={(completion) => {
+            setInputValue(completion);
+            // Send the query to backend
+            debouncedUpdateQuery.cancel();
+            wsAPI.updateQuery(completion);
+            // Update URL
+            const newSearchParams = new URLSearchParams();
+            newSearchParams.set("q", encodeURIComponent(completion));
+            window.history.pushState({}, '', `?${newSearchParams.toString()}`);
+          }}
         />
       </div>
     </div>
