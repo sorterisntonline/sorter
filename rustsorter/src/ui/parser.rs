@@ -14,6 +14,7 @@ use crate::ui::types::{UIResponse, Suggestion, GuideOption, SelectionItem};
 pub enum ParseResult {
     Partial(PartialParse),
     Complete(ParsedUrl),
+    Error(ParseError),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -21,6 +22,13 @@ pub enum PartialParse {
     Prefix(String),           // "r", "re", "red", etc.
     Domain(String),           // "reddit.c", "reddit.co", etc.
     Path(ParsedUrl, String),  // Complete parse + remaining incomplete part
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum ParseError {
+    InvalidFormat(String),      // Input doesn't match any expected pattern
+    UnsupportedPlatform(String), // Platform not yet supported (e.g., "youtube.com")
+    MalformedUrl(String),       // URL structure is invalid
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -80,6 +88,16 @@ fn reddit_url_parser(input: &str) -> IResult<&str, ParsedUrl> {
 pub fn parse_url(query: &str) -> ParseResult {
     let query = query.trim();
     
+    // Handle empty input
+    if query.is_empty() {
+        return ParseResult::Partial(PartialParse::Prefix("".to_string()));
+    }
+    
+    // Check for unsupported platforms first
+    if let Some(error) = check_unsupported_platforms(query) {
+        return ParseResult::Error(error);
+    }
+    
     // Check if it's an incomplete domain first (more specific)
     if is_incomplete_domain(query, "reddit.com") {
         return ParseResult::Partial(PartialParse::Domain(query.to_string()));
@@ -107,8 +125,21 @@ pub fn parse_url(query: &str) -> ParseResult {
                         path_part.to_string(),
                     ));
                 }
+                // Invalid path after reddit.com/
+                return ParseResult::Error(ParseError::MalformedUrl(
+                    format!("Invalid Reddit path: '{}'", path_part)
+                ));
             }
-            ParseResult::Partial(PartialParse::Prefix(query.to_string()))
+            
+            // Check if it looks like a URL but isn't supported
+            if is_url_like(query) {
+                ParseResult::Error(ParseError::InvalidFormat(
+                    format!("Unable to parse URL: '{}'", query)
+                ))
+            } else {
+                // Treat as unknown prefix for now
+                ParseResult::Partial(PartialParse::Prefix(query.to_string()))
+            }
         }
     }
 }
@@ -136,6 +167,37 @@ fn is_incomplete_domain(input: &str, target: &str) -> bool {
     (input.contains('.') || input.starts_with("reddit."))
 }
 
+fn check_unsupported_platforms(input: &str) -> Option<ParseError> {
+    let unsupported_platforms = [
+        "youtube.com",
+        "youtu.be", 
+        "github.com",
+        "twitter.com",
+        "x.com",
+        "facebook.com",
+        "instagram.com",
+        "tiktok.com"
+    ];
+    
+    for platform in &unsupported_platforms {
+        if input.starts_with(platform) || input.starts_with(&format!("www.{}", platform)) {
+            return Some(ParseError::UnsupportedPlatform(
+                format!("Platform '{}' is not yet supported. Currently only Reddit URLs are supported.", platform)
+            ));
+        }
+    }
+    
+    None
+}
+
+fn is_url_like(input: &str) -> bool {
+    // Check if it looks like a URL (contains domain-like patterns)
+    input.contains('.') && 
+    (input.contains('/') || input.contains('?') || input.contains('#') ||
+     input.starts_with("http://") || input.starts_with("https://") ||
+     input.starts_with("www."))
+}
+
 // --- Public API ---
 
 pub fn parse_for_autocomplete(query: &str) -> UIResponse {
@@ -149,6 +211,7 @@ fn parse_result_to_ui_response(result: ParseResult, query: &str) -> UIResponse {
     match result {
         ParseResult::Partial(partial) => handle_partial_parse(partial, query),
         ParseResult::Complete(parsed) => handle_complete_parse(parsed, query),
+        ParseResult::Error(error) => handle_parse_error(error, query),
     }
 }
 
@@ -185,6 +248,29 @@ fn handle_partial_parse(partial: PartialParse, query: &str) -> UIResponse {
 fn handle_complete_parse(parsed: ParsedUrl, query: &str) -> UIResponse {
     match parsed {
         ParsedUrl::Reddit(path) => handle_reddit_path(path, query),
+    }
+}
+
+fn handle_parse_error(error: ParseError, _query: &str) -> UIResponse {
+    match error {
+        ParseError::InvalidFormat(msg) => {
+            UIResponse::error(
+                "InvalidFormat".to_string(),
+                format!("{} Try typing a Reddit URL like 'reddit.com/r/programming'", msg)
+            )
+        }
+        ParseError::UnsupportedPlatform(msg) => {
+            UIResponse::error(
+                "UnsupportedPlatform".to_string(),
+                format!("{} Support for more platforms is coming soon!", msg)
+            )
+        }
+        ParseError::MalformedUrl(msg) => {
+            UIResponse::error(
+                "MalformedUrl".to_string(),
+                format!("{} Please check the URL format and try again.", msg)
+            )
+        }
     }
 }
 
@@ -451,6 +537,87 @@ mod tests {
                 assert_eq!(data.options[2].completion, "reddit.com/r/programming/top");
             }
             _ => panic!("Expected Guide"),
+        }
+    }
+
+    // Test error handling
+    #[test]
+    fn test_parse_errors() {
+        // Test unsupported platform
+        assert_eq!(
+            parse_url("youtube.com"),
+            ParseResult::Error(ParseError::UnsupportedPlatform(
+                "Platform 'youtube.com' is not yet supported. Currently only Reddit URLs are supported.".to_string()
+            ))
+        );
+
+        // Test malformed Reddit URL
+        assert_eq!(
+            parse_url("reddit.com/invalid"),
+            ParseResult::Error(ParseError::MalformedUrl(
+                "Invalid Reddit path: 'invalid'".to_string()
+            ))
+        );
+
+        // Test invalid URL format
+        assert_eq!(
+            parse_url("not.a.real.domain/path"),
+            ParseResult::Error(ParseError::InvalidFormat(
+                "Unable to parse URL: 'not.a.real.domain/path'".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn test_error_ui_responses() {
+        // Test unsupported platform error UI
+        match parse_for_autocomplete("youtube.com/watch?v=123") {
+            UIResponse::ErrorPage(data) => {
+                assert_eq!(data.error_type, "UnsupportedPlatform");
+                assert!(data.message.contains("youtube.com"));
+                assert!(data.message.contains("not yet supported"));
+            }
+            _ => panic!("Expected ErrorPage for YouTube URL"),
+        }
+
+        // Test malformed Reddit URL error UI
+        match parse_for_autocomplete("reddit.com/badpath") {
+            UIResponse::ErrorPage(data) => {
+                assert_eq!(data.error_type, "MalformedUrl");
+                assert!(data.message.contains("Invalid Reddit path"));
+            }
+            _ => panic!("Expected ErrorPage for malformed Reddit URL"),
+        }
+
+        // Test invalid format error UI
+        match parse_for_autocomplete("definitely.not.supported.com/something") {
+            UIResponse::ErrorPage(data) => {
+                assert_eq!(data.error_type, "InvalidFormat");
+                assert!(data.message.contains("Unable to parse URL"));
+            }
+            _ => panic!("Expected ErrorPage for invalid format"),
+        }
+    }
+
+    #[test]
+    fn test_supported_platforms_detection() {
+        let unsupported_urls = vec![
+            "youtube.com",
+            "youtu.be",
+            "github.com",
+            "twitter.com",
+            "x.com",
+            "facebook.com",
+            "www.youtube.com",
+        ];
+
+        for url in unsupported_urls {
+            match parse_url(url) {
+                ParseResult::Error(ParseError::UnsupportedPlatform(_)) => {
+                    // Expected
+                }
+                other => panic!("Expected UnsupportedPlatform error for {}, got {:?}", url, other),
+            }
         }
     }
 }

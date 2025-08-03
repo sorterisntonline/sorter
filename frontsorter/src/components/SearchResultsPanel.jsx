@@ -48,9 +48,7 @@ const SearchResultsPanel = ({ isLoading, searchResults, error }) => {
   };
 
   return (
-    <div className="w-full max-w-4xl bg-gray-50 border border-gray-200 rounded-lg p-6 mt-4">
-      <h3 className="text-lg font-semibold mb-4">Search Results:</h3>
-      
+    <div>
       {isLoading && (
         <div className="text-gray-600">Loading...</div>
       )}
