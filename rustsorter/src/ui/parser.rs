@@ -269,11 +269,10 @@ fn handle_reddit_path_with_suggestion(path: RedditPath, query: &str) -> UIRespon
                 Some(Suggestion::new("reddit.com/r/programming", "Go to r/programming"))
             ))
         }
-        RedditPath::Subreddit(sub) => {
-            Some(UIResponse::suggestions(
-                query.to_string(),
-                Some(Suggestion::new(&format!("reddit.com/r/{}/", sub), "View subreddit"))
-            ))
+        RedditPath::Subreddit(_) => {
+            // Subreddit case already returns a suggestion from handle_reddit_path_single
+            // Don't create a Multiple response
+            None
         }
         RedditPath::SubredditWithSlash(sub) => {
             // When viewing a subreddit, suggest going to comments
@@ -542,19 +541,12 @@ mod tests {
             _ => panic!("Expected Multiple for reddit.com/r/"),
         }
 
-        // reddit.com/r/rust should return Multiple with suggestion
+        // reddit.com/r/rust should return just a Suggestions response
         match parse_for_autocomplete("reddit.com/r/rust") {
-            UIResponse::Multiple(data) => {
-                assert_eq!(data.responses.len(), 2);
-                // First should be suggestion for completion
-                match &data.responses[0] {
-                    UIResponse::Suggestions(sug_data) => {
-                        assert_eq!(sug_data.suggestion.as_ref().unwrap().completion, "reddit.com/r/rust/");
-                    }
-                    _ => panic!("Expected first response to be Suggestions"),
-                }
+            UIResponse::Suggestions(data) => {
+                assert_eq!(data.suggestion.as_ref().unwrap().completion, "reddit.com/r/rust/");
             }
-            _ => panic!("Expected Multiple for reddit.com/r/rust"),
+            _ => panic!("Expected Suggestions for reddit.com/r/rust"),
         }
 
         // reddit.com/r/rust/ should return Multiple with suggestion and guide
@@ -596,6 +588,8 @@ mod tests {
             }
         }
     }
+
+
 
     #[test]
     fn test_guide_content() {
