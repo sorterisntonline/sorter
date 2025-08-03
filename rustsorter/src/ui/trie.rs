@@ -12,7 +12,8 @@ type ExactMatchHandler = fn(query: &str, context: &HashMap<String, String>) -> U
 /// - `query`: The full, original query string.
 /// - `partial_segment`: The part of the segment the user has typed (e.g., "progra").
 /// - `parent_node`: The node on which the partial match is occurring.
-type PartialMatchHandler = fn(query: &str, partial_segment: &str, parent_node: &UINode) -> UIResponse;
+/// - `context`: Captured path variables (e.g., {"subreddit": "rust"}).
+type PartialMatchHandler = fn(query: &str, partial_segment: &str, parent_node: &UINode, context: &HashMap<String, String>) -> UIResponse;
 
 #[derive(Default)]
 pub struct NodeHandlers {
@@ -117,7 +118,7 @@ impl UITrie {
         // If this is the last segment, it's a partial match.
         if remaining_segments.is_empty() {
             return node.handlers.on_partial_match
-                .map(|f| f(query, current_segment, node))
+                .map(|f| f(query, current_segment, node, context))
                 .unwrap_or_else(|| UIResponse::error("InvalidPath".into(), format!("'{}' is not a valid path.", query)));
         }
         
@@ -430,7 +431,7 @@ fn ui_user_profile_view(_query: &str, ctx: &HashMap<String, String>) -> UIRespon
 
 // --- Suggestion Handler Implementations ---
 
-fn suggest_root_children(query: &str, partial: &str, node: &UINode) -> UIResponse {
+fn suggest_root_children(query: &str, partial: &str, node: &UINode, _context: &HashMap<String, String>) -> UIResponse {
     let suggestion = node.children.keys()
         .find(|k| k.starts_with(partial))
         .map(|k| Suggestion {
@@ -446,9 +447,9 @@ fn suggest_root_children(query: &str, partial: &str, node: &UINode) -> UIRespons
     UIResponse::suggestions(query.to_string(), suggestion)
 }
 
-fn suggest_subreddit_children(query: &str, partial: &str, node: &UINode) -> UIResponse {
-    // Extract subreddit from query to build proper completion path
-    let subreddit = extract_subreddit_from_query(query).unwrap_or("programming");
+fn suggest_subreddit_children(query: &str, partial: &str, node: &UINode, context: &HashMap<String, String>) -> UIResponse {
+    // Use the captured subreddit from context - much cleaner than parsing the query!
+    let subreddit = context.get("subreddit").cloned().unwrap_or_else(|| "programming".to_string());
     
     let suggestion = node.children.keys()
         .find(|k| k.starts_with(partial))
@@ -467,7 +468,7 @@ fn suggest_subreddit_children(query: &str, partial: &str, node: &UINode) -> UIRe
     UIResponse::suggestions(query.to_string(), suggestion)
 }
 
-fn suggest_subreddit_from_api(query: &str, partial: &str, _node: &UINode) -> UIResponse {
+fn suggest_subreddit_from_api(query: &str, partial: &str, _node: &UINode, _context: &HashMap<String, String>) -> UIResponse {
     // In a real implementation, this would call an API to get subreddit suggestions
     // For now, provide static popular subreddits that match the partial
     let popular_subreddits = vec![
@@ -493,20 +494,21 @@ fn suggest_subreddit_from_api(query: &str, partial: &str, _node: &UINode) -> UIR
     UIResponse::suggestions(query.to_string(), suggestion)
 }
 
-fn suggest_post_id_from_api(query: &str, _partial: &str, _node: &UINode) -> UIResponse {
+fn suggest_post_id_from_api(query: &str, _partial: &str, _node: &UINode, context: &HashMap<String, String>) -> UIResponse {
     // In a real implementation, this would suggest actual post IDs from the subreddit
+    let subreddit = context.get("subreddit").cloned().unwrap_or_else(|| "programming".to_string());
     let random_id = generate_random_post_id();
     let suggestion = Some(Suggestion {
         text: format!("{}{}", query, random_id),
         completion: format!("{}{}", query, random_id),
-        description: Some("Random popular thread".to_string()),
+        description: Some(format!("Random popular thread from r/{}", subreddit)),
         score: 1.0,
     });
 
     UIResponse::suggestions(query.to_string(), suggestion)
 }
 
-fn suggest_username_from_api(query: &str, partial: &str, _node: &UINode) -> UIResponse {
+fn suggest_username_from_api(query: &str, partial: &str, _node: &UINode, _context: &HashMap<String, String>) -> UIResponse {
     // In a real implementation, this would suggest actual usernames
     let popular_users = vec![
         ("spez", "Reddit CEO"),
@@ -547,12 +549,14 @@ fn normalize_input(input: &str) -> String {
     normalized
 }
 
-fn split_query(input: &str) -> (&str, &str) {
-    if let Some(slash_pos) = input.find('/') {
-        let (domain, path) = input.split_at(slash_pos);
-        (domain, &path[1..]) // Remove the leading slash from path
+fn split_query(normalized_input: &str) -> (&str, &str) {
+    if let Some(slash_pos) = normalized_input.find('/') {
+        let (domain, path) = normalized_input.split_at(slash_pos);
+        // Trim the leading '/' from the path. If path was just "/", this becomes "".
+        (domain, path.strip_prefix('/').unwrap_or(path))
     } else {
-        (input, "")
+        // Handle cases like "reddit.com" with no slash
+        (normalized_input, "")
     }
 }
 
@@ -598,15 +602,6 @@ fn is_valid_post_id(id: &str) -> bool {
     id.chars().all(|c| c.is_alphanumeric())
 }
 
-fn extract_subreddit_from_query(query: &str) -> Option<&str> {
-    // Extract subreddit name from a query like "reddit.com/r/programming/ho"
-    let parts: Vec<&str> = query.split('/').collect();
-    if parts.len() >= 3 && parts[1] == "r" {
-        Some(parts[2])
-    } else {
-        None
-    }
-}
 
 fn generate_random_post_id() -> String {
     // Generate a random-looking post ID for demonstration
