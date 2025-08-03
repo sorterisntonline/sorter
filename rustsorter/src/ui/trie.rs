@@ -871,4 +871,55 @@ mod tests {
             _ => panic!("Expected Multiple for http://www.reddit.com/r/"),
         }
     }
+
+    #[test]
+    fn test_context_aware_partial_matching() {
+        let trie = build_ui_trie();
+        
+        // Test that partial matching now correctly uses context to build completions
+        // This tests the improvement where we use captured variables instead of parsing the query
+        
+        // Test partial matching in rust subreddit - context should contain subreddit name
+        match trie.parse("reddit.com/r/rust/h") {
+            UIResponse::Suggestions(data) => {
+                let suggestion = data.suggestion.as_ref().unwrap();
+                assert_eq!(suggestion.completion, "reddit.com/r/rust/hot");
+                assert!(suggestion.text.contains("rust"));
+                assert!(suggestion.description.as_ref().unwrap().contains("hot"));
+            }
+            _ => panic!("Expected Suggestions for partial match in rust subreddit"),
+        }
+        
+        // Test partial matching in different subreddit - should use different context
+        match trie.parse("reddit.com/r/webdev/h") {
+            UIResponse::Suggestions(data) => {
+                let suggestion = data.suggestion.as_ref().unwrap();
+                assert_eq!(suggestion.completion, "reddit.com/r/webdev/hot");
+                assert!(suggestion.text.contains("webdev"));
+                assert!(suggestion.description.as_ref().unwrap().contains("hot"));
+            }
+            _ => panic!("Expected Suggestions for partial match in webdev subreddit"),
+        }
+        
+        // Test another type of partial matching: partial commands
+        match trie.parse("reddit.com/r/programming/co") {
+            UIResponse::Suggestions(data) => {
+                let suggestion = data.suggestion.as_ref().unwrap();
+                assert_eq!(suggestion.completion, "reddit.com/r/programming/comments");
+                assert!(suggestion.text.contains("programming")); // Context-aware!
+                assert!(suggestion.description.as_ref().unwrap().contains("comments"));
+            }
+            _ => panic!("Expected Suggestions for partial command match"),
+        }
+        
+        // Test that the comments path uses context correctly
+        match trie.parse("reddit.com/r/programming/comments/") {
+            UIResponse::Guide(data) => {
+                // This demonstrates that context is properly passed through exact matches
+                assert_eq!(data.title, "Import Comments from r/programming");
+                assert!(data.title.contains("programming")); // Context-aware title!
+            }
+            _ => panic!("Expected Guide for comments path"),
+        }
+    }
 }
