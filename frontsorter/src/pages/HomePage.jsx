@@ -27,10 +27,17 @@ const HomePage = () => {
           
           if (uiResponse.type === 'Suggestions') {
             setSuggestion(uiResponse.data.suggestion);
-            // Don't hide search results when showing suggestions
+            // Clear search results when showing just suggestions
+            if (!uiResponse.data.suggestion) {
+              setSearchResults(null);
+            }
           } else {
             setSearchResults(uiResponse);
-            setSuggestion(null); // Hide suggestion when a search result is shown
+            // Keep suggestions visible alongside other UI responses
+            // Only clear suggestions if this is an empty/error state
+            if (uiResponse.type === 'ErrorPage') {
+              setSuggestion(null);
+            }
           }
           
           setIsLoading(false);
