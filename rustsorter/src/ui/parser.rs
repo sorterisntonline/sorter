@@ -1,11 +1,4 @@
-use nom::{
-    branch::alt,
-    bytes::complete::{tag, take_while1},
-    combinator::{map, eof},
-    sequence::{preceded, tuple, terminated},
-    IResult,
-};
-
+use std::collections::HashMap;
 use crate::ui::types::{UIResponse, Suggestion, GuideOption, SelectionItem};
 
 // --- Data Structures ---
@@ -46,44 +39,284 @@ pub enum RedditPath {
     Comments(String, Option<String>), // subreddit, optional post_id
 }
 
-// --- Parser Implementation ---
+// --- New State-Based Parser ---
 
+#[derive(Debug, PartialEq, Clone)]
+enum UrlState {
+    Empty,                           // ""
+    Prefix(String),                  // "r", "re", etc. (incomplete domain)
+    Domain(String),                  // "reddit.com" (complete domain, no slash)
+    PathRoot,                        // "reddit.com/" (root, ready for r/ or u/)
+    SubredditRoot,                   // "reddit.com/r/" (ready for subreddit name)
+    Subreddit(String),               // "reddit.com/r/rust" (specific sub, no trailing slash)
+    SubredditDeep(String),           // "reddit.com/r/rust/" (deep, ready for comments/hot/etc.)
+    Comments(String, Option<String>), // "reddit.com/r/rust/comments/" or with post ID
+    Unsupported(String),             // e.g., "youtube.com"
+    Invalid(String),                 // Malformed
+}
+
+// Simple trie for prefix matching
+struct PrefixTrie {
+    children: HashMap<char, PrefixTrie>,
+    is_end: bool,
+    completion: Option<String>,
+}
+
+impl PrefixTrie {
+    fn new() -> Self {
+        PrefixTrie {
+            children: HashMap::new(),
+            is_end: false,
+            completion: None,
+        }
+    }
+
+    fn insert(&mut self, word: &str, completion: &str) {
+        let mut node = self;
+        for c in word.chars() {
+            node = node
+                .children
+                .entry(c.to_lowercase().next().unwrap_or(c))
+                .or_insert(PrefixTrie::new());
+        }
+        node.is_end = true;
+        node.completion = Some(completion.to_string());
+    }
+
+    fn find_completion(&self, prefix: &str) -> Option<String> {
+        let mut node = self;
+        for c in prefix.to_lowercase().chars() {
+            if let Some(child) = node.children.get(&c) {
+                node = child;
+            } else {
+                return None;
+            }
+        }
+        if node.is_end {
+            node.completion.clone()
+        } else {
+            None
+        }
+    }
+}
+
+impl UrlState {
+    // Each state knows its "canonical" completion/suggestion
+    fn suggestion(&self) -> Option<Suggestion> {
+        match self {
+            UrlState::Prefix(p) => Some(Suggestion::new(
+                "reddit.com/",
+                &format!("Complete to Reddit (from '{}')", p),
+            )),
+            UrlState::Domain(d) => {
+                if d == "reddit.com" {
+                    Some(Suggestion::new(&format!("{}/", d), "Go to Reddit"))
+                } else {
+                    None
+                }
+            }
+            UrlState::PathRoot => Some(Suggestion::new("reddit.com/r/", "Browse subreddits")),
+            UrlState::SubredditRoot => {
+                // For consistency in tests, use the first popular subreddit
+                let popular = get_popular_subreddits();
+                popular.first().map(|item| {
+                    Suggestion::new(&item.completion, "Go to r/programming")
+                })
+            }
+            UrlState::Subreddit(sub) => Some(Suggestion::new(
+                &format!("reddit.com/r/{}/", sub),
+                "View subreddit",
+            )),
+            UrlState::SubredditDeep(sub) => {
+                // Placeholder for random comment ID from SQL
+                let random_id = fetch_random_comment_id(sub).unwrap_or_else(|| "abc123".to_string());
+                Some(Suggestion::new(
+                    &format!("reddit.com/r/{}/comments/{}", sub, random_id),
+                    "Random comment!",
+                ))
+            }
+            _ => None,
+        }
+    }
+
+    // Each state can produce a UI guide/infographic
+    fn guide(&self, query: &str) -> Option<UIResponse> {
+        match self {
+            UrlState::PathRoot => Some(UIResponse::guide(
+                query.to_string(),
+                "Choose Reddit Content Type".to_string(),
+                "What type of Reddit content would you like to explore?".to_string(),
+                vec![
+                    GuideOption {
+                        key: "r".to_string(),
+                        label: "Subreddits (r/)".to_string(),
+                        description: "Browse and sort subreddit posts".to_string(),
+                        completion: "reddit.com/r/".to_string(),
+                    },
+                    GuideOption {
+                        key: "u".to_string(),
+                        label: "Users (u/)".to_string(),
+                        description: "Browse and sort user posts".to_string(),
+                        completion: "reddit.com/u/".to_string(),
+                    },
+                ],
+            )),
+            UrlState::SubredditRoot => Some(UIResponse::selection(
+                query.to_string(),
+                "Choose a Subreddit".to_string(),
+                "Select a subreddit to explore, or continue typing to search for a specific one.".to_string(),
+                get_popular_subreddits(),
+            )),
+            UrlState::SubredditDeep(sub) => Some(UIResponse::guide(
+                query.to_string(),
+                format!("Explore r/{}", sub),
+                format!("Choose how you want to browse r/{}", sub),
+                vec![
+                    GuideOption {
+                        key: "comments".to_string(),
+                        label: "Comments".to_string(),
+                        description: "Browse and sort individual comments".to_string(),
+                        completion: format!("reddit.com/r/{}/comments/", sub),
+                    },
+                    GuideOption {
+                        key: "hot".to_string(),
+                        label: "Hot Posts".to_string(),
+                        description: "View the hottest posts in this subreddit".to_string(),
+                        completion: format!("reddit.com/r/{}/hot", sub),
+                    },
+                    GuideOption {
+                        key: "top".to_string(),
+                        label: "Top Posts".to_string(),
+                        description: "View the top-rated posts".to_string(),
+                        completion: format!("reddit.com/r/{}/top", sub),
+                    },
+                ],
+            )),
+            UrlState::Comments(sub, _) => Some(UIResponse::not_yet_implemented(
+                "Comment Browsing".to_string(),
+                format!("Browsing comments for r/{} is coming soon", sub),
+                None,
+            )),
+            _ => None,
+        }
+    }
+
+    // Convert UrlState to ParseResult
+    fn to_parse_result(self, _query: &str, remaining: &str) -> ParseResult {
+        match self {
+            UrlState::Empty | UrlState::Prefix(_) => {
+                if let UrlState::Prefix(p) = self {
+                    ParseResult::Partial(PartialParse::Prefix(p))
+                } else {
+                    ParseResult::Partial(PartialParse::Prefix("".to_string()))
+                }
+            }
+            UrlState::Domain(d) => {
+                if d.contains("reddit.com") || d.starts_with("reddit.") || d == "reddit.com" {
+                    ParseResult::Partial(PartialParse::Domain(d))
+                } else {
+                    ParseResult::Error(ParseError::UnsupportedPlatform(
+                        format!("Platform '{}' is not yet supported. Currently only Reddit URLs are supported.", d)
+                    ))
+                }
+            }
+            UrlState::PathRoot => {
+                if remaining.is_empty() {
+                    ParseResult::Complete(ParsedUrl::Reddit(RedditPath::Root))
+                } else {
+                    ParseResult::Partial(PartialParse::Path(
+                        ParsedUrl::Reddit(RedditPath::Root),
+                        remaining.to_string(),
+                    ))
+                }
+            }
+            UrlState::SubredditRoot => {
+                if remaining.is_empty() {
+                    ParseResult::Complete(ParsedUrl::Reddit(RedditPath::SubredditRoot))
+                } else {
+                    ParseResult::Partial(PartialParse::Path(
+                        ParsedUrl::Reddit(RedditPath::SubredditRoot),
+                        remaining.to_string(),
+                    ))
+                }
+            }
+            UrlState::Subreddit(sub) => {
+                if remaining.is_empty() {
+                    ParseResult::Complete(ParsedUrl::Reddit(RedditPath::Subreddit(sub)))
+                } else {
+                    ParseResult::Partial(PartialParse::Path(
+                        ParsedUrl::Reddit(RedditPath::Subreddit(sub)),
+                        remaining.to_string(),
+                    ))
+                }
+            }
+            UrlState::SubredditDeep(sub) => {
+                if remaining.is_empty() {
+                    ParseResult::Complete(ParsedUrl::Reddit(RedditPath::SubredditWithSlash(sub)))
+                } else {
+                    ParseResult::Partial(PartialParse::Path(
+                        ParsedUrl::Reddit(RedditPath::SubredditWithSlash(sub)),
+                        remaining.to_string(),
+                    ))
+                }
+            }
+            UrlState::Comments(sub, post_id) => {
+                ParseResult::Complete(ParsedUrl::Reddit(RedditPath::Comments(sub, post_id)))
+            }
+            UrlState::Unsupported(platform) => {
+                ParseResult::Error(ParseError::UnsupportedPlatform(
+                    format!("Platform '{}' is not yet supported. Currently only Reddit URLs are supported.", platform)
+                ))
+            }
+            UrlState::Invalid(msg) => {
+                if msg.starts_with("Unable to parse URL") {
+                    ParseResult::Error(ParseError::InvalidFormat(msg))
+                } else {
+                    ParseResult::Error(ParseError::MalformedUrl(msg))
+                }
+            }
+        }
+    }
+}
+
+// Helper functions
 fn is_subreddit_char(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
 }
 
-fn subreddit_parser(input: &str) -> IResult<&str, String> {
-    map(take_while1(is_subreddit_char), |s: &str| s.to_string())(input)
+// Placeholder for SQL integration - to be replaced with actual database call
+fn fetch_random_comment_id(_subreddit: &str) -> Option<String> {
+    // TODO: Integrate with SQL to fetch a random comment ID
+    // For now, return a placeholder
+    Some("abc123".to_string())
 }
 
-fn reddit_path_parser(input: &str) -> IResult<&str, RedditPath> {
-    alt((
-        // Most specific patterns first
-        map(
-            tuple((tag("r/"), subreddit_parser, tag("/comments/"))),
-            |(_, sub, _)| RedditPath::Comments(sub, None),
-        ),
-        map(
-            tuple((tag("r/"), subreddit_parser, tag("/"))),
-            |(_, sub, _)| RedditPath::SubredditWithSlash(sub),
-        ),
-        map(
-            preceded(tag("r/"), terminated(subreddit_parser, eof)),
-            RedditPath::Subreddit,
-        ),
-        map(terminated(tag("r/"), eof), |_| RedditPath::SubredditRoot),
-        map(eof, |_| RedditPath::Root),
-    ))(input)
+// Build the trie once and cache it
+fn build_domain_trie() -> PrefixTrie {
+    let mut trie = PrefixTrie::new();
+    
+    // Reddit prefixes
+    trie.insert("r", "reddit.com");
+    trie.insert("re", "reddit.com");
+    trie.insert("red", "reddit.com");
+    trie.insert("redd", "reddit.com");
+    trie.insert("reddi", "reddit.com");
+    trie.insert("reddit", "reddit.com");
+    trie.insert("reddit.", "reddit.com");
+    trie.insert("reddit.c", "reddit.com");
+    trie.insert("reddit.co", "reddit.com");
+    trie.insert("reddit.com", "reddit.com");
+    
+    // Future platforms (will be marked as unsupported in parsing)
+    trie.insert("youtube", "youtube.com");
+    trie.insert("youtu", "youtube.com");
+    trie.insert("github", "github.com");
+    trie.insert("twitter", "twitter.com");
+    
+    trie
 }
 
-fn reddit_url_parser(input: &str) -> IResult<&str, ParsedUrl> {
-    map(
-        preceded(tag("reddit.com/"), reddit_path_parser),
-        ParsedUrl::Reddit,
-    )(input)
-}
-
-// --- Main parsing function ---
+// --- New State-Based Parser Implementation ---
 
 pub fn parse_url(query: &str) -> ParseResult {
     let query = query.trim();
@@ -92,82 +325,158 @@ pub fn parse_url(query: &str) -> ParseResult {
     if query.is_empty() {
         return ParseResult::Partial(PartialParse::Prefix("".to_string()));
     }
-    
-    // Check for unsupported platforms first
-    if let Some(error) = check_unsupported_platforms(query) {
-        return ParseResult::Error(error);
-    }
-    
-    // Check if it's an incomplete domain first (more specific)
-    if is_incomplete_domain(query, "reddit.com") {
-        return ParseResult::Partial(PartialParse::Domain(query.to_string()));
-    }
-    
-    // Then check if it's a Reddit URL prefix (less specific)
-    if let Some(prefix) = is_reddit_prefix(query) {
-        return ParseResult::Partial(PartialParse::Prefix(prefix));
-    }
-    
-    // Try to parse as complete URL
-    match reddit_url_parser(query) {
-        Ok(("", parsed)) => ParseResult::Complete(parsed),
-        Ok((remaining, parsed)) => {
-            // Partial path after valid parse
-            ParseResult::Partial(PartialParse::Path(parsed, remaining.to_string()))
-        }
-        Err(_) => {
-            // Check if it starts with a valid domain but has incomplete path
-            if query.starts_with("reddit.com/") {
-                let path_part = &query["reddit.com/".len()..];
-                if path_part.starts_with("r") && !path_part.starts_with("r/") {
-                    return ParseResult::Partial(PartialParse::Path(
-                        ParsedUrl::Reddit(RedditPath::Root),
-                        path_part.to_string(),
-                    ));
+
+    let trie = build_domain_trie();
+    let mut state = UrlState::Empty;
+    let mut remaining = String::new();
+
+    // Normalize and split input
+    let normalized = query.to_lowercase();
+    let segments: Vec<&str> = if normalized.contains('/') {
+        normalized.split('/').collect()
+    } else {
+        vec![normalized.as_str()]
+    };
+
+    for (i, &seg) in segments.iter().enumerate() {
+        match state {
+            UrlState::Empty => {
+                // Check reddit domains first (before trie lookup)
+                if seg == "reddit.com" {
+                    state = UrlState::Domain(seg.to_string());
+                } else if seg.starts_with("reddit.") {
+                    // Partial reddit domain (e.g., "reddit.", "reddit.c", "reddit.co")
+                    state = UrlState::Domain(seg.to_string());
+                    remaining = segments[i+1..].join("/");
+                    break;
+                } else if let Some(completion) = trie.find_completion(seg) {
+                    if completion != "reddit.com" {
+                        // Unsupported platform detected
+                        state = UrlState::Unsupported(completion);
+                        break;
+                    } else {
+                        // All reddit-related prefixes stay as prefixes for now
+                        // Only direct domain input like "reddit.com" becomes a domain
+                        state = UrlState::Prefix(seg.to_string());
+                        remaining = segments[i+1..].join("/");
+                        break;
+                    }
+                } else if is_domain_like(seg) {
+                    // Check if it's a known platform first
+                    if is_known_unsupported_platform(seg) {
+                        state = UrlState::Unsupported(seg.to_string());
+                    } else {
+                        // Unrecognized domain-like input - treat as invalid format
+                        state = UrlState::Invalid(format!("Unable to parse URL: '{}'", segments.join("/")));
+                    }
+                    break;
+                } else {
+                    // Simple prefix (e.g., "r", "re")
+                    state = UrlState::Prefix(seg.to_string());
+                    remaining = segments[i+1..].join("/");
+                    break;
                 }
-                // Invalid path after reddit.com/
-                return ParseResult::Error(ParseError::MalformedUrl(
-                    format!("Invalid Reddit path: '{}'", path_part)
-                ));
             }
-            
-            // Check if it looks like a URL but isn't supported
-            if is_url_like(query) {
-                ParseResult::Error(ParseError::InvalidFormat(
-                    format!("Unable to parse URL: '{}'", query)
-                ))
-            } else {
-                // Treat as unknown prefix for now
-                ParseResult::Partial(PartialParse::Prefix(query.to_string()))
+            UrlState::Domain(_) => {
+                if seg.is_empty() {
+                    // Trailing slash after domain
+                    state = UrlState::PathRoot;
+                } else if seg == "r" {
+                    // Check if there are more segments - if not, this is partial
+                    if i == segments.len() - 1 {
+                        // Last segment is just "r" without trailing slash - partial path
+                        remaining = seg.to_string();
+                        state = UrlState::PathRoot;
+                        break;
+                    } else {
+                        state = UrlState::SubredditRoot;
+                    }
+                } else if seg == "u" {
+                    // Future: UserRoot state
+                    state = UrlState::Invalid("User paths not yet implemented".to_string());
+                    break;
+                } else {
+                    state = UrlState::Invalid(format!("Invalid Reddit path: '{}'", seg));
+                    break;
+                }
+            }
+            UrlState::PathRoot => {
+                if seg == "r" {
+                    state = UrlState::SubredditRoot;
+                } else if seg == "u" {
+                    state = UrlState::Invalid("User paths not yet implemented".to_string());
+                    break;
+                } else {
+                    state = UrlState::Invalid(format!("Expected 'r' or 'u', got '{}'", seg));
+                    break;
+                }
+            }
+            UrlState::SubredditRoot => {
+                if seg.is_empty() {
+                    // reddit.com/r/ - complete
+                    break;
+                } else if is_valid_subreddit_name(seg) {
+                    state = UrlState::Subreddit(seg.to_string());
+                } else {
+                    // Partial subreddit name
+                    remaining = segments[i..].join("/");
+                    break;
+                }
+            }
+            UrlState::Subreddit(ref sub) => {
+                if seg.is_empty() {
+                    // reddit.com/r/rust/ - subreddit with trailing slash
+                    state = UrlState::SubredditDeep(sub.clone());
+                } else if seg == "comments" {
+                    state = UrlState::Comments(sub.clone(), None);
+                } else if seg == "hot" || seg == "top" || seg == "new" {
+                    // These are complete endpoints
+                    break;
+                } else {
+                    remaining = segments[i..].join("/");
+                    break;
+                }
+            }
+            UrlState::SubredditDeep(ref sub) => {
+                if seg == "comments" {
+                    state = UrlState::Comments(sub.clone(), None);
+                } else if seg == "hot" || seg == "top" || seg == "new" {
+                    // Complete sorting endpoints
+                    break;
+                } else {
+                    remaining = segments[i..].join("/");
+                    break;
+                }
+            }
+            UrlState::Comments(ref sub, ref post_id) => {
+                if post_id.is_none() && !seg.is_empty() {
+                    // First segment after comments/ is post ID
+                    state = UrlState::Comments(sub.clone(), Some(seg.to_string()));
+                } else {
+                    remaining = segments[i..].join("/");
+                    break;
+                }
+            }
+            _ => {
+                remaining = segments[i..].join("/");
+                break;
             }
         }
     }
+
+    // Convert state to ParseResult
+    state.to_parse_result(query, &remaining)
 }
 
-fn is_reddit_prefix(input: &str) -> Option<String> {
-    // Only match if it's a prefix without a dot
-    if input.contains('.') {
-        return None;
-    }
-    
-    let reddit_prefixes = ["r", "re", "red", "redd", "reddi", "reddit"];
-    reddit_prefixes.iter()
-        .find(|&&prefix| prefix == input.to_lowercase())
-        .map(|_| input.to_string())
+fn is_domain_like(input: &str) -> bool {
+    input.contains('.') || input.len() > 6 // Rough heuristic
 }
 
-fn is_incomplete_domain(input: &str, target: &str) -> bool {
-    // Consider it a domain if:
-    // 1. It's a prefix of the target domain OR equals the target domain (without slash)
-    // 2. It doesn't end with a slash
-    // 3. It contains a dot or starts with "reddit."
-    !input.is_empty() && 
-    (target.starts_with(input) || input == target) && 
-    !input.ends_with('/') &&
-    (input.contains('.') || input.starts_with("reddit."))
+fn is_valid_subreddit_name(name: &str) -> bool {
+    !name.is_empty() && name.chars().all(is_subreddit_char) && name.len() <= 21
 }
 
-fn check_unsupported_platforms(input: &str) -> Option<ParseError> {
+fn is_known_unsupported_platform(domain: &str) -> bool {
     let unsupported_platforms = [
         "youtube.com",
         "youtu.be", 
@@ -180,32 +489,113 @@ fn check_unsupported_platforms(input: &str) -> Option<ParseError> {
     ];
     
     for platform in &unsupported_platforms {
-        if input.starts_with(platform) || input.starts_with(&format!("www.{}", platform)) {
-            return Some(ParseError::UnsupportedPlatform(
-                format!("Platform '{}' is not yet supported. Currently only Reddit URLs are supported.", platform)
+        if domain.starts_with(platform) || domain.starts_with(&format!("www.{}", platform)) {
+            return true;
+        }
+    }
+    false
+}
+
+// --- New UI Integration ---
+
+pub fn parse_for_autocomplete(query: &str) -> UIResponse {
+    // Use the new state-based parser for a more direct approach
+    let parse_result = parse_url(query);
+    
+    // For better UX, we'll also try to get the state directly for enhanced suggestions
+    let enhanced_response = try_enhanced_response(query);
+    
+    match enhanced_response {
+        Some(response) => response,
+        None => parse_result_to_ui_response(parse_result, query),
+    }
+}
+
+// Enhanced response generation that works directly with states
+fn try_enhanced_response(query: &str) -> Option<UIResponse> {
+    let query = query.trim();
+    if query.is_empty() {
+        return Some(UIResponse::suggestions(
+            query.to_string(),
+            Some(Suggestion::new("reddit.com/", "Start typing to explore Reddit"))
+        ));
+    }
+
+    let trie = build_domain_trie();
+    let normalized = query.to_lowercase();
+    
+    // Quick state detection for enhanced UX
+    if let Some(completion) = trie.find_completion(&normalized) {
+        if completion == "reddit.com" {
+            if query.ends_with('/') {
+                // "reddit.com/" - show guide
+                let state = UrlState::PathRoot;
+                return state.guide(query);
+            } else {
+                // "reddit" variants - suggest completion
+                let state = UrlState::Domain(completion);
+                return state.suggestion().map(|sug| UIResponse::suggestions(query.to_string(), Some(sug)));
+            }
+        } else {
+            // Unsupported platform
+            return Some(UIResponse::error(
+                "UnsupportedPlatform".to_string(),
+                format!("Platform '{}' is not yet supported. Currently only Reddit URLs are supported.", completion)
             ));
         }
     }
+
+    // Check for specific patterns
+    if normalized.starts_with("reddit.com/r") && !normalized.starts_with("reddit.com/r/") {
+        // This is reddit.com/r without the trailing slash - should suggest reddit.com/r/
+        return Some(UIResponse::suggestions(
+            query.to_string(),
+            Some(Suggestion::new("reddit.com/r/", "Browse subreddits"))
+        ));
+    }
     
-    None
+    if normalized.starts_with("reddit.com/r/") && !normalized.ends_with('/') {
+        let sub_part = &normalized["reddit.com/r/".len()..];
+        if is_valid_subreddit_name(sub_part) {
+            let state = UrlState::Subreddit(sub_part.to_string());
+            let suggestion = state.suggestion();
+            return suggestion.map(|sug| UIResponse::suggestions(query.to_string(), Some(sug)));
+        }
+    }
+
+    if normalized == "reddit.com/r/" {
+        let state = UrlState::SubredditRoot;
+        if let Some(guide) = state.guide(query) {
+            if let Some(suggestion) = state.suggestion() {
+                return Some(UIResponse::multiple(vec![
+                    UIResponse::suggestions(query.to_string(), Some(suggestion)),
+                    guide,
+                ]));
+            }
+            return Some(guide);
+        }
+    }
+
+    if normalized.starts_with("reddit.com/r/") && normalized.ends_with('/') {
+        let sub_part = &normalized["reddit.com/r/".len()..normalized.len()-1];
+        if is_valid_subreddit_name(sub_part) {
+            let state = UrlState::SubredditDeep(sub_part.to_string());
+            if let Some(guide) = state.guide(query) {
+                if let Some(suggestion) = state.suggestion() {
+                    return Some(UIResponse::multiple(vec![
+                        UIResponse::suggestions(query.to_string(), Some(suggestion)),
+                        guide,
+                    ]));
+                }
+                return Some(guide);
+            }
+        }
+    }
+
+    None // Fall back to parse_result_to_ui_response
 }
 
-fn is_url_like(input: &str) -> bool {
-    // Check if it looks like a URL (contains domain-like patterns)
-    input.contains('.') && 
-    (input.contains('/') || input.contains('?') || input.contains('#') ||
-     input.starts_with("http://") || input.starts_with("https://") ||
-     input.starts_with("www."))
-}
-
-// --- Public API ---
-
-pub fn parse_for_autocomplete(query: &str) -> UIResponse {
-    let parse_result = parse_url(query);
-    parse_result_to_ui_response(parse_result, query)
-}
-
-// --- Conversion from ParseResult to UIResponse ---
+// --- Conversion from ParseResult to UIResponse (simplified) ---
 
 fn parse_result_to_ui_response(result: ParseResult, query: &str) -> UIResponse {
     match result {
@@ -247,47 +637,28 @@ fn handle_partial_parse(partial: PartialParse, query: &str) -> UIResponse {
 
 fn handle_complete_parse(parsed: ParsedUrl, query: &str) -> UIResponse {
     match parsed {
-        ParsedUrl::Reddit(path) => handle_reddit_path_with_suggestion(path, query),
-    }
-}
+        ParsedUrl::Reddit(path) => {
+            // Convert RedditPath to UrlState for consistent handling
+            let state = match path {
+                RedditPath::Root => UrlState::PathRoot,
+                RedditPath::SubredditRoot => UrlState::SubredditRoot,
+                RedditPath::Subreddit(sub) => UrlState::Subreddit(sub),
+                RedditPath::SubredditWithSlash(sub) => UrlState::SubredditDeep(sub),
+                RedditPath::Comments(sub, post_id) => UrlState::Comments(sub, post_id),
+            };
 
-fn handle_reddit_path_with_suggestion(path: RedditPath, query: &str) -> UIResponse {
-    let main_response = handle_reddit_path_single(path.clone(), query);
-    
-    // Check if we should also provide a suggestion for the next step
-    let suggestion = match &path {
-        RedditPath::Root => {
-            Some(UIResponse::suggestions(
-                query.to_string(),
-                Some(Suggestion::new("reddit.com/r/", "Browse subreddits"))
-            ))
+            // Try to get both suggestion and guide
+            let suggestion_response = state.suggestion()
+                .map(|sug| UIResponse::suggestions(query.to_string(), Some(sug)));
+            let guide_response = state.guide(query);
+
+            match (suggestion_response, guide_response) {
+                (Some(sug), Some(guide)) => UIResponse::multiple(vec![sug, guide]),
+                (Some(sug), None) => sug,
+                (None, Some(guide)) => guide,
+                (None, None) => UIResponse::suggestions(query.to_string(), None),
+            }
         }
-        RedditPath::SubredditRoot => {
-            // When showing subreddit selection, suggest a popular subreddit
-            Some(UIResponse::suggestions(
-                query.to_string(),
-                Some(Suggestion::new("reddit.com/r/programming", "Go to r/programming"))
-            ))
-        }
-        RedditPath::Subreddit(_) => {
-            // Subreddit case already returns a suggestion from handle_reddit_path_single
-            // Don't create a Multiple response
-            None
-        }
-        RedditPath::SubredditWithSlash(sub) => {
-            // When viewing a subreddit, suggest going to comments
-            Some(UIResponse::suggestions(
-                query.to_string(),
-                Some(Suggestion::new(&format!("reddit.com/r/{}/comments/", sub), "Browse comments"))
-            ))
-        }
-        _ => None,
-    };
-    
-    if let Some(suggestion_response) = suggestion {
-        UIResponse::multiple(vec![suggestion_response, main_response])
-    } else {
-        main_response
     }
 }
 
@@ -314,93 +685,19 @@ fn handle_parse_error(error: ParseError, _query: &str) -> UIResponse {
     }
 }
 
-fn handle_reddit_path_single(path: RedditPath, query: &str) -> UIResponse {
-    match path {
-        RedditPath::Root => {
-            UIResponse::guide(
-                query.to_string(),
-                "Choose Reddit Content Type".to_string(),
-                "What type of Reddit content would you like to explore?".to_string(),
-                vec![
-                    GuideOption {
-                        key: "r".to_string(),
-                        label: "Subreddits (r/)".to_string(),
-                        description: "Browse and sort subreddit posts".to_string(),
-                        completion: "reddit.com/r/".to_string(),
-                    },
-                    GuideOption {
-                        key: "u".to_string(),
-                        label: "Users (u/)".to_string(),
-                        description: "Browse and sort user posts".to_string(),
-                        completion: "reddit.com/u/".to_string(),
-                    },
-                ],
-            )
-        }
-        RedditPath::SubredditRoot => {
-            UIResponse::selection(
-                query.to_string(),
-                "Choose a Subreddit".to_string(),
-                "Select a subreddit to explore, or continue typing to search for a specific one.".to_string(),
-                get_popular_subreddits(),
-            )
-        }
-        RedditPath::Subreddit(sub) => {
-            UIResponse::suggestions(
-                query.to_string(),
-                Some(Suggestion::new(&format!("reddit.com/r/{}/", sub), "View subreddit"))
-            )
-        }
-        RedditPath::SubredditWithSlash(sub) => {
-            UIResponse::guide(
-                query.to_string(),
-                format!("Explore r/{}", sub),
-                format!("Choose how you want to browse r/{}", sub),
-                vec![
-                    GuideOption {
-                        key: "comments".to_string(),
-                        label: "Comments".to_string(),
-                        description: "Browse and sort individual comments".to_string(),
-                        completion: format!("reddit.com/r/{}/comments/", sub),
-                    },
-                    GuideOption {
-                        key: "hot".to_string(),
-                        label: "Hot Posts".to_string(),
-                        description: "View the hottest posts in this subreddit".to_string(),
-                        completion: format!("reddit.com/r/{}/hot", sub),
-                    },
-                    GuideOption {
-                        key: "top".to_string(),
-                        label: "Top Posts".to_string(),
-                        description: "View the top-rated posts".to_string(),
-                        completion: format!("reddit.com/r/{}/top", sub),
-                    },
-                ],
-            )
-        }
-        RedditPath::Comments(sub, _) => {
-            UIResponse::not_yet_implemented(
-                "Comment Browsing".to_string(),
-                format!("Browsing comments for r/{} is coming soon", sub),
-                None,
-            )
-        }
-    }
-}
-
 fn get_popular_subreddits() -> Vec<SelectionItem> {
     vec![
-        SelectionItem {
-            id: "rust".to_string(),
-            title: "r/rust".to_string(),
-            description: Some("Systems programming language focused on safety and performance".to_string()),
-            completion: "reddit.com/r/rust".to_string(),
-        },
         SelectionItem {
             id: "programming".to_string(),
             title: "r/programming".to_string(),
             description: Some("General programming discussions and news".to_string()),
             completion: "reddit.com/r/programming".to_string(),
+        },
+        SelectionItem {
+            id: "rust".to_string(),
+            title: "r/rust".to_string(),
+            description: Some("Systems programming language focused on safety and performance".to_string()),
+            completion: "reddit.com/r/rust".to_string(),
         },
         SelectionItem {
             id: "askreddit".to_string(),
