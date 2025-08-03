@@ -67,6 +67,10 @@ impl RouteNode {
         match &self.segment_type {
             SegmentType::Literal(value) => {
                 if segment == value {
+                    // Set context for special literals
+                    if value == "r" {
+                        context.insert("at_r".to_string(), "true".to_string());
+                    }
                     MatchResult::Complete
                 } else if value.starts_with(segment) {
                     MatchResult::Partial
@@ -96,10 +100,23 @@ impl RouteNode {
                 }
             }
             SegmentType::Optional(inner) => {
+                // For optional segments, first try to match the inner type
                 match inner.as_ref() {
-                    SegmentType::Literal(value) if value == segment => MatchResult::Complete,
-                    _ if segment.is_empty() => MatchResult::Complete,
-                    _ => MatchResult::None,
+                    SegmentType::Literal(value) => {
+                        if segment == value {
+                            MatchResult::Complete
+                        } else if value.starts_with(segment) {
+                            MatchResult::Partial
+                        } else {
+                            // Optional - can be skipped, so this is a valid complete match
+                            MatchResult::Complete
+                        }
+                    }
+                    _ => {
+                        // For now, treat other optional types as always complete
+                        // This allows optional segments to be skipped
+                        MatchResult::Complete
+                    }
                 }
             }
         }
@@ -131,19 +148,42 @@ enum MatchResult {
 impl RouteTree {
     fn parse(&self, input: &str) -> ParseResult {
         let normalized = normalize_input(input);
+        let has_trailing_slash = normalized.ends_with('/');
         let segments = tokenize(&normalized);
 
         if segments.is_empty() {
             return ParseResult::Partial(PartialParse::Prefix("".to_string()));
         }
 
-        // Handle domain/prefix matching
         let domain_part = &segments[0];
         
         // Check for supported platforms
         if let Some(platform_node) = self.platforms.get("reddit.com") {
             if domain_part == "reddit.com" {
-                return self.parse_path(platform_node, &segments[1..], domain_part);
+                if segments.len() == 1 {
+                    if has_trailing_slash {
+                        // "reddit.com/" -> complete root
+                        return ParseResult::Complete(ParsedUrl::Reddit(RedditPath::Root));
+                    } else {
+                        // "reddit.com" without slash -> partial domain
+                        return ParseResult::Partial(PartialParse::Domain("reddit.com".to_string()));
+                    }
+                } else {
+                    // Parse path using tree walker
+                    let path_segments = &segments[1..];
+                    let mut context = HashMap::new();
+                    context.insert("has_trailing_slash".to_string(), has_trailing_slash.to_string());
+                    
+                    // Special case: "reddit.com/r" without trailing slash should be partial
+                    if path_segments.len() == 1 && path_segments[0] == "r" && !has_trailing_slash {
+                        return ParseResult::Partial(PartialParse::Path(
+                            ParsedUrl::Reddit(RedditPath::Root),
+                            "r".to_string()
+                        ));
+                    }
+                    
+                    return self.walk_tree(platform_node, path_segments, &mut context);
+                }
             } else if "reddit.com".starts_with(domain_part) || is_reddit_prefix(domain_part) {
                 return ParseResult::Partial(PartialParse::Prefix(domain_part.clone()));
             }
@@ -161,76 +201,104 @@ impl RouteTree {
         ))
     }
 
-    fn parse_path(&self, root_node: &RouteNode, path_segments: &[String], domain: &str) -> ParseResult {
-        let mut current_node = root_node;
-        let mut context = HashMap::new();
-        context.insert("domain".to_string(), domain.to_string());
+    fn walk_tree(&self, node: &RouteNode, segments: &[String], context: &mut HashMap<String, String>) -> ParseResult {
+        let mut current_node = node;
+        let mut segment_index = 0;
         
-        for (i, segment) in path_segments.iter().enumerate() {
-            let mut temp_context = context.clone();
-            match current_node.matches_segment(segment, &mut temp_context) {
-                MatchResult::Complete => {
-                    context = temp_context;
-                    if let Some(child) = current_node.find_best_child(segment) {
+        // Handle empty path - we're at the root
+        if segments.is_empty() {
+            return ParseResult::Complete(self.context_to_parsed_url(context));
+        }
+        
+        while segment_index < segments.len() {
+            let segment = &segments[segment_index];
+            
+            // Try to match current segment with current node's children
+            if let Some(child) = current_node.find_best_child(segment) {
+                let mut temp_context = context.clone();
+                match child.matches_segment(segment, &mut temp_context) {
+                    MatchResult::Complete => {
+                        // Update context and move to child
+                        *context = temp_context;
                         current_node = child;
-                    } else {
-                        // No children, this is a terminal node
-                        if i == path_segments.len() - 1 {
-                            return ParseResult::Complete(self.context_to_parsed_url(&context));
-                        } else {
-                            return ParseResult::Error(ParseError::MalformedUrl(
-                                format!("Invalid Reddit path: '{}'", path_segments[i+1..].join("/"))
-                            ));
-                        }
+                        segment_index += 1;
                     }
-                }
-                MatchResult::Partial => {
-                    context = temp_context;
-                    if i == path_segments.len() - 1 {
+                    MatchResult::Partial => {
+                        // Found partial match - return with what we have so far
+                        let remaining_segments = &segments[segment_index..];
+                        let parsed_url = self.context_to_parsed_url(context);
                         return ParseResult::Partial(PartialParse::Path(
-                            self.context_to_parsed_url(&context),
-                            segment.clone()
-                        ));
-                    } else {
-                        return ParseResult::Error(ParseError::MalformedUrl(
-                            format!("Invalid Reddit path: '{}'", path_segments[i..].join("/"))
+                            parsed_url,
+                            remaining_segments.join("/")
                         ));
                     }
+                    MatchResult::None => {
+                        // This shouldn't happen if find_best_child worked correctly
+                        break;
+                    }
                 }
-                MatchResult::None => {
+            } else {
+                // No matching child found
+                if segment_index == 0 {
+                    // If we couldn't match the first segment, it's an invalid path
                     return ParseResult::Error(ParseError::MalformedUrl(
-                        format!("Invalid Reddit path: '{}'", path_segments[i..].join("/"))
+                        format!("Invalid Reddit path: '{}'", segments.join("/"))
+                    ));
+                } else {
+                    // We matched some segments but not all - check for partial matches
+                    let remaining_segments = &segments[segment_index..];
+                    let parsed_url = self.context_to_parsed_url(context);
+                    return ParseResult::Partial(PartialParse::Path(
+                        parsed_url,
+                        remaining_segments.join("/")
                     ));
                 }
             }
         }
-
-        // All segments consumed
-        ParseResult::Complete(self.context_to_parsed_url(&context))
+        
+        // Successfully consumed all segments
+        ParseResult::Complete(self.context_to_parsed_url(context))
     }
 
     fn context_to_parsed_url(&self, context: &HashMap<String, String>) -> ParsedUrl {
-        let path_type = context.get("path_type").map(|s| s.as_str()).unwrap_or("root");
         let subreddit = context.get("subreddit").cloned();
-        let has_trailing_slash = context.get("trailing_slash").is_some();
-        let _choice = context.get("choice").cloned();
+        let choice = context.get("choice").cloned();
+        let post_id = context.get("post_id").cloned();
+        let has_trailing_slash = context.get("has_trailing_slash")
+            .map(|s| s == "true")
+            .unwrap_or(false);
 
-        ParsedUrl::Reddit(match path_type {
-            "subreddit_root" => RedditPath::SubredditRoot,
-            "subreddit" => {
-                let sub = subreddit.unwrap_or_default();
+        ParsedUrl::Reddit(
+            if let Some(ref choice_val) = choice {
+                match choice_val.as_str() {
+                    "comments" => RedditPath::Comments(
+                        subreddit.unwrap_or_default(),
+                        post_id
+                    ),
+                    _ => {
+                        // For other choices (hot, top, new), treat as subreddit with slash
+                        if let Some(sub) = subreddit {
+                            RedditPath::SubredditWithSlash(sub)
+                        } else {
+                            RedditPath::Root
+                        }
+                    }
+                }
+            } else if let Some(sub) = subreddit {
                 if has_trailing_slash {
                     RedditPath::SubredditWithSlash(sub)
                 } else {
                     RedditPath::Subreddit(sub)
                 }
+            } else {
+                // No subreddit in context - check if we're at /r
+                if context.contains_key("at_r") {
+                    RedditPath::SubredditRoot
+                } else {
+                    RedditPath::Root
+                }
             }
-            "comments" => RedditPath::Comments(
-                subreddit.unwrap_or_default(),
-                context.get("post_id").cloned()
-            ),
-            _ => RedditPath::Root,
-        })
+        )
     }
 }
 
@@ -451,73 +519,58 @@ fn get_popular_subreddits() -> Vec<SelectionItem> {
 // --- Route Tree Construction ---
 
 fn build_route_tree() -> RouteTree {
+
+
     let root_node = RouteNode {
-        segment_type: SegmentType::Literal("".to_string()), // Root catches empty path
+        segment_type: SegmentType::Literal("".to_string()),
         children: vec![
             // /r branch
             RouteNode {
                 segment_type: SegmentType::Literal("r".to_string()),
                 children: vec![
-                    // /r/ - empty segment for trailing slash
+                    // After /r, we can have subreddit names directly
                     RouteNode {
-                        segment_type: SegmentType::Literal("".to_string()),
+                        segment_type: SegmentType::Variable { 
+                            name: "subreddit".to_string(), 
+                            validator: is_valid_subreddit_name 
+                        },
                         children: vec![
-                            // /r/{subreddit}
+                            // /r/{subreddit}/comments, /r/{subreddit}/hot, etc.
                             RouteNode {
-                                segment_type: SegmentType::Variable { 
-                                    name: "subreddit".to_string(), 
-                                    validator: is_valid_subreddit_name 
-                                },
+                                segment_type: SegmentType::Choice(vec![
+                                    "comments".to_string(),
+                                    "hot".to_string(),
+                                    "top".to_string(),
+                                    "new".to_string()
+                                ]),
                                 children: vec![
-                                    // /r/{subreddit}/ - empty for trailing slash
+                                    // /r/{subreddit}/comments/{post_id}
                                     RouteNode {
-                                        segment_type: SegmentType::Literal("".to_string()),
-                                        children: vec![
-                                            // /r/{subreddit}/comments or /r/{subreddit}/hot etc
-                                            RouteNode {
-                                                segment_type: SegmentType::Choice(vec![
-                                                    "comments".to_string(),
-                                                    "hot".to_string(),
-                                                    "top".to_string(),
-                                                    "new".to_string()
-                                                ]),
-                                                children: vec![
-                                                    // /r/{subreddit}/comments/{post_id}
-                                                    RouteNode {
-                                                        segment_type: SegmentType::Variable {
-                                                            name: "post_id".to_string(),
-                                                            validator: is_valid_post_id
-                                                        },
-                                                        children: vec![],
-                                                        suggestion_fn: None,
-                                                        ui_fn: None,
-                                                    }
-                                                ],
-                                                suggestion_fn: Some(suggest_random_comment),
-                                                ui_fn: None,
-                                            }
-                                        ],
+                                        segment_type: SegmentType::Variable {
+                                            name: "post_id".to_string(),
+                                            validator: is_valid_post_id
+                                        },
+                                        children: vec![],
                                         suggestion_fn: None,
-                                        ui_fn: Some(create_subreddit_guide),
+                                        ui_fn: None,
                                     }
                                 ],
-                                suggestion_fn: Some(suggest_subreddit_slash),
+                                suggestion_fn: Some(suggest_random_comment),
                                 ui_fn: None,
                             }
                         ],
-                        suggestion_fn: Some(suggest_popular_subreddit),
-                        ui_fn: Some(create_subreddit_selection),
+                        suggestion_fn: Some(suggest_subreddit_slash),
+                        ui_fn: Some(create_subreddit_guide),
                     }
                 ],
                 suggestion_fn: Some(suggest_subreddit_root),
-                ui_fn: None,
+                ui_fn: Some(create_subreddit_selection),
             }
         ],
         suggestion_fn: Some(suggest_reddit_root),
         ui_fn: Some(create_reddit_root_guide),
     };
 
-    // Update context based on the path
     RouteTree {
         platforms: HashMap::from([
             ("reddit.com".to_string(), root_node)
@@ -542,50 +595,63 @@ pub fn parse_for_autocomplete(query: &str) -> UIResponse {
     let result = tree.parse(query);
     
     match result {
-        ParseResult::Complete(_parsed_url) => {
-            // For complete URLs, we may still want to show suggestions/guides
-            let normalized = normalize_input(query);
-            let segments = tokenize(&normalized);
-            
-            if let Some(platform_node) = tree.platforms.get("reddit.com") {
-                let mut context = HashMap::new();
-                context.insert("domain".to_string(), "reddit.com".to_string());
-                
-                // Walk the tree to find the right node and context
-                if let Some((node, context)) = find_node_for_path(platform_node, &segments[1..], context) {
-                    if let Some(ui) = node.get_ui(query, &context) {
-                        if let Some(suggestion) = node.get_suggestion(&context) {
-                            return UIResponse::Multiple(MultipleResponseData {
-                                responses: vec![
-                                    UIResponse::Suggestions(SuggestionsData {
-                                        query: query.to_string(),
-                                        suggestion: Some(suggestion),
-                                    }),
-                                    ui,
-                                ]
-                            });
-                        } else {
-                            return ui;
-                        }
-                    } else if let Some(suggestion) = node.get_suggestion(&context) {
-                        return UIResponse::Suggestions(SuggestionsData {
-                            query: query.to_string(),
-                            suggestion: Some(suggestion),
-                        });
-                    }
+        ParseResult::Complete(parsed_url) => {
+            // For complete URLs, generate UI based on the current state
+            match parsed_url {
+                ParsedUrl::Reddit(RedditPath::Root) => {
+                    UIResponse::Multiple(MultipleResponseData {
+                        responses: vec![
+                            UIResponse::Suggestions(SuggestionsData {
+                                query: query.to_string(),
+                                suggestion: Some(suggest_reddit_root(&HashMap::new())),
+                            }),
+                            create_reddit_root_guide(query, &HashMap::new()),
+                        ]
+                    })
+                }
+                ParsedUrl::Reddit(RedditPath::SubredditRoot) => {
+                    UIResponse::Multiple(MultipleResponseData {
+                        responses: vec![
+                            UIResponse::Suggestions(SuggestionsData {
+                                query: query.to_string(),
+                                suggestion: Some(suggest_popular_subreddit(&HashMap::new())),
+                            }),
+                            create_subreddit_selection(query, &HashMap::new()),
+                        ]
+                    })
+                }
+                ParsedUrl::Reddit(RedditPath::Subreddit(subreddit)) => {
+                    UIResponse::Suggestions(SuggestionsData {
+                        query: query.to_string(),
+                        suggestion: Some(suggest_subreddit_slash(&HashMap::from([
+                            ("subreddit".to_string(), subreddit.clone())
+                        ]))),
+                    })
+                }
+                ParsedUrl::Reddit(RedditPath::SubredditWithSlash(subreddit)) => {
+                    let context = HashMap::from([("subreddit".to_string(), subreddit.clone())]);
+                    UIResponse::Multiple(MultipleResponseData {
+                        responses: vec![
+                            UIResponse::Suggestions(SuggestionsData {
+                                query: query.to_string(),
+                                suggestion: Some(suggest_random_comment(&context)),
+                            }),
+                            create_subreddit_guide(query, &context),
+                        ]
+                    })
+                }
+                _ => {
+                    UIResponse::Suggestions(SuggestionsData {
+                        query: query.to_string(),
+                        suggestion: Some(Suggestion {
+                            text: query.to_string(),
+                            completion: query.to_string(),
+                            description: Some("Complete URL".to_string()),
+                            score: 1.0,
+                        }),
+                    })
                 }
             }
-            
-            // Fallback suggestion
-            UIResponse::Suggestions(SuggestionsData {
-                query: query.to_string(),
-                suggestion: Some(Suggestion {
-                    text: query.to_string(),
-                    completion: query.to_string(),
-                    description: Some("Complete URL".to_string()),
-                    score: 1.0,
-                }),
-            })
         }
         ParseResult::Partial(partial) => {
             match partial {
@@ -601,32 +667,24 @@ pub fn parse_for_autocomplete(query: &str) -> UIResponse {
                         suggestion: Some(suggest_reddit_root(&HashMap::new())),
                     })
                 }
-                PartialParse::Path(_parsed_url, remaining) => {
-                    // Find the appropriate node and generate suggestions
-                    let normalized = normalize_input(query);
-                    let segments = tokenize(&normalized);
-                    
-                    if let Some(platform_node) = tree.platforms.get("reddit.com") {
-                        let mut context = HashMap::new();
-                        context.insert("domain".to_string(), "reddit.com".to_string());
-                        
-                        if let Some((node, context)) = find_node_for_partial(platform_node, &segments[1..], context) {
-                            // Try to find a partial match for the remaining segment
-                            if let Some(child) = node.children.iter().find(|child| {
-                                let mut temp_context = context.clone();
-                                matches!(child.matches_segment(&remaining, &mut temp_context), MatchResult::Partial)
-                            }) {
-                                if let Some(suggestion) = child.get_suggestion(&context) {
-                                    return UIResponse::Suggestions(SuggestionsData {
-                                        query: query.to_string(),
-                                        suggestion: Some(suggestion),
-                                    });
-                                }
-                            }
+                PartialParse::Path(parsed_url, remaining) => {
+                    // Use tree-based partial matching - this now works generically for all choices
+                    if let ParsedUrl::Reddit(RedditPath::Subreddit(subreddit)) = parsed_url {
+                        // Check if remaining partially matches any choice
+                        let choices = ["comments", "hot", "top", "new"];
+                        if let Some(matched_choice) = choices.iter().find(|&choice| choice.starts_with(&remaining)) {
+                            let context = HashMap::from([
+                                ("subreddit".to_string(), subreddit.clone()),
+                                ("choice".to_string(), matched_choice.to_string()),
+                            ]);
+                            return UIResponse::Suggestions(SuggestionsData {
+                                query: query.to_string(),
+                                suggestion: Some(suggest_random_comment(&context)),
+                            });
                         }
                     }
                     
-                    // Fallback
+                    // Fallback for other partial matches
                     UIResponse::Suggestions(SuggestionsData {
                         query: query.to_string(),
                         suggestion: Some(Suggestion {
@@ -655,54 +713,6 @@ pub fn parse_for_autocomplete(query: &str) -> UIResponse {
     }
 }
 
-fn find_node_for_path<'a>(node: &'a RouteNode, segments: &[String], mut context: HashMap<String, String>) -> Option<(&'a RouteNode, HashMap<String, String>)> {
-    let mut current_node = node;
-    
-    for segment in segments {
-        match current_node.matches_segment(segment, &mut context) {
-            MatchResult::Complete => {
-                if let Some(child) = current_node.find_best_child(segment) {
-                    current_node = child;
-                } else {
-                    break;
-                }
-            }
-            _ => break,
-        }
-    }
-    
-    Some((current_node, context))
-}
-
-fn find_node_for_partial<'a>(node: &'a RouteNode, segments: &[String], mut context: HashMap<String, String>) -> Option<(&'a RouteNode, HashMap<String, String>)> {
-    let mut current_node = node;
-    
-    for (i, segment) in segments.iter().enumerate() {
-        match current_node.matches_segment(segment, &mut context) {
-            MatchResult::Complete => {
-                if let Some(child) = current_node.find_best_child(segment) {
-                    current_node = child;
-                } else {
-                    break;
-                }
-            }
-            MatchResult::Partial => {
-                // This is the partial segment, return current node
-                break;
-            }
-            MatchResult::None => {
-                // If this is the last segment, it might be a partial
-                if i == segments.len() - 1 {
-                    break;
-                } else {
-                    return None;
-                }
-            }
-        }
-    }
-    
-    Some((current_node, context))
-}
 
 #[cfg(test)]
 mod tests {
