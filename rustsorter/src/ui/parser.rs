@@ -262,10 +262,24 @@ fn handle_reddit_path_with_suggestion(path: RedditPath, query: &str) -> UIRespon
                 Some(Suggestion::new("reddit.com/r/", "Browse subreddits"))
             ))
         }
+        RedditPath::SubredditRoot => {
+            // When showing subreddit selection, suggest a popular subreddit
+            Some(UIResponse::suggestions(
+                query.to_string(),
+                Some(Suggestion::new("reddit.com/r/programming", "Go to r/programming"))
+            ))
+        }
         RedditPath::Subreddit(sub) => {
             Some(UIResponse::suggestions(
                 query.to_string(),
                 Some(Suggestion::new(&format!("reddit.com/r/{}/", sub), "View subreddit"))
+            ))
+        }
+        RedditPath::SubredditWithSlash(sub) => {
+            // When viewing a subreddit, suggest going to comments
+            Some(UIResponse::suggestions(
+                query.to_string(),
+                Some(Suggestion::new(&format!("reddit.com/r/{}/comments/", sub), "Browse comments"))
             ))
         }
         _ => None,
@@ -480,42 +494,80 @@ mod tests {
             _ => panic!("Expected Suggestions for 'r'"),
         }
 
-        // Complete reddit.com/ should return guide
+        // Complete reddit.com/ should return Multiple with suggestion and guide
         match parse_for_autocomplete("reddit.com/") {
-            UIResponse::Guide(data) => {
-                assert_eq!(data.title, "Choose Reddit Content Type");
-                assert_eq!(data.options.len(), 2);
-                assert_eq!(data.options[0].key, "r");
-                assert_eq!(data.options[1].key, "u");
+            UIResponse::Multiple(data) => {
+                assert_eq!(data.responses.len(), 2);
+                // First should be suggestion
+                match &data.responses[0] {
+                    UIResponse::Suggestions(sug_data) => {
+                        assert_eq!(sug_data.suggestion.as_ref().unwrap().completion, "reddit.com/r/");
+                    }
+                    _ => panic!("Expected first response to be Suggestions"),
+                }
+                // Second should be guide
+                match &data.responses[1] {
+                    UIResponse::Guide(guide_data) => {
+                        assert_eq!(guide_data.title, "Choose Reddit Content Type");
+                        assert_eq!(guide_data.options.len(), 2);
+                        assert_eq!(guide_data.options[0].key, "r");
+                        assert_eq!(guide_data.options[1].key, "u");
+                    }
+                    _ => panic!("Expected second response to be Guide"),
+                }
             }
-            _ => panic!("Expected Guide for reddit.com/"),
+            _ => panic!("Expected Multiple for reddit.com/"),
         }
 
-        // reddit.com/r/ should return selection
+        // reddit.com/r/ should return Multiple with suggestion and selection
         match parse_for_autocomplete("reddit.com/r/") {
-            UIResponse::Selection(data) => {
-                assert_eq!(data.title, "Choose a Subreddit");
-                assert!(data.items.len() > 0);
+            UIResponse::Multiple(data) => {
+                assert_eq!(data.responses.len(), 2);
+                // First should be suggestion
+                match &data.responses[0] {
+                    UIResponse::Suggestions(sug_data) => {
+                        assert_eq!(sug_data.suggestion.as_ref().unwrap().completion, "reddit.com/r/programming");
+                    }
+                    _ => panic!("Expected first response to be Suggestions"),
+                }
+                // Second should be selection
+                match &data.responses[1] {
+                    UIResponse::Selection(sel_data) => {
+                        assert_eq!(sel_data.title, "Choose a Subreddit");
+                        assert!(sel_data.items.len() > 0);
+                    }
+                    _ => panic!("Expected second response to be Selection"),
+                }
             }
-            _ => panic!("Expected Selection for reddit.com/r/"),
+            _ => panic!("Expected Multiple for reddit.com/r/"),
         }
 
-        // reddit.com/r/rust should return suggestions
+        // reddit.com/r/rust should return Multiple with suggestion
         match parse_for_autocomplete("reddit.com/r/rust") {
-            UIResponse::Suggestions(data) => {
-                assert_eq!(data.suggestion.as_ref().unwrap().completion, "reddit.com/r/rust/");
+            UIResponse::Multiple(data) => {
+                assert_eq!(data.responses.len(), 2);
+                // First should be suggestion for completion
+                match &data.responses[0] {
+                    UIResponse::Suggestions(sug_data) => {
+                        assert_eq!(sug_data.suggestion.as_ref().unwrap().completion, "reddit.com/r/rust/");
+                    }
+                    _ => panic!("Expected first response to be Suggestions"),
+                }
             }
-            _ => panic!("Expected Suggestions for reddit.com/r/rust"),
+            _ => panic!("Expected Multiple for reddit.com/r/rust"),
         }
 
-        // reddit.com/r/rust/ should return guide
+        // reddit.com/r/rust/ should return Multiple with suggestion and guide
         match parse_for_autocomplete("reddit.com/r/rust/") {
-            UIResponse::Guide(data) => {
-                assert!(data.title.contains("rust"));
-                assert_eq!(data.options.len(), 3);
-                assert_eq!(data.options[0].key, "comments");
+            UIResponse::Multiple(data) => {
+                assert_eq!(data.responses.len(), 2);
+                // Check guide exists in responses
+                let has_guide = data.responses.iter().any(|resp| {
+                    matches!(resp, UIResponse::Guide(guide_data) if guide_data.title.contains("rust"))
+                });
+                assert!(has_guide, "Expected to find Guide in Multiple response");
             }
-            _ => panic!("Expected Guide for reddit.com/r/rust/"),
+            _ => panic!("Expected Multiple for reddit.com/r/rust/"),
         }
     }
 
@@ -549,21 +601,37 @@ mod tests {
     fn test_guide_content() {
         // Test root guide
         match parse_for_autocomplete("reddit.com/") {
-            UIResponse::Guide(data) => {
-                assert_eq!(data.options[0].completion, "reddit.com/r/");
-                assert_eq!(data.options[1].completion, "reddit.com/u/");
+            UIResponse::Multiple(data) => {
+                // Find the guide in the responses
+                let guide = data.responses.iter().find_map(|resp| {
+                    match resp {
+                        UIResponse::Guide(guide_data) => Some(guide_data),
+                        _ => None,
+                    }
+                }).expect("Expected to find Guide in Multiple response");
+                
+                assert_eq!(guide.options[0].completion, "reddit.com/r/");
+                assert_eq!(guide.options[1].completion, "reddit.com/u/");
             }
-            _ => panic!("Expected Guide"),
+            _ => panic!("Expected Multiple"),
         }
 
         // Test subreddit guide
         match parse_for_autocomplete("reddit.com/r/programming/") {
-            UIResponse::Guide(data) => {
-                assert_eq!(data.options[0].completion, "reddit.com/r/programming/comments/");
-                assert_eq!(data.options[1].completion, "reddit.com/r/programming/hot");
-                assert_eq!(data.options[2].completion, "reddit.com/r/programming/top");
+            UIResponse::Multiple(data) => {
+                // Find the guide in the responses
+                let guide = data.responses.iter().find_map(|resp| {
+                    match resp {
+                        UIResponse::Guide(guide_data) => Some(guide_data),
+                        _ => None,
+                    }
+                }).expect("Expected to find Guide in Multiple response");
+                
+                assert_eq!(guide.options[0].completion, "reddit.com/r/programming/comments/");
+                assert_eq!(guide.options[1].completion, "reddit.com/r/programming/hot");
+                assert_eq!(guide.options[2].completion, "reddit.com/r/programming/top");
             }
-            _ => panic!("Expected Guide"),
+            _ => panic!("Expected Multiple"),
         }
     }
 
