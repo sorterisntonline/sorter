@@ -698,4 +698,182 @@ mod tests {
             _ => panic!("Expected ErrorPage for YouTube"),
         }
     }
+
+    // Test the specific flow described in parser.tdsl
+    #[test]
+    fn test_parser_tdsl_flow() {
+        let trie = build_ui_trie();
+        
+        // Step 1: "r" -> suggests "reddit.com/"
+        match trie.parse("r") {
+            UIResponse::Suggestions(data) => {
+                let suggestion = data.suggestion.as_ref().unwrap();
+                assert_eq!(suggestion.completion, "reddit.com/");
+                assert_eq!(suggestion.text, "reddit.com/");
+            }
+            _ => panic!("Expected Suggestions for 'r'"),
+        }
+
+        // Step 2: "re" -> suggests "reddit.com/"
+        match trie.parse("re") {
+            UIResponse::Suggestions(data) => {
+                let suggestion = data.suggestion.as_ref().unwrap();
+                assert_eq!(suggestion.completion, "reddit.com/");
+                assert_eq!(suggestion.text, "reddit.com/");
+            }
+            _ => panic!("Expected Suggestions for 're'"),
+        }
+
+        // Step 3: "reddit.com/" -> shows infographic with 'r' (subreddit) and 'u' (user) options
+        match trie.parse("reddit.com/") {
+            UIResponse::Multiple(responses) => {
+                // Should contain both suggestions and guide
+                let has_guide = responses.responses.iter().any(|r| matches!(r, UIResponse::Guide(_)));
+                let has_suggestions = responses.responses.iter().any(|r| matches!(r, UIResponse::Suggestions(_)));
+                assert!(has_guide, "Should contain a guide response");
+                assert!(has_suggestions, "Should contain suggestions");
+                
+                // Check that guide has both 'r' and 'u' options
+                if let Some(UIResponse::Guide(guide_data)) = responses.responses.iter().find(|r| matches!(r, UIResponse::Guide(_))) {
+                    let has_r_option = guide_data.options.iter().any(|opt| opt.key == "r");
+                    let has_u_option = guide_data.options.iter().any(|opt| opt.key == "u");
+                    assert!(has_r_option, "Should have 'r' option for subreddits");
+                    assert!(has_u_option, "Should have 'u' option for users");
+                }
+            }
+            _ => panic!("Expected Multiple responses for 'reddit.com/'"),
+        }
+
+        // Step 4: "reddit.com/r/" -> shows subreddit selection (randomly chose sub from list)
+        match trie.parse("reddit.com/r/") {
+            UIResponse::Multiple(responses) => {
+                // Should contain selection with popular subreddits
+                let has_selection = responses.responses.iter().any(|r| matches!(r, UIResponse::Selection(_)));
+                assert!(has_selection, "Should contain a selection response with subreddit options");
+                
+                // Check that selection has subreddit options
+                if let Some(UIResponse::Selection(selection_data)) = responses.responses.iter().find(|r| matches!(r, UIResponse::Selection(_))) {
+                    assert!(!selection_data.items.is_empty(), "Should have subreddit options");
+                    // Verify some popular subreddits are present
+                    let has_programming = selection_data.items.iter().any(|item| item.id == "programming");
+                    let has_rust = selection_data.items.iter().any(|item| item.id == "rust");
+                    assert!(has_programming, "Should include programming subreddit");
+                    assert!(has_rust, "Should include rust subreddit");
+                }
+            }
+            _ => panic!("Expected Multiple responses for 'reddit.com/r/'"),
+        }
+
+        // Step 5: "reddit.com/r/{sub}" -> shows subreddit view
+        match trie.parse("reddit.com/r/programming") {
+            UIResponse::Multiple(responses) => {
+                let has_guide = responses.responses.iter().any(|r| matches!(r, UIResponse::Guide(_)));
+                assert!(has_guide, "Should show subreddit view guide");
+                
+                // Check that guide has options for hot, top, new, comments
+                if let Some(UIResponse::Guide(guide_data)) = responses.responses.iter().find(|r| matches!(r, UIResponse::Guide(_))) {
+                    let has_hot = guide_data.options.iter().any(|opt| opt.key == "hot");
+                    let has_top = guide_data.options.iter().any(|opt| opt.key == "top");
+                    let has_new = guide_data.options.iter().any(|opt| opt.key == "new");
+                    let has_comments = guide_data.options.iter().any(|opt| opt.key == "comments");
+                    
+                    assert!(has_hot, "Should have 'hot' option");
+                    assert!(has_top, "Should have 'top' option");
+                    assert!(has_new, "Should have 'new' option");
+                    assert!(has_comments, "Should have 'comments' option");
+                }
+            }
+            _ => panic!("Expected Multiple responses for 'reddit.com/r/programming'"),
+        }
+
+        // Step 6: "reddit.com/r/{sub}/" -> shows infographic with comments option
+        match trie.parse("reddit.com/r/programming/") {
+            UIResponse::Multiple(responses) => {
+                let has_guide = responses.responses.iter().any(|r| matches!(r, UIResponse::Guide(_)));
+                assert!(has_guide, "Should show subreddit view guide");
+                
+                // Verify the comments option leads to the comments path
+                if let Some(UIResponse::Guide(guide_data)) = responses.responses.iter().find(|r| matches!(r, UIResponse::Guide(_))) {
+                    let comments_option = guide_data.options.iter().find(|opt| opt.key == "comments");
+                    assert!(comments_option.is_some(), "Should have comments option");
+                    if let Some(opt) = comments_option {
+                        assert_eq!(opt.completion, "reddit.com/r/programming/comments/");
+                    }
+                }
+            }
+            _ => panic!("Expected Multiple responses for 'reddit.com/r/programming/'"),
+        }
+
+        // Step 7: "reddit.com/r/{sub}/comments/" -> shows thread import options
+        match trie.parse("reddit.com/r/programming/comments/") {
+            UIResponse::Guide(guide_data) => {
+                assert_eq!(guide_data.title, "Import Comments from r/programming");
+                assert!(!guide_data.options.is_empty(), "Should have thread import options");
+                
+                // Should have options for pasting URL or random thread
+                let has_paste_option = guide_data.options.iter().any(|opt| opt.key == "paste");
+                let has_random_option = guide_data.options.iter().any(|opt| opt.key == "random");
+                assert!(has_paste_option, "Should have paste URL option");
+                assert!(has_random_option, "Should have random thread option");
+            }
+            _ => panic!("Expected Guide for 'reddit.com/r/programming/comments/'"),
+        }
+    }
+
+    #[test]
+    fn test_parser_tdsl_flow_variations() {
+        let trie = build_ui_trie();
+        
+        // Test with different subreddit names
+        for subreddit in &["rust", "webdev", "askreddit"] {
+            let query = format!("reddit.com/r/{}", subreddit);
+            match trie.parse(&query) {
+                UIResponse::Multiple(_) => {}, // Expected
+                _ => panic!("Expected Multiple for {}", query),
+            }
+            
+            let query_with_slash = format!("reddit.com/r/{}/", subreddit);
+            match trie.parse(&query_with_slash) {
+                UIResponse::Multiple(_) => {}, // Expected
+                _ => panic!("Expected Multiple for {}", query_with_slash),
+            }
+            
+            let comments_query = format!("reddit.com/r/{}/comments/", subreddit);
+            match trie.parse(&comments_query) {
+                UIResponse::Guide(_) => {}, // Expected
+                _ => panic!("Expected Guide for {}", comments_query),
+            }
+        }
+    }
+
+    #[test]
+    fn test_parser_tdsl_flow_edge_cases() {
+        let trie = build_ui_trie();
+        
+        // Test case variations
+        match trie.parse("R") {
+            UIResponse::Suggestions(data) => {
+                assert_eq!(data.suggestion.as_ref().unwrap().completion, "reddit.com/");
+            }
+            _ => panic!("Expected Suggestions for uppercase 'R'"),
+        }
+        
+        match trie.parse("RE") {
+            UIResponse::Suggestions(data) => {
+                assert_eq!(data.suggestion.as_ref().unwrap().completion, "reddit.com/");
+            }
+            _ => panic!("Expected Suggestions for uppercase 'RE'"),
+        }
+        
+        // Test with protocols
+        match trie.parse("https://reddit.com/") {
+            UIResponse::Multiple(_) => {}, // Expected
+            _ => panic!("Expected Multiple for https://reddit.com/"),
+        }
+        
+        match trie.parse("http://www.reddit.com/r/") {
+            UIResponse::Multiple(_) => {}, // Expected
+            _ => panic!("Expected Multiple for http://www.reddit.com/r/"),
+        }
+    }
 }
