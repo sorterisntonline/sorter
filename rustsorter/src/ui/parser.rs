@@ -444,7 +444,7 @@ impl DeclarativeParser {
     }
     
     fn is_unsupported_platform(&self, domain: &str) -> bool {
-        let unsupported_platforms = [
+    let unsupported_platforms = [
             "youtube.com", "youtu.be", "github.com", "twitter.com",
             "x.com", "facebook.com", "instagram.com", "tiktok.com"
         ];
@@ -608,8 +608,8 @@ fn handle_partial_parse_declarative(partial: PartialParse, query: &str, parser: 
         PartialParse::Prefix(prefix) => {
             if prefix.is_empty() {
             UIResponse::suggestions(
-                query.to_string(), 
-                    Some(Suggestion::new("reddit.com/", "Start typing to explore Reddit"))
+            query.to_string(),
+            Some(Suggestion::new("reddit.com/", "Start typing to explore Reddit"))
                 )
             } else {
                 // Find the platform this prefix belongs to
@@ -634,11 +634,67 @@ fn handle_partial_parse_declarative(partial: PartialParse, query: &str, parser: 
                 UIResponse::suggestions(query.to_string(), None)
             }
         }
-        PartialParse::Path(parsed_url, _remaining) => {
-            // This is a partial path - we can get suggestions from the current context
-            handle_complete_parse_declarative(parsed_url, query, parser)
+        PartialParse::Path(parsed_url, remaining) => {
+            // This is a partial path - check if we can find a partial match suggestion
+            if let Some(suggestion) = try_find_partial_match_for_ui(&parsed_url, &remaining, parser) {
+                UIResponse::suggestions(query.to_string(), Some(suggestion))
+        } else {
+                // Fall back to treating it as a complete path
+                handle_complete_parse_declarative(parsed_url, query, parser)
+            }
         }
     }
+}
+
+fn try_find_partial_match_for_ui(parsed_url: &ParsedUrl, remaining: &str, parser: &DeclarativeParser) -> Option<Suggestion> {
+    match parsed_url {
+        ParsedUrl::Reddit(reddit_path) => {
+            let platform = parser.schema.platforms.get("reddit.com")?;
+            
+            match reddit_path {
+                RedditPath::Subreddit(sub) | RedditPath::SubredditWithSlash(sub) => {
+                    // Look for partial matches in the subreddit's children (comments, hot, top, etc.)
+                    let mut context = ParseContext::new();
+                    context.set_variable("subreddit", &sub);
+                    
+                    // Find the subreddit path in the schema
+                    if let Some(r_path) = platform.paths.iter().find(|p| matches!(p.pattern, PathPattern::Literal(ref l) if l == "r")) {
+                        if let Some(sub_path) = r_path.children.iter().find(|p| matches!(p.pattern, PathPattern::Variable(_, VariableType::Subreddit))) {
+                            // Look for choice patterns in the subreddit's children
+                            for child_path in &sub_path.children {
+                                if let PathPattern::Choice(choices) = &child_path.pattern {
+                                    for choice in choices {
+                                        if choice.starts_with(remaining) {
+                                            context.set_variable("choice", choice);
+                                            let completion = parser.expand_template(&child_path.suggestion_template, &context);
+                                            
+                                            // For comments, add random comment ID
+                                            let final_completion = if choice == "comments" {
+                                                let random_id = fetch_random_comment_id(&sub).unwrap_or_else(|| "abc123".to_string());
+                                                format!("{}{}", completion, random_id)
+                                            } else {
+                                                completion
+                                            };
+                                            
+                                            let description = if choice == "comments" {
+                                                "Random comment!".to_string()
+                                            } else {
+                                                format!("Browse {}", choice)
+                                            };
+                                            
+                                            return Some(Suggestion::new(&final_completion, &description));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    None
 }
 
 fn handle_complete_parse_declarative(parsed: ParsedUrl, query: &str, parser: &DeclarativeParser) -> UIResponse {
@@ -665,8 +721,8 @@ fn handle_complete_parse_declarative(parsed: ParsedUrl, query: &str, parser: &De
                         
                         UIResponse::multiple(vec![suggestion, ui_guide])
                     } else {
-                        UIResponse::suggestions(
-                            query.to_string(),
+            UIResponse::suggestions(
+                query.to_string(), 
                             Some(Suggestion::new("reddit.com/r/", "Browse subreddits"))
                         )
                     }
@@ -686,8 +742,8 @@ fn handle_complete_parse_declarative(parsed: ParsedUrl, query: &str, parser: &De
                     UIResponse::multiple(vec![suggestion, selection])
                 }
                 RedditPath::Subreddit(sub) => {
-                    UIResponse::suggestions(
-                        query.to_string(),
+            UIResponse::suggestions(
+                query.to_string(),
                         Some(Suggestion::new(&format!("reddit.com/r/{}/", sub), "View subreddit"))
                     )
                 }
@@ -695,8 +751,8 @@ fn handle_complete_parse_declarative(parsed: ParsedUrl, query: &str, parser: &De
                     // Show subreddit browsing options
                     let suggestion_with_random = {
                         let random_id = fetch_random_comment_id(&sub).unwrap_or_else(|| "abc123".to_string());
-                        UIResponse::suggestions(
-                            query.to_string(),
+                UIResponse::suggestions(
+                    query.to_string(),
                             Some(Suggestion::new(&format!("reddit.com/r/{}/comments/{}", sub, random_id), "Random comment!"))
                         )
                     };
@@ -966,7 +1022,19 @@ mod tests {
         }
     }
 
-
+    #[test]
+    fn test_partial_choice_matching() {
+        // Test that "c" partially matches "comments" and provides suggestion with random comment ID
+        match parse_for_autocomplete("reddit.com/r/programming/c") {
+            UIResponse::Suggestions(data) => {
+                let suggestion = data.suggestion.as_ref().unwrap();
+                assert!(suggestion.completion.starts_with("reddit.com/r/programming/comments/"));
+                assert!(suggestion.completion.len() > "reddit.com/r/programming/comments/".len());
+                assert_eq!(suggestion.description.as_ref().unwrap(), "Random comment!");
+            }
+            other => panic!("Expected Suggestions for partial choice match, got: {:?}", other),
+        }
+    }
 
     #[test]
     fn test_guide_content() {
