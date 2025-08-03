@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-const useUIStore = create((set) => ({
+const useUIStore = create((set, get) => ({
   // State
   suggestion: null,
   guide: null,
@@ -137,30 +137,11 @@ const useUIStore = create((set) => ({
         break;
         
       case 'Multiple':
-        // Handle multiple responses by processing each one
+        // Handle multiple responses by processing each one additively
         if (response.data && response.data.responses) {
+          // Process all responses additively (don't clear between them)
           response.data.responses.forEach(subResponse => {
-            // Recursively handle each response
-            // Note: We need to be careful about state overwrites here
-            set((state) => {
-              const newState = { ...state };
-              
-              // Process each response type but don't clear other states
-              switch (subResponse.type) {
-                case 'Suggestions':
-                  newState.suggestion = subResponse.data.suggestion;
-                  break;
-                case 'Guide':
-                  newState.guide = subResponse.data;
-                  break;
-                case 'Selection':
-                  newState.selection = subResponse.data;
-                  break;
-                // ... other types as needed
-              }
-              
-              return newState;
-            });
+            get().handleUIResponseAdditive(subResponse);
           });
         }
         break;
@@ -170,6 +151,55 @@ const useUIStore = create((set) => ({
     }
     
     set({ isLoading: false });
+  },
+  
+  // Additive version that doesn't clear other state
+  handleUIResponseAdditive: (response) => {
+    if (!response || !response.type) return;
+    
+    // Only update the specific field for this response type
+    switch (response.type) {
+      case 'Suggestions':
+        set({ suggestion: response.data.suggestion });
+        break;
+        
+      case 'Guide':
+        set({ guide: response.data });
+        break;
+        
+      case 'Selection':
+        set({ selection: response.data });
+        break;
+        
+      case 'SearchResults':
+        set({ searchResults: response.data });
+        break;
+        
+      case 'VotingPairs':
+        set({ votingPairs: response.data });
+        break;
+        
+      case 'EntityView':
+        set({ entityView: response.data });
+        break;
+        
+      case 'ErrorPage':
+        set({ error: response.data });
+        break;
+        
+      case 'NotYetImplemented':
+        set({ notYetImplemented: response.data });
+        break;
+        
+      case 'Multiple':
+        // Recursively handle nested Multiple responses
+        if (response.data && response.data.responses) {
+          response.data.responses.forEach(subResponse => {
+            get().handleUIResponseAdditive(subResponse);
+          });
+        }
+        break;
+    }
   },
   
   // Utility actions
