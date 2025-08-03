@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     app_state::AppState,
     ui::types::UIResponse,
-    ui::parser,
+    ui::trie,
 };
 
 #[derive(Deserialize, Serialize, JsonSchema, Debug, Clone)]
@@ -138,9 +138,8 @@ async fn handle_client_message(
 }
 
 async fn handle_update_query_command(query: String) -> UIResponse {
-    // This will eventually hold the unified parsing logic.
-    // For now, it will just call the autocomplete parser.
-    parser::parse_for_autocomplete(&query)
+    // Use the refined UI Trie system for intelligent URL parsing and autocomplete
+    trie::parse_for_autocomplete(&query)
 }
 
 async fn handle_vote_command(
