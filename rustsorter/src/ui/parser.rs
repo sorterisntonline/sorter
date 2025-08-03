@@ -1,3 +1,11 @@
+use nom::{
+    branch::alt,
+    bytes::complete::{tag, take_while1},
+    combinator::{map, eof},
+    sequence::{preceded, tuple, terminated},
+    IResult,
+};
+
 use crate::ui::types::{UIResponse, Suggestion, GuideOption, SelectionItem};
 
 // --- Data Structures ---
@@ -44,6 +52,37 @@ fn is_subreddit_char(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
 }
 
+fn subreddit_parser(input: &str) -> IResult<&str, String> {
+    map(take_while1(is_subreddit_char), |s: &str| s.to_string())(input)
+}
+
+fn reddit_path_parser(input: &str) -> IResult<&str, RedditPath> {
+    alt((
+        // Most specific patterns first
+        map(
+            tuple((tag("r/"), subreddit_parser, tag("/comments/"))),
+            |(_, sub, _)| RedditPath::Comments(sub, None),
+        ),
+        map(
+            tuple((tag("r/"), subreddit_parser, tag("/"))),
+            |(_, sub, _)| RedditPath::SubredditWithSlash(sub),
+        ),
+        map(
+            preceded(tag("r/"), terminated(subreddit_parser, eof)),
+            RedditPath::Subreddit,
+        ),
+        map(terminated(tag("r/"), eof), |_| RedditPath::SubredditRoot),
+        map(eof, |_| RedditPath::Root),
+    ))(input)
+}
+
+fn reddit_url_parser(input: &str) -> IResult<&str, ParsedUrl> {
+    map(
+        preceded(tag("reddit.com/"), reddit_path_parser),
+        ParsedUrl::Reddit,
+    )(input)
+}
+
 // --- Main parsing function ---
 
 pub fn parse_url(query: &str) -> ParseResult {
@@ -69,58 +108,39 @@ pub fn parse_url(query: &str) -> ParseResult {
         return ParseResult::Partial(PartialParse::Prefix(prefix));
     }
     
-    // TODO: Implement custom parser without nom
-    // For now, handle basic complete cases that tests expect
-    if query.starts_with("reddit.com/") {
-        let path_part = &query["reddit.com/".len()..];
-        
-        // Handle complete parsing cases
-        match path_part {
-            "" => return ParseResult::Complete(ParsedUrl::Reddit(RedditPath::Root)),
-            "r/" => return ParseResult::Complete(ParsedUrl::Reddit(RedditPath::SubredditRoot)),
-            _ if path_part.starts_with("r/") && path_part.ends_with("/comments/") => {
-                let sub_part = &path_part[2..path_part.len()-10]; // Remove "r/" and "/comments/"
-                if !sub_part.is_empty() && sub_part.chars().all(is_subreddit_char) {
-                    return ParseResult::Complete(ParsedUrl::Reddit(RedditPath::Comments(sub_part.to_string(), None)));
+    // Try to parse as complete URL
+    match reddit_url_parser(query) {
+        Ok(("", parsed)) => ParseResult::Complete(parsed),
+        Ok((remaining, parsed)) => {
+            // Partial path after valid parse
+            ParseResult::Partial(PartialParse::Path(parsed, remaining.to_string()))
+        }
+        Err(_) => {
+            // Check if it starts with a valid domain but has incomplete path
+            if query.starts_with("reddit.com/") {
+                let path_part = &query["reddit.com/".len()..];
+                if path_part.starts_with("r") && !path_part.starts_with("r/") {
+                    return ParseResult::Partial(PartialParse::Path(
+                        ParsedUrl::Reddit(RedditPath::Root),
+                        path_part.to_string(),
+                    ));
                 }
-            },
-            _ if path_part.starts_with("r/") && path_part.ends_with("/") => {
-                let sub_part = &path_part[2..path_part.len()-1]; // Remove "r/" and trailing "/"
-                if !sub_part.is_empty() && sub_part.chars().all(is_subreddit_char) {
-                    return ParseResult::Complete(ParsedUrl::Reddit(RedditPath::SubredditWithSlash(sub_part.to_string())));
-                }
-            },
-            _ if path_part.starts_with("r/") => {
-                let sub_part = &path_part[2..]; // Remove "r/"
-                if !sub_part.is_empty() && sub_part.chars().all(is_subreddit_char) {
-                    return ParseResult::Complete(ParsedUrl::Reddit(RedditPath::Subreddit(sub_part.to_string())));
-                }
-            },
-            _ if path_part.starts_with("r") && !path_part.starts_with("r/") => {
-                return ParseResult::Partial(PartialParse::Path(
-                    ParsedUrl::Reddit(RedditPath::Root),
-                    path_part.to_string(),
+                // Invalid path after reddit.com/
+                return ParseResult::Error(ParseError::MalformedUrl(
+                    format!("Invalid Reddit path: '{}'", path_part)
                 ));
-            },
-            _ => {
-                // Fall through to invalid path handling
+            }
+            
+            // Check if it looks like a URL but isn't supported
+            if is_url_like(query) {
+                ParseResult::Error(ParseError::InvalidFormat(
+                    format!("Unable to parse URL: '{}'", query)
+                ))
+            } else {
+                // Treat as unknown prefix for now
+                ParseResult::Partial(PartialParse::Prefix(query.to_string()))
             }
         }
-        
-        // Invalid path after reddit.com/
-        return ParseResult::Error(ParseError::MalformedUrl(
-            format!("Invalid Reddit path: '{}'", path_part)
-        ));
-    }
-    
-    // Check if it looks like a URL but isn't supported
-    if is_url_like(query) {
-        ParseResult::Error(ParseError::InvalidFormat(
-            format!("Unable to parse URL: '{}'", query)
-        ))
-    } else {
-        // Treat as unknown prefix for now
-        ParseResult::Partial(PartialParse::Prefix(query.to_string()))
     }
 }
 
