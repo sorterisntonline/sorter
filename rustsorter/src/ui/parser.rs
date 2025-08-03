@@ -213,7 +213,7 @@ impl RouteTree {
         let path_type = context.get("path_type").map(|s| s.as_str()).unwrap_or("root");
         let subreddit = context.get("subreddit").cloned();
         let has_trailing_slash = context.get("trailing_slash").is_some();
-        let choice = context.get("choice").cloned();
+        let _choice = context.get("choice").cloned();
 
         ParsedUrl::Reddit(match path_type {
             "subreddit_root" => RedditPath::SubredditRoot,
@@ -321,7 +321,7 @@ fn suggest_popular_subreddit(_context: &HashMap<String, String>) -> Suggestion {
 }
 
 fn suggest_subreddit_slash(context: &HashMap<String, String>) -> Suggestion {
-    let subreddit = context.get("subreddit").unwrap_or(&"programming".to_string());
+    let subreddit = context.get("subreddit").map(|s| s.as_str()).unwrap_or("programming");
     Suggestion {
         text: format!("reddit.com/r/{}/", subreddit),
         completion: format!("reddit.com/r/{}/", subreddit),
@@ -331,8 +331,8 @@ fn suggest_subreddit_slash(context: &HashMap<String, String>) -> Suggestion {
 }
 
 fn suggest_random_comment(context: &HashMap<String, String>) -> Suggestion {
-    let subreddit = context.get("subreddit").unwrap_or(&"programming".to_string());
-    let choice = context.get("choice").unwrap_or(&"comments".to_string());
+    let subreddit = context.get("subreddit").map(|s| s.as_str()).unwrap_or("programming");
+    let choice = context.get("choice").map(|s| s.as_str()).unwrap_or("comments");
     
     if choice == "comments" {
         let random_id = generate_random_post_id();
@@ -346,7 +346,7 @@ fn suggest_random_comment(context: &HashMap<String, String>) -> Suggestion {
         Suggestion {
             text: format!("reddit.com/r/{}/{}", subreddit, choice),
             completion: format!("reddit.com/r/{}/{}", subreddit, choice),
-            description: Some(format!("View {} posts", choice)).to_string()),
+            description: Some(format!("View {} posts", choice)),
             score: 1.0,
         }
     }
@@ -397,7 +397,7 @@ fn create_subreddit_selection(query: &str, _context: &HashMap<String, String>) -
 }
 
 fn create_subreddit_guide(query: &str, context: &HashMap<String, String>) -> UIResponse {
-    let subreddit = context.get("subreddit").unwrap_or(&"programming".to_string());
+    let subreddit = context.get("subreddit").map(|s| s.as_str()).unwrap_or("programming");
     UIResponse::Guide(GuideData {
         query: query.to_string(),
         title: format!("Browse r/{}", subreddit),
@@ -501,7 +501,6 @@ fn build_route_tree() -> RouteTree {
                                         ui_fn: Some(create_subreddit_guide),
                                     }
                                 ],
-                                children: vec![],
                                 suggestion_fn: Some(suggest_subreddit_slash),
                                 ui_fn: None,
                             }
@@ -538,12 +537,12 @@ fn parse_url(url: &str) -> ParseResult {
     get_route_tree().parse(url)
 }
 
-fn parse_for_autocomplete(query: &str) -> UIResponse {
+pub fn parse_for_autocomplete(query: &str) -> UIResponse {
     let tree = get_route_tree();
     let result = tree.parse(query);
     
     match result {
-        ParseResult::Complete(parsed_url) => {
+        ParseResult::Complete(_parsed_url) => {
             // For complete URLs, we may still want to show suggestions/guides
             let normalized = normalize_input(query);
             let segments = tokenize(&normalized);
@@ -602,7 +601,7 @@ fn parse_for_autocomplete(query: &str) -> UIResponse {
                         suggestion: Some(suggest_reddit_root(&HashMap::new())),
                     })
                 }
-                PartialParse::Path(parsed_url, remaining) => {
+                PartialParse::Path(_parsed_url, remaining) => {
                     // Find the appropriate node and generate suggestions
                     let normalized = normalize_input(query);
                     let segments = tokenize(&normalized);
@@ -611,7 +610,7 @@ fn parse_for_autocomplete(query: &str) -> UIResponse {
                         let mut context = HashMap::new();
                         context.insert("domain".to_string(), "reddit.com".to_string());
                         
-                        if let Some((node, mut context)) = find_node_for_partial(platform_node, &segments[1..], context) {
+                        if let Some((node, context)) = find_node_for_partial(platform_node, &segments[1..], context) {
                             // Try to find a partial match for the remaining segment
                             if let Some(child) = node.children.iter().find(|child| {
                                 let mut temp_context = context.clone();
@@ -656,7 +655,7 @@ fn parse_for_autocomplete(query: &str) -> UIResponse {
     }
 }
 
-fn find_node_for_path(node: &RouteNode, segments: &[String], mut context: HashMap<String, String>) -> Option<(&RouteNode, HashMap<String, String>)> {
+fn find_node_for_path<'a>(node: &'a RouteNode, segments: &[String], mut context: HashMap<String, String>) -> Option<(&'a RouteNode, HashMap<String, String>)> {
     let mut current_node = node;
     
     for segment in segments {
@@ -675,7 +674,7 @@ fn find_node_for_path(node: &RouteNode, segments: &[String], mut context: HashMa
     Some((current_node, context))
 }
 
-fn find_node_for_partial(node: &RouteNode, segments: &[String], mut context: HashMap<String, String>) -> Option<(&RouteNode, HashMap<String, String>)> {
+fn find_node_for_partial<'a>(node: &'a RouteNode, segments: &[String], mut context: HashMap<String, String>) -> Option<(&'a RouteNode, HashMap<String, String>)> {
     let mut current_node = node;
     
     for (i, segment) in segments.iter().enumerate() {
