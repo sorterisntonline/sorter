@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::OnceLock;
 use crate::ui::types::{UIResponse, Suggestion, GuideOption, SelectionItem};
 
 // --- Data Structures ---
@@ -85,18 +86,39 @@ impl PrefixTrie {
 
     fn find_completion(&self, prefix: &str) -> Option<String> {
         let mut node = self;
-        for c in prefix.to_lowercase().chars() {
+        let lower_prefix = prefix.to_lowercase();
+        
+        // Walk as far as we can with the prefix
+        for c in lower_prefix.chars() {
             if let Some(child) = node.children.get(&c) {
                 node = child;
             } else {
                 return None;
             }
         }
+        
+        // If we found an exact match, return it
         if node.is_end {
-            node.completion.clone()
-        } else {
-            None
+            return node.completion.clone();
         }
+        
+        // Otherwise, find the first completion reachable from here
+        self.find_first_completion_from(node)
+    }
+    
+    fn find_first_completion_from(&self, start_node: &PrefixTrie) -> Option<String> {
+        if start_node.is_end {
+            return start_node.completion.clone();
+        }
+        
+        // Do a simple DFS to find the first completion
+        for child in start_node.children.values() {
+            if let Some(completion) = self.find_first_completion_from(child) {
+                return Some(completion);
+            }
+        }
+        
+        None
     }
 }
 
@@ -291,29 +313,29 @@ fn fetch_random_comment_id(_subreddit: &str) -> Option<String> {
     Some("abc123".to_string())
 }
 
+// Cached trie for domain matching
+static DOMAIN_TRIE: OnceLock<PrefixTrie> = OnceLock::new();
+
 // Build the trie once and cache it
-fn build_domain_trie() -> PrefixTrie {
-    let mut trie = PrefixTrie::new();
-    
-    // Reddit prefixes
-    trie.insert("r", "reddit.com");
-    trie.insert("re", "reddit.com");
-    trie.insert("red", "reddit.com");
-    trie.insert("redd", "reddit.com");
-    trie.insert("reddi", "reddit.com");
-    trie.insert("reddit", "reddit.com");
-    trie.insert("reddit.", "reddit.com");
-    trie.insert("reddit.c", "reddit.com");
-    trie.insert("reddit.co", "reddit.com");
-    trie.insert("reddit.com", "reddit.com");
-    
-    // Future platforms (will be marked as unsupported in parsing)
-    trie.insert("youtube", "youtube.com");
-    trie.insert("youtu", "youtube.com");
-    trie.insert("github", "github.com");
-    trie.insert("twitter", "twitter.com");
-    
-    trie
+fn get_domain_trie() -> &'static PrefixTrie {
+    DOMAIN_TRIE.get_or_init(|| {
+        let mut trie = PrefixTrie::new();
+        
+        // Reddit - insert full domain with slash for consistent completions
+        trie.insert("reddit.com", "reddit.com/");
+        
+        // Unsupported platforms - also with slashes for consistency
+        trie.insert("youtube.com", "youtube.com/");
+        trie.insert("youtu.be", "youtu.be/");
+        trie.insert("github.com", "github.com/");
+        trie.insert("twitter.com", "twitter.com/");
+        trie.insert("x.com", "x.com/");
+        trie.insert("facebook.com", "facebook.com/");
+        trie.insert("instagram.com", "instagram.com/");
+        trie.insert("tiktok.com", "tiktok.com/");
+        
+        trie
+    })
 }
 
 // --- New State-Based Parser Implementation ---
@@ -326,12 +348,17 @@ pub fn parse_url(query: &str) -> ParseResult {
         return ParseResult::Partial(PartialParse::Prefix("".to_string()));
     }
 
-    let trie = build_domain_trie();
+    let trie = get_domain_trie();
     let mut state = UrlState::Empty;
     let mut remaining = String::new();
 
-    // Normalize and split input
-    let normalized = query.to_lowercase();
+    // Normalize and split input - strip protocols and www
+    let normalized = query
+        .replace("https://", "")
+        .replace("http://", "")
+        .replace("www.", "")
+        .to_lowercase();
+    
     let segments: Vec<&str> = if normalized.contains('/') {
         normalized.split('/').collect()
     } else {
@@ -341,37 +368,33 @@ pub fn parse_url(query: &str) -> ParseResult {
     for (i, &seg) in segments.iter().enumerate() {
         match state {
             UrlState::Empty => {
-                // Check reddit domains first (before trie lookup)
-                if seg == "reddit.com" {
-                    state = UrlState::Domain(seg.to_string());
-                } else if seg.starts_with("reddit.") {
-                    // Partial reddit domain (e.g., "reddit.", "reddit.c", "reddit.co")
-                    state = UrlState::Domain(seg.to_string());
-                    remaining = segments[i+1..].join("/");
-                    break;
-                } else if let Some(completion) = trie.find_completion(seg) {
-                    if completion != "reddit.com" {
-                        // Unsupported platform detected
-                        state = UrlState::Unsupported(completion);
-                        break;
+                if let Some(completion) = trie.find_completion(seg) {
+                    if completion.starts_with("reddit.com") {
+                        // Reddit domain or prefix
+                        if seg == "reddit.com" {
+                            state = UrlState::Domain(seg.to_string());
+                        } else {
+                            // Partial reddit input (e.g., "r", "reddit", "reddit.c")
+                            state = UrlState::Prefix(seg.to_string());
+                            remaining = segments[i+1..].join("/");
+                            break;
+                        }
                     } else {
-                        // All reddit-related prefixes stay as prefixes for now
-                        // Only direct domain input like "reddit.com" becomes a domain
-                        state = UrlState::Prefix(seg.to_string());
-                        remaining = segments[i+1..].join("/");
+                        // Unsupported platform detected
+                        state = UrlState::Unsupported(completion.trim_end_matches('/').to_string());
                         break;
                     }
                 } else if is_domain_like(seg) {
-                    // Check if it's a known platform first
+                    // Check if it's a known unsupported platform
                     if is_known_unsupported_platform(seg) {
                         state = UrlState::Unsupported(seg.to_string());
                     } else {
-                        // Unrecognized domain-like input - treat as invalid format
+                        // Unrecognized domain-like input
                         state = UrlState::Invalid(format!("Unable to parse URL: '{}'", segments.join("/")));
                     }
                     break;
                 } else {
-                    // Simple prefix (e.g., "r", "re")
+                    // Simple prefix that didn't match trie (e.g., "xyz")
                     state = UrlState::Prefix(seg.to_string());
                     remaining = segments[i+1..].join("/");
                     break;
@@ -521,26 +544,26 @@ fn try_enhanced_response(query: &str) -> Option<UIResponse> {
         ));
     }
 
-    let trie = build_domain_trie();
+    let trie = get_domain_trie();
     let normalized = query.to_lowercase();
     
     // Quick state detection for enhanced UX
     if let Some(completion) = trie.find_completion(&normalized) {
-        if completion == "reddit.com" {
+        if completion.starts_with("reddit.com") {
             if query.ends_with('/') {
                 // "reddit.com/" - show guide
                 let state = UrlState::PathRoot;
                 return state.guide(query);
             } else {
                 // "reddit" variants - suggest completion
-                let state = UrlState::Domain(completion);
+                let state = UrlState::Domain(completion.trim_end_matches('/').to_string());
                 return state.suggestion().map(|sug| UIResponse::suggestions(query.to_string(), Some(sug)));
             }
         } else {
             // Unsupported platform
             return Some(UIResponse::error(
                 "UnsupportedPlatform".to_string(),
-                format!("Platform '{}' is not yet supported. Currently only Reddit URLs are supported.", completion)
+                format!("Platform '{}' is not yet supported. Currently only Reddit URLs are supported.", completion.trim_end_matches('/'))
             ));
         }
     }
@@ -739,8 +762,10 @@ mod tests {
 
     #[test]
     fn test_parse_url_domains() {
-        assert_eq!(parse_url("reddit."), ParseResult::Partial(PartialParse::Domain("reddit.".to_string())));
-        assert_eq!(parse_url("reddit.c"), ParseResult::Partial(PartialParse::Domain("reddit.c".to_string())));
+        // Partial reddit domains are now treated as prefixes for consistency
+        assert_eq!(parse_url("reddit."), ParseResult::Partial(PartialParse::Prefix("reddit.".to_string())));
+        assert_eq!(parse_url("reddit.c"), ParseResult::Partial(PartialParse::Prefix("reddit.c".to_string())));
+        // Complete reddit.com is still a domain
         assert_eq!(parse_url("reddit.com"), ParseResult::Partial(PartialParse::Domain("reddit.com".to_string())));
     }
 
@@ -1005,5 +1030,24 @@ mod tests {
                 other => panic!("Expected UnsupportedPlatform error for {}, got {:?}", url, other),
             }
         }
+    }
+
+    #[test]
+    fn test_protocol_and_www_stripping() {
+        // Test that protocols and www are properly stripped
+        assert_eq!(
+            parse_url("https://reddit.com/"),
+            ParseResult::Complete(ParsedUrl::Reddit(RedditPath::Root))
+        );
+        assert_eq!(
+            parse_url("http://www.reddit.com/r/rust"),
+            ParseResult::Complete(ParsedUrl::Reddit(RedditPath::Subreddit("rust".to_string())))
+        );
+        assert_eq!(
+            parse_url("https://www.youtube.com/watch"),
+            ParseResult::Error(ParseError::UnsupportedPlatform(
+                "Platform 'youtube.com' is not yet supported. Currently only Reddit URLs are supported.".to_string()
+            ))
+        );
     }
 }
