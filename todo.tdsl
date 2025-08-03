@@ -1,9 +1,10 @@
-random subreddit suggestion from list (rust, programming, askreddit, amitheasshole)
+fill in some of these pages with reddit api http requests, which import hot
 {
   on reddit.com/r/programm  (unfinished) -> show "import subrdedit" ui.
     where unfinished = sql query misses the ns=reddit.sub&pk=programm 
     where ui = <div> always import reddit hot (not top) </div>
 }
+random subreddit suggestion from list (rust, programming, askreddit, amitheasshole)
 pk_namespace => ns
 
 append only log arcitecture
