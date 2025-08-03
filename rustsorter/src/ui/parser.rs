@@ -72,12 +72,14 @@ pub fn parse_for_autocomplete(query: &str) -> UIResponse {
     }
     
     // Handle incomplete cases that nom struggles with by default
-    if "reddit.com/".starts_with(query) && query != "reddit.com/" {
-        return UIResponse::suggestions(query.to_string(), Some(Suggestion::new("reddit.com/", "Go to Reddit")));
-    } else if "reddit.com/r/".starts_with(query) && query != "reddit.com/r/" {
+    // Check for incomplete reddit.com/r/ first (more specific)
+    if "reddit.com/r/".starts_with(query) && query != "reddit.com/r/" && query.starts_with("reddit.com/r") {
         return UIResponse::suggestions(query.to_string(), Some(Suggestion::new("reddit.com/r/", "Browse subreddits")));
     }
-
+    // Then check for incomplete reddit.com/ (less specific)
+    else if "reddit.com/".starts_with(query) && query != "reddit.com/" {
+        return UIResponse::suggestions(query.to_string(), Some(Suggestion::new("reddit.com/", "Go to Reddit")));
+    }
 
     match reddit_url_parser(query) {
         Ok((remaining, parsed_url)) if remaining.is_empty() => {
@@ -245,5 +247,35 @@ mod tests {
         assert_eq!(get_suggestion("reddit.com/r/"), Some("reddit.com/r/rust".to_string()));
         assert_eq!(get_suggestion("reddit.com/r/rust"), Some("reddit.com/r/rust/".to_string()));
         assert_eq!(get_suggestion("reddit.com/r/rust/"), Some("reddit.com/r/rust/comments/".to_string()));
+    }
+
+    #[test]
+    fn test_ui_response_types() {
+        // Test that we get the right UI response types
+        let response1 = parse_for_autocomplete("reddit.com/");
+        let response2 = parse_for_autocomplete("reddit.com/r/");
+        let response3 = parse_for_autocomplete("reddit.com/r/rust");
+        let response4 = parse_for_autocomplete("reddit.com/r/rust/");
+        
+        // Verify types
+        match response1 {
+            UIResponse::Guide(_) => {},
+            _ => panic!("Expected Guide for reddit.com/"),
+        }
+        
+        match response2 {
+            UIResponse::Selection(_) => {},
+            _ => panic!("Expected Selection for reddit.com/r/"),
+        }
+        
+        match response3 {
+            UIResponse::Suggestions(_) => {},
+            _ => panic!("Expected Suggestions for reddit.com/r/rust"),
+        }
+        
+        match response4 {
+            UIResponse::Guide(_) => {},
+            _ => panic!("Expected Guide for reddit.com/r/rust/"),
+        }
     }
 }
