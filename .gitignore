@@ -7,5 +7,5 @@
 repomix-output.txt
 
 !.clj-kondo/config.edn
-all.txt
+all.xml
 rustsorter/.idea
