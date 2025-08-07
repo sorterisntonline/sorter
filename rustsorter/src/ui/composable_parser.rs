@@ -697,11 +697,55 @@ mod tests {
     use super::*;
 
     /// Represents a keystroke action
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, PartialEq)]
     enum KeyAction {
         Type(String),  // Type characters
         Tab,           // Press tab (accept completion)
         Enter,         // Press enter
+    }
+
+    /// Expected state after a keystroke
+    #[derive(Debug, Clone)]
+    enum ExpectedAction {
+        Suggestion { completion: String },
+        Guide { title_contains: String },
+        Selection { title_contains: String },
+        RenderSubreddit { subreddit: String, sort: Option<String> },
+        RenderUser { username: String },
+        Error { error_type: String },
+        Multiple,  // Multiple responses (guide + suggestions)
+        Home,
+    }
+
+    impl ExpectedAction {
+        fn matches(&self, action: &UIAction) -> bool {
+            match (self, action) {
+                (ExpectedAction::Suggestion { completion }, UIAction::ShowSuggestions(data)) => {
+                    data.suggestion.as_ref()
+                        .map(|s| s.completion == *completion)
+                        .unwrap_or(false)
+                }
+                (ExpectedAction::Guide { title_contains }, UIAction::ShowStaticGuide { title, .. }) => {
+                    title.contains(title_contains)
+                }
+                (ExpectedAction::Selection { title_contains }, UIAction::ShowStaticSelection { title, .. }) => {
+                    title.contains(title_contains)
+                }
+                (ExpectedAction::RenderSubreddit { subreddit, sort }, 
+                 UIAction::RenderSubredditView { subreddit: s, sort: so }) => {
+                    s == subreddit && so == sort
+                }
+                (ExpectedAction::RenderUser { username }, UIAction::RenderUserProfile { username: u }) => {
+                    u == username
+                }
+                (ExpectedAction::Error { error_type }, UIAction::ShowError(data)) => {
+                    data.error_type == *error_type
+                }
+                (ExpectedAction::Multiple, UIAction::ShowMultiple { .. }) => true,
+                (ExpectedAction::Home, UIAction::ShowHomePage { .. }) => true,
+                _ => false,
+            }
+        }
     }
 
     /// Test helper to simulate a sequence of keystrokes
@@ -739,7 +783,50 @@ mod tests {
         results
     }
 
-    /// Helper to assert a specific flow works as expected
+    /// Test a flow using declarative (KeyAction, ExpectedAction) tuples
+    fn test_flow(name: &str, flow: Vec<(KeyAction, ExpectedAction)>) {
+        let graph = build_reddit_graph();
+        let mut current_text = String::new();
+        
+        println!("\n=== Flow: {} ===", name);
+        
+        for (i, (key_action, expected)) in flow.iter().enumerate() {
+            // Perform the keystroke
+            match key_action {
+                KeyAction::Type(text) => {
+                    current_text.push_str(text);
+                }
+                KeyAction::Tab => {
+                    // Tab accepts the current suggestion
+                    let result = graph.parse(&current_text);
+                    if let UIAction::ShowSuggestions(data) = result {
+                        if let Some(suggestion) = &data.suggestion {
+                            current_text = suggestion.completion.clone();
+                        }
+                    }
+                }
+                KeyAction::Enter => {
+                    // Enter submits current text (no change needed for testing)
+                }
+            }
+            
+            // Check the result
+            let actual_action = graph.parse(&current_text);
+            
+            println!("  Step {}: {:?} -> '{}' -> {:?}", 
+                     i + 1, key_action, current_text, actual_action);
+            
+            assert!(
+                expected.matches(&actual_action),
+                "Flow '{}' failed at step {}\n  Expected: {:?}\n  Actual: {:?}\n  Text: '{}'",
+                name, i + 1, expected, actual_action, current_text
+            );
+        }
+        
+        println!("✓ Flow '{}' passed!", name);
+    }
+    
+    /// Legacy helper for backward compatibility (will be removed)
     fn assert_flow(
         name: &str,
         actions: Vec<KeyAction>,
@@ -1039,6 +1126,139 @@ mod tests {
         assert_eq!(results[4].0, "https://reddit.com/");  // After typing /
         
         println!("✓ Multiple tab completions work correctly!");
+    }
+
+    // === CONVENIENCE MACROS FOR CLEANER TESTS ===
+    
+    macro_rules! flow {
+        ($(($key:expr, $expected:expr)),* $(,)?) => {
+            vec![$(($key, $expected)),*]
+        };
+    }
+    
+    macro_rules! type_text {
+        ($text:expr) => {
+            KeyAction::Type($text.to_string())
+        };
+    }
+    
+    macro_rules! suggests {
+        ($completion:expr) => {
+            ExpectedAction::Suggestion { completion: $completion.to_string() }
+        };
+    }
+    
+    macro_rules! renders_subreddit {
+        ($subreddit:expr) => {
+            ExpectedAction::RenderSubreddit { subreddit: $subreddit.to_string(), sort: None }
+        };
+        ($subreddit:expr, $sort:expr) => {
+            ExpectedAction::RenderSubreddit { 
+                subreddit: $subreddit.to_string(), 
+                sort: Some($sort.to_string()) 
+            }
+        };
+    }
+
+    // === NEW DECLARATIVE TESTS ===
+
+    #[test]
+    fn test_declarative_https_tab_flow() {
+        test_flow("HTTPS Tab Completion", vec![
+            (KeyAction::Type("https://reddit.com".to_string()), 
+             ExpectedAction::Suggestion { completion: "https://reddit.com/".to_string() }),
+            (KeyAction::Tab, 
+             ExpectedAction::Multiple),
+        ]);
+    }
+
+    #[test]
+    fn test_declarative_quick_subreddit_flow() {
+        test_flow("Quick Subreddit Flow", vec![
+            (KeyAction::Type("r".to_string()), 
+             ExpectedAction::Suggestion { completion: "reddit.com".to_string() }),
+            (KeyAction::Tab, 
+             ExpectedAction::Suggestion { completion: "reddit.com/".to_string() }),
+            (KeyAction::Type("/r/rust".to_string()),
+             ExpectedAction::RenderSubreddit { subreddit: "rust".to_string(), sort: None }),
+        ]);
+    }
+
+    #[test]
+    fn test_declarative_complete_journey() {
+        test_flow("Complete User Journey", vec![
+            (KeyAction::Type("http".to_string()),
+             ExpectedAction::Suggestion { completion: "https://".to_string() }),
+            (KeyAction::Type("s://r".to_string()),
+             ExpectedAction::Suggestion { completion: "https://reddit.com".to_string() }),
+            (KeyAction::Tab,
+             ExpectedAction::Suggestion { completion: "https://reddit.com/".to_string() }),
+            (KeyAction::Type("/r/programming/top".to_string()),
+             ExpectedAction::RenderSubreddit { 
+                 subreddit: "programming".to_string(), 
+                 sort: Some("top".to_string()) 
+             }),
+        ]);
+    }
+
+    #[test]
+    fn test_declarative_user_profile() {
+        test_flow("User Profile Navigation", vec![
+            (KeyAction::Type("reddit.com/u/spez".to_string()),
+             ExpectedAction::RenderUser { username: "spez".to_string() }),
+        ]);
+    }
+
+    #[test]
+    fn test_declarative_error_handling() {
+        test_flow("Error Handling", vec![
+            (KeyAction::Type("reddit.com/invalid/path".to_string()),
+             ExpectedAction::Error { error_type: "InvalidPath".to_string() }),
+        ]);
+    }
+
+    #[test]
+    fn test_declarative_progressive_completion() {
+        test_flow("Progressive Completion", vec![
+            (KeyAction::Type("r".to_string()),
+             ExpectedAction::Suggestion { completion: "reddit.com".to_string() }),
+            (KeyAction::Type("e".to_string()),
+             ExpectedAction::Suggestion { completion: "reddit.com".to_string() }),
+            (KeyAction::Type("d".to_string()),
+             ExpectedAction::Suggestion { completion: "reddit.com".to_string() }),
+            (KeyAction::Type("dit".to_string()),
+             ExpectedAction::Suggestion { completion: "reddit.com".to_string() }),
+            (KeyAction::Tab,
+             ExpectedAction::Suggestion { completion: "reddit.com/".to_string() }),
+        ]);
+    }
+
+    #[test]
+    fn test_declarative_subreddit_guide() {
+        test_flow("Subreddit Guide", vec![
+            (KeyAction::Type("reddit.com/r/programming/".to_string()),
+             ExpectedAction::Guide { title_contains: "What to sort".to_string() }),
+        ]);
+    }
+
+    #[test]
+    fn test_clean_macro_example() {
+        // This is what the tests can look like with macros!
+        test_flow("Clean Macro Example", flow![
+            (type_text!("r"), suggests!("reddit.com")),
+            (KeyAction::Tab, suggests!("reddit.com/")),
+            (type_text!("/r/rust/hot"), renders_subreddit!("rust", "hot")),
+        ]);
+    }
+
+    #[test]
+    fn test_ultra_clean_user_journey() {
+        test_flow("Ultra Clean User Journey", flow![
+            (type_text!("h"), suggests!("https://")),
+            (type_text!("ttps://r"), suggests!("https://reddit.com")), 
+            (KeyAction::Tab, suggests!("https://reddit.com/")),
+            (type_text!("/u/spez"), ExpectedAction::RenderUser { username: "spez".to_string() }),
+        ]);
     }
 
     // Keep the original tests as well
