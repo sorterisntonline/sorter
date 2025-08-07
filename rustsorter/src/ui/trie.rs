@@ -45,6 +45,8 @@ impl Default for UINode {
 /// The root of our UI parsing system.
 pub struct UITrie {
     platforms: HashMap<String, UINode>,
+    /// Maps common prefixes to their full platform names
+    platform_prefixes: HashMap<String, String>,
 }
 
 // --- Trie Traversal Logic ---
@@ -54,11 +56,9 @@ impl UITrie {
     pub fn parse(&self, query: &str) -> UIResponse {
         let normalized = normalize_input(query);
 
-        // Handle empty or root-level prefixes (e.g., "r", "re", "redd")
+        // Handle empty or root-level prefixes using trie's data
         if !normalized.contains('/') {
-            if let Some(suggestion) = suggest_platform(&normalized) {
-                return UIResponse::suggestions(query.to_string(), Some(suggestion));
-            }
+            return self.handle_platform_prefix(&normalized, query);
         }
 
         let (platform, path) = split_query(&normalized);
@@ -77,6 +77,54 @@ impl UITrie {
 
         let mut context = HashMap::new();
         self.traverse(root_node, &segments, &mut context, query)
+    }
+    
+    /// Handle platform prefix matching using trie's platform data
+    fn handle_platform_prefix(&self, prefix: &str, original_query: &str) -> UIResponse {
+        // Find all platforms that match this prefix
+        let mut matches: Vec<(&String, f64)> = Vec::new();
+        
+        for platform in self.platforms.keys() {
+            // Check if platform starts with prefix
+            if platform.starts_with(prefix) {
+                let score = if platform == prefix { 1.0 } else { 0.9 };
+                matches.push((platform, score));
+            }
+            // Also check without .com suffix (e.g., "reddit" matches "reddit.com")
+            else if let Some(name) = platform.strip_suffix(".com") {
+                if name.starts_with(prefix) || prefix.starts_with(name) {
+                    let score = if name == prefix { 0.95 } else { 0.85 };
+                    matches.push((platform, score));
+                }
+            }
+        }
+        
+        // Also check if any platform's prefixes match (e.g., "r" -> "reddit.com")
+        if matches.is_empty() && self.platform_prefixes.contains_key(prefix) {
+            if let Some(platform_name) = self.platform_prefixes.get(prefix) {
+                if let Some(platform) = self.platforms.keys().find(|k| *k == platform_name) {
+                    matches.push((platform, 0.8));
+                }
+            }
+        }
+        
+        if let Some((platform, score)) = matches.first() {
+            UIResponse::suggestions(
+                original_query.to_string(),
+                Some(Suggestion {
+                    text: format!("{}/", platform),
+                    completion: format!("{}/", platform),
+                    description: Some(format!("Go to {} homepage", 
+                        platform.strip_suffix(".com").unwrap_or(platform))),
+                    score: *score,
+                })
+            )
+        } else {
+            UIResponse::error(
+                "UnknownPrefix".to_string(),
+                format!("'{}' doesn't match any supported platform.", prefix)
+            )
+        }
     }
 
     /// Recursively traverses the Trie based on URL segments.
@@ -218,8 +266,16 @@ pub fn build_ui_trie() -> UITrie {
         ..UINode::default()
     };
 
+    // Build platform prefix mappings
+    let mut platform_prefixes = HashMap::new();
+    // Add all reddit prefixes
+    for prefix in &["r", "re", "red", "redd", "reddi", "reddit"] {
+        platform_prefixes.insert(prefix.to_string(), "reddit.com".to_string());
+    }
+    
     UITrie {
         platforms: HashMap::from([("reddit.com".to_string(), reddit_trie)]),
+        platform_prefixes,
     }
 }
 
@@ -560,20 +616,6 @@ fn split_query(normalized_input: &str) -> (&str, &str) {
     }
 }
 
-fn suggest_platform(prefix: &str) -> Option<Suggestion> {
-    let reddit_prefixes = ["r", "re", "red", "redd", "reddi", "reddit", "reddit.", "reddit.c", "reddit.co"];
-    
-    if reddit_prefixes.iter().any(|&p| p == prefix || "reddit.com".starts_with(prefix)) {
-        return Some(Suggestion {
-            text: "reddit.com/".to_string(),
-            completion: "reddit.com/".to_string(),
-            description: Some("Go to Reddit homepage".to_string()),
-            score: 1.0,
-        });
-    }
-    
-    None
-}
 
 fn is_valid_segment(var_name: &str, segment: &str) -> bool {
     match var_name {
