@@ -490,10 +490,21 @@ pub fn build_reddit_graph() -> Graph {
             .edge(EdgePattern::Literal("r"), "r_prefix")
             .edge(EdgePattern::Literal("u"), "u_prefix")
             .handler(|query, _ctx| {
+                // Preserve the protocol prefix from the original query
+                let base_url = if query.starts_with("https://") {
+                    "https://reddit.com"
+                } else if query.starts_with("http://") {
+                    "http://reddit.com"
+                } else if query.starts_with("www.") {
+                    "www.reddit.com"
+                } else {
+                    "reddit.com"
+                };
+
                 UIAction::multiple(vec![
                     UIAction::suggest(query.to_string(), Some(Suggestion { 
-                        text: "reddit.com/r/".to_string(),
-                        completion: "reddit.com/r/".to_string(),
+                        text: format!("{}/r/", base_url),
+                        completion: format!("{}/r/", base_url),
                         description: Some("Browse subreddits".to_string()),
                         score: 1.0,
                     })),
@@ -506,13 +517,13 @@ pub fn build_reddit_graph() -> Graph {
                                 key: "r".to_string(), 
                                 label: "Sort a Subreddit".to_string(), 
                                 description: "Find the best posts in a community.".to_string(), 
-                                completion: "reddit.com/r/".to_string() 
+                                completion: format!("{}/r/", base_url)
                             },
                             GuideOption { 
                                 key: "u".to_string(), 
                                 label: "Sort User Content".to_string(), 
                                 description: "Explore and rank a user's posts and comments.".to_string(), 
-                                completion: "reddit.com/u/".to_string() 
+                                completion: format!("{}/u/", base_url)
                             },
                         ]
                     ),
@@ -526,10 +537,21 @@ pub fn build_reddit_graph() -> Graph {
         .at("subreddit_selection")
             .edge(EdgePattern::Variable("subreddit"), "subreddit_page")
             .handler(|query, _ctx| {
+                // Preserve the protocol prefix from the original query
+                let base_url = if query.starts_with("https://") {
+                    "https://reddit.com"
+                } else if query.starts_with("http://") {
+                    "http://reddit.com"
+                } else if query.starts_with("www.") {
+                    "www.reddit.com"
+                } else {
+                    "reddit.com"
+                };
+
                 UIAction::multiple(vec![
                     UIAction::suggest(query.to_string(), Some(Suggestion {
-                        text: "reddit.com/r/programming".to_string(),
-                        completion: "reddit.com/r/programming".to_string(),
+                        text: format!("{}/r/programming", base_url),
+                        completion: format!("{}/r/programming", base_url),
                         description: Some("Popular programming community".to_string()),
                         score: 1.0,
                     })),
@@ -542,19 +564,19 @@ pub fn build_reddit_graph() -> Graph {
                                 id: "programming".to_string(), 
                                 title: "r/programming".to_string(), 
                                 description: Some("Computer programming discussions".to_string()),
-                                completion: "reddit.com/r/programming".to_string() 
+                                completion: format!("{}/r/programming", base_url)
                             },
                             SelectionItem { 
                                 id: "rust".to_string(), 
                                 title: "r/rust".to_string(), 
                                 description: Some("The Rust programming language".to_string()),
-                                completion: "reddit.com/r/rust".to_string() 
+                                completion: format!("{}/r/rust", base_url)
                             },
                             SelectionItem { 
                                 id: "webdev".to_string(), 
                                 title: "r/webdev".to_string(), 
                                 description: Some("Web development community".to_string()),
-                                completion: "reddit.com/r/webdev".to_string() 
+                                completion: format!("{}/r/webdev", base_url)
                             },
                         ]
                     )
@@ -714,7 +736,8 @@ mod tests {
         RenderSubredditComments { subreddit: String },
         RenderUser { username: String },
         Error { error_type: String },
-        Multiple,  // Multiple responses (guide + suggestions)
+        Multiple { expected_actions: Vec<ExpectedAction> },  // Multiple responses with specific expectations
+        MultipleAny,  // Multiple responses (any sub-actions - legacy)
         Home,
     }
 
@@ -746,7 +769,16 @@ mod tests {
                 (ExpectedAction::Error { error_type }, UIAction::ShowError(data)) => {
                     data.error_type == *error_type
                 }
-                (ExpectedAction::Multiple, UIAction::ShowMultiple { .. }) => true,
+                (ExpectedAction::Multiple { expected_actions }, UIAction::ShowMultiple { actions }) => {
+                    // Check that all expected actions are present
+                    if expected_actions.len() != actions.len() {
+                        return false;
+                    }
+                    expected_actions.iter().zip(actions.iter()).all(|(expected, actual)| {
+                        expected.matches(actual)
+                    })
+                }
+                (ExpectedAction::MultipleAny, UIAction::ShowMultiple { .. }) => true,
                 (ExpectedAction::Home, UIAction::ShowHomePage { .. }) => true,
                 _ => false,
             }
@@ -1182,6 +1214,12 @@ mod tests {
             ExpectedAction::Error { error_type: $error_type.to_string() }
         };
     }
+    
+    macro_rules! multiple {
+        ($($action:expr),* $(,)?) => {
+            ExpectedAction::Multiple { expected_actions: vec![$($action),*] }
+        };
+    }
 
     // === NEW DECLARATIVE TESTS ===
 
@@ -1191,7 +1229,10 @@ mod tests {
             (KeyAction::Type("https://reddit.com".to_string()), 
              ExpectedAction::Suggestion { completion: "https://reddit.com/".to_string() }),
             (KeyAction::Tab, 
-             ExpectedAction::Multiple),
+             multiple![
+                 suggests!("https://reddit.com/r/"),
+                 shows_guide!("Welcome to Sorter")
+             ]),
         ]);
     }
 
@@ -1307,7 +1348,7 @@ mod tests {
     fn test_tdsl_reddit_com_slash_infographic() {
         // reddit.com/ -> {show infographic explaining that u (sort user posts) and r (sort subreddit posts)}
         test_flow("TDSL Reddit.com/ Infographic", flow![
-            (type_text!("reddit.com/"), ExpectedAction::Multiple),
+            (type_text!("reddit.com/"), ExpectedAction::MultipleAny),
         ]);
     }
 
@@ -1315,7 +1356,7 @@ mod tests {
     fn test_tdsl_subreddit_selection() {
         // reddit.com/r/ -> reddit.com/r/{randomly chose sub from list}
         test_flow("TDSL Subreddit Selection", flow![
-            (type_text!("reddit.com/r/"), ExpectedAction::Multiple),
+            (type_text!("reddit.com/r/"), ExpectedAction::MultipleAny),
         ]);
     }
 
@@ -1396,7 +1437,7 @@ mod tests {
         // Test various reddit paths work as expected
         test_flow("TDSL Progressive Reddit Paths", flow![
             (type_text!("reddit.com"), suggests!("reddit.com/")),
-            (KeyAction::Tab, ExpectedAction::Multiple),
+            (KeyAction::Tab, ExpectedAction::MultipleAny),
         ]);
     }
 
@@ -1456,7 +1497,132 @@ mod tests {
         // Test that typing full reddit.com suggests the slash
         test_flow("TDSL Full domain completion", flow![
             (type_text!("reddit.com"), suggests!("reddit.com/")),
-            (KeyAction::Tab, ExpectedAction::Multiple),
+            (KeyAction::Tab, ExpectedAction::MultipleAny),
+        ]);
+    }
+
+    #[test]
+    fn test_real_user_trace_2025_08_07_fixed() {
+        // Based on actual WebSocket trace from 2025-08-07T01:35:46Z
+        // This test shows the CORRECT behavior after fixing the protocol preservation bug
+        test_flow("Real User Trace: Progressive Typing with Tab Completions (Fixed)", flow![
+            // User started typing "h"
+            (type_text!("h"), suggests!("https://")),
+            
+            // User continued to "ht" 
+            (type_text!("t"), suggests!("https://")),
+            
+            // User finished typing "https://" (trace shows full protocol)
+            (type_text!("tps://"), suggests!("https://")),
+            
+            // User started typing "r" after protocol
+            (type_text!("r"), suggests!("https://reddit.com")),
+            
+            // User continued typing "re"
+            (type_text!("e"), suggests!("https://reddit.com")),
+            
+            // User typed out or completed "https://reddit.com"
+            (type_text!("ddit.com"), suggests!("https://reddit.com/")),
+            
+            // User accepted completion to "https://reddit.com/"
+            // NOW suggestions should preserve the https:// protocol
+            (KeyAction::Tab, multiple![
+                suggests!("https://reddit.com/r/"),  // This is the key fix!
+                shows_guide!("Welcome to Sorter")
+            ]),
+        ]);
+    }
+
+    #[test]
+    fn test_protocol_preservation_bug_fix() {
+        // This test specifically verifies the fix for the protocol preservation bug
+        test_flow("Protocol Preservation: HTTPS Reddit Homepage", flow![
+            (type_text!("https://reddit.com/"), multiple![
+                suggests!("https://reddit.com/r/"),  // Should preserve https://
+                shows_guide!("Welcome to Sorter")
+            ]),
+        ]);
+        
+        // Test that subreddit selection preserves protocol
+        test_flow("Protocol Preservation: HTTPS Subreddit Selection", flow![
+            (type_text!("https://reddit.com/r/"), multiple![
+                suggests!("https://reddit.com/r/programming"),  // Should preserve https://
+                ExpectedAction::Selection { title_contains: "Choose a Subreddit".to_string() }
+            ]),
+        ]);
+        
+        // Test with different protocols
+        test_flow("Protocol Preservation: HTTP", flow![
+            (type_text!("http://reddit.com/"), multiple![
+                suggests!("http://reddit.com/r/"),  // Should preserve http://
+                shows_guide!("Welcome to Sorter")
+            ]),
+        ]);
+        
+        test_flow("Protocol Preservation: WWW", flow![
+            (type_text!("www.reddit.com/"), multiple![
+                suggests!("www.reddit.com/r/"),  // Should preserve www.
+                shows_guide!("Welcome to Sorter")
+            ]),
+        ]);
+        
+        // Test that plain reddit.com still works
+        test_flow("Protocol Preservation: Plain Domain", flow![
+            (type_text!("reddit.com/"), multiple![
+                suggests!("reddit.com/r/"),  // No protocol prefix
+                shows_guide!("Welcome to Sorter")
+            ]),
+        ]);
+    }
+
+    #[test]
+    fn test_user_navigation_pattern() {
+        // Models how users actually navigate: type → tab → click suggestion → end up at destination
+        // This captures the "jump" from https://reddit.com/ to reddit.com/r/ seen in the trace
+        test_flow("User Navigation: Protocol to Domain", flow![
+            // User types and gets to homepage
+            (type_text!("https://reddit.com/"), ExpectedAction::MultipleAny),
+        ]);
+        
+        // Then they navigate (perhaps clicking a suggestion) to subreddit selection
+        test_flow("User Navigation: Click to Subreddit", flow![
+            // This is where they ended up - the suggestion in the guide probably said "reddit.com/r/"
+            (type_text!("reddit.com/r/"), ExpectedAction::MultipleAny),
+        ]);
+    }
+
+    #[test]
+    fn test_progressive_typing_pattern() {
+        // Based on the trace pattern - users often type character by character
+        // This tests the exact sequence of suggestions they would see
+        test_flow("Progressive Typing Pattern", flow![
+            (type_text!("h"), suggests!("https://")),
+            (type_text!("t"), suggests!("https://")), // Still suggests https://
+            (type_text!("t"), suggests!("https://")), // ht -> htt, still suggests https://
+            (type_text!("p"), suggests!("https://")), // http should still suggest https://
+            (type_text!("s"), suggests!("https://")), // https should suggest https://
+            (type_text!("://"), suggests!("https://")), // Even complete protocol still suggests itself
+        ]);
+    }
+
+    #[test]  
+    fn test_tab_completion_workflow() {
+        // Test what happens when user uses tab completions strategically
+        test_flow("Strategic Tab Completion Workflow", flow![
+            // Start typing, get suggestion
+            (type_text!("h"), suggests!("https://")),
+            
+            // Accept suggestion with tab
+            (KeyAction::Tab, ExpectedAction::MultipleAny), // Should be ready for next input
+            
+            // Start typing reddit
+            (type_text!("r"), suggests!("https://reddit.com")),
+            
+            // Accept reddit suggestion  
+            (KeyAction::Tab, suggests!("https://reddit.com/")),
+            
+            // Accept final suggestion to get to homepage
+            (KeyAction::Tab, ExpectedAction::MultipleAny),
         ]);
     }
 
