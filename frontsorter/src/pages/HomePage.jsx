@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useDebouncedCallback } from "use-debounce";
 import { wsAPI } from "../services/api.js";
 import UIView from "../components/UIView.jsx";
 import useUIStore from "../store/uiStore.js";
@@ -73,8 +72,8 @@ const HomePage = () => {
     }
   }, [isConnected]);
 
-  // Debounced function to send query updates to the backend
-  const debouncedUpdateQuery = useDebouncedCallback((value) => {
+  // Function to send query updates to the backend immediately
+  const updateQuery = useCallback((value) => {
     if (!isConnected) return;
     wsAPI.updateQuery(value);
 
@@ -88,14 +87,13 @@ const HomePage = () => {
     // Use replace to avoid polluting browser history on every keystroke
     const newUrl = value.trim() ? `?${newSearchParams.toString()}` : window.location.pathname;
     window.history.replaceState({}, '', newUrl);
-
-  }, 150); // Send updates quickly
+  }, [isConnected, searchParams]);
 
   // Handle input change
   const handleInputChange = (e) => {
     const value = e.target.value;
     setInputValue(value);
-    debouncedUpdateQuery(value);
+    updateQuery(value);
   };
 
   const handleKeyDown = (e) => {
@@ -105,7 +103,6 @@ const HomePage = () => {
       setInputValue(completion);
       
       // Send the completed query to the backend immediately
-      debouncedUpdateQuery.cancel();
       wsAPI.updateQuery(completion);
 
       // Update URL
@@ -162,7 +159,6 @@ const HomePage = () => {
           onCompletionSelect={(completion) => {
             setInputValue(completion);
             // Send the query to backend
-            debouncedUpdateQuery.cancel();
             wsAPI.updateQuery(completion);
             // Update URL
             const newSearchParams = new URLSearchParams();
