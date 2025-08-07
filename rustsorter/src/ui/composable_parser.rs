@@ -387,7 +387,7 @@ pub fn build_reddit_graph() -> Graph {
             // Short alias
             .edge(EdgePattern::Literal("r"), "reddit_slash_prefix")
             
-            // Protocol patterns
+            // Protocol patterns - "h" can suggest "https://"
             .edge_with_desc(
                 EdgePattern::PrefixOf("https://"),
                 "https_protocol",
@@ -462,12 +462,23 @@ pub fn build_reddit_graph() -> Graph {
         .at("reddit_domain")
             .edge(EdgePattern::Literal("/"), "reddit_root")
             .handler(|query, _ctx| {
-                // If someone just types "reddit.com" without slash
+                // If someone just types "reddit.com" (or with protocol) without slash
+                // Suggest adding the slash
+                let completion = if query.starts_with("https://") {
+                    "https://reddit.com/".to_string()
+                } else if query.starts_with("http://") {
+                    "http://reddit.com/".to_string()
+                } else if query.starts_with("www.") {
+                    "www.reddit.com/".to_string()
+                } else {
+                    "reddit.com/".to_string()
+                };
+                
                 UIAction::suggest(
                     query.to_string(),
                     Some(Suggestion {
-                        text: "reddit.com/".to_string(),
-                        completion: "reddit.com/".to_string(),
+                        text: completion.clone(),
+                        completion,
                         description: Some("Go to Reddit homepage".to_string()),
                         score: 1.0,
                     })
@@ -685,6 +696,352 @@ pub fn parse_reddit_url(query: &str) -> UIAction {
 mod tests {
     use super::*;
 
+    /// Represents a keystroke action
+    #[derive(Debug, Clone)]
+    enum KeyAction {
+        Type(String),  // Type characters
+        Tab,           // Press tab (accept completion)
+        Enter,         // Press enter
+    }
+
+    /// Test helper to simulate a sequence of keystrokes
+    fn simulate_keystrokes(actions: Vec<KeyAction>) -> Vec<(String, UIAction)> {
+        let graph = build_reddit_graph();
+        let mut current_text = String::new();
+        let mut results = Vec::new();
+        
+        for action in actions {
+            match action {
+                KeyAction::Type(text) => {
+                    current_text.push_str(&text);
+                    let result = graph.parse(&current_text);
+                    results.push((current_text.clone(), result));
+                }
+                KeyAction::Tab => {
+                    // Tab accepts the current suggestion if there is one
+                    let result = graph.parse(&current_text);
+                    if let UIAction::ShowSuggestions(ref data) = result {
+                        if let Some(ref suggestion) = data.suggestion {
+                            current_text = suggestion.completion.clone();
+                            let new_result = graph.parse(&current_text);
+                            results.push((current_text.clone(), new_result));
+                        }
+                    }
+                }
+                KeyAction::Enter => {
+                    // Enter submits the current text
+                    let result = graph.parse(&current_text);
+                    results.push((format!("{}[ENTER]", current_text), result));
+                }
+            }
+        }
+        
+        results
+    }
+
+    /// Helper to assert a specific flow works as expected
+    fn assert_flow(
+        name: &str,
+        actions: Vec<KeyAction>,
+        expected_checks: Vec<Box<dyn Fn(&str, &UIAction) -> bool>>,
+    ) {
+        let results = simulate_keystrokes(actions);
+        
+        println!("\n=== Flow: {} ===", name);
+        for (i, (text, action)) in results.iter().enumerate() {
+            println!("  Step {}: '{}' -> {:?}", i + 1, text, action);
+            
+            if i < expected_checks.len() {
+                let check = &expected_checks[i];
+                assert!(
+                    check(text, action),
+                    "Flow '{}' failed at step {} with text '{}' and action {:?}",
+                    name, i + 1, text, action
+                );
+            }
+        }
+        println!("✓ Flow '{}' passed!", name);
+    }
+
+    #[test]
+    fn test_https_reddit_tab_flow() {
+        // Test: typing "https://reddit.com" and pressing tab should give "https://reddit.com/"
+        assert_flow(
+            "HTTPS Reddit with Tab",
+            vec![
+                KeyAction::Type("https://reddit.com".to_string()),
+                KeyAction::Tab,
+            ],
+            vec![
+                Box::new(|text, action| {
+                    // After typing "https://reddit.com", should get a suggestion
+                    text == "https://reddit.com" && matches!(action, UIAction::ShowSuggestions(data) if 
+                        data.suggestion.as_ref().map(|s| s.completion == "https://reddit.com/").unwrap_or(false)
+                    )
+                }),
+                Box::new(|text, action| {
+                    // After tab, should have "https://reddit.com/" and show guide
+                    text == "https://reddit.com/" && matches!(action, UIAction::ShowMultiple { .. })
+                }),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_quick_subreddit_flow() {
+        // Test: "r" -> TAB -> "/r/" -> "rust"
+        // Note: After tab completion, we need to clear and type the full path
+        assert_flow(
+            "Quick Subreddit Access",
+            vec![
+                KeyAction::Type("r".to_string()),
+                KeyAction::Tab,
+                KeyAction::Type("/r/rust".to_string()),  // Append to "reddit.com"
+            ],
+            vec![
+                Box::new(|text, action| {
+                    // "r" should suggest "reddit.com"
+                    text == "r" && matches!(action, UIAction::ShowSuggestions(data) if 
+                        data.suggestion.as_ref().map(|s| s.completion == "reddit.com").unwrap_or(false)
+                    )
+                }),
+                Box::new(|text, action| {
+                    // After tab, should have "reddit.com"
+                    text == "reddit.com" && matches!(action, UIAction::ShowSuggestions(_))
+                }),
+                Box::new(|text, action| {
+                    // "reddit.com/r/rust" should render the subreddit
+                    text == "reddit.com/r/rust" && matches!(action, UIAction::RenderSubredditView { subreddit, .. } if subreddit == "rust")
+                }),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_progressive_completion_flow() {
+        // Test progressive typing: "r" -> "re" -> "red" -> "redd" -> "reddit" -> TAB
+        let progressive_actions = vec![
+            KeyAction::Type("r".to_string()),
+            KeyAction::Type("e".to_string()),
+            KeyAction::Type("d".to_string()),
+            KeyAction::Type("d".to_string()),
+            KeyAction::Type("i".to_string()),
+            KeyAction::Type("t".to_string()),
+            KeyAction::Tab,
+        ];
+        
+        let results = simulate_keystrokes(progressive_actions);
+        
+        println!("\n=== Progressive Completion Flow ===");
+        for (text, action) in &results {
+            println!("  '{}' -> {:?}", text, action);
+            
+            // Each step before tab should suggest "reddit.com"
+            if !text.contains("reddit.com") {
+                match action {
+                    UIAction::ShowSuggestions(data) => {
+                        assert_eq!(
+                            data.suggestion.as_ref().unwrap().completion,
+                            "reddit.com",
+                            "Should suggest reddit.com at '{}'", text
+                        );
+                    }
+                    _ => panic!("Expected suggestion at '{}'", text),
+                }
+            }
+        }
+        
+        // After tab, should have "reddit.com"
+        let (final_text, _) = results.last().unwrap();
+        assert_eq!(final_text, "reddit.com");
+        println!("✓ Progressive completion flow passed!");
+    }
+
+    #[test]
+    fn test_subreddit_sort_flow() {
+        // Test navigating to a subreddit and choosing a sort option
+        assert_flow(
+            "Subreddit Sort Navigation",
+            vec![
+                KeyAction::Type("reddit.com/r/programming/hot".to_string()),
+            ],
+            vec![
+                Box::new(|text, action| {
+                    text == "reddit.com/r/programming/hot" && 
+                    matches!(action, UIAction::RenderSubredditView { subreddit, sort } 
+                        if subreddit == "programming" && sort.as_deref() == Some("hot"))
+                }),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_user_profile_flow() {
+        // Test navigating to a user profile
+        assert_flow(
+            "User Profile Navigation",
+            vec![
+                KeyAction::Type("reddit.com/u/spez".to_string()),
+            ],
+            vec![
+                Box::new(|text, action| {
+                    text == "reddit.com/u/spez" && 
+                    matches!(action, UIAction::RenderUserProfile { username } if username == "spez")
+                }),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_alias_shortcut_flow() {
+        // Test using the "r/" shortcut
+        assert_flow(
+            "Alias Shortcut",
+            vec![
+                KeyAction::Type("r/".to_string()),
+                KeyAction::Type("r/".to_string()),
+                KeyAction::Type("technology".to_string()),
+            ],
+            vec![
+                Box::new(|text, _| text == "r/"),
+                Box::new(|text, _| text == "r/r/"),
+                Box::new(|text, action| {
+                    text == "r/r/technology" && 
+                    matches!(action, UIAction::RenderSubredditView { subreddit, .. } if subreddit == "technology")
+                }),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_www_prefix_flow() {
+        // Test with www prefix
+        assert_flow(
+            "WWW Prefix",
+            vec![
+                KeyAction::Type("www.reddit.com".to_string()),
+                KeyAction::Tab,
+            ],
+            vec![
+                Box::new(|text, action| {
+                    // Should suggest adding slash
+                    text == "www.reddit.com" && matches!(action, UIAction::ShowSuggestions(data) if 
+                        data.suggestion.as_ref().map(|s| s.completion == "www.reddit.com/").unwrap_or(false)
+                    )
+                }),
+                Box::new(|text, action| {
+                    // After tab, should show guide
+                    text == "www.reddit.com/" && matches!(action, UIAction::ShowMultiple { .. })
+                }),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_invalid_path_handling() {
+        // Test that invalid paths show errors
+        assert_flow(
+            "Invalid Path",
+            vec![
+                KeyAction::Type("reddit.com/invalid/path".to_string()),
+            ],
+            vec![
+                Box::new(|text, action| {
+                    text == "reddit.com/invalid/path" && 
+                    matches!(action, UIAction::ShowError(_))
+                }),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_complete_user_journey() {
+        // Test a complete user journey: type partial URL, tab complete, navigate to subreddit
+        assert_flow(
+            "Complete User Journey",
+            vec![
+                KeyAction::Type("http".to_string()),
+                KeyAction::Type("s://r".to_string()),
+                KeyAction::Tab,
+                KeyAction::Type("/".to_string()),
+                KeyAction::Type("r/".to_string()),
+                KeyAction::Type("programming".to_string()),
+                KeyAction::Type("/".to_string()),
+                KeyAction::Type("top".to_string()),
+            ],
+            vec![
+                Box::new(|text, action| {
+                    // "http" should suggest "https://"
+                    text == "http" && matches!(action, UIAction::ShowSuggestions(data) if 
+                        data.suggestion.as_ref().map(|s| s.completion == "https://").unwrap_or(false)
+                    )
+                }),
+                Box::new(|text, action| {
+                    // "https://r" should suggest "https://reddit.com"
+                    text == "https://r" && matches!(action, UIAction::ShowSuggestions(data) if 
+                        data.suggestion.as_ref().map(|s| s.completion == "https://reddit.com").unwrap_or(false)
+                    )
+                }),
+                Box::new(|text, action| {
+                    // After tab, should have "https://reddit.com"
+                    text == "https://reddit.com" && matches!(action, UIAction::ShowSuggestions(_))
+                }),
+                Box::new(|text, action| {
+                    // "https://reddit.com/" should show guide
+                    text == "https://reddit.com/" && matches!(action, UIAction::ShowMultiple { .. })
+                }),
+                Box::new(|text, action| {
+                    // "https://reddit.com/r/" should show subreddit selection
+                    text == "https://reddit.com/r/" && matches!(action, UIAction::ShowMultiple { .. })
+                }),
+                Box::new(|text, action| {
+                    // "https://reddit.com/r/programming" should render subreddit
+                    text == "https://reddit.com/r/programming" && 
+                    matches!(action, UIAction::RenderSubredditView { subreddit, sort } 
+                        if subreddit == "programming" && sort.is_none())
+                }),
+                Box::new(|text, action| {
+                    // "https://reddit.com/r/programming/" should show sort options
+                    text == "https://reddit.com/r/programming/" && 
+                    matches!(action, UIAction::ShowStaticGuide { .. })
+                }),
+                Box::new(|text, action| {
+                    // "https://reddit.com/r/programming/top" should render with top sort
+                    text == "https://reddit.com/r/programming/top" && 
+                    matches!(action, UIAction::RenderSubredditView { subreddit, sort } 
+                        if subreddit == "programming" && sort.as_deref() == Some("top"))
+                }),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_multiple_tab_completions() {
+        // Test multiple tab completions in sequence
+        let actions = vec![
+            KeyAction::Type("h".to_string()),
+            KeyAction::Tab,  // Complete to "https://"
+            KeyAction::Type("r".to_string()),
+            KeyAction::Tab,  // Complete to "https://reddit.com"
+            KeyAction::Type("/".to_string()),
+        ];
+        
+        let results = simulate_keystrokes(actions);
+        
+        println!("\n=== Multiple Tab Completions ===");
+        for (i, (text, _action)) in results.iter().enumerate() {
+            println!("  Step {}: '{}'", i + 1, text);
+        }
+        
+        // Verify the final state
+        assert_eq!(results[1].0, "https://");  // After first tab
+        assert_eq!(results[3].0, "https://reddit.com");  // After second tab
+        assert_eq!(results[4].0, "https://reddit.com/");  // After typing /
+        
+        println!("✓ Multiple tab completions work correctly!");
+    }
+
+    // Keep the original tests as well
     #[test]
     fn test_reddit_prefix_autocomplete() {
         let graph = build_reddit_graph();
