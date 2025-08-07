@@ -711,6 +711,7 @@ mod tests {
         Guide { title_contains: String },
         Selection { title_contains: String },
         RenderSubreddit { subreddit: String, sort: Option<String> },
+        RenderSubredditComments { subreddit: String },
         RenderUser { username: String },
         Error { error_type: String },
         Multiple,  // Multiple responses (guide + suggestions)
@@ -734,6 +735,10 @@ mod tests {
                 (ExpectedAction::RenderSubreddit { subreddit, sort }, 
                  UIAction::RenderSubredditView { subreddit: s, sort: so }) => {
                     s == subreddit && so == sort
+                }
+                (ExpectedAction::RenderSubredditComments { subreddit }, 
+                 UIAction::RenderSubredditComments { subreddit: s }) => {
+                    s == subreddit
                 }
                 (ExpectedAction::RenderUser { username }, UIAction::RenderUserProfile { username: u }) => {
                     u == username
@@ -1159,6 +1164,24 @@ mod tests {
             }
         };
     }
+    
+    macro_rules! renders_subreddit_comments {
+        ($subreddit:expr) => {
+            ExpectedAction::RenderSubredditComments { subreddit: $subreddit.to_string() }
+        };
+    }
+    
+    macro_rules! shows_guide {
+        ($title_contains:expr) => {
+            ExpectedAction::Guide { title_contains: $title_contains.to_string() }
+        };
+    }
+    
+    macro_rules! shows_error {
+        ($error_type:expr) => {
+            ExpectedAction::Error { error_type: $error_type.to_string() }
+        };
+    }
 
     // === NEW DECLARATIVE TESTS ===
 
@@ -1258,6 +1281,182 @@ mod tests {
             (type_text!("ttps://r"), suggests!("https://reddit.com")), 
             (KeyAction::Tab, suggests!("https://reddit.com/")),
             (type_text!("/u/spez"), ExpectedAction::RenderUser { username: "spez".to_string() }),
+        ]);
+    }
+
+    // === TESTS FROM parser.tdsl ===
+
+    #[test]
+    fn test_tdsl_basic_reddit_progression() {
+        // Tests from parser.tdsl: r -> reddit.com/ with all intermediate steps
+        test_flow("TDSL Basic Reddit Progression", flow![
+            (type_text!("r"), suggests!("reddit.com")),
+            (type_text!("e"), suggests!("reddit.com")),
+            (type_text!("d"), suggests!("reddit.com")),
+            (type_text!("d"), suggests!("reddit.com")),
+            (type_text!("i"), suggests!("reddit.com")),
+            (type_text!("t"), suggests!("reddit.com")),
+            (type_text!("."), suggests!("reddit.com")),
+            (type_text!("c"), suggests!("reddit.com")),
+            (type_text!("o"), suggests!("reddit.com")),
+            (KeyAction::Tab, suggests!("reddit.com/")),
+        ]);
+    }
+
+    #[test]
+    fn test_tdsl_reddit_com_slash_infographic() {
+        // reddit.com/ -> {show infographic explaining that u (sort user posts) and r (sort subreddit posts)}
+        test_flow("TDSL Reddit.com/ Infographic", flow![
+            (type_text!("reddit.com/"), ExpectedAction::Multiple),
+        ]);
+    }
+
+    #[test]
+    fn test_tdsl_subreddit_selection() {
+        // reddit.com/r/ -> reddit.com/r/{randomly chose sub from list}
+        test_flow("TDSL Subreddit Selection", flow![
+            (type_text!("reddit.com/r/"), ExpectedAction::Multiple),
+        ]);
+    }
+
+    #[test]
+    fn test_tdsl_subreddit_view() {
+        // reddit.com/r/{sub} -> {show subreddit view}
+        test_flow("TDSL Subreddit View", flow![
+            (type_text!("reddit.com/r/programming"), renders_subreddit!("programming")),
+        ]);
+    }
+
+    #[test]
+    fn test_tdsl_subreddit_slash_infographic() {
+        // reddit.com/r/{sub}/ -> {show infographic or something}
+        test_flow("TDSL Subreddit Slash Infographic", flow![
+            (type_text!("reddit.com/r/programming/"), shows_guide!("What to sort")),
+        ]);
+    }
+
+    #[test]
+    fn test_tdsl_subreddit_comments() {
+        // reddit.com/r/{sub}/comments/{randomly chose comment from sql}
+        test_flow("TDSL Subreddit Comments", flow![
+            (type_text!("reddit.com/r/programming/comments"), renders_subreddit_comments!("programming")),
+        ]);
+    }
+
+    #[test]
+    fn test_tdsl_h_to_https() {
+        // h->https:// (show supported domains)
+        test_flow("TDSL H to HTTPS", flow![
+            (type_text!("h"), suggests!("https://")),
+        ]);
+    }
+
+    #[test]
+    fn test_tdsl_composable_https_reddit() {
+        // https://r->https://reddit.com/
+        test_flow("TDSL Composable HTTPS Reddit", flow![
+            (type_text!("https://r"), suggests!("https://reddit.com")),
+        ]);
+    }
+
+    #[test]
+    fn test_tdsl_composable_https_www() {
+        // https://w->https://www.
+        test_flow("TDSL Composable HTTPS WWW", flow![
+            (type_text!("https://w"), suggests!("https://www.")),
+        ]);
+    }
+
+    #[test]
+    fn test_tdsl_composable_https_www_reddit() {
+        // https://www.r->https://www.reddit.com/
+        test_flow("TDSL Composable HTTPS WWW Reddit", flow![
+            (type_text!("https://www.r"), suggests!("https://www.reddit.com")),
+        ]);
+    }
+
+    #[test]
+    fn test_tdsl_full_composable_chain() {
+        // Complete chain showing composability: h -> https:// -> https://www.reddit.com
+        test_flow("TDSL Full Composable Chain Step 1", flow![
+            (type_text!("h"), suggests!("https://")),
+        ]);
+        
+        test_flow("TDSL Full Composable Chain Step 2", flow![
+            (type_text!("https://w"), suggests!("https://www.")),
+        ]);
+        
+        test_flow("TDSL Full Composable Chain Step 3", flow![
+            (type_text!("https://www.r"), suggests!("https://www.reddit.com")),
+        ]);
+    }
+
+    #[test]
+    fn test_tdsl_progressive_reddit_paths() {
+        // Test various reddit paths work as expected
+        test_flow("TDSL Progressive Reddit Paths", flow![
+            (type_text!("reddit.com"), suggests!("reddit.com/")),
+            (KeyAction::Tab, ExpectedAction::Multiple),
+        ]);
+    }
+
+    #[test] 
+    fn test_tdsl_subreddit_sorting_options() {
+        // Test that subreddit sorting options work as described
+        test_flow("TDSL Subreddit Sorting", flow![
+            (type_text!("reddit.com/r/rust/hot"), renders_subreddit!("rust", "hot")),
+        ]);
+        
+        test_flow("TDSL Subreddit Top", flow![
+            (type_text!("reddit.com/r/rust/top"), renders_subreddit!("rust", "top")),
+        ]);
+        
+        test_flow("TDSL Subreddit New", flow![
+            (type_text!("reddit.com/r/rust/new"), renders_subreddit!("rust", "new")),
+        ]);
+    }
+
+    #[test]
+    fn test_tdsl_all_reddit_prefixes() {
+        // Test all the prefixes mentioned in parser.tdsl work
+        let prefixes = vec!["r", "re", "red", "redd", "reddi", "reddit", "reddit.", "reddit.c", "reddit.co"];
+        
+        for prefix in prefixes {
+            test_flow(&format!("TDSL Prefix: {}", prefix), flow![
+                (type_text!(prefix), suggests!("reddit.com")),
+            ]);
+        }
+    }
+
+    #[test]
+    fn test_tdsl_protocol_combinations() {
+        // Test various protocol combinations from parser.tdsl
+        let test_cases = vec![
+            ("http://r", "http://reddit.com"),
+            ("https://r", "https://reddit.com"),
+            ("www.r", "www.reddit.com"),
+            ("https://www.r", "https://www.reddit.com"),
+            ("http://www.r", "http://www.reddit.com"),
+        ];
+        
+        for (input, expected) in test_cases {
+            test_flow(&format!("TDSL Protocol: {}", input), flow![
+                (type_text!(input), suggests!(expected)),
+            ]);
+        }
+    }
+
+    #[test]
+    fn test_tdsl_edge_case_completions() {
+        // Test edge cases mentioned in parser.tdsl
+        test_flow("TDSL Reddit.com completion", flow![
+            (type_text!("reddit.com"), suggests!("reddit.com/")),
+        ]);
+        
+        // Test that typing full reddit.com suggests the slash
+        test_flow("TDSL Full domain completion", flow![
+            (type_text!("reddit.com"), suggests!("reddit.com/")),
+            (KeyAction::Tab, ExpectedAction::Multiple),
         ]);
     }
 
