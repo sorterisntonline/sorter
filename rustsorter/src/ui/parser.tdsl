@@ -26,3 +26,7 @@ h->https:// (show supported domains)
 https://r->https://reddit.com/
 https://w->https://www.
 https://www.r->https://www.reddit.com/
+
+
+// and i also want to have commands after you press space, like
+reddit.com/r/programming !vote(reddit.comment{t3_123, t4_4444})

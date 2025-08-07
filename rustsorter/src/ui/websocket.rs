@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     app_state::AppState,
     ui::types::UIResponse,
-    ui::trie_graph,
+    ui::composable_parser,
 };
 
 #[derive(Deserialize, Serialize, JsonSchema, Debug, Clone)]
@@ -138,8 +138,8 @@ async fn handle_client_message(
 }
 
 async fn handle_update_query_command(query: String) -> UIResponse {
-    // Use the refined UI Graph system for intelligent URL parsing and autocomplete
-    trie_graph::parse_for_autocomplete(&query)
+    // Use the composable parser for intelligent URL parsing and autocomplete
+    composable_parser::parse_reddit_url(&query)
 }
 
 async fn handle_vote_command(
