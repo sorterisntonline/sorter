@@ -964,4 +964,64 @@ mod tests {
             _ => panic!("Expected Guide for comments path"),
         }
     }
+
+    #[test]
+    fn test_partial_segment_completion() {
+        let trie = build_ui_trie();
+        
+        // Test the specific case: reddit.com/r/programming/comm -> reddit.com/r/programming/comments
+        match trie.parse("reddit.com/r/programming/comm") {
+            UIResponse::Suggestions(data) => {
+                let suggestion = data.suggestion.as_ref().unwrap();
+                assert_eq!(suggestion.completion, "reddit.com/r/programming/comments");
+                assert_eq!(suggestion.text, "reddit.com/r/programming/comments");
+                assert!(suggestion.description.as_ref().unwrap().contains("comments"));
+                assert!(suggestion.text.contains("programming")); // Context-aware!
+            }
+            _ => panic!("Expected Suggestions for 'reddit.com/r/programming/comm', got a different response type"),
+        }
+        
+        // Test similar cases with other subreddits
+        match trie.parse("reddit.com/r/rust/comm") {
+            UIResponse::Suggestions(data) => {
+                let suggestion = data.suggestion.as_ref().unwrap();
+                assert_eq!(suggestion.completion, "reddit.com/r/rust/comments");
+                assert_eq!(suggestion.text, "reddit.com/r/rust/comments");
+                assert!(suggestion.description.as_ref().unwrap().contains("comments"));
+                assert!(suggestion.text.contains("rust"));
+            }
+            _ => panic!("Expected Suggestions for 'reddit.com/r/rust/comm'"),
+        }
+        
+        // Test other partial segment completions
+        match trie.parse("reddit.com/r/programming/ho") {
+            UIResponse::Suggestions(data) => {
+                let suggestion = data.suggestion.as_ref().unwrap();
+                assert_eq!(suggestion.completion, "reddit.com/r/programming/hot");
+                assert_eq!(suggestion.text, "reddit.com/r/programming/hot");
+                assert!(suggestion.description.as_ref().unwrap().contains("hot"));
+            }
+            _ => panic!("Expected Suggestions for 'reddit.com/r/programming/ho'"),
+        }
+        
+        match trie.parse("reddit.com/r/programming/to") {
+            UIResponse::Suggestions(data) => {
+                let suggestion = data.suggestion.as_ref().unwrap();
+                assert_eq!(suggestion.completion, "reddit.com/r/programming/top");
+                assert_eq!(suggestion.text, "reddit.com/r/programming/top");
+                assert!(suggestion.description.as_ref().unwrap().contains("top"));
+            }
+            _ => panic!("Expected Suggestions for 'reddit.com/r/programming/to'"),
+        }
+        
+        match trie.parse("reddit.com/r/programming/ne") {
+            UIResponse::Suggestions(data) => {
+                let suggestion = data.suggestion.as_ref().unwrap();
+                assert_eq!(suggestion.completion, "reddit.com/r/programming/new");
+                assert_eq!(suggestion.text, "reddit.com/r/programming/new");
+                assert!(suggestion.description.as_ref().unwrap().contains("new"));
+            }
+            _ => panic!("Expected Suggestions for 'reddit.com/r/programming/ne'"),
+        }
+    }
 }
