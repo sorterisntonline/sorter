@@ -1,3 +1,6 @@
+add a test for typing out fully https://reddit.com pressing tab, and getting the https://reddit.com/ back.
+ideally i want a test that is a series of keystrokes+tabs, what ui is shown at every keystroke. certain flows must always work.
+something like ["r", TAB] => [UIAction, UIAction]
 
 fill in some of these pages with reddit api http requests, which import hot
 {

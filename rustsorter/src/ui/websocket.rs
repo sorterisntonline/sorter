@@ -3,6 +3,8 @@ use axum::{
     response::Response,
 };
 use axum::extract::ws::{Message, WebSocket};
+use std::pin::Pin;
+use std::future::Future;
 
 
 
@@ -12,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     app_state::AppState,
     ui::types::UIResponse,
+    ui::action::UIAction,
     ui::composable_parser,
 };
 
@@ -110,7 +113,7 @@ async fn handle_client_message(
 
     let response = match command {
         ClientCommand::UpdateQuery { query } => {
-            handle_update_query_command(query).await
+            handle_update_query_command(query, app_state).await
         }
         ClientCommand::Vote { item_a_id, item_b_id, preference } => {
             handle_vote_command(item_a_id, item_b_id, preference, app_state).await
@@ -137,9 +140,130 @@ async fn handle_client_message(
     Ok(())
 }
 
-async fn handle_update_query_command(query: String) -> UIResponse {
-    // Use the composable parser for intelligent URL parsing and autocomplete
-    composable_parser::parse_reddit_url(&query)
+async fn handle_update_query_command(query: String, app_state: &AppState) -> UIResponse {
+    // Phase 1: Pure, synchronous parsing - the parser determines intent
+    let action = composable_parser::parse_reddit_url(&query);
+    
+    // Phase 2: Stateful, async execution - dispatch the action
+    dispatch_ui_action(action, app_state).await
+}
+
+/// Dispatch a UIAction to produce a UIResponse
+/// This is where stateful/async operations happen (database queries, API calls, etc.)
+fn dispatch_ui_action(action: UIAction, _app_state: &AppState) -> Pin<Box<dyn Future<Output = UIResponse> + Send + '_>> {
+    Box::pin(async move {
+    match action {
+        // --- Static actions (no database needed) ---
+        UIAction::ShowStaticGuide { query, title, description, options } => {
+            UIResponse::guide(query, title, description, options)
+        }
+        
+        UIAction::ShowStaticSelection { query, title, description, items } => {
+            UIResponse::selection(query, title, description, items)
+        }
+        
+        UIAction::ShowSuggestions(suggestions_data) => {
+            UIResponse::Suggestions(suggestions_data)
+        }
+        
+        UIAction::ShowError(error_data) => {
+            UIResponse::ErrorPage(error_data)
+        }
+        
+        UIAction::ShowNotYetImplemented(not_impl_data) => {
+            UIResponse::NotYetImplemented(not_impl_data)
+        }
+        
+        UIAction::ShowHomePage { query } => {
+            UIResponse::home_page(query)
+        }
+        
+        UIAction::ShowMultiple { actions } => {
+            // Recursively dispatch each action
+            let mut responses = Vec::new();
+            for sub_action in actions {
+                responses.push(dispatch_ui_action(sub_action, _app_state).await);
+            }
+            UIResponse::multiple(responses)
+        }
+        
+        // --- Dynamic actions (database/state required) ---
+        UIAction::RenderSubredditView { subreddit, sort } => {
+            // TODO: Implement actual Reddit API integration
+            // For now, return a placeholder
+            let sort_type = sort.unwrap_or_else(|| "hot".to_string());
+            UIResponse::not_yet_implemented(
+                format!("Subreddit View: r/{}", subreddit),
+                format!("Would show {} posts from r/{}", sort_type, subreddit),
+                Some("https://github.com/yourusername/sorter/issues".to_string()),
+            )
+        }
+        
+        UIAction::RenderSubredditComments { subreddit } => {
+            // TODO: Implement comment loading
+            UIResponse::not_yet_implemented(
+                format!("Subreddit Comments: r/{}", subreddit),
+                format!("Would show all comments from r/{}", subreddit),
+                None,
+            )
+        }
+        
+        UIAction::RenderUserProfile { username } => {
+            // TODO: Implement user profile loading
+            UIResponse::not_yet_implemented(
+                format!("User Profile: u/{}", username),
+                format!("Would show posts and comments from u/{}", username),
+                None,
+            )
+        }
+        
+        UIAction::RenderPost { subreddit, post_id } => {
+            // TODO: Implement post loading
+            UIResponse::not_yet_implemented(
+                format!("Post View"),
+                format!("Would show post {} from r/{}", post_id, subreddit),
+                None,
+            )
+        }
+        
+        UIAction::ImportRedditContent { url, entity_type, context: _ } => {
+            // TODO: Implement Reddit content import
+            UIResponse::not_yet_implemented(
+                format!("Import {}", entity_type),
+                format!("Would import {} from: {}", entity_type, url),
+                None,
+            )
+        }
+        
+        UIAction::RenderEntityView { pk_namespace, pk } => {
+            // TODO: Call entity::get_entity here
+            UIResponse::not_yet_implemented(
+                "Entity View".to_string(),
+                format!("Would show entity {}:{}", pk_namespace, pk),
+                None,
+            )
+        }
+        
+        UIAction::SuggestSubredditsFromDb { partial } => {
+            // TODO: Query database for matching subreddits
+            UIResponse::not_yet_implemented(
+                "Subreddit Suggestions".to_string(),
+                format!("Would suggest subreddits matching '{}'", partial),
+                None,
+            )
+        }
+        
+        UIAction::SearchEntities { query, entity_type } => {
+            // TODO: Search database for entities
+            let type_str = entity_type.unwrap_or_else(|| "all".to_string());
+            UIResponse::not_yet_implemented(
+                "Entity Search".to_string(),
+                format!("Would search for {} entities matching '{}'", type_str, query),
+                None,
+            )
+        }
+    }
+    })
 }
 
 async fn handle_vote_command(

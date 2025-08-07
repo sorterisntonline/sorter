@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::cell::RefCell;
-use crate::ui::types::{UIResponse, Suggestion, GuideOption, SelectionItem};
+use crate::ui::action::UIAction;
+use crate::ui::types::{Suggestion, GuideOption, SelectionItem};
 
 // --- Core Abstractions ---
 
@@ -98,8 +99,8 @@ pub struct Edge {
     description: Option<&'static str>,
 }
 
-/// Handler function for generating UI responses
-type Handler = Box<dyn Fn(&str, &HashMap<String, String>) -> UIResponse>;
+/// Handler function for generating UI actions
+type Handler = Box<dyn Fn(&str, &HashMap<String, String>) -> UIAction>;
 
 /// Node in the graph
 pub struct Node {
@@ -188,7 +189,7 @@ impl GraphBuilder {
     /// Set handler for current node
     pub fn handler<F>(self, handler: F) -> Self 
     where 
-        F: Fn(&str, &HashMap<String, String>) -> UIResponse + 'static
+        F: Fn(&str, &HashMap<String, String>) -> UIAction + 'static
     {
         let current = self.current_node.expect("No current node selected");
         if let Some(node) = self.nodes.get(current) {
@@ -209,7 +210,7 @@ impl GraphBuilder {
 // --- Parser Implementation ---
 
 impl Graph {
-    pub fn parse(&self, input: &str) -> UIResponse {
+    pub fn parse(&self, input: &str) -> UIAction {
         let normalized = input.trim().to_lowercase();
         let mut state = ParserState {
             input: &normalized,
@@ -222,7 +223,7 @@ impl Graph {
         self.parse_recursive(&mut state)
     }
     
-    fn parse_recursive(&self, state: &mut ParserState) -> UIResponse {
+    fn parse_recursive(&self, state: &mut ParserState) -> UIAction {
         let node = self.nodes.get(state.current_node_id)
             .expect("Node not found in graph");
         let node_ref = node.borrow();
@@ -263,7 +264,7 @@ impl Graph {
                         // Preserve what was typed before this segment
                         let prefix = &state.input[..state.cursor - consumed];
                         let full_completion = format!("{}{}", prefix, completion);
-                        return UIResponse::suggestions(
+                        return UIAction::suggest(
                             state.original_query.clone(),
                             Some(Suggestion {
                                 text: full_completion.clone(),
@@ -279,7 +280,7 @@ impl Graph {
                 let result = self.parse_recursive(state);
                 
                 // If we got a valid response, return it
-                if !matches!(result, UIResponse::ErrorPage(_)) {
+                if !matches!(result, UIAction::ShowError(_)) {
                     return result;
                 }
                 
@@ -293,7 +294,7 @@ impl Graph {
         self.suggest_from_edges(&node_ref, state)
     }
     
-    fn suggest_from_edges(&self, node: &Node, state: &ParserState) -> UIResponse {
+    fn suggest_from_edges(&self, node: &Node, state: &ParserState) -> UIAction {
         let remaining = &state.input[state.cursor..];
         let prefix = &state.input[..state.cursor];
         
@@ -304,7 +305,7 @@ impl Graph {
                     if target.starts_with(remaining) && !remaining.is_empty() {
                         // Preserve the prefix that was already typed
                         let full_completion = format!("{}{}", prefix, target);
-                        return UIResponse::suggestions(
+                        return UIAction::suggest(
                             state.original_query.clone(),
                             Some(Suggestion {
                                 text: full_completion.clone(),
@@ -318,7 +319,7 @@ impl Graph {
                 EdgePattern::Literal(lit) => {
                     if lit.starts_with(remaining) && !remaining.is_empty() {
                         let full_completion = format!("{}{}", prefix, lit);
-                        return UIResponse::suggestions(
+                        return UIAction::suggest(
                             state.original_query.clone(),
                             Some(Suggestion {
                                 text: full_completion.clone(),
@@ -333,7 +334,7 @@ impl Graph {
             }
         }
         
-        UIResponse::error(
+        UIAction::error(
             "InvalidPath".to_string(),
             format!("'{}' doesn't match any known pattern", state.original_query)
         )
@@ -462,7 +463,7 @@ pub fn build_reddit_graph() -> Graph {
             .edge(EdgePattern::Literal("/"), "reddit_root")
             .handler(|query, _ctx| {
                 // If someone just types "reddit.com" without slash
-                UIResponse::suggestions(
+                UIAction::suggest(
                     query.to_string(),
                     Some(Suggestion {
                         text: "reddit.com/".to_string(),
@@ -478,14 +479,14 @@ pub fn build_reddit_graph() -> Graph {
             .edge(EdgePattern::Literal("r"), "r_prefix")
             .edge(EdgePattern::Literal("u"), "u_prefix")
             .handler(|query, _ctx| {
-                UIResponse::multiple(vec![
-                    UIResponse::suggestions(query.to_string(), Some(Suggestion { 
+                UIAction::multiple(vec![
+                    UIAction::suggest(query.to_string(), Some(Suggestion { 
                         text: "reddit.com/r/".to_string(),
                         completion: "reddit.com/r/".to_string(),
                         description: Some("Browse subreddits".to_string()),
                         score: 1.0,
                     })),
-                    UIResponse::guide(
+                    UIAction::guide(
                         query.to_string(),
                         "Welcome to Sorter for Reddit".to_string(),
                         "Where would you like to start?".to_string(),
@@ -514,14 +515,14 @@ pub fn build_reddit_graph() -> Graph {
         .at("subreddit_selection")
             .edge(EdgePattern::Variable("subreddit"), "subreddit_page")
             .handler(|query, _ctx| {
-                UIResponse::multiple(vec![
-                    UIResponse::suggestions(query.to_string(), Some(Suggestion {
+                UIAction::multiple(vec![
+                    UIAction::suggest(query.to_string(), Some(Suggestion {
                         text: "reddit.com/r/programming".to_string(),
                         completion: "reddit.com/r/programming".to_string(),
                         description: Some("Popular programming community".to_string()),
                         score: 1.0,
                     })),
-                    UIResponse::selection(
+                    UIAction::selection(
                         query.to_string(), 
                         "Choose a Subreddit".to_string(), 
                         "Select a popular community or type a name.".to_string(), 
@@ -552,17 +553,13 @@ pub fn build_reddit_graph() -> Graph {
         // === Specific subreddit page ===
         .at("subreddit_page")
             .edge(EdgePattern::Literal("/"), "subreddit_slash")
-            .handler(|query, ctx| {
+            .handler(|_query, ctx| {
                 let subreddit = ctx.get("subreddit").cloned().unwrap_or_default();
-                UIResponse::suggestions(
-                    query.to_string(),
-                    Some(Suggestion {
-                        text: format!("reddit.com/r/{}/", subreddit),
-                        completion: format!("reddit.com/r/{}/", subreddit),
-                        description: Some(format!("Browse r/{}", subreddit)),
-                        score: 1.0,
-                    })
-                )
+                // This should trigger importing/loading the subreddit
+                UIAction::RenderSubredditView {
+                    subreddit: subreddit.clone(),
+                    sort: None,
+                }
             })
         
         .at("subreddit_slash")
@@ -572,7 +569,7 @@ pub fn build_reddit_graph() -> Graph {
             .edge(EdgePattern::Literal("comments"), "subreddit_comments")
             .handler(|query, ctx| {
                 let subreddit = ctx.get("subreddit").cloned().unwrap_or_default();
-                UIResponse::guide(
+                UIAction::guide(
                     query.to_string(), 
                     format!("What to sort in r/{}?", subreddit), 
                     "Choose a category to begin sorting.".to_string(), 
@@ -612,7 +609,7 @@ pub fn build_reddit_graph() -> Graph {
         .at("user_selection")
             .edge(EdgePattern::Variable("username"), "user_profile")
             .handler(|query, _ctx| {
-                UIResponse::guide(
+                UIAction::guide(
                     query.to_string(),
                     "User Profile Sorting".to_string(),
                     "Enter a Reddit username to sort their content.".to_string(),
@@ -627,14 +624,59 @@ pub fn build_reddit_graph() -> Graph {
                 )
             })
         
+        // === Subreddit sort types ===
+        .at("subreddit_hot")
+            .handler(|_query, ctx| {
+                let subreddit = ctx.get("subreddit").cloned().unwrap_or_default();
+                UIAction::RenderSubredditView {
+                    subreddit,
+                    sort: Some("hot".to_string()),
+                }
+            })
+        
+        .at("subreddit_top")
+            .handler(|_query, ctx| {
+                let subreddit = ctx.get("subreddit").cloned().unwrap_or_default();
+                UIAction::RenderSubredditView {
+                    subreddit,
+                    sort: Some("top".to_string()),
+                }
+            })
+        
+        .at("subreddit_new")
+            .handler(|_query, ctx| {
+                let subreddit = ctx.get("subreddit").cloned().unwrap_or_default();
+                UIAction::RenderSubredditView {
+                    subreddit,
+                    sort: Some("new".to_string()),
+                }
+            })
+        
+        .at("subreddit_comments")
+            .handler(|_query, ctx| {
+                let subreddit = ctx.get("subreddit").cloned().unwrap_or_default();
+                UIAction::RenderSubredditComments {
+                    subreddit,
+                }
+            })
+        
+        // === User profile ===
+        .at("user_profile")
+            .handler(|_query, ctx| {
+                let username = ctx.get("username").cloned().unwrap_or_default();
+                UIAction::RenderUserProfile {
+                    username,
+                }
+            })
+        
         // === Build the graph ===
         .build()
 }
 
 // --- Public API ---
 
-/// Parse a query string and return a UI response
-pub fn parse_reddit_url(query: &str) -> UIResponse {
+/// Parse a query string and return a UI action
+pub fn parse_reddit_url(query: &str) -> UIAction {
     let graph = build_reddit_graph();
     graph.parse(query)
 }
@@ -652,7 +694,7 @@ mod tests {
         
         for prefix in prefixes {
             match graph.parse(prefix) {
-                UIResponse::Suggestions(data) => {
+                UIAction::ShowSuggestions(data) => {
                     assert_eq!(data.suggestion.as_ref().unwrap().completion, "reddit.com");
                     println!("✓ '{}' → reddit.com", prefix);
                 }
@@ -678,7 +720,7 @@ mod tests {
         
         for (input, expected) in tests {
             match graph.parse(input) {
-                UIResponse::Suggestions(data) => {
+                UIAction::ShowSuggestions(data) => {
                     assert_eq!(data.suggestion.as_ref().unwrap().completion, expected);
                     println!("✓ '{}' → {}", input, expected);
                 }
@@ -699,13 +741,13 @@ mod tests {
         
         for path in paths {
             match graph.parse(path) {
-                UIResponse::Multiple(responses) => {
-                    let has_guide = responses.responses.iter()
-                        .any(|r| matches!(r, UIResponse::Guide(_)));
+                UIAction::ShowMultiple { actions } => {
+                    let has_guide = actions.iter()
+                        .any(|a| matches!(a, UIAction::ShowStaticGuide { .. }));
                     assert!(has_guide, "Path '{}' should show guide", path);
                     println!("✓ '{}' shows Reddit root guide", path);
                 }
-                _ => panic!("Expected Multiple response for '{}'", path),
+                _ => panic!("Expected Multiple action for '{}'", path),
             }
         }
     }
@@ -716,20 +758,22 @@ mod tests {
         
         // Test navigation to subreddit
         match graph.parse("reddit.com/r/rust") {
-            UIResponse::Suggestions(data) => {
-                assert!(data.suggestion.as_ref().unwrap().completion.contains("rust"));
+            UIAction::RenderSubredditView { subreddit, sort } => {
+                assert_eq!(subreddit, "rust");
+                assert_eq!(sort, None);
                 println!("✓ reddit.com/r/rust recognized");
             }
-            _ => panic!("Expected suggestion for subreddit"),
+            _ => panic!("Expected RenderSubredditView for subreddit"),
         }
         
         // Test with alias
         match graph.parse("r/r/programming") {
-            UIResponse::Suggestions(data) => {
-                assert!(data.suggestion.as_ref().unwrap().completion.contains("programming"));
+            UIAction::RenderSubredditView { subreddit, sort } => {
+                assert_eq!(subreddit, "programming");
+                assert_eq!(sort, None);
                 println!("✓ r/r/programming (alias) recognized");
             }
-            _ => panic!("Expected suggestion for subreddit via alias"),
+            _ => panic!("Expected RenderSubredditView for subreddit via alias"),
         }
     }
 }
