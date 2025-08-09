@@ -1,33 +1,41 @@
 (ns sorter-test.ws-client
-  (:require [ws-client-async.core :as ws]
-            [clojure.core.async :as a]
-            [cheshire.core :as json]))
+  (:require [gniazdo.core :as ws]
+            [clojure.core.async :as async :refer [chan go >! <! <!! timeout alt!!]]))
 
-(defprotocol IWebSocketClient
-  (connect [this])
-  (send! [this command])
-  (receive! [this] [this timeout])
-  (close! [this]))
+(defprotocol WebSocketClient
+  (send! [this message] "Send a message to the WebSocket")
+  (receive! [this] [this timeout-ms] "Receive a message from the WebSocket")
+  (close! [this] "Close the WebSocket connection"))
 
-(deftype WebSocketClient [uri client]
-  IWebSocketClient
-  (connect [this]
-    (let [c (ws/create-client)]
-      (ws/connect c uri)
-      (assoc this :client c)))
+(defrecord GniaznoWSClient [socket receive-chan]
+  WebSocketClient
+  (send! [this message]
+    (ws/send-msg socket (pr-str message)))
+  
+  (receive! [this]
+    (receive! this 5000)) ; Default 5 second timeout
+  
+  (receive! [this timeout-ms]
+    (let [timeout-chan (timeout timeout-ms)]
+      (alt!!
+        receive-chan ([msg] (when msg (read-string msg)))
+        timeout-chan :timeout)))
+  
+  (close! [this]
+    (ws/close socket)
+    (async/close! receive-chan)))
 
-  (send! [_ command]
-    (ws/send! client (json/encode command)))
+(defn create-ws-client [url]
+  (let [receive-chan (chan 100)] ; Buffer up to 100 messages
+    {:url url :receive-chan receive-chan}))
 
-  (receive! [_] (receive! _ 5000)) ; Default 5s timeout
-  (receive! [_ timeout]
-    (let [ch (ws/messages client)
-          [_ val] (a/alts!! [ch (a/timeout timeout)])]
-      (if val
-        (json/parse-string val true)
-        (throw (ex-info "Timeout: Did not receive message" {:timeout timeout})))))
-
-  (close! [_] (ws/close! client)))
-
-(defn create-ws-client [uri]
-  (->WebSocketClient uri nil))
+(defn connect [{:keys [url receive-chan]}]
+  (let [socket (ws/connect url
+                          :on-receive (fn [msg]
+                                        (go (>! receive-chan msg)))
+                          :on-error (fn [error]
+                                      (println "WebSocket error:" error))
+                          :on-close (fn [status reason]
+                                      (println "WebSocket closed:" status reason)
+                                      (async/close! receive-chan)))]
+    (->GniaznoWSClient socket receive-chan)))
