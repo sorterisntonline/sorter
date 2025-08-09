@@ -11,7 +11,7 @@
 (defrecord GniaznoWSClient [socket receive-chan]
   WebSocketClient
   (send! [this message]
-    (ws/send-msg socket (pr-str message)))
+    (ws/send-msg socket (json/encode message)))
   
   (receive! [this]
     (receive! this 5000)) ; Default 5 second timeout
@@ -19,7 +19,7 @@
   (receive! [this timeout-ms]
     (let [timeout-chan (timeout timeout-ms)]
       (alt!!
-        receive-chan ([msg] (when msg (json/decode msg)))
+        receive-chan ([msg] (when msg (json/decode msg keyword)))
         timeout-chan :timeout)))
   
   (close! [this]
