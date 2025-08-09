@@ -1,0 +1,9 @@
+{:paths ["src"]
+ :deps {clojure.test            {:mvn/version "1.0.0"}
+        gnarrow/ws-client-async {:mvn/version "0.1.2"} ; A good async option
+        jp.pinkikki/meander     {:mvn/version "0.0.628"} ; Or whichever version you use
+        clj-http/clj-http       {:mvn/version "3.12.3"}
+        cheshire/cheshire       {:mvn/version "5.11.0"}
+        environ/environ         {:mvn/version "1.2.0"} }
+ :aliases {:test {:extra-paths ["test"]
+                  :extra-deps {}}}}
