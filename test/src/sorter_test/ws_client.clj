@@ -1,5 +1,6 @@
 (ns sorter-test.ws-client
   (:require [gniazdo.core :as ws]
+            [cheshire.core :as json]
             [clojure.core.async :as async :refer [chan go >! <! <!! timeout alt!!]]))
 
 (defprotocol WebSocketClient
@@ -18,7 +19,7 @@
   (receive! [this timeout-ms]
     (let [timeout-chan (timeout timeout-ms)]
       (alt!!
-        receive-chan ([msg] (when msg (read-string msg)))
+        receive-chan ([msg] (when msg (json/decode msg)))
         timeout-chan :timeout)))
   
   (close! [this]
