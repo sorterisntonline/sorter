@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::cell::RefCell;
 use crate::ui::action::UIAction;
-use crate::ui::types::{Suggestion, GuideOption, SelectionItem, ScrollingSuggestion};
+use crate::ui::types::{Suggestion, GuideOption, ScrollingSuggestion};
 
 // --- Core Abstractions ---
 
@@ -705,7 +705,7 @@ mod tests {
     enum KeyAction {
         Type(String),  // Type characters
         Tab,           // Press tab (accept completion)
-        Enter,         // Press enter
+
     }
 
     /// Expected state after a keystroke
@@ -714,7 +714,7 @@ mod tests {
         Suggestion { completion: String },
         ScrollingSuggestions { completions: Vec<String> },
         Guide { title_contains: String },
-        Selection { title_contains: String },
+
         RenderSubreddit { subreddit: String, sort: Option<String> },
         RenderSubredditComments { subreddit: String },
         RenderUser { username: String },
@@ -722,7 +722,7 @@ mod tests {
         Multiple { expected_actions: Vec<ExpectedAction> },  // Multiple responses with specific expectations
         MultipleAny,  // Multiple responses (any sub-actions - legacy)
         DbSuggestions { partial: String, prefix: String },  // Database-backed suggestions
-        Home,
+
     }
 
     impl ExpectedAction {
@@ -738,9 +738,6 @@ mod tests {
                     *completions == actual_completions
                 }
                 (ExpectedAction::Guide { title_contains }, UIAction::ShowStaticGuide { title, .. }) => {
-                    title.contains(title_contains)
-                }
-                (ExpectedAction::Selection { title_contains }, UIAction::ShowStaticSelection { title, .. }) => {
                     title.contains(title_contains)
                 }
                 (ExpectedAction::RenderSubreddit { subreddit, sort }, 
@@ -771,7 +768,7 @@ mod tests {
                  UIAction::SuggestSubredditsFromDb { partial: p, prefix: pr }) => {
                     p == partial && pr == prefix
                 }
-                (ExpectedAction::Home, UIAction::ShowHomePage { .. }) => true,
+
                 _ => false,
             }
         }
@@ -801,11 +798,7 @@ mod tests {
                         }
                     }
                 }
-                KeyAction::Enter => {
-                    // Enter submits the current text
-                    let result = graph.parse(&current_text);
-                    results.push((format!("{}[ENTER]", current_text), result));
-                }
+
             }
         }
         
@@ -833,9 +826,6 @@ mod tests {
                             current_text = suggestion.completion.clone();
                         }
                     }
-                }
-                KeyAction::Enter => {
-                    // Enter submits current text (no change needed for testing)
                 }
             }
             
@@ -1210,12 +1200,6 @@ mod tests {
     macro_rules! shows_guide {
         ($title_contains:expr) => {
             ExpectedAction::Guide { title_contains: $title_contains.to_string() }
-        };
-    }
-    
-    macro_rules! shows_error {
-        ($error_type:expr) => {
-            ExpectedAction::Error { error_type: $error_type.to_string() }
         };
     }
     
