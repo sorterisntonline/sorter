@@ -4,6 +4,7 @@
         meander/epsilon {:mvn/version "0.0.650"}
         clj-http/clj-http {:mvn/version "3.12.3"}
         cheshire/cheshire {:mvn/version "5.11.0"}
-        environ/environ {:mvn/version "1.2.0"} }
+        environ/environ {:mvn/version "1.2.0"}
+        nubank/matcher-combinators {:mvn/version "3.9.1"}}
  :aliases {:test {:extra-deps {lambdaisland/kaocha {:mvn/version "1.91.1392"}}
                   :main-opts ["-m" "kaocha.runner"]}}}
