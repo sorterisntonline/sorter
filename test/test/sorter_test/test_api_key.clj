@@ -1,4 +1,4 @@
-(ns sorter-test.test-http
+(ns sorter-test.test-api-key
   (:require [clojure.test :refer :all]
             [matcher-combinators.test] ;; adds match? support to clojure.test
             [matcher-combinators.matchers :as m]

@@ -7,10 +7,11 @@
 (def static-admin-key (env :static-admin-key "STATIC_TEST_KEY_FOR_ADMIN_USER_123"))
 
 (defn make-request
-  [method endpoint & {:keys [is-authenticated? body headers]}]
+  [method endpoint & {:keys [is-authenticated? body headers params]}]
   (let [base-opts {:content-type :json
                    :throw-exceptions false
-                   :body (when body (json/encode body))}
+                   :body (when body (json/encode body))
+                   :query-params params}
         auth-headers (when is-authenticated?
                        {"Authorization" (str "Bearer " static-admin-key)})
         all-headers (merge auth-headers headers)
@@ -19,7 +20,7 @@
                base-opts)
         response (http/request (assoc opts :method method :url (str base-url endpoint)))]
     ;; Parse JSON response body manually
-    (if (:body response)
+    (if (and (:body response) (not= "" (:body response)))
       (try
         (assoc response :body (json/parse-string (:body response) true))
         (catch Exception _
