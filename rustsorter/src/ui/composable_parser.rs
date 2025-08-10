@@ -570,14 +570,12 @@ pub fn build_reddit_graph() -> Graph {
         // === Specific subreddit page ===
         .at("subreddit_page")
             .edge(EdgePattern::Literal("/"), "subreddit_slash")
-            .handler(|query, prefix, ctx| {
-                // While typing a subreddit (no trailing slash), show DB-backed suggestions every keystroke
-                let partial = ctx.get("subreddit").cloned().unwrap_or_default();
-                // Compute the base prefix by removing the partial from the end of the prefix
-                let base_prefix = prefix.strip_suffix(&partial).unwrap_or(prefix).to_string();
-                UIAction::SuggestSubredditsFromDb {
-                    partial: partial.clone(),
-                    prefix: base_prefix,
+            .handler(|_query, _prefix, ctx| {
+                // If we have a complete subreddit name, render the subreddit view
+                let subreddit = ctx.get("subreddit").cloned().unwrap_or_default();
+                UIAction::RenderSubredditView {
+                    subreddit,
+                    sort: None,
                 }
             })
         
@@ -723,6 +721,7 @@ mod tests {
         Error { error_type: String },
         Multiple { expected_actions: Vec<ExpectedAction> },  // Multiple responses with specific expectations
         MultipleAny,  // Multiple responses (any sub-actions - legacy)
+        DbSuggestions { partial: String, prefix: String },  // Database-backed suggestions
         Home,
     }
 
@@ -768,6 +767,10 @@ mod tests {
                     })
                 }
                 (ExpectedAction::MultipleAny, UIAction::ShowMultiple { .. }) => true,
+                (ExpectedAction::DbSuggestions { partial, prefix }, 
+                 UIAction::SuggestSubredditsFromDb { partial: p, prefix: pr }) => {
+                    p == partial && pr == prefix
+                }
                 (ExpectedAction::Home, UIAction::ShowHomePage { .. }) => true,
                 _ => false,
             }
@@ -1227,6 +1230,12 @@ mod tests {
             ExpectedAction::ScrollingSuggestions { completions: vec![$($completion.to_string()),*] }
         };
     }
+    
+    macro_rules! db_suggestions {
+        ($partial:expr, $prefix:expr) => {
+            ExpectedAction::DbSuggestions { partial: $partial.to_string(), prefix: $prefix.to_string() }
+        };
+    }
 
     // === NEW DECLARATIVE TESTS ===
 
@@ -1560,7 +1569,7 @@ mod tests {
         test_flow("Protocol Preservation: HTTPS Subreddit Selection", flow![
             (type_text!("https://reddit.com/r/"), multiple![
                 scrolling_suggestions!("https://reddit.com/r/programming", "https://reddit.com/r/askreddit", "https://reddit.com/r/aww", "https://reddit.com/r/rust", "https://reddit.com/r/webdev"),  // Should preserve https://
-                ExpectedAction::Selection { title_contains: "Choose a Subreddit".to_string() }
+                db_suggestions!("https://reddit.com/r/", "https://reddit.com/r/")
             ]),
         ]);
         
@@ -1710,9 +1719,12 @@ mod tests {
         
         match graph.parse("r/") {
             UIAction::ShowMultiple { actions } => {
-                let has_selection = actions.iter()
-                    .any(|a| matches!(a, UIAction::ShowStaticSelection { .. }));
-                assert!(has_selection, "Path 'r/' should show subreddit selection");
+                let has_scrolling_suggestions = actions.iter()
+                    .any(|a| matches!(a, UIAction::ShowScrollingSuggestions { .. }));
+                let has_db_suggestions = actions.iter()
+                    .any(|a| matches!(a, UIAction::SuggestSubredditsFromDb { .. }));
+                assert!(has_scrolling_suggestions && has_db_suggestions, 
+                       "Path 'r/' should show scrolling suggestions and DB suggestions");
                 println!("✓ 'r/' shows subreddit selection");
             }
             _ => panic!("Expected Multiple action for 'r/'"),
