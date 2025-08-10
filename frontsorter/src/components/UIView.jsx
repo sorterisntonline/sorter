@@ -1,6 +1,6 @@
 import useUIStore, { ViewTypes } from '../store/uiStore.js';
 
-const UIView = ({ onCompletionSelect }) => {
+const UIView = ({ onCompletionSelect, onImportCommand }) => {
   const { view, isLoading } = useUIStore();
 
   // Helper function to render a single view based on type and data
@@ -54,17 +54,16 @@ const UIView = ({ onCompletionSelect }) => {
             
             <div className="grid gap-3">
               {viewData?.items?.map((item, index) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    if (onCompletionSelect) {
-                      onCompletionSelect(item.completion);
-                    }
-                  }}
-                  className="text-left p-4 bg-white border border-green-300 rounded-lg hover:bg-green-50 hover:border-green-400 transition-colors group"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
+                <div key={item.id} className="p-4 bg-white border border-green-300 rounded-lg hover:bg-green-50 hover:border-green-400 transition-colors">
+                  <div className="flex items-start justify-between gap-3">
+                    <button
+                      onClick={() => {
+                        if (onCompletionSelect) {
+                          onCompletionSelect(item.completion);
+                        }
+                      }}
+                      className="text-left flex-1"
+                    >
                       <div className="flex items-center gap-3">
                         <span className="text-sm font-mono bg-green-100 text-green-800 px-2 py-1 rounded">
                           {index + 1}
@@ -74,12 +73,24 @@ const UIView = ({ onCompletionSelect }) => {
                       {item.description && (
                         <p className="text-sm text-gray-600 mt-1 ml-8">{item.description}</p>
                       )}
-                    </div>
-                    <span className="text-xs text-gray-400 font-mono group-hover:text-gray-600">
-                      {item.completion}
-                    </span>
+                      <span className="block text-xs text-gray-400 font-mono mt-1">{item.completion}</span>
+                    </button>
+                    {item.import_action && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onImportCommand) {
+                            onImportCommand(item.import_action.command);
+                          }
+                        }}
+                        className="shrink-0 px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                        title={item.import_action.description}
+                      >
+                        {item.import_action.label || 'Import'}
+                      </button>
+                    )}
                   </div>
-                </button>
+                </div>
               ))}
             </div>
             

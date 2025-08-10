@@ -5,7 +5,8 @@ import useWebSocket, { ReadyState } from 'react-use-websocket';
 import { 
   WS_URL, 
   createUpdateQueryCommand, 
-  handleWebSocketMessage 
+  handleWebSocketMessage,
+  sendCommand,
 } from "../services/wsAPI.js";
 import UIView from "../components/UIView.jsx";
 import useUIStore, { ViewTypes } from "../store/uiStore.js";
@@ -231,6 +232,10 @@ const HomePage = () => {
             const newSearchParams = new URLSearchParams();
             newSearchParams.set("q", encodeURIComponent(completion));
             window.history.pushState({}, '', `?${newSearchParams.toString()}`);
+          }}
+          onImportCommand={(command) => {
+            // Send the continuation command verbatim
+            sendCommand(sendJsonMessage, command);
           }}
         />
       </div>

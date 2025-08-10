@@ -32,6 +32,15 @@ export const createPingCommand = () => ({
   type: 'Ping'
 });
 
+// Helper: send a fully-formed command object (continuation)
+export const sendCommand = (sendJsonMessage, commandObject) => {
+  try {
+    sendJsonMessage(commandObject);
+  } catch (e) {
+    console.error('Failed to send command', e);
+  }
+};
+
 // Message handler - processes incoming messages
 export const handleWebSocketMessage = (message, onUIUpdate, onError) => {
   try {

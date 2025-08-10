@@ -108,6 +108,16 @@ pub struct SelectionItem {
     pub title: String,
     pub description: Option<String>,
     pub completion: String,
+    #[serde(skip_serializing_if = "Option::is_none")] 
+    pub import_action: Option<ImportAction>,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct ImportAction {
+    pub label: String,
+    pub description: String,
+    // Full command to send back over the socket; client can send it verbatim
+    pub command: serde_json::Value,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]

@@ -265,30 +265,64 @@ fn dispatch_ui_action(action: UIAction, _app_state: &AppState) -> Pin<Box<dyn Fu
         }
         
         UIAction::SuggestSubredditsFromDb { partial, prefix } => {
-            // Query database for subreddits starting with partial
+            use crate::ui::types::{SelectionItem, ImportAction};
+
+            // Query database for existing subreddits starting with partial
             let pattern = format!("{}%", partial);
-            let rows = sqlx::query!(
-                "SELECT pk, title FROM entities WHERE ns = 'reddit.subreddit' AND pk ILIKE $1 ORDER BY pk LIMIT 10",
+            let existing_rows = sqlx::query!(
+                "SELECT pk FROM entities WHERE ns = 'reddit.subreddit' AND pk ILIKE $1 ORDER BY pk LIMIT 10",
                 pattern
             )
             .fetch_all(&_app_state.db)
             .await
             .unwrap_or_default();
 
-            let items: Vec<crate::ui::types::SelectionItem> = rows
+            let mut items: Vec<SelectionItem> = existing_rows
                 .into_iter()
-                .map(|r| crate::ui::types::SelectionItem {
+                .map(|r| SelectionItem {
                     id: r.pk.clone(),
                     title: format!("r/{}", r.pk),
-                    description: None,
+                    description: Some("Already imported".to_string()),
                     completion: format!("{}{}", prefix, r.pk),
+                    import_action: None,
                 })
                 .collect();
 
+            // If user typed something that doesn't exactly exist yet, offer an import action
+            if !partial.is_empty() && !partial.contains(' ') {
+                let exact_exists: i64 = sqlx::query_scalar!(
+                    "SELECT COUNT(*) as \"count!\" FROM entities WHERE ns = 'reddit.subreddit' AND pk = $1",
+                    partial
+                )
+                .fetch_one(&_app_state.db)
+                .await
+                .unwrap_or(0);
+
+                if exact_exists == 0 {
+                    // Build full command from typed enums to ensure it matches the server deserializer
+                    let typed_command = ClientCommand::ExecuteRedditImport(
+                        RedditImport::SubredditHot { subreddit: partial.clone(), limit: Some(25) }
+                    );
+                    let command = serde_json::to_value(&typed_command).unwrap_or_else(|_| serde_json::json!({}));
+
+                    items.insert(0, SelectionItem {
+                        id: format!("import_{}", partial),
+                        title: format!("r/{}", partial),
+                        description: Some("Not imported yet".to_string()),
+                        completion: format!("{}{}", prefix, partial),
+                        import_action: Some(ImportAction {
+                            label: "Import hot posts".to_string(),
+                            description: "Import hot posts from this subreddit".to_string(),
+                            command,
+                        }),
+                    });
+                }
+            }
+
             UIResponse::selection(
                 partial.clone(),
-                "Matching subreddits".to_string(),
-                "Select a subreddit or continue typing".to_string(),
+                "Subreddits".to_string(),
+                "Select a subreddit or import a new one".to_string(),
                 items,
             )
         }
