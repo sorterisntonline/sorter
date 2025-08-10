@@ -264,12 +264,31 @@ fn dispatch_ui_action(action: UIAction, _app_state: &AppState) -> Pin<Box<dyn Fu
             )
         }
         
-        UIAction::SuggestSubredditsFromDb { partial } => {
-            // TODO: Query database for matching subreddits
-            UIResponse::not_yet_implemented(
-                "Subreddit Suggestions".to_string(),
-                format!("Would suggest subreddits matching '{}'", partial),
-                None,
+        UIAction::SuggestSubredditsFromDb { partial, prefix } => {
+            // Query database for subreddits starting with partial
+            let rows = sqlx::query!(
+                "SELECT pk, title FROM entities WHERE ns = 'reddit.subreddit' AND pk ILIKE $1 ORDER BY pk LIMIT 10",
+                format!("{}%", partial)
+            )
+            .fetch_all(&_app_state.db)
+            .await
+            .unwrap_or_default();
+
+            let items: Vec<crate::ui::types::SelectionItem> = rows
+                .into_iter()
+                .map(|r| crate::ui::types::SelectionItem {
+                    id: r.pk.clone(),
+                    title: format!("r/{}", r.pk),
+                    description: None,
+                    completion: format!("{}{}", prefix, r.pk),
+                })
+                .collect();
+
+            UIResponse::selection(
+                partial.clone(),
+                "Matching subreddits".to_string(),
+                "Select a subreddit or continue typing".to_string(),
+                items,
             )
         }
         

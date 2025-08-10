@@ -75,6 +75,7 @@ pub enum UIAction {
     // Suggest subreddits from database
     SuggestSubredditsFromDb {
         partial: String,
+        prefix: String,
     },
     
     // Search entities in database

@@ -562,31 +562,8 @@ pub fn build_reddit_graph() -> Graph {
                         1600, // 1.6 second interval (slower)
                         true  // loop through
                     ),
-                    UIAction::selection(
-                        query.to_string(), 
-                        "Choose a Subreddit".to_string(), 
-                        "Select a popular community or type a name.".to_string(), 
-                        vec![
-                            SelectionItem { 
-                                id: "programming".to_string(), 
-                                title: "r/programming".to_string(), 
-                                description: Some("Computer programming discussions".to_string()),
-                                completion: format!("{}programming", prefix)
-                            },
-                            SelectionItem { 
-                                id: "rust".to_string(), 
-                                title: "r/rust".to_string(), 
-                                description: Some("The Rust programming language".to_string()),
-                                completion: format!("{}rust", prefix)
-                            },
-                            SelectionItem { 
-                                id: "webdev".to_string(), 
-                                title: "r/webdev".to_string(), 
-                                description: Some("Web development community".to_string()),
-                                completion: format!("{}webdev", prefix)
-                            },
-                        ]
-                    )
+                    // Live DB-backed suggestions for subreddits as the user types
+                    UIAction::SuggestSubredditsFromDb { partial: query.to_string(), prefix: prefix.to_string() }
                 ])
             })
         
