@@ -1561,7 +1561,7 @@ mod tests {
             // User accepted completion to "https://reddit.com/"
             // NOW suggestions should preserve the https:// protocol
             (KeyAction::Tab, multiple![
-                suggests!("https://reddit.com/r/"),  // This is the key fix!
+                scrolling_suggestions!("https://reddit.com/r/", "https://reddit.com/u/"),  // This is the key fix!
                 shows_guide!("Welcome to Sorter")
             ]),
         ]);
@@ -1572,7 +1572,7 @@ mod tests {
         // This test specifically verifies the fix for the protocol preservation bug
         test_flow("Protocol Preservation: HTTPS Reddit Homepage", flow![
             (type_text!("https://reddit.com/"), multiple![
-                suggests!("https://reddit.com/r/"),  // Should preserve https://
+                scrolling_suggestions!("https://reddit.com/r/", "https://reddit.com/u/"),  // Should preserve https://
                 shows_guide!("Welcome to Sorter")
             ]),
         ]);
@@ -1580,7 +1580,7 @@ mod tests {
         // Test that subreddit selection preserves protocol
         test_flow("Protocol Preservation: HTTPS Subreddit Selection", flow![
             (type_text!("https://reddit.com/r/"), multiple![
-                suggests!("https://reddit.com/r/programming"),  // Should preserve https://
+                scrolling_suggestions!("https://reddit.com/r/programming", "https://reddit.com/r/askreddit", "https://reddit.com/r/aww", "https://reddit.com/r/rust", "https://reddit.com/r/webdev"),  // Should preserve https://
                 ExpectedAction::Selection { title_contains: "Choose a Subreddit".to_string() }
             ]),
         ]);
@@ -1588,14 +1588,14 @@ mod tests {
         // Test with different protocols
         test_flow("Protocol Preservation: HTTP", flow![
             (type_text!("http://reddit.com/"), multiple![
-                suggests!("http://reddit.com/r/"),  // Should preserve http://
+                scrolling_suggestions!("http://reddit.com/r/", "http://reddit.com/u/"),  // Should preserve http://
                 shows_guide!("Welcome to Sorter")
             ]),
         ]);
         
         test_flow("Protocol Preservation: WWW", flow![
             (type_text!("www.reddit.com/"), multiple![
-                suggests!("www.reddit.com/r/"),  // Should preserve www.
+                scrolling_suggestions!("www.reddit.com/r/", "www.reddit.com/u/"),  // Should preserve www.
                 shows_guide!("Welcome to Sorter")
             ]),
         ]);
@@ -1603,7 +1603,7 @@ mod tests {
         // Test that plain reddit.com still works
         test_flow("Protocol Preservation: Plain Domain", flow![
             (type_text!("reddit.com/"), multiple![
-                suggests!("reddit.com/r/"),  // No protocol prefix
+                scrolling_suggestions!("reddit.com/r/", "reddit.com/u/"),  // No protocol prefix
                 shows_guide!("Welcome to Sorter")
             ]),
         ]);
