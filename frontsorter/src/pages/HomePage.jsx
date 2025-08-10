@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { wsAPI } from "../services/api.js";
 import UIView from "../components/UIView.jsx";
-import useUIStore from "../store/uiStore.js";
+import useUIStore, { ViewTypes } from "../store/uiStore.js";
 
 const HomePage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -11,17 +11,17 @@ const HomePage = () => {
   
   // Get state and actions from the store
   const { 
-    suggestion, 
-    guide, 
-    selection, 
-    searchResults, 
-    error, 
-    notYetImplemented,
+    view,
     isLoading,
     handleUIResponse,
     setLoading,
-    setError 
+    setError,
+    getViewData,
+    hasViewType
   } = useUIStore();
+
+  // Get suggestion data if present
+  const suggestion = getViewData(ViewTypes.SUGGESTIONS)?.suggestion;
 
   // Initialize WebSocket connection on mount
   useEffect(() => {

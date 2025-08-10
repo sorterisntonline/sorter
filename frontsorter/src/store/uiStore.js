@@ -1,221 +1,105 @@
 import { create } from 'zustand';
 
 const useUIStore = create((set, get) => ({
-  // State
-  suggestion: null,
-  guide: null,
-  selection: null,
-  searchResults: null,
-  votingPairs: null,
-  entityView: null,
-  error: null,
-  notYetImplemented: null,
+  // Core state - single view with discriminated union
+  view: { type: 'HomePage', data: null },
   isLoading: false,
   
-  // Actions/Mutations for each UI response type
+  // Main handler that updates the view based on response type
   handleUIResponse: (response) => {
     if (!response || !response.type) return;
     
-    switch (response.type) {
-      case 'Suggestions':
-        set({ 
-          suggestion: response.data.suggestion,
-          // Clear other views when showing just suggestions
-          guide: null,
-          selection: null,
-          searchResults: null,
-          votingPairs: null,
-          entityView: null,
-          error: null,
-          notYetImplemented: null,
-        });
-        break;
-        
-      case 'Guide':
-        set({ 
-          guide: response.data,
-          // Keep suggestion visible with guide
-          selection: null,
-          searchResults: null,
-          votingPairs: null,
-          entityView: null,
-          error: null,
-          notYetImplemented: null,
-        });
-        break;
-        
-      case 'Selection':
-        set({ 
-          selection: response.data,
-          // Keep suggestion visible with selection
-          guide: null,
-          searchResults: null,
-          votingPairs: null,
-          entityView: null,
-          error: null,
-          notYetImplemented: null,
-        });
-        break;
-        
-      case 'SearchResults':
-        set({ 
-          searchResults: response.data,
-          suggestion: null,
-          guide: null,
-          selection: null,
-          votingPairs: null,
-          entityView: null,
-          error: null,
-          notYetImplemented: null,
-        });
-        break;
-        
-      case 'VotingPairs':
-        set({ 
-          votingPairs: response.data,
-          suggestion: null,
-          guide: null,
-          selection: null,
-          searchResults: null,
-          entityView: null,
-          error: null,
-          notYetImplemented: null,
-        });
-        break;
-        
-      case 'EntityView':
-        set({ 
-          entityView: response.data,
-          suggestion: null,
-          guide: null,
-          selection: null,
-          searchResults: null,
-          votingPairs: null,
-          error: null,
-          notYetImplemented: null,
-        });
-        break;
-        
-      case 'ErrorPage':
-        set({ 
-          error: response.data,
-          suggestion: null,
-          guide: null,
-          selection: null,
-          searchResults: null,
-          votingPairs: null,
-          entityView: null,
-          notYetImplemented: null,
-        });
-        break;
-        
-      case 'NotYetImplemented':
-        set({ 
-          notYetImplemented: response.data,
-          suggestion: null,
-          guide: null,
-          selection: null,
-          searchResults: null,
-          votingPairs: null,
-          entityView: null,
-          error: null,
-        });
-        break;
-        
-      case 'HomePage':
-        set({ 
-          // HomePage might set suggestions
-          suggestion: null,
-          guide: null,
-          selection: null,
-          searchResults: null,
-          votingPairs: null,
-          entityView: null,
-          error: null,
-          notYetImplemented: null,
-        });
-        break;
-        
-      case 'Multiple':
-        // Handle multiple responses by processing each one additively
-        if (response.data && response.data.responses) {
-          // Process all responses additively (don't clear between them)
-          response.data.responses.forEach(subResponse => {
-            get().handleUIResponseAdditive(subResponse);
-          });
-        }
-        break;
-        
-      default:
-        console.warn('Unknown UI response type:', response.type);
-    }
-    
+    // Set loading to false since we got a response
     set({ isLoading: false });
-  },
-  
-  // Additive version that doesn't clear other state
-  handleUIResponseAdditive: (response) => {
-    if (!response || !response.type) return;
     
-    // Only update the specific field for this response type
-    switch (response.type) {
-      case 'Suggestions':
-        set({ suggestion: response.data.suggestion });
-        break;
-        
-      case 'Guide':
-        set({ guide: response.data });
-        break;
-        
-      case 'Selection':
-        set({ selection: response.data });
-        break;
-        
-      case 'SearchResults':
-        set({ searchResults: response.data });
-        break;
-        
-      case 'VotingPairs':
-        set({ votingPairs: response.data });
-        break;
-        
-      case 'EntityView':
-        set({ entityView: response.data });
-        break;
-        
-      case 'ErrorPage':
-        set({ error: response.data });
-        break;
-        
-      case 'NotYetImplemented':
-        set({ notYetImplemented: response.data });
-        break;
-        
-      case 'Multiple':
-        // Recursively handle nested Multiple responses
-        if (response.data && response.data.responses) {
-          response.data.responses.forEach(subResponse => {
-            get().handleUIResponseAdditive(subResponse);
-          });
+    // For Multiple responses, we keep the same structure
+    // The view itself contains the multiple responses
+    if (response.type === 'Multiple') {
+      set({ 
+        view: {
+          type: 'Multiple',
+          data: response.data
         }
-        break;
+      });
+      return;
     }
+    
+    // For all other response types, directly map to view
+    set({
+      view: {
+        type: response.type,
+        data: response.data
+      }
+    });
   },
   
   // Utility actions
   setLoading: (loading) => set({ isLoading: loading }),
-  setError: (error) => set({ error: error ? { message: error } : null }),
-  clearAll: () => set({
-    suggestion: null,
-    guide: null,
-    selection: null,
-    searchResults: null,
-    votingPairs: null,
-    entityView: null,
-    error: null,
-    notYetImplemented: null,
-    isLoading: false,
+  
+  setError: (error) => set({ 
+    view: {
+      type: 'ErrorPage',
+      data: error ? { message: error } : null
+    },
+    isLoading: false
   }),
+  
+  clearView: () => set({
+    view: { type: 'HomePage', data: null },
+    isLoading: false
+  }),
+  
+  // Helper to navigate to a specific view type
+  navigateTo: (viewType, data = null) => set({
+    view: {
+      type: viewType,
+      data: data
+    },
+    isLoading: false
+  }),
+  
+  // Computed getters for common view checks
+  isHomePage: () => get().view.type === 'HomePage',
+  isError: () => get().view.type === 'ErrorPage',
+  isMultiple: () => get().view.type === 'Multiple',
+  
+  // Get specific view data if current view matches type
+  getViewData: (type) => {
+    const { view } = get();
+    if (view.type === type) {
+      return view.data;
+    }
+    // For Multiple views, check if any sub-view matches
+    if (view.type === 'Multiple' && view.data?.responses) {
+      const match = view.data.responses.find(r => r.type === type);
+      return match?.data;
+    }
+    return null;
+  },
+  
+  // Check if a specific view type is active (including within Multiple)
+  hasViewType: (type) => {
+    const { view } = get();
+    if (view.type === type) return true;
+    if (view.type === 'Multiple' && view.data?.responses) {
+      return view.data.responses.some(r => r.type === type);
+    }
+    return false;
+  }
 }));
 
 export default useUIStore;
+
+// Export view type constants for consistency
+export const ViewTypes = {
+  SUGGESTIONS: 'Suggestions',
+  GUIDE: 'Guide',
+  SELECTION: 'Selection',
+  SEARCH_RESULTS: 'SearchResults',
+  VOTING_PAIRS: 'VotingPairs',
+  ENTITY_VIEW: 'EntityView',
+  ERROR_PAGE: 'ErrorPage',
+  NOT_YET_IMPLEMENTED: 'NotYetImplemented',
+  HOME_PAGE: 'HomePage',
+  MULTIPLE: 'Multiple'
+};
