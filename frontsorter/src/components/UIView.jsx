@@ -1,7 +1,4 @@
-import { useState, useEffect } from 'react';
 import useUIStore, { ViewTypes } from '../store/uiStore.js';
-
-
 
 const UIView = ({ onCompletionSelect }) => {
   const { view, isLoading } = useUIStore();

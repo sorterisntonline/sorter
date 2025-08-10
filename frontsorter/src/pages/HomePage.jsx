@@ -1,13 +1,17 @@
 import { useState, useEffect, useCallback } from "react";
 // eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from "framer-motion";
-import { wsAPI } from "../services/api.js";
+import useWebSocket, { ReadyState } from 'react-use-websocket';
+import { 
+  WS_URL, 
+  createUpdateQueryCommand, 
+  handleWebSocketMessage 
+} from "../services/wsAPI.js";
 import UIView from "../components/UIView.jsx";
 import useUIStore, { ViewTypes } from "../store/uiStore.js";
 
 const HomePage = () => {
   const [inputValue, setInputValue] = useState("");
-  const [isConnected, setIsConnected] = useState(false);
   
   // Get state and actions from the store
   const { 
@@ -17,6 +21,27 @@ const HomePage = () => {
     getViewData,
   } = useUIStore();
 
+  // WebSocket connection using react-use-websocket (handles StrictMode automatically)
+  const { sendJsonMessage, lastMessage, readyState } = useWebSocket(WS_URL, {
+    onOpen: () => {
+      console.log('WebSocket connected');
+      setLoading(false);
+    },
+    onClose: () => {
+      console.log('WebSocket disconnected');
+    },
+    onError: (error) => {
+      console.error('WebSocket error:', error);
+      setError('WebSocket connection error');
+    },
+    shouldReconnect: () => true, // Automatically reconnect
+    reconnectAttempts: 5,
+    reconnectInterval: (attemptNumber) => Math.min(Math.pow(2, attemptNumber) * 1000, 10000),
+  });
+
+  // Connection state derived from readyState
+  const isConnected = readyState === ReadyState.OPEN;
+
   // Get suggestion data if present
   const suggestion = getViewData(ViewTypes.SUGGESTIONS)?.suggestion;
   const scrollingSuggestions = getViewData(ViewTypes.SCROLLING_SUGGESTIONS);
@@ -24,44 +49,22 @@ const HomePage = () => {
   // State for scrolling suggestions
   const [currentScrollingSuggestion, setCurrentScrollingSuggestion] = useState(null);
 
-  // Initialize WebSocket connection on mount
+  // Handle incoming WebSocket messages
   useEffect(() => {
-    const initializeWebSocket = async () => {
-      try {
-        setLoading(true);
-        await wsAPI.connect();
-        setIsConnected(true);
-        
-        // Set up UI update handler
-        wsAPI.onUIUpdate((uiResponse) => {
+    if (lastMessage !== null) {
+      handleWebSocketMessage(
+        lastMessage.data,
+        (uiResponse) => {
           console.log('Received UI update:', uiResponse);
-          
-          // Dispatch to the store
           handleUIResponse(uiResponse);
-        });
-
-        // Set up error handler
-        wsAPI.onError((errorMessage) => {
+        },
+        (errorMessage) => {
           console.error('WebSocket error:', errorMessage);
           setError(errorMessage);
-        });
-
-        setLoading(false);
-      } catch (err) {
-        console.error('Failed to connect to WebSocket:', err);
-        setError('Failed to connect to server');
-        setLoading(false);
-        setIsConnected(false);
-      }
-    };
-
-    initializeWebSocket();
-
-    // Cleanup on unmount
-    return () => {
-      wsAPI.disconnect();
-    };
-  }, [handleUIResponse, setError, setLoading]);
+        }
+      );
+    }
+  }, [lastMessage, handleUIResponse, setError]);
 
   // Initialize from URL on first load
   useEffect(() => {
@@ -69,9 +72,9 @@ const HomePage = () => {
     if (qParam && isConnected) {
       const decodedValue = decodeURIComponent(qParam);
       setInputValue(decodedValue);
-      wsAPI.updateQuery(decodedValue);
+      sendJsonMessage(createUpdateQueryCommand(decodedValue));
     }
-  }, [isConnected]);
+  }, [isConnected, sendJsonMessage]);
 
   // Handle scrolling suggestions animation
   useEffect(() => {
@@ -102,7 +105,7 @@ const HomePage = () => {
   // Function to send query updates to the backend immediately
   const updateQuery = useCallback((value) => {
     if (!isConnected) return;
-    wsAPI.updateQuery(value);
+    sendJsonMessage(createUpdateQueryCommand(value));
 
     // Also update the URL in the background
     const newSearchParams = new URLSearchParams(window.location.search);
@@ -114,7 +117,7 @@ const HomePage = () => {
     // Use replace to avoid polluting browser history on every keystroke
     const newUrl = value.trim() ? `?${newSearchParams.toString()}` : window.location.pathname;
     window.history.replaceState({}, '', newUrl);
-  }, [isConnected]);
+  }, [isConnected, sendJsonMessage]);
 
   // Handle input change
   const handleInputChange = (e) => {
@@ -133,7 +136,7 @@ const HomePage = () => {
       setInputValue(completion);
       
       // Send the completed query to the backend immediately
-      wsAPI.updateQuery(completion);
+      sendJsonMessage(createUpdateQueryCommand(completion));
 
       // Update URL
       const newSearchParams = new URLSearchParams();
@@ -223,7 +226,7 @@ const HomePage = () => {
           onCompletionSelect={(completion) => {
             setInputValue(completion);
             // Send the query to backend
-            wsAPI.updateQuery(completion);
+            sendJsonMessage(createUpdateQueryCommand(completion));
             // Update URL
             const newSearchParams = new URLSearchParams();
             newSearchParams.set("q", encodeURIComponent(completion));
