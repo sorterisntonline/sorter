@@ -166,6 +166,10 @@ fn dispatch_ui_action(action: UIAction, _app_state: &AppState) -> Pin<Box<dyn Fu
             UIResponse::Suggestions(suggestions_data)
         }
         
+        UIAction::ShowScrollingSuggestions { query, suggestions, animation_interval_ms, loop_through } => {
+            UIResponse::scrolling_suggestions(query, suggestions, animation_interval_ms, loop_through)
+        }
+        
         UIAction::ShowError(error_data) => {
             UIResponse::ErrorPage(error_data)
         }

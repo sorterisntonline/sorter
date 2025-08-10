@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use crate::ui::types::{GuideOption, SelectionItem, Suggestion, SuggestionsData, ErrorPageData, NotYetImplementedData};
+use crate::ui::types::{GuideOption, SelectionItem, Suggestion, SuggestionsData, ScrollingSuggestion, ErrorPageData, NotYetImplementedData};
 
 /// Represents the result of parsing a query - an action to be executed
 /// This enum describes WHAT should be done, without containing the actual data
@@ -21,6 +21,13 @@ pub enum UIAction {
     },
     
     ShowSuggestions(SuggestionsData),
+    
+    ShowScrollingSuggestions {
+        query: String,
+        suggestions: Vec<ScrollingSuggestion>,
+        animation_interval_ms: u32,
+        loop_through: bool,
+    },
     
     ShowError(ErrorPageData),
     
@@ -118,5 +125,15 @@ impl UIAction {
     /// Helper to create a multiple actions response
     pub fn multiple(actions: Vec<UIAction>) -> Self {
         UIAction::ShowMultiple { actions }
+    }
+    
+    /// Helper to create a scrolling suggestions action
+    pub fn scrolling_suggestions(query: String, suggestions: Vec<ScrollingSuggestion>, animation_interval_ms: u32, loop_through: bool) -> Self {
+        UIAction::ShowScrollingSuggestions {
+            query,
+            suggestions,
+            animation_interval_ms,
+            loop_through,
+        }
     }
 }

@@ -22,6 +22,11 @@ const HomePage = () => {
 
   // Get suggestion data if present
   const suggestion = getViewData(ViewTypes.SUGGESTIONS)?.suggestion;
+  const scrollingSuggestions = getViewData(ViewTypes.SCROLLING_SUGGESTIONS);
+  
+  // State for scrolling suggestions
+  const [scrollingIndex, setScrollingIndex] = useState(0);
+  const [currentScrollingSuggestion, setCurrentScrollingSuggestion] = useState(null);
 
   // Initialize WebSocket connection on mount
   useEffect(() => {
@@ -72,6 +77,35 @@ const HomePage = () => {
     }
   }, [isConnected]);
 
+  // Handle scrolling suggestions animation
+  useEffect(() => {
+    if (!scrollingSuggestions?.suggestions?.length) {
+      setCurrentScrollingSuggestion(null);
+      return;
+    }
+
+    const suggestions = scrollingSuggestions.suggestions;
+    const interval = scrollingSuggestions.animation_interval_ms || 1000;
+    const loopThrough = scrollingSuggestions.loop_through !== false;
+
+    // Set initial suggestion
+    setCurrentScrollingSuggestion(suggestions[0]);
+    setScrollingIndex(0);
+
+    const scrollInterval = setInterval(() => {
+      setScrollingIndex(prevIndex => {
+        const nextIndex = loopThrough 
+          ? (prevIndex + 1) % suggestions.length
+          : Math.min(prevIndex + 1, suggestions.length - 1);
+        
+        setCurrentScrollingSuggestion(suggestions[nextIndex]);
+        return nextIndex;
+      });
+    }, interval);
+
+    return () => clearInterval(scrollInterval);
+  }, [scrollingSuggestions]);
+
   // Function to send query updates to the backend immediately
   const updateQuery = useCallback((value) => {
     if (!isConnected) return;
@@ -97,9 +131,12 @@ const HomePage = () => {
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Tab' && suggestion) {
+    // Priority: regular suggestion over scrolling suggestion
+    const activeSuggestion = suggestion || currentScrollingSuggestion;
+    
+    if (e.key === 'Tab' && activeSuggestion) {
       e.preventDefault();
-      const completion = suggestion.completion;
+      const completion = activeSuggestion.completion;
       setInputValue(completion);
       
       // Send the completed query to the backend immediately
@@ -132,14 +169,26 @@ const HomePage = () => {
               className="w-96 px-4 py-2 text-base border border-gray-300 focus:border-blue-500 focus:outline-none hover:shadow-sm transition-shadow bg-transparent" 
               style={{ position: 'relative', zIndex: 2 }}
             />
-            {suggestion && inputValue && suggestion.completion.startsWith(inputValue) && (
-              <div 
-                className="absolute top-0 left-0 w-96 px-4 py-2 text-base text-gray-400 pointer-events-none"
-                style={{ zIndex: 1 }}
-              >
-                <span className="text-transparent">{inputValue}</span>{suggestion.completion.substring(inputValue.length)}
-              </div>
-            )}
+            {/* Regular suggestion takes priority, then scrolling suggestion */}
+            {(() => {
+              const activeSuggestion = suggestion || currentScrollingSuggestion;
+              const isScrolling = !suggestion && currentScrollingSuggestion;
+              
+              if (activeSuggestion && inputValue && activeSuggestion.completion.startsWith(inputValue)) {
+                return (
+                  <div 
+                    className={`absolute top-0 left-0 w-96 px-4 py-2 text-base pointer-events-none transition-opacity duration-300 ${
+                      isScrolling ? 'text-purple-400 opacity-75' : 'text-gray-400'
+                    }`}
+                    style={{ zIndex: 1 }}
+                  >
+                    <span className="text-transparent">{inputValue}</span>
+                    {activeSuggestion.completion.substring(inputValue.length)}
+                  </div>
+                );
+              }
+              return null;
+            })()}
             {/* Connection status indicator */}
             <div className={`absolute right-2 top-1/2 transform -translate-y-1/2 w-2 h-2 rounded-full ${
               isConnected ? 'bg-green-500' : 'bg-red-500'

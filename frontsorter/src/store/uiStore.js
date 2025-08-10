@@ -93,6 +93,7 @@ export default useUIStore;
 // Export view type constants for consistency
 export const ViewTypes = {
   SUGGESTIONS: 'Suggestions',
+  SCROLLING_SUGGESTIONS: 'ScrollingSuggestions',
   GUIDE: 'Guide',
   SELECTION: 'Selection',
   SEARCH_RESULTS: 'SearchResults',

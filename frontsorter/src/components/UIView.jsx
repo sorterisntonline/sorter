@@ -1,5 +1,7 @@
+import { useState, useEffect } from 'react';
 import useUIStore, { ViewTypes } from '../store/uiStore.js';
-import { wsAPI } from '../services/api.js';
+
+
 
 const UIView = ({ onCompletionSelect }) => {
   const { view, isLoading } = useUIStore();
@@ -24,7 +26,7 @@ const UIView = ({ onCompletionSelect }) => {
             <p className="text-blue-700 mb-6">{viewData?.description}</p>
             
             <div className="grid gap-3">
-              {viewData?.options?.map((option, index) => (
+              {viewData?.options?.map((option) => (
                 <button
                   key={option.key}
                   onClick={() => {

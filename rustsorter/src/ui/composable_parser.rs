@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::cell::RefCell;
 use crate::ui::action::UIAction;
-use crate::ui::types::{Suggestion, GuideOption, SelectionItem};
+use crate::ui::types::{Suggestion, GuideOption, SelectionItem, ScrollingSuggestion};
 
 // --- Core Abstractions ---
 
@@ -497,12 +497,19 @@ pub fn build_reddit_graph() -> Graph {
             .edge(EdgePattern::Literal("u/"), "user_selection")
             .handler(|query, prefix, _ctx| {
                 UIAction::multiple(vec![
-                    UIAction::suggest(query.to_string(), Some(Suggestion { 
-                        text: format!("{}r/", prefix),
-                        completion: format!("{}r/", prefix),
-                        description: Some("Browse subreddits".to_string()),
-                        score: 1.0,
-                    })),
+                    UIAction::scrolling_suggestions(
+                        query.to_string(),
+                        vec![
+                            ScrollingSuggestion {
+                                completion: format!("{}r/", prefix),
+                            },
+                            ScrollingSuggestion {
+                                completion: format!("{}u/", prefix),
+                            },
+                        ],
+                        1000, // 1 second interval
+                        true  // loop through
+                    ),
                     UIAction::guide(
                         query.to_string(),
                         "Welcome to Sorter for Reddit".to_string(),
@@ -533,12 +540,28 @@ pub fn build_reddit_graph() -> Graph {
             .edge(EdgePattern::Variable("subreddit"), "subreddit_page")
             .handler(|query, prefix, _ctx| {
                 UIAction::multiple(vec![
-                    UIAction::suggest(query.to_string(), Some(Suggestion {
-                        text: format!("{}programming", prefix),
-                        completion: format!("{}programming", prefix),
-                        description: Some("Popular programming community".to_string()),
-                        score: 1.0,
-                    })),
+                    UIAction::scrolling_suggestions(
+                        query.to_string(),
+                        vec![
+                            ScrollingSuggestion {
+                                completion: format!("{}programming", prefix),
+                            },
+                            ScrollingSuggestion {
+                                completion: format!("{}askreddit", prefix),
+                            },
+                            ScrollingSuggestion {
+                                completion: format!("{}aww", prefix),
+                            },
+                            ScrollingSuggestion {
+                                completion: format!("{}rust", prefix),
+                            },
+                            ScrollingSuggestion {
+                                completion: format!("{}webdev", prefix),
+                            },
+                        ],
+                        1500, // 1.5 second interval
+                        true  // loop through
+                    ),
                     UIAction::selection(
                         query.to_string(), 
                         "Choose a Subreddit".to_string(), 
@@ -712,6 +735,7 @@ mod tests {
     #[derive(Debug, Clone)]
     enum ExpectedAction {
         Suggestion { completion: String },
+        ScrollingSuggestions { completions: Vec<String> },
         Guide { title_contains: String },
         Selection { title_contains: String },
         RenderSubreddit { subreddit: String, sort: Option<String> },
@@ -730,6 +754,10 @@ mod tests {
                     data.suggestion.as_ref()
                         .map(|s| s.completion == *completion)
                         .unwrap_or(false)
+                }
+                (ExpectedAction::ScrollingSuggestions { completions }, UIAction::ShowScrollingSuggestions { suggestions, .. }) => {
+                    let actual_completions: Vec<String> = suggestions.iter().map(|s| s.completion.clone()).collect();
+                    *completions == actual_completions
                 }
                 (ExpectedAction::Guide { title_contains }, UIAction::ShowStaticGuide { title, .. }) => {
                     title.contains(title_contains)
@@ -1214,6 +1242,12 @@ mod tests {
             ExpectedAction::Multiple { expected_actions: vec![$($action),*] }
         };
     }
+    
+    macro_rules! scrolling_suggestions {
+        ($($completion:expr),* $(,)?) => {
+            ExpectedAction::ScrollingSuggestions { completions: vec![$($completion.to_string()),*] }
+        };
+    }
 
     // === NEW DECLARATIVE TESTS ===
 
@@ -1224,7 +1258,7 @@ mod tests {
              ExpectedAction::Suggestion { completion: "https://reddit.com/".to_string() }),
             (KeyAction::Tab, 
              multiple![
-                 suggests!("https://reddit.com/r/"),
+                 scrolling_suggestions!("https://reddit.com/r/", "https://reddit.com/u/"),
                  shows_guide!("Welcome to Sorter")
              ]),
         ]);

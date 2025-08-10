@@ -11,6 +11,7 @@ pub enum UIResponse {
     ErrorPage(ErrorPageData),
     NotYetImplemented(NotYetImplementedData),
     Suggestions(SuggestionsData),
+    ScrollingSuggestions(ScrollingSuggestionsData),
     Guide(GuideData),
     Selection(SelectionData),
     Multiple(MultipleResponseData),
@@ -65,6 +66,14 @@ pub struct SuggestionsData {
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct ScrollingSuggestionsData {
+    pub query: String,
+    pub suggestions: Vec<ScrollingSuggestion>,
+    pub animation_interval_ms: u32,
+    pub loop_through: bool,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct GuideData {
     pub query: String,
     pub title: String,
@@ -107,6 +116,11 @@ pub struct Suggestion {
     pub completion: String,
     pub description: Option<String>,
     pub score: f64,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct ScrollingSuggestion {
+    pub completion: String,
 }
 
 // Supporting types
@@ -259,6 +273,15 @@ impl UIResponse {
     pub fn multiple(responses: Vec<UIResponse>) -> Self {
         UIResponse::Multiple(MultipleResponseData {
             responses,
+        })
+    }
+
+    pub fn scrolling_suggestions(query: String, suggestions: Vec<ScrollingSuggestion>, animation_interval_ms: u32, loop_through: bool) -> Self {
+        UIResponse::ScrollingSuggestions(ScrollingSuggestionsData {
+            query,
+            suggestions,
+            animation_interval_ms,
+            loop_through,
         })
     }
 }
