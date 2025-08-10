@@ -183,327 +183,238 @@ pub struct RedditListingResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RedditListingData {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub after: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub before: Option<String>,
     pub children: Vec<RedditThing>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub modhash: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RedditThing {
     pub kind: String,
-    pub data: serde_json::Value, // We'll use Value for flexibility
+    pub data: RedditThingData,
 }
 
-/// Parsed Reddit post data
+/// Reddit's "Thing" data can be either a post, comment, or other types
+/// We use untagged enum to handle different data structures
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum RedditThingData {
+    Post(RedditPost),
+    Comment(RedditComment),
+    // For things we don't care about yet (like "more" comments)
+    Other(serde_json::Value),
+}
+
+/// Reddit post data with serde handling all the parsing
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RedditPost {
     pub id: String,
     pub name: String, // Full name (t3_xxx)
+    #[serde(default = "default_untitled")]
     pub title: String,
+    #[serde(default = "default_deleted_user")]
     pub author: String,
     pub subreddit: String,
+    #[serde(default)]
     pub url: String,
+    #[serde(default)]
     pub permalink: String,
+    #[serde(default, deserialize_with = "deserialize_selftext")]
     pub selftext: Option<String>,
+    #[serde(default)]
     pub score: i64,
+    #[serde(default)]
     pub num_comments: i64,
+    #[serde(default)]
     pub created_utc: f64,
+    #[serde(default, deserialize_with = "deserialize_thumbnail")]
     pub thumbnail: Option<String>,
+    #[serde(default)]
     pub is_video: bool,
+    #[serde(default)]
     pub is_self: bool,
+    // Additional useful fields
+    #[serde(default)]
+    pub ups: i64,
+    #[serde(default)]
+    pub downs: i64,
+    #[serde(default)]
+    pub upvote_ratio: f64,
+    #[serde(default)]
+    pub over_18: bool,
+    #[serde(default)]
+    pub spoiler: bool,
+    #[serde(default)]
+    pub stickied: bool,
+    #[serde(default)]
+    pub locked: bool,
+    #[serde(default)]
+    pub distinguished: Option<String>,
 }
 
-impl RedditPost {
-    /// Parse a Reddit post from the raw JSON data
-    pub fn from_thing(thing: &RedditThing) -> Result<Self> {
-        if thing.kind != "t3" {
-            return Err(anyhow!("Expected post (t3), got {}", thing.kind));
-        }
-        
-        let data = &thing.data;
-        
-        Ok(RedditPost {
-            id: data.get("id")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow!("Missing post id"))?
-                .to_string(),
-            name: data.get("name")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow!("Missing post name"))?
-                .to_string(),
-            title: data.get("title")
-                .and_then(|v| v.as_str())
-                .unwrap_or("Untitled")
-                .to_string(),
-            author: data.get("author")
-                .and_then(|v| v.as_str())
-                .unwrap_or("[deleted]")
-                .to_string(),
-            subreddit: data.get("subreddit")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow!("Missing subreddit"))?
-                .to_string(),
-            url: data.get("url")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
-            permalink: data.get("permalink")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
-            selftext: data.get("selftext")
-                .and_then(|v| v.as_str())
-                .filter(|s| !s.is_empty())
-                .map(|s| s.to_string()),
-            score: data.get("score")
-                .and_then(|v| v.as_i64())
-                .unwrap_or(0),
-            num_comments: data.get("num_comments")
-                .and_then(|v| v.as_i64())
-                .unwrap_or(0),
-            created_utc: data.get("created_utc")
-                .and_then(|v| v.as_f64())
-                .unwrap_or(0.0),
-            thumbnail: data.get("thumbnail")
-                .and_then(|v| v.as_str())
-                .filter(|s| !s.is_empty() && *s != "self" && *s != "default")
-                .map(|s| s.to_string()),
-            is_video: data.get("is_video")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false),
-            is_self: data.get("is_self")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false),
-        })
-    }
-}
-
-/// Parsed Reddit comment data
+/// Reddit comment data
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RedditComment {
     pub id: String,
     pub name: String, // Full name (t1_xxx)
+    #[serde(default = "default_deleted_user")]
     pub author: String,
+    #[serde(default)]
     pub body: String,
+    #[serde(default)]
     pub score: i64,
+    #[serde(default)]
     pub created_utc: f64,
+    #[serde(default)]
     pub parent_id: String,
+    #[serde(default)]
     pub permalink: String,
+    #[serde(default)]
     pub depth: i32,
+    // Additional useful fields
+    #[serde(default)]
+    pub ups: i64,
+    #[serde(default)]
+    pub downs: i64,
+    #[serde(default)]
+    pub edited: RedditEditStatus,
+    #[serde(default)]
+    pub stickied: bool,
+    #[serde(default)]
+    pub distinguished: Option<String>,
+    #[serde(default)]
+    pub is_submitter: bool,
+    #[serde(default)]
+    pub collapsed: bool,
+    #[serde(default)]
+    pub controversiality: i32,
 }
 
-impl RedditComment {
-    /// Parse a Reddit comment from the raw JSON data
-    pub fn from_thing(thing: &RedditThing) -> Result<Self> {
-        if thing.kind != "t1" {
-            return Err(anyhow!("Expected comment (t1), got {}", thing.kind));
+/// Reddit's edit status - can be false or a timestamp
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum RedditEditStatus {
+    NotEdited(bool),
+    EditedAt(f64),
+}
+
+impl Default for RedditEditStatus {
+    fn default() -> Self {
+        RedditEditStatus::NotEdited(false)
+    }
+}
+
+// Helper functions for serde defaults
+fn default_untitled() -> String {
+    "Untitled".to_string()
+}
+
+fn default_deleted_user() -> String {
+    "[deleted]".to_string()
+}
+
+// Custom deserializer for selftext (empty strings should be None)
+fn deserialize_selftext<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s: Option<String> = Option::deserialize(deserializer)?;
+    Ok(s.filter(|text| !text.is_empty()))
+}
+
+// Custom deserializer for thumbnail (filter out "self", "default", empty)
+fn deserialize_thumbnail<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s: Option<String> = Option::deserialize(deserializer)?;
+    Ok(s.filter(|thumb| {
+        !thumb.is_empty() && thumb != "self" && thumb != "default" && thumb != "nsfw" && thumb != "spoiler"
+    }))
+}
+
+// Helper methods for extracting typed data from Things
+impl RedditThing {
+    /// Try to get this Thing as a Post
+    pub fn as_post(&self) -> Option<&RedditPost> {
+        if self.kind != "t3" {
+            return None;
         }
-        
-        let data = &thing.data;
-        
-        Ok(RedditComment {
-            id: data.get("id")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow!("Missing comment id"))?
-                .to_string(),
-            name: data.get("name")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow!("Missing comment name"))?
-                .to_string(),
-            author: data.get("author")
-                .and_then(|v| v.as_str())
-                .unwrap_or("[deleted]")
-                .to_string(),
-            body: data.get("body")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
-            score: data.get("score")
-                .and_then(|v| v.as_i64())
-                .unwrap_or(0),
-            created_utc: data.get("created_utc")
-                .and_then(|v| v.as_f64())
-                .unwrap_or(0.0),
-            parent_id: data.get("parent_id")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
-            permalink: data.get("permalink")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
-            depth: data.get("depth")
-                .and_then(|v| v.as_i64())
-                .unwrap_or(0) as i32,
-        })
-    }
-}
-
-/// Trait for Reddit API operations (allows mocking)
-#[async_trait::async_trait]
-pub trait RedditApi: Send + Sync {
-    async fn get_subreddit_hot(&self, subreddit: &str, limit: usize) -> Result<RedditListingResponse>;
-    async fn get_subreddit_top(&self, subreddit: &str, limit: usize, time_period: &str) -> Result<RedditListingResponse>;
-    async fn get_subreddit_new(&self, subreddit: &str, limit: usize) -> Result<RedditListingResponse>;
-    async fn get_post(&self, subreddit: &str, post_id: &str) -> Result<Vec<RedditListingResponse>>;
-    async fn get_user_profile(&self, username: &str, content_type: &str, limit: usize) -> Result<RedditListingResponse>;
-}
-
-#[async_trait::async_trait]
-impl RedditApi for RedditClient {
-    async fn get_subreddit_hot(&self, subreddit: &str, limit: usize) -> Result<RedditListingResponse> {
-        self.get_subreddit_hot(subreddit, limit).await
-    }
-    
-    async fn get_subreddit_top(&self, subreddit: &str, limit: usize, time_period: &str) -> Result<RedditListingResponse> {
-        self.get_subreddit_top(subreddit, limit, time_period).await
-    }
-    
-    async fn get_subreddit_new(&self, subreddit: &str, limit: usize) -> Result<RedditListingResponse> {
-        self.get_subreddit_new(subreddit, limit).await
-    }
-    
-    async fn get_post(&self, subreddit: &str, post_id: &str) -> Result<Vec<RedditListingResponse>> {
-        self.get_post(subreddit, post_id).await
-    }
-    
-    async fn get_user_profile(&self, username: &str, content_type: &str, limit: usize) -> Result<RedditListingResponse> {
-        self.get_user_profile(username, content_type, limit).await
-    }
-}
-
-/// Mock Reddit client for testing
-pub struct MockRedditClient {
-    // You can add fields here to control mock behavior if needed
-}
-
-impl MockRedditClient {
-    pub fn new() -> Self {
-        Self {}
-    }
-    
-    /// Create a mock listing response with sample data
-    fn create_mock_listing(&self, subreddit: &str, count: usize) -> RedditListingResponse {
-        let mut children = Vec::new();
-        
-        for i in 0..count {
-            let post_data = serde_json::json!({
-                "id": format!("mock_id_{}", i),
-                "name": format!("t3_mock_{}", i),
-                "title": format!("Mock Post {} in r/{}", i, subreddit),
-                "author": "mock_user",
-                "subreddit": subreddit,
-                "url": format!("https://reddit.com/r/{}/comments/mock_{}", subreddit, i),
-                "permalink": format!("/r/{}/comments/mock_{}/", subreddit, i),
-                "selftext": "This is mock post content for testing.",
-                "score": 100 + i as i64,
-                "num_comments": 10 + i as i64,
-                "created_utc": 1700000000.0 + (i as f64 * 3600.0),
-                "thumbnail": null,
-                "is_video": false,
-                "is_self": true,
-            });
-            
-            children.push(RedditThing {
-                kind: "t3".to_string(),
-                data: post_data,
-            });
-        }
-        
-        RedditListingResponse {
-            kind: "Listing".to_string(),
-            data: RedditListingData {
-                after: None,
-                before: None,
-                children,
-                modhash: None,
-            },
+        match &self.data {
+            RedditThingData::Post(post) => Some(post),
+            _ => None,
         }
     }
+    
+    /// Try to get this Thing as a Comment
+    pub fn as_comment(&self) -> Option<&RedditComment> {
+        if self.kind != "t1" {
+            return None;
+        }
+        match &self.data {
+            RedditThingData::Comment(comment) => Some(comment),
+            _ => None,
+        }
+    }
+    
+    /// Check if this is a "more comments" indicator
+    pub fn is_more_comments(&self) -> bool {
+        self.kind == "more"
+    }
 }
 
-#[async_trait::async_trait]
-impl RedditApi for MockRedditClient {
-    async fn get_subreddit_hot(&self, subreddit: &str, limit: usize) -> Result<RedditListingResponse> {
-        Ok(self.create_mock_listing(subreddit, limit.min(5)))
+// Helper methods for working with listing responses
+impl RedditListingResponse {
+    /// Extract all posts from this listing
+    pub fn get_posts(&self) -> Vec<&RedditPost> {
+        self.data.children.iter()
+            .filter_map(|thing| thing.as_post())
+            .collect()
     }
     
-    async fn get_subreddit_top(&self, subreddit: &str, limit: usize, _time_period: &str) -> Result<RedditListingResponse> {
-        Ok(self.create_mock_listing(subreddit, limit.min(5)))
+    /// Extract all comments from this listing
+    pub fn get_comments(&self) -> Vec<&RedditComment> {
+        self.data.children.iter()
+            .filter_map(|thing| thing.as_comment())
+            .collect()
     }
     
-    async fn get_subreddit_new(&self, subreddit: &str, limit: usize) -> Result<RedditListingResponse> {
-        Ok(self.create_mock_listing(subreddit, limit.min(5)))
+    /// Extract posts as owned values
+    pub fn into_posts(self) -> Vec<RedditPost> {
+        self.data.children.into_iter()
+            .filter_map(|thing| {
+                if thing.kind == "t3" {
+                    match thing.data {
+                        RedditThingData::Post(post) => Some(post),
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
     
-    async fn get_post(&self, subreddit: &str, post_id: &str) -> Result<Vec<RedditListingResponse>> {
-        // Return a post and some mock comments
-        let post_listing = self.create_mock_listing(subreddit, 1);
-        
-        let comment_data = serde_json::json!({
-            "id": "mock_comment_1",
-            "name": "t1_mock_comment_1",
-            "author": "commenter",
-            "body": "This is a mock comment for testing.",
-            "score": 50,
-            "created_utc": 1700001000.0,
-            "parent_id": format!("t3_{}", post_id),
-            "permalink": format!("/r/{}/comments/{}/comment/mock_comment_1", subreddit, post_id),
-            "depth": 0,
-        });
-        
-        let comments_listing = RedditListingResponse {
-            kind: "Listing".to_string(),
-            data: RedditListingData {
-                after: None,
-                before: None,
-                children: vec![RedditThing {
-                    kind: "t1".to_string(),
-                    data: comment_data,
-                }],
-                modhash: None,
-            },
-        };
-        
-        Ok(vec![post_listing, comments_listing])
-    }
-    
-    async fn get_user_profile(&self, username: &str, _content_type: &str, limit: usize) -> Result<RedditListingResponse> {
-        let mut children = Vec::new();
-        
-        for i in 0..limit.min(3) {
-            let post_data = serde_json::json!({
-                "id": format!("user_post_{}", i),
-                "name": format!("t3_user_post_{}", i),
-                "title": format!("Post by {}", username),
-                "author": username,
-                "subreddit": "test",
-                "url": format!("https://reddit.com/user/{}/post_{}", username, i),
-                "permalink": format!("/user/{}/post_{}/", username, i),
-                "selftext": "User post content",
-                "score": 50 + i as i64,
-                "num_comments": 5,
-                "created_utc": 1700000000.0 + (i as f64 * 7200.0),
-                "thumbnail": null,
-                "is_video": false,
-                "is_self": true,
-            });
-            
-            children.push(RedditThing {
-                kind: "t3".to_string(),
-                data: post_data,
-            });
-        }
-        
-        Ok(RedditListingResponse {
-            kind: "Listing".to_string(),
-            data: RedditListingData {
-                after: None,
-                before: None,
-                children,
-                modhash: None,
-            },
-        })
+    /// Extract comments as owned values
+    pub fn into_comments(self) -> Vec<RedditComment> {
+        self.data.children.into_iter()
+            .filter_map(|thing| {
+                if thing.kind == "t1" {
+                    match thing.data {
+                        RedditThingData::Comment(comment) => Some(comment),
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 }
+
+
+

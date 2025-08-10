@@ -95,12 +95,8 @@ async fn main() -> Result<(), anyhow::Error> {
         .await
         .expect("Unable to connect to database");
 
-    // Initialize Reddit client (use MockRedditClient for testing if TEST_MODE env var is set)
-    let reddit_client: Arc<dyn integrations::reddit::RedditApi> = if env::var("TEST_MODE").is_ok() {
-        Arc::new(integrations::reddit::MockRedditClient::new())
-    } else {
-        Arc::new(integrations::reddit::RedditClient::new())
-    };
+    // Initialize Reddit client
+    let reddit_client = Arc::new(integrations::reddit::RedditClient::new());
 
     let app_state = AppState { 
         db: pool.clone(),
