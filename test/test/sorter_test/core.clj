@@ -1,6 +1,7 @@
 (ns sorter-test.core
   (:require [clojure.test :refer :all]
-            [meander.epsilon :as m]
+            [matcher-combinators.test] ;; adds match? support to clojure.test
+            [matcher-combinators.matchers :as m]
             [sorter-test.util :as util]
             [sorter-test.ws-client :as ws]))
 
@@ -33,12 +34,11 @@
    (println "Received response:" response)
    
    ;; Test that we get a UIUpdate with HomePage (matching actual response)
-   (is (m/match response
-         {:type "UIUpdate"
-          :data {:type "HomePage"
-                 :data {:current_query _
-                        :suggested_queries (m/pred vector?)}}}
-         true))
+   (is (match? {:type "UIUpdate"
+                :data {:type "HomePage"
+                       :data {:current_query any?
+                              :suggested_queries vector?}}}
+               response))
    
    ;; Send another query to verify continued functionality
    (ws/send! client {:type "UpdateQuery" :data {:query "hello world"}})
@@ -47,11 +47,10 @@
    (println "Second response:" response2)
    
    ;; Should get some response (either UIUpdate or Error)
-   (is (m/match response2
-         (m/or {:type "UIUpdate" :data _}
-               {:type "Error" :data _}
-               {:type _ :data _})
-         true))
+   (is (match? (m/any-of {:type "UIUpdate" :data any?}
+                         {:type "Error" :data any?}
+                         {:type any? :data any?})
+               response2))
    
    ;; Clean up
    (ws/close! client)))
@@ -72,25 +71,24 @@
    (println "Subreddit query response:" response1)
    
    ;; Verify we get a Selection UI response
-   (is (m/match response1
-         {:type "UIUpdate"
-          :data {:type "Multiple"
-                 :data {:responses [{:type "ScrollingSuggestions" :data _}
-                                   {:type "Selection" 
-                                    :data {:title "Subreddits"
-                                           :items (m/some [{:import_action {:command _}}])}}]}}}
-         true
-         false))
+   (is (match? {:type "UIUpdate"
+                :data {:type "Multiple"
+                       :data {:responses [{:type "ScrollingSuggestions" :data any?}
+                                         {:type "Selection" 
+                                          :data {:title "Subreddits"
+                                                 :items (m/embeds [{:import_action {:command any?}}])}}]}}}
+               response1))
    
    ;; Step 2: Extract and send the import command
    (bind import-command 
-         (m/find response1
-           {:type "UIUpdate"
-            :data {:type "Multiple"
-                   :data {:responses [{:type "ScrollingSuggestions" :data _}
-                                     {:type "Selection" 
-                                      :data {:items (m/some [{:import_action {:command ?command}}])}}]}}}
-           ?command))
+         (-> response1
+             (get-in [:data :data :responses])
+             (->> (filter #(= (:type %) "Selection")))
+             first
+             (get-in [:data :items])
+             (->> (filter #(contains? % :import_action)))
+             first
+             (get-in [:import_action :command])))
    
    (println "Import command:" import-command)
    (is (some? import-command) "Should have an import command")
@@ -103,13 +101,11 @@
    (println "Import response:" response2)
    
    ;; Should get a success message (currently NotYetImplemented but with success message)
-   (is (m/match response2
-         {:type "UIUpdate"
-          :data {:type "NotYetImplemented"
-                 :data {:feature_name (m/re #"Imported r/testsubreddit")
-                        :description (m/re #"Successfully imported.*posts")}}}
-         true
-         false))
+   (is (match? {:type "UIUpdate"
+                :data {:type "NotYetImplemented"
+                       :data {:feature_name #"Imported r/testsubreddit"
+                              :description #"Successfully imported.*posts"}}}
+               response2))
    
    ;; Step 4: Verify database state - should have imported entities
    (Thread/sleep 1000) ; Give the import some time to complete
@@ -131,14 +127,12 @@
    (println "Second query response:" response3)
    
    ;; Should now show the subreddit as already imported (no import action)
-   (is (m/match response3
-         {:type "UIUpdate"
-          :data {:type "Multiple"
-                 :data {:responses [{:type "ScrollingSuggestions" :data _}
-                                   {:type "Selection" 
-                                    :data {:items (m/some [{:description "Already imported"}])}}]}}}
-         true
-         false))
+   (is (match? {:type "UIUpdate"
+                :data {:type "Multiple"
+                       :data {:responses [{:type "ScrollingSuggestions" :data any?}
+                                         {:type "Selection" 
+                                          :data {:items (m/embeds [{:description "Already imported"}])}}]}}}
+               response3))
    
    ;; Clean up
    (ws/close! client)))
