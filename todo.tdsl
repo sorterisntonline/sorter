@@ -3,7 +3,7 @@ random subreddit suggestion from list (rust, programming, askreddit, amitheassho
 
 refactor frontend to be more declarative
 
-pk_namespace => ns
+ns => ns
 make empty homepage better (click to sort subreddits instantly, mobile friendly)
 
 append only log arcitecture

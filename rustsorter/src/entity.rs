@@ -20,7 +20,7 @@ use crate::{
 #[derive(Serialize, Debug, sqlx::FromRow, Clone, JsonSchema)]
 pub struct Entity {
     pub user_id: Uuid,
-    pub pk_namespace: String,
+    pub ns: String,
     pub pk: String,
     pub title: Option<String>,
     pub profile_picture_url: Option<String>,
@@ -31,7 +31,7 @@ pub struct Entity {
 
 #[derive(Deserialize, Debug, JsonSchema)]
 pub struct EntityPayload {
-    pub pk_namespace: String,
+    pub ns: String,
     pub pk: String,
     pub title: Option<String>,
     pub metadata: Option<JsonValue>,
@@ -53,7 +53,7 @@ pub struct EntityWithParentsAndChildren {
 
 #[derive(Deserialize, JsonSchema)]
 pub struct EntityPath {
-    pub pk_namespace: String,
+    pub ns: String,
     pub pk: String,
 }
 
@@ -71,7 +71,7 @@ pub fn routes() -> ApiRouter<AppState> {
             }),
         )
         .api_route(
-            "/{pk_namespace}/{pk}",
+            "/{ns}/{pk}",
             get_with(get_route, |op| {
                 op.description("Get an entity.")
                     .response::<200, Json<EntityWithParentsAndChildren>>()
@@ -90,7 +90,7 @@ pub async fn get_entity<'a, A: PgAcquire<'a>>(
     acquire: A,
     include_parents: bool,
     include_children: bool,
-    pk_namespace: &str,
+    ns: &str,
     pk: &str,
 ) -> Result<EntityWithParentsAndChildren, Error> {
     let mut tx = acquire.begin().await.map_internal()?;
@@ -98,7 +98,7 @@ pub async fn get_entity<'a, A: PgAcquire<'a>>(
     let entity = query_file_as!(
         Entity,
         "../database/sql/entity/select.sql",
-        pk_namespace,
+        ns,
         pk
     )
     .fetch_one(&mut *tx)
@@ -109,12 +109,12 @@ pub async fn get_entity<'a, A: PgAcquire<'a>>(
         let parents = query_file_as!(
             Entity,
             "../database/sql/entity/select_parents.sql",
-            pk_namespace,
+            ns,
             pk
         )
         .fetch_all(&mut *tx)
         .await
-        .map_error(&format!("entity parents for {}/{}", pk_namespace, pk))?;
+        .map_error(&format!("entity parents for {}/{}", ns, pk))?;
 
         Some(parents)
     } else {
@@ -125,12 +125,12 @@ pub async fn get_entity<'a, A: PgAcquire<'a>>(
         let children = query_file_as!(
             Entity,
             "../database/sql/entity/select_children.sql",
-            pk_namespace,
+            ns,
             pk
         )
         .fetch_all(&mut *tx)
         .await
-        .map_error(&format!("entity children for {}/{}", pk_namespace, pk))?;
+        .map_error(&format!("entity children for {}/{}", ns, pk))?;
 
         Some(children)
     } else {
@@ -148,7 +148,7 @@ pub async fn get_entity<'a, A: PgAcquire<'a>>(
 
 pub async fn create_entity<'e, E: PgExecutor<'e>>(
     executor: E,
-    pk_namespace: &str,
+    ns: &str,
     pk: &str,
     title: Option<&str>,
     profile_picture_url: Option<&str>,
@@ -156,7 +156,7 @@ pub async fn create_entity<'e, E: PgExecutor<'e>>(
     user_id: Uuid,
 ) -> Result<Entity, Error> {
     debug!(
-        pk_namespace,
+        ns,
         pk,
         title,
         profile_picture_url;
@@ -166,7 +166,7 @@ pub async fn create_entity<'e, E: PgExecutor<'e>>(
     query_file_as!(
         Entity,
         "../database/sql/entity/insert.sql",
-        pk_namespace,
+        ns,
         pk,
         title,
         metadata,
@@ -180,7 +180,7 @@ pub async fn create_entity<'e, E: PgExecutor<'e>>(
 
 pub async fn create_entity_ignore_conflict<'e, E: PgExecutor<'e>>(
     executor: E,
-    pk_namespace: &str,
+    ns: &str,
     pk: &str,
     title: Option<&str>,
     profile_picture_url: Option<&str>,
@@ -188,7 +188,7 @@ pub async fn create_entity_ignore_conflict<'e, E: PgExecutor<'e>>(
     user_id: Uuid,
 ) -> Result<Option<Entity>, Error> {
     debug!(
-        pk_namespace,
+        ns,
         pk,
         title,
         profile_picture_url;
@@ -198,7 +198,7 @@ pub async fn create_entity_ignore_conflict<'e, E: PgExecutor<'e>>(
     query_file_as!(
         Entity,
         "../database/sql/entity/insert_ignore_conflict.sql",
-        pk_namespace,
+        ns,
         pk,
         title,
         metadata,
@@ -218,7 +218,7 @@ pub async fn update_entity<'e, E: PgExecutor<'e>>(
     let entity = query_file_as!(
         Entity,
         "../database/sql/entity/update.sql",
-        payload.pk_namespace,
+        payload.ns,
         payload.pk,
         payload.title,
         payload.metadata,
@@ -240,7 +240,7 @@ async fn post_route(
 ) -> Result<(StatusCode, Json<Entity>), Error> {
     let entity = create_entity(
         &state.db,
-        &payload.pk_namespace,
+        &payload.ns,
         &payload.pk,
         payload.title.as_deref(),
         payload.profile_picture_url.as_deref(),
@@ -262,7 +262,7 @@ async fn get_route(
             &state.db,
             params.parents.unwrap_or(false),
             params.children.unwrap_or(false),
-            &path.pk_namespace,
+            &path.ns,
             &path.pk,
         )
         .await?,
@@ -286,7 +286,7 @@ async fn put_route(
     AuthenticatedUser(user): AuthenticatedUser,
     Json(payload): Json<EntityPayload>,
 ) -> Result<(StatusCode, Json<Entity>), Error> {
-    if path.pk_namespace != payload.pk_namespace || path.pk != payload.pk {
+    if path.ns != payload.ns || path.pk != payload.pk {
         return Err(Error::BadRequest {
             message: "path parameters must match payload primary key".into(),
         });
@@ -305,7 +305,7 @@ async fn delete_entity(
     // TODO only delete entity if user is the owner
     sqlx::query_file!(
         "../database/sql/entity/delete.sql",
-        path.pk_namespace,
+        path.ns,
         path.pk
     )
     .execute(&state.db)

@@ -20,9 +20,9 @@ use crate::{
 
 #[derive(Serialize, Debug, sqlx::FromRow, JsonSchema)]
 pub struct Vote {
-    pub left_entity_pk_namespace: String,
+    pub left_entity_ns: String,
     pub left_entity_pk: String,
-    pub right_entity_pk_namespace: String,
+    pub right_entity_ns: String,
     pub right_entity_pk: String,
     pub user_id: Uuid,
     pub magnitude: i32,
@@ -43,9 +43,9 @@ pub struct VotePath {
 
 #[derive(Deserialize, Debug, JsonSchema)]
 pub struct VotePayload {
-    left_entity_pk_namespace: String,
+    left_entity_ns: String,
     left_entity_pk: String,
-    right_entity_pk_namespace: String,
+    right_entity_ns: String,
     right_entity_pk: String,
     magnitude: i32,
     attribute_id: i32,
@@ -57,24 +57,24 @@ async fn create_vote(
     Json(payload): Json<VotePayload>,
 ) -> Result<(StatusCode, Json<Vote>), Error> {
     let (left_ns, left_pk, right_ns, right_pk, magnitude) = if (
-        payload.left_entity_pk_namespace.clone(),
+        payload.left_entity_ns.clone(),
         payload.left_entity_pk.clone(),
     ) < (
-        payload.right_entity_pk_namespace.clone(),
+        payload.right_entity_ns.clone(),
         payload.right_entity_pk.clone(),
     ) {
         (
-            payload.left_entity_pk_namespace,
+            payload.left_entity_ns,
             payload.left_entity_pk,
-            payload.right_entity_pk_namespace,
+            payload.right_entity_ns,
             payload.right_entity_pk,
             payload.magnitude,
         )
     } else {
         (
-            payload.right_entity_pk_namespace,
+            payload.right_entity_ns,
             payload.right_entity_pk,
-            payload.left_entity_pk_namespace,
+            payload.left_entity_ns,
             payload.left_entity_pk,
             -payload.magnitude,
         )

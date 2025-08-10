@@ -30,9 +30,9 @@
   (println (str "Cleanup Attempt: Deleting relationship " 
                 parent-ns "/" parent-pk " -> " child-ns "/" child-pk))
   (util/make-request :delete "/relationships"
-                     :params {:parent_pk_namespace parent-ns
+                     :params {:parent_ns parent-ns
                              :parent_pk parent-pk
-                             :child_pk_namespace child-ns
+                             :child_ns child-ns
                              :child_pk child-pk}
                      :is-authenticated? true))
 
@@ -45,7 +45,7 @@
     (testing "Successfully creating a new entity"
       (let [ns "test.namespace"
             pk (str "test_pk_" (uuid-str))
-            payload {:pk_namespace ns
+            payload {:ns ns
                     :pk pk
                     :title "My Test Entity"
                     :metadata {:key "value" :num 123}}
@@ -53,7 +53,7 @@
                                        :body payload
                                        :is-authenticated? true)]
         (is (match? {:status 201
-                     :body {:pk_namespace ns
+                     :body {:ns ns
                            :pk pk
                            :title "My Test Entity"
                            :metadata {:key "value" :num 123}
@@ -69,7 +69,7 @@
     (testing "Creating an entity with the same primary key (conflict)"
       (let [ns (:created-entity-ns @test-state)
             pk (:created-entity-pk @test-state)
-            payload {:pk_namespace ns
+            payload {:ns ns
                     :pk pk
                     :title "Attempt to duplicate"
                     :metadata {}}
@@ -87,7 +87,7 @@
             response (util/make-request :get (str "/entity/" ns "/" pk)
                                        :is-authenticated? true)]
         (is (match? {:status 200
-                     :body {:entity {:pk_namespace ns
+                     :body {:entity {:ns ns
                                    :pk pk
                                    :title "My Test Entity"
                                    :metadata {:key "value" :num 123}}}}
@@ -100,7 +100,7 @@
             response (util/make-request :get "/entity"
                                        :is-authenticated? true)]
         (is (match? {:status 200
-                     :body (m/embeds [{:pk_namespace ns
+                     :body (m/embeds [{:ns ns
                                       :pk pk
                                       :title "My Test Entity"}])}
                     response))))
@@ -109,7 +109,7 @@
     (testing "Successfully updating the created entity"
       (let [ns (:created-entity-ns @test-state)
             pk (:created-entity-pk @test-state)
-            payload {:pk_namespace ns
+            payload {:ns ns
                     :pk pk
                     :title "Updated Test Entity Title"
                     :metadata {:new_key "new_value"}}
@@ -117,7 +117,7 @@
                                        :body payload
                                        :is-authenticated? true)]
         (is (match? {:status 200
-                     :body {:pk_namespace ns
+                     :body {:ns ns
                            :pk pk
                            :title "Updated Test Entity Title"
                            :metadata {:new_key "new_value"}}}
@@ -134,7 +134,7 @@
     (testing "Updating with mismatched primary key between path and payload"
       (let [ns (:created-entity-ns @test-state)
             pk (:created-entity-pk @test-state)
-            payload {:pk_namespace "mismatch.ns"
+            payload {:ns "mismatch.ns"
                     :pk "mismatch.pk"
                     :title "Mismatch Test"
                     :metadata {}}
@@ -168,7 +168,7 @@
 ;; Individual validation tests
 (deftest test-create-entity-no-auth
   (testing "Creating an entity without authentication"
-    (let [payload {:pk_namespace "noauth.ns"
+    (let [payload {:ns "noauth.ns"
                   :pk (str "noauth_pk_" (uuid-str))
                   :title "No Auth Test"
                   :metadata nil}]
@@ -178,7 +178,7 @@
 
 (deftest test-create-entity-invalid-payload
   (testing "Creating an entity with missing required fields"
-    (let [payload {:pk_namespace "invalid.ns"
+    (let [payload {:ns "invalid.ns"
                   ;; Missing "pk"
                   :title "Invalid Payload"}]
       (is (match? {:status (m/any-of 400 422)
@@ -207,7 +207,7 @@
   (testing "Updating a non-existent entity"
     (let [ns "nonexistent.ns"
           pk (str "nonexistent_pk_" (uuid-str))
-          payload {:pk_namespace ns
+          payload {:ns ns
                   :pk pk
                   :title "Update Non Existent"
                   :metadata {}}]
@@ -221,7 +221,7 @@
     ;; First create an entity
     (let [ns "tempupdate.ns"
           pk (str "tempupdate_pk_" (uuid-str))
-          create-payload {:pk_namespace ns
+          create-payload {:ns ns
                          :pk pk
                          :title "Temp Update"
                          :metadata {}}]
@@ -231,7 +231,7 @@
                         :is-authenticated? true)
       
       ;; Try to update without auth
-      (let [update-payload {:pk_namespace ns
+      (let [update-payload {:ns ns
                            :pk pk
                            :title "No Auth Update"}]
         (is (match? {:status 401}
@@ -254,7 +254,7 @@
     ;; Create a temporary entity to try deleting without auth
     (let [temp-ns "tempdel.ns"
           temp-pk (str "tempdel_pk_" (uuid-str))
-          payload {:pk_namespace temp-ns
+          payload {:ns temp-ns
                   :pk temp-pk
                   :title "Temp Delete"}]
       ;; Create with auth

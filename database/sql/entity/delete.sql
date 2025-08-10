@@ -1,3 +1,3 @@
 DELETE FROM entities
-WHERE pk_namespace = $1
+WHERE ns = $1
     AND pk = $2

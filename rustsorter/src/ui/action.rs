@@ -66,9 +66,9 @@ pub enum UIAction {
         context: HashMap<String, String>,
     },
     
-    // Generic entity view (for when we have a pk_namespace and pk)
+    // Generic entity view (for when we have a ns and pk)
     RenderEntityView {
-        pk_namespace: String,
+        ns: String,
         pk: String,
     },
     

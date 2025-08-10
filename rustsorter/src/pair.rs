@@ -52,7 +52,7 @@ struct _Vote {
 
 #[derive(Deserialize, Debug, JsonSchema)]
 pub struct PairQueryParams {
-    pk_namespace: String,
+    ns: String,
     pk: String,
 }
 
@@ -102,7 +102,7 @@ async fn get_pair_handler(
     State(state): State<AppState>,
     Query(params): Query<PairQueryParams>,
 ) -> Result<Json<PairResponse>, Error> {
-    let children_entities = get_children_entities(&state, params.pk_namespace, params.pk).await?;
+    let children_entities = get_children_entities(&state, params.ns, params.pk).await?;
 
     let left_entity = children_entities.choose(&mut rand::thread_rng()).unwrap();
     let mut right_entity = children_entities.choose(&mut rand::thread_rng()).unwrap();

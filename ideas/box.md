@@ -33,7 +33,7 @@ This sits prominently on the homepage and perhaps in the header of every other p
 3.  **Backend "Inspect" API Call:**
     The frontend sends the URL to a new, lightweight API endpoint: `POST /api/inspect-url` with payload `{"url": "..."}`.
     *   **Your Rust backend parses the URL:** It identifies this as a Reddit post with ID `t3_1cq2rf`.
-    *   **It checks your database:** `SELECT pk_namespace, pk FROM entities WHERE pk_namespace = 'reddit.com.post' AND pk = 't3_1cq2rf'`.
+    *   **It checks your database:** `SELECT ns, pk FROM entities WHERE ns = 'reddit.com.post' AND pk = 't3_1cq2rf'`.
     *   The query returns **nothing**.
     *   **The API responds with:**
         ```json
@@ -41,7 +41,7 @@ This sits prominently on the homepage and perhaps in the header of every other p
           "status": "not_imported",
           "entity_type": "Reddit Post",
           "title_preview": "LPT: Have nothing to say? Ask a question.", // Scraped from Reddit page title
-          "pk_namespace": "reddit.com.post",
+          "ns": "reddit.com.post",
           "pk": "t3_1cq2rf"
         }
         ```
@@ -75,7 +75,7 @@ This sits prominently on the homepage and perhaps in the header of every other p
         ```json
         {
           "status": "imported",
-          "pk_namespace": "reddit.com.post",
+          "ns": "reddit.com.post",
           "pk": "t3_1cq2rf"
         }
         ```
@@ -114,7 +114,7 @@ This is the core view where users live after using the Omnibox. It's the visual 
 >
 > **2. The Sorting View (A primary tab/button)**
 >
-> `[ Go to Voting Session ]` -> Navigates to `/vote?pk_namespace=reddit.com.post&pk=t3_1cq2rf`
+> `[ Go to Voting Session ]` -> Navigates to `/vote?ns=reddit.com.post&pk=t3_1cq2rf`
 >
 > This is how you connect discovery/analysis to the core voting action of your app.
 

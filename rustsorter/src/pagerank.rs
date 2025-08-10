@@ -14,7 +14,7 @@ use crate::{
 
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq, Hash, Serialize, JsonSchema)]
 pub struct EntityIdentifier {
-    pub pk_namespace: String,
+    pub ns: String,
     pub pk: String,
 }
 
@@ -32,9 +32,9 @@ pub struct RankingResponse {
 
 #[derive(sqlx::FromRow, Debug)]
 struct RelevantVote {
-    left_entity_pk_namespace: String,
+    left_entity_ns: String,
     left_entity_pk: String,
-    right_entity_pk_namespace: String,
+    right_entity_ns: String,
     right_entity_pk: String,
 
     magnitude: i32,
@@ -57,7 +57,7 @@ fn build_rank_graph(
     let mut node_count = 0;
 
     for entity in entities {
-        let key = format!("{}:{}", entity.pk_namespace, entity.pk);
+        let key = format!("{}:{}", entity.ns, entity.pk);
         if !entity_key_to_index.contains_key(&key) {
             entity_key_to_index.insert(key.clone(), node_count);
             index_to_entity_identifier.insert(node_count, entity.clone());
@@ -66,10 +66,10 @@ fn build_rank_graph(
     }
 
     for vote in votes {
-        let left_key = format!("{}:{}", vote.left_entity_pk_namespace, vote.left_entity_pk);
+        let left_key = format!("{}:{}", vote.left_entity_ns, vote.left_entity_pk);
         let right_key = format!(
             "{}:{}",
-            vote.right_entity_pk_namespace, vote.right_entity_pk
+            vote.right_entity_ns, vote.right_entity_pk
         );
 
         let Some(&left_idx) = entity_key_to_index.get(&left_key) else {
@@ -192,7 +192,7 @@ async fn rank_children_handler(
 
     let entity_keys: Vec<String> = payload
         .iter()
-        .map(|e| format!("{}:{}", e.pk_namespace, e.pk))
+        .map(|e| format!("{}:{}", e.ns, e.pk))
         .collect();
 
     let votes = sqlx::query_file_as!(
@@ -207,11 +207,11 @@ async fn rank_children_handler(
     let mut voted_entities = HashSet::new();
     for vote in &votes {
         let left_id = EntityIdentifier {
-            pk_namespace: vote.left_entity_pk_namespace.clone(),
+            ns: vote.left_entity_ns.clone(),
             pk: vote.left_entity_pk.clone(),
         };
         let right_id = EntityIdentifier {
-            pk_namespace: vote.right_entity_pk_namespace.clone(),
+            ns: vote.right_entity_ns.clone(),
             pk: vote.right_entity_pk.clone(),
         };
 

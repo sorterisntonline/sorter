@@ -239,11 +239,11 @@ fn dispatch_ui_action(action: UIAction, _app_state: &AppState) -> Pin<Box<dyn Fu
             )
         }
         
-        UIAction::RenderEntityView { pk_namespace, pk } => {
+        UIAction::RenderEntityView { ns, pk } => {
             // TODO: Call entity::get_entity here
             UIResponse::not_yet_implemented(
                 "Entity View".to_string(),
-                format!("Would show entity {}:{}", pk_namespace, pk),
+                format!("Would show entity {}:{}", ns, pk),
                 None,
             )
         }

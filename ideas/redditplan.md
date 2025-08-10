@@ -20,7 +20,7 @@ This is the "cold start" for this specific subreddit. The user experience should
 **The User Journey:**
 
 1.  **User navigates to `sorter.social/sort/r/art`**.
-2.  Your backend receives the request, queries its `entities` table for a parent entity (`pk_namespace: 'reddit.com.subreddit'`, `pk: 'art'`) and finds nothing, or finds the parent but sees it has zero children.
+2.  Your backend receives the request, queries its `entities` table for a parent entity (`ns: 'reddit.com.subreddit'`, `pk: 'art'`) and finds nothing, or finds the parent but sees it has zero children.
 3.  Instead of a spinner, the user sees a **"Summoning Gate"** page. This is a static, welcoming page that manages expectations.
 
     > **Mockup of the "Summoning Gate" Page:**
@@ -49,7 +49,7 @@ This is the "cold start" for this specific subreddit. The user experience should
     *   It creates the parent entity for `r/art` if it doesn't exist.
     *   It loops 100 times, creating an `entity` for each post and an `entity_relationship` linking it to the `r/art` parent. Your `create_entity_ignore_conflict` is perfect here.
     *   This might take 5-10 seconds. That's fine, as you said.
-6.  **The Result:** The API call finishes. The user is redirected to the main voting interface for this content set: `sorter.social/vote?pk_namespace=reddit.com.subreddit&pk=art`. The page now successfully fetches pairs of art posts for them to vote on.
+6.  **The Result:** The API call finishes. The user is redirected to the main voting interface for this content set: `sorter.social/vote?ns=reddit.com.subreddit&pk=art`. The page now successfully fetches pairs of art posts for them to vote on.
 
 This flow is user-driven, populates your database on demand, and feels like an accomplishment for the user.
 
@@ -61,7 +61,7 @@ This flow is user-driven, populates your database on demand, and feels like an a
 
 1.  **User navigates to `sorter.social/sort/r/art`**.
 2.  Your system finds the parent entity and sees it has children.
-3.  **The page loads instantly**. The user sees the voting interface (`/vote?pk_namespace=...`) immediately and can start sorting the existing, previously-imported posts.
+3.  **The page loads instantly**. The user sees the voting interface (`/vote?ns=...`) immediately and can start sorting the existing, previously-imported posts.
 4.  On the page, there is a clear button: **`[ Import More Posts ]`** or **`[ Refresh with Latest ]`**.
 5.  Clicking it doesn't immediately trigger an API call. Instead, it **opens the "Summoning Gate" UI again**, perhaps in a modal. The text is slightly different:
 
@@ -96,7 +96,7 @@ This requires a different UX because we can't possibly fetch all comments. The U
 
 1.  **User navigates to `sorter.social/sort/r/askreddit/comments`**.
 2.  Your backend needs to identify the pool of comments.
-    *   **The Query:** "Find all `entity` rows where `pk_namespace = 'reddit.com.comment'` whose parent post has a parent entity of `pk_namespace = 'reddit.com.subreddit'` and `pk = 'askreddit'`."
+    *   **The Query:** "Find all `entity` rows where `ns = 'reddit.com.comment'` whose parent post has a parent entity of `ns = 'reddit.com.subreddit'` and `pk = 'askreddit'`."
     *   Let's assume on the first visit, this query returns zero results.
 
 3.  **The "Seed the Ocean" UI:** The user sees an empty state page, optimized for the first action.
