@@ -1,6 +1,6 @@
 (ns sorter-test.core
   (:require [clojure.test :refer :all]
-            [matcher-combinators.test] ;; adds match? support to clojure.test
+            [matcher-combinators.test]
             [matcher-combinators.matchers :as m]
             [sorter-test.util :as util]
             [sorter-test.ws-client :as ws]))

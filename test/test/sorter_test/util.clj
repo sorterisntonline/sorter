@@ -44,14 +44,14 @@
 (defn clear-postgres-data []
   "Remove PostgreSQL data directory"
   (println "Clearing PostgreSQL data...")
-  (let [pgdata-path "database/pgdata"]
+  (let [pgdata-path "../database/pgdata"]
     (when (.exists (io/file pgdata-path))
       (shell/sh "rm" "-rf" pgdata-path))))
 
 (defn start-postgres-container []
   "Start PostgreSQL container in background"
   (println "Starting PostgreSQL container...")
-  (let [result (shell/sh "bash" "database/run-postgres.sh" :dir "." :env {"DETACH" "true"})]
+  (let [result (shell/sh "bash" "../database/run-postgres.sh" :dir "../database" :env {"DETACH" "true"})]
     (when (not= 0 (:exit result))
       (println "Failed to start PostgreSQL:" (:err result))
       (throw (ex-info "Failed to start PostgreSQL container" result)))
@@ -60,7 +60,7 @@
 (defn run-migrations []
   "Run database migrations"
   (println "Running migrations...")
-  (let [result (shell/sh "bash" "rustsorter/migrate.sh" :dir ".")]
+  (let [result (shell/sh "bash" "./migrate.sh" :dir "../rustsorter")]
     (when (not= 0 (:exit result))
       (println "Migration failed:" (:err result))
       (throw (ex-info "Migration failed" result)))
