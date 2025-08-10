@@ -895,29 +895,28 @@ mod tests {
 
     #[test]
     fn test_quick_subreddit_flow() {
-        // Test: "r" -> TAB -> "/r/" -> "rust"
-        // Note: After tab completion, we need to clear and type the full path
+        // Test: "r" -> TAB -> "rust" (direct alias flow)
         assert_flow(
             "Quick Subreddit Access",
             vec![
                 KeyAction::Type("r".to_string()),
                 KeyAction::Tab,
-                KeyAction::Type("/r/rust".to_string()),  // Append to "reddit.com"
+                KeyAction::Type("rust".to_string()),
             ],
             vec![
                 Box::new(|text, action| {
-                    // "r" should suggest "reddit.com"
+                    // "r" should suggest "r/"
                     text == "r" && matches!(action, UIAction::ShowSuggestions(data) if 
-                        data.suggestion.as_ref().map(|s| s.completion == "reddit.com").unwrap_or(false)
+                        data.suggestion.as_ref().map(|s| s.completion == "r/").unwrap_or(false)
                     )
                 }),
                 Box::new(|text, action| {
-                    // After tab, should have "reddit.com"
-                    text == "reddit.com" && matches!(action, UIAction::ShowSuggestions(_))
+                    // After tab, should have "r/" and show subreddit selection
+                    text == "r/" && matches!(action, UIAction::ShowMultiple { .. })
                 }),
                 Box::new(|text, action| {
-                    // "reddit.com/r/rust" should render the subreddit
-                    text == "reddit.com/r/rust" && matches!(action, UIAction::RenderSubredditView { subreddit, .. } if subreddit == "rust")
+                    // "r/rust" should render the subreddit
+                    text == "r/rust" && matches!(action, UIAction::RenderSubredditView { subreddit, .. } if subreddit == "rust")
                 }),
             ],
         );
@@ -939,11 +938,24 @@ mod tests {
         let results = simulate_keystrokes(progressive_actions);
         
         println!("\n=== Progressive Completion Flow ===");
-        for (text, action) in &results {
+        for (i, (text, action)) in results.iter().enumerate() {
             println!("  '{}' -> {:?}", text, action);
             
-            // Each step before tab should suggest "reddit.com"
-            if !text.contains("reddit.com") {
+            // First step: "r" should suggest "r/"
+            if i == 0 && text == "r" {
+                match action {
+                    UIAction::ShowSuggestions(data) => {
+                        assert_eq!(
+                            data.suggestion.as_ref().unwrap().completion,
+                            "r/",
+                            "Should suggest r/ at 'r'"
+                        );
+                    }
+                    _ => panic!("Expected suggestion at 'r'"),
+                }
+            }
+            // Other steps before tab should suggest "reddit.com"
+            else if i > 0 && i < results.len() - 1 {
                 match action {
                     UIAction::ShowSuggestions(data) => {
                         assert_eq!(
@@ -1000,19 +1012,19 @@ mod tests {
 
     #[test]
     fn test_alias_shortcut_flow() {
-        // Test using the "r/" shortcut
+        // Test using the "r/" shortcut - now correctly goes directly to subreddit
         assert_flow(
             "Alias Shortcut",
             vec![
                 KeyAction::Type("r/".to_string()),
-                KeyAction::Type("r/".to_string()),
                 KeyAction::Type("technology".to_string()),
             ],
             vec![
-                Box::new(|text, _| text == "r/"),
-                Box::new(|text, _| text == "r/r/"),
                 Box::new(|text, action| {
-                    text == "r/r/technology" && 
+                    text == "r/" && matches!(action, UIAction::ShowMultiple { .. })
+                }),
+                Box::new(|text, action| {
+                    text == "r/technology" && 
                     matches!(action, UIAction::RenderSubredditView { subreddit, .. } if subreddit == "technology")
                 }),
             ],
@@ -1222,10 +1234,10 @@ mod tests {
     fn test_declarative_quick_subreddit_flow() {
         test_flow("Quick Subreddit Flow", vec![
             (KeyAction::Type("r".to_string()), 
-             ExpectedAction::Suggestion { completion: "reddit.com".to_string() }),
+             ExpectedAction::Suggestion { completion: "r/".to_string() }),
             (KeyAction::Tab, 
-             ExpectedAction::Suggestion { completion: "reddit.com/".to_string() }),
-            (KeyAction::Type("/r/rust".to_string()),
+             ExpectedAction::MultipleAny), // r/ shows subreddit selection
+            (KeyAction::Type("rust".to_string()),
              ExpectedAction::RenderSubreddit { subreddit: "rust".to_string(), sort: None }),
         ]);
     }
@@ -1267,7 +1279,7 @@ mod tests {
     fn test_declarative_progressive_completion() {
         test_flow("Progressive Completion", vec![
             (KeyAction::Type("r".to_string()),
-             ExpectedAction::Suggestion { completion: "reddit.com".to_string() }),
+             ExpectedAction::Suggestion { completion: "r/".to_string() }),
             (KeyAction::Type("e".to_string()),
              ExpectedAction::Suggestion { completion: "reddit.com".to_string() }),
             (KeyAction::Type("d".to_string()),
@@ -1291,9 +1303,9 @@ mod tests {
     fn test_clean_macro_example() {
         // This is what the tests can look like with macros!
         test_flow("Clean Macro Example", flow![
-            (type_text!("r"), suggests!("reddit.com")),
-            (KeyAction::Tab, suggests!("reddit.com/")),
-            (type_text!("/r/rust/hot"), renders_subreddit!("rust", "hot")),
+            (type_text!("r"), suggests!("r/")),
+            (KeyAction::Tab, ExpectedAction::MultipleAny),
+            (type_text!("rust/hot"), renders_subreddit!("rust", "hot")),
         ]);
     }
 
@@ -1311,9 +1323,9 @@ mod tests {
 
     #[test]
     fn test_tdsl_basic_reddit_progression() {
-        // Tests from parser.tdsl: r -> reddit.com/ with all intermediate steps
+        // Tests from parser.tdsl: r -> r/, then re -> reddit.com with all intermediate steps
         test_flow("TDSL Basic Reddit Progression", flow![
-            (type_text!("r"), suggests!("reddit.com")),
+            (type_text!("r"), suggests!("r/")),
             (type_text!("e"), suggests!("reddit.com")),
             (type_text!("d"), suggests!("reddit.com")),
             (type_text!("d"), suggests!("reddit.com")),
@@ -1442,9 +1454,15 @@ mod tests {
     #[test]
     fn test_tdsl_all_reddit_prefixes() {
         // Test all the prefixes mentioned in parser.tdsl work
-        let prefixes = vec!["r", "re", "red", "redd", "reddi", "reddit", "reddit.", "reddit.c", "reddit.co"];
+        // "r" now suggests "r/", all others suggest "reddit.com"
+        let prefixes_to_reddit = vec!["re", "red", "redd", "reddi", "reddit", "reddit.", "reddit.c", "reddit.co"];
         
-        for prefix in prefixes {
+        // Test "r" separately since it now suggests "r/"
+        test_flow("TDSL Prefix: r", flow![
+            (type_text!("r"), suggests!("r/")),
+        ]);
+        
+        for prefix in prefixes_to_reddit {
             test_flow(&format!("TDSL Prefix: {}", prefix), flow![
                 (type_text!(prefix), suggests!("reddit.com")),
             ]);
@@ -1594,8 +1612,8 @@ mod tests {
             // Start typing, get suggestion
             (type_text!("h"), suggests!("https://")),
             
-            // Accept suggestion with tab
-            (KeyAction::Tab, ExpectedAction::MultipleAny), // Should be ready for next input
+            // Accept suggestion with tab - this should move us to "https://"
+            (KeyAction::Tab, suggests!("https://")), // After tab, we're at "https://" which still suggests itself
             
             // Start typing reddit
             (type_text!("r"), suggests!("https://reddit.com")),
@@ -1613,8 +1631,17 @@ mod tests {
     fn test_reddit_prefix_autocomplete() {
         let graph = build_reddit_graph();
         
-        // Test various prefixes
-        let prefixes = vec!["r", "re", "red", "redd", "reddi", "reddit", "reddit.", "reddit.c", "reddit.co"];
+        // "r" now suggests "r/", others suggest "reddit.com"
+        match graph.parse("r") {
+            UIAction::ShowSuggestions(data) => {
+                assert_eq!(data.suggestion.as_ref().unwrap().completion, "r/");
+                println!("✓ 'r' → r/");
+            }
+            _ => panic!("Expected suggestion for 'r'"),
+        }
+        
+        // Test other prefixes that should suggest "reddit.com"
+        let prefixes = vec!["re", "red", "redd", "reddi", "reddit", "reddit.", "reddit.c", "reddit.co"];
         
         for prefix in prefixes {
             match graph.parse(prefix) {
@@ -1657,22 +1684,25 @@ mod tests {
     fn test_alias_and_full_paths() {
         let graph = build_reddit_graph();
         
-        // Both should work the same
-        let paths = vec![
-            "reddit.com/",
-            "r/",
-        ];
-        
-        for path in paths {
-            match graph.parse(path) {
-                UIAction::ShowMultiple { actions } => {
-                    let has_guide = actions.iter()
-                        .any(|a| matches!(a, UIAction::ShowStaticGuide { .. }));
-                    assert!(has_guide, "Path '{}' should show guide", path);
-                    println!("✓ '{}' shows Reddit root guide", path);
-                }
-                _ => panic!("Expected Multiple action for '{}'", path),
+        // reddit.com/ should show guide, r/ should show subreddit selection
+        match graph.parse("reddit.com/") {
+            UIAction::ShowMultiple { actions } => {
+                let has_guide = actions.iter()
+                    .any(|a| matches!(a, UIAction::ShowStaticGuide { .. }));
+                assert!(has_guide, "Path 'reddit.com/' should show guide");
+                println!("✓ 'reddit.com/' shows Reddit root guide");
             }
+            _ => panic!("Expected Multiple action for 'reddit.com/'"),
+        }
+        
+        match graph.parse("r/") {
+            UIAction::ShowMultiple { actions } => {
+                let has_selection = actions.iter()
+                    .any(|a| matches!(a, UIAction::ShowStaticSelection { .. }));
+                assert!(has_selection, "Path 'r/' should show subreddit selection");
+                println!("✓ 'r/' shows subreddit selection");
+            }
+            _ => panic!("Expected Multiple action for 'r/'"),
         }
     }
     
@@ -1690,12 +1720,12 @@ mod tests {
             _ => panic!("Expected RenderSubredditView for subreddit"),
         }
         
-        // Test with alias
-        match graph.parse("r/r/programming") {
+        // Test with alias (r/ goes directly to subreddit, no double r/)
+        match graph.parse("r/programming") {
             UIAction::RenderSubredditView { subreddit, sort } => {
                 assert_eq!(subreddit, "programming");
                 assert_eq!(sort, None);
-                println!("✓ r/r/programming (alias) recognized");
+                println!("✓ r/programming (alias) recognized");
             }
             _ => panic!("Expected RenderSubredditView for subreddit via alias"),
         }
