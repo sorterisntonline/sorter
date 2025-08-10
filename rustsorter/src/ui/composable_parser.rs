@@ -100,7 +100,7 @@ pub struct Edge {
 }
 
 /// Handler function for generating UI actions
-type Handler = Box<dyn Fn(&str, &HashMap<String, String>) -> UIAction>;
+type Handler = Box<dyn Fn(&str, &str, &HashMap<String, String>) -> UIAction>;
 
 /// Node in the graph
 pub struct Node {
@@ -189,7 +189,7 @@ impl GraphBuilder {
     /// Set handler for current node
     pub fn handler<F>(self, handler: F) -> Self 
     where 
-        F: Fn(&str, &HashMap<String, String>) -> UIAction + 'static
+        F: Fn(&str, &str, &HashMap<String, String>) -> UIAction + 'static
     {
         let current = self.current_node.expect("No current node selected");
         if let Some(node) = self.nodes.get(current) {
@@ -218,6 +218,7 @@ impl Graph {
             current_node_id: self.root,
             context: HashMap::new(),
             original_query: input.to_string(),
+            current_prefix: String::new(),
         };
         
         self.parse_recursive(&mut state)
@@ -231,7 +232,7 @@ impl Graph {
         // If we've consumed all input, check for handler or suggestions
         if state.cursor >= state.input.len() {
             if let Some(handler) = &node_ref.handler {
-                return handler(&state.original_query, &state.context);
+                return handler(&state.original_query, &state.current_prefix, &state.context);
             }
             
             // No handler, try to suggest based on available edges
@@ -246,10 +247,12 @@ impl Graph {
                 // Save state for potential backtracking
                 let saved_cursor = state.cursor;
                 let saved_node = state.current_node_id;
+                let saved_prefix = state.current_prefix.clone();
                 
                 // Update state
                 state.cursor += consumed;
                 state.current_node_id = edge.target;
+                state.current_prefix.push_str(&remaining[..consumed]);
                 
                 // Store captured variable if any
                 if let Some(value) = captured {
@@ -260,10 +263,12 @@ impl Graph {
                 
                 // Check if this is a partial match that needs completion
                 if state.cursor == state.input.len() {
-                    if let Some(completion) = edge.pattern.completion(remaining) {
-                        // Preserve what was typed before this segment
-                        let prefix = &state.input[..state.cursor - consumed];
-                        let full_completion = format!("{}{}", prefix, completion);
+                    if let Some(completion_suffix) = edge.pattern.completion(remaining) {
+                        // Use the current_prefix plus the completion suffix
+                        let full_completion = format!("{}{}", 
+                            state.current_prefix, 
+                            completion_suffix.strip_prefix(remaining).unwrap_or(&completion_suffix)
+                        );
                         return UIAction::suggest(
                             state.original_query.clone(),
                             Some(Suggestion {
@@ -287,6 +292,7 @@ impl Graph {
                 // Otherwise, restore state and try next edge
                 state.cursor = saved_cursor;
                 state.current_node_id = saved_node;
+                state.current_prefix = saved_prefix;
             }
         }
         
@@ -296,15 +302,14 @@ impl Graph {
     
     fn suggest_from_edges(&self, node: &Node, state: &ParserState) -> UIAction {
         let remaining = &state.input[state.cursor..];
-        let prefix = &state.input[..state.cursor];
         
         // Find edges that could match with more input
         for edge in &node.edges {
             match &edge.pattern {
                 EdgePattern::PrefixOf(target) => {
                     if target.starts_with(remaining) && !remaining.is_empty() {
-                        // Preserve the prefix that was already typed
-                        let full_completion = format!("{}{}", prefix, target);
+                        // Use current_prefix instead of rebuilding from input
+                        let full_completion = format!("{}{}", state.current_prefix, target);
                         return UIAction::suggest(
                             state.original_query.clone(),
                             Some(Suggestion {
@@ -318,7 +323,7 @@ impl Graph {
                 }
                 EdgePattern::Literal(lit) => {
                     if lit.starts_with(remaining) && !remaining.is_empty() {
-                        let full_completion = format!("{}{}", prefix, lit);
+                        let full_completion = format!("{}{}", state.current_prefix, lit);
                         return UIAction::suggest(
                             state.original_query.clone(),
                             Some(Suggestion {
@@ -347,6 +352,7 @@ struct ParserState<'a> {
     current_node_id: NodeId,
     context: HashMap<String, String>,
     original_query: String,
+    current_prefix: String,
 }
 
 // --- Helper Functions ---
@@ -376,16 +382,26 @@ fn is_valid_variable(var_name: &str, value: &str) -> bool {
 
 pub fn build_reddit_graph() -> Graph {
     GraphBuilder::new()
-        // === ROOT LEVEL: Direct domain/protocol patterns ===
+        // === ROOT LEVEL: Direct aliases and domain/protocol patterns ===
         .at("root")
+            // Direct aliases to subreddit and user selection
+            .edge_with_desc(
+                EdgePattern::PrefixOf("r/"),
+                "subreddit_selection",
+                Some("Browse subreddits (e.g., r/programming)")
+            )
+            .edge_with_desc(
+                EdgePattern::PrefixOf("u/"),
+                "user_selection",
+                Some("Browse users (e.g., u/spez)")
+            )
+            
             // Reddit shortcuts - one pattern handles ALL prefixes!
             .edge_with_desc(
                 EdgePattern::PrefixOf("reddit.com"), 
                 "reddit_domain",
                 Some("Go to Reddit")
             )
-            // Short alias
-            .edge(EdgePattern::Literal("r"), "reddit_slash_prefix")
             
             // Protocol patterns - "h" can suggest "https://"
             .edge_with_desc(
@@ -404,9 +420,7 @@ pub fn build_reddit_graph() -> Graph {
                 Some("World Wide Web")
             )
         
-        // === After "r" shortcut, expect "/" ===
-        .at("reddit_slash_prefix")
-            .edge(EdgePattern::Literal("/"), "reddit_root")
+
         
         // === HTTPS PROTOCOL: Can go to any domain ===
         .at("https_protocol")
@@ -461,25 +475,17 @@ pub fn build_reddit_graph() -> Graph {
         // === REDDIT DOMAIN: Expect "/" ===
         .at("reddit_domain")
             .edge(EdgePattern::Literal("/"), "reddit_root")
-            .handler(|query, _ctx| {
+            .handler(|query, prefix, _ctx| {
                 // If someone just types "reddit.com" (or with protocol) without slash
-                // Suggest adding the slash
-                let completion = if query.starts_with("https://") {
-                    "https://reddit.com/".to_string()
-                } else if query.starts_with("http://") {
-                    "http://reddit.com/".to_string()
-                } else if query.starts_with("www.") {
-                    "www.reddit.com/".to_string()
-                } else {
-                    "reddit.com/".to_string()
-                };
+                // Suggest adding the slash using the current prefix
+                let completion = format!("{}/", prefix);
                 
                 UIAction::suggest(
                     query.to_string(),
                     Some(Suggestion {
                         text: completion.clone(),
                         completion,
-                        description: Some("Go to Reddit homepage".to_string()),
+                        description: Some("Continue to Reddit homepage".to_string()),
                         score: 1.0,
                     })
                 )
@@ -487,24 +493,13 @@ pub fn build_reddit_graph() -> Graph {
         
         // === REDDIT ROOT: The main Reddit navigation ===
         .at("reddit_root")
-            .edge(EdgePattern::Literal("r"), "r_prefix")
-            .edge(EdgePattern::Literal("u"), "u_prefix")
-            .handler(|query, _ctx| {
-                // Preserve the protocol prefix from the original query
-                let base_url = if query.starts_with("https://") {
-                    "https://reddit.com"
-                } else if query.starts_with("http://") {
-                    "http://reddit.com"
-                } else if query.starts_with("www.") {
-                    "www.reddit.com"
-                } else {
-                    "reddit.com"
-                };
-
+            .edge(EdgePattern::Literal("r/"), "subreddit_selection")
+            .edge(EdgePattern::Literal("u/"), "user_selection")
+            .handler(|query, prefix, _ctx| {
                 UIAction::multiple(vec![
                     UIAction::suggest(query.to_string(), Some(Suggestion { 
-                        text: format!("{}/r/", base_url),
-                        completion: format!("{}/r/", base_url),
+                        text: format!("{}r/", prefix),
+                        completion: format!("{}r/", prefix),
                         description: Some("Browse subreddits".to_string()),
                         score: 1.0,
                     })),
@@ -517,41 +512,30 @@ pub fn build_reddit_graph() -> Graph {
                                 key: "r".to_string(), 
                                 label: "Sort a Subreddit".to_string(), 
                                 description: "Find the best posts in a community.".to_string(), 
-                                completion: format!("{}/r/", base_url)
+                                completion: format!("{}r/", prefix)
                             },
                             GuideOption { 
                                 key: "u".to_string(), 
                                 label: "Sort User Content".to_string(), 
                                 description: "Explore and rank a user's posts and comments.".to_string(), 
-                                completion: format!("{}/u/", base_url)
+                                completion: format!("{}u/", prefix)
                             },
                         ]
                     ),
                 ])
             })
         
-        // === /r/ - Subreddit browsing ===
-        .at("r_prefix")
-            .edge(EdgePattern::Literal("/"), "subreddit_selection")
+
         
+        // === SUBREDDIT SELECTION: THE UNIFIED NODE ===
+        // This node is now reached from `r/` OR `reddit.com/r/`
         .at("subreddit_selection")
             .edge(EdgePattern::Variable("subreddit"), "subreddit_page")
-            .handler(|query, _ctx| {
-                // Preserve the protocol prefix from the original query
-                let base_url = if query.starts_with("https://") {
-                    "https://reddit.com"
-                } else if query.starts_with("http://") {
-                    "http://reddit.com"
-                } else if query.starts_with("www.") {
-                    "www.reddit.com"
-                } else {
-                    "reddit.com"
-                };
-
+            .handler(|query, prefix, _ctx| {
                 UIAction::multiple(vec![
                     UIAction::suggest(query.to_string(), Some(Suggestion {
-                        text: format!("{}/r/programming", base_url),
-                        completion: format!("{}/r/programming", base_url),
+                        text: format!("{}programming", prefix),
+                        completion: format!("{}programming", prefix),
                         description: Some("Popular programming community".to_string()),
                         score: 1.0,
                     })),
@@ -564,19 +548,19 @@ pub fn build_reddit_graph() -> Graph {
                                 id: "programming".to_string(), 
                                 title: "r/programming".to_string(), 
                                 description: Some("Computer programming discussions".to_string()),
-                                completion: format!("{}/r/programming", base_url)
+                                completion: format!("{}programming", prefix)
                             },
                             SelectionItem { 
                                 id: "rust".to_string(), 
                                 title: "r/rust".to_string(), 
                                 description: Some("The Rust programming language".to_string()),
-                                completion: format!("{}/r/rust", base_url)
+                                completion: format!("{}rust", prefix)
                             },
                             SelectionItem { 
                                 id: "webdev".to_string(), 
                                 title: "r/webdev".to_string(), 
                                 description: Some("Web development community".to_string()),
-                                completion: format!("{}/r/webdev", base_url)
+                                completion: format!("{}webdev", prefix)
                             },
                         ]
                     )
@@ -586,7 +570,7 @@ pub fn build_reddit_graph() -> Graph {
         // === Specific subreddit page ===
         .at("subreddit_page")
             .edge(EdgePattern::Literal("/"), "subreddit_slash")
-            .handler(|_query, ctx| {
+            .handler(|_query, _prefix, ctx| {
                 let subreddit = ctx.get("subreddit").cloned().unwrap_or_default();
                 // This should trigger importing/loading the subreddit
                 UIAction::RenderSubredditView {
@@ -600,7 +584,7 @@ pub fn build_reddit_graph() -> Graph {
             .edge(EdgePattern::Literal("top"), "subreddit_top")
             .edge(EdgePattern::Literal("new"), "subreddit_new")
             .edge(EdgePattern::Literal("comments"), "subreddit_comments")
-            .handler(|query, ctx| {
+            .handler(|query, prefix, ctx| {
                 let subreddit = ctx.get("subreddit").cloned().unwrap_or_default();
                 UIAction::guide(
                     query.to_string(), 
@@ -611,37 +595,35 @@ pub fn build_reddit_graph() -> Graph {
                             key: "hot".to_string(), 
                             label: "Hot Posts".to_string(), 
                             description: "Import and sort posts currently on the front page.".to_string(), 
-                            completion: format!("reddit.com/r/{}/hot", subreddit) 
+                            completion: format!("{}hot", prefix) 
                         },
                         GuideOption { 
                             key: "top".to_string(), 
                             label: "Top Posts".to_string(), 
                             description: "Import and sort the highest-rated posts.".to_string(), 
-                            completion: format!("reddit.com/r/{}/top", subreddit) 
+                            completion: format!("{}top", prefix) 
                         },
                         GuideOption { 
                             key: "new".to_string(), 
                             label: "New Posts".to_string(), 
                             description: "Import and sort the newest posts.".to_string(), 
-                            completion: format!("reddit.com/r/{}/new", subreddit) 
+                            completion: format!("{}new", prefix) 
                         },
                         GuideOption { 
                             key: "comments".to_string(), 
                             label: "All Comments".to_string(), 
                             description: "Find the best comment across all imported threads.".to_string(), 
-                            completion: format!("reddit.com/r/{}/comments/", subreddit) 
+                            completion: format!("{}comments/", prefix) 
                         },
                     ]
                 )
             })
         
-        // === /u/ - User profiles ===
-        .at("u_prefix")
-            .edge(EdgePattern::Literal("/"), "user_selection")
+
         
         .at("user_selection")
             .edge(EdgePattern::Variable("username"), "user_profile")
-            .handler(|query, _ctx| {
+            .handler(|query, prefix, _ctx| {
                 UIAction::guide(
                     query.to_string(),
                     "User Profile Sorting".to_string(),
@@ -651,7 +633,7 @@ pub fn build_reddit_graph() -> Graph {
                             key: "popular".to_string(),
                             label: "Popular Users".to_string(),
                             description: "Browse well-known Reddit users.".to_string(),
-                            completion: "reddit.com/u/".to_string(),
+                            completion: prefix.to_string(),
                         },
                     ]
                 )
@@ -659,7 +641,7 @@ pub fn build_reddit_graph() -> Graph {
         
         // === Subreddit sort types ===
         .at("subreddit_hot")
-            .handler(|_query, ctx| {
+            .handler(|_query, _prefix, ctx| {
                 let subreddit = ctx.get("subreddit").cloned().unwrap_or_default();
                 UIAction::RenderSubredditView {
                     subreddit,
@@ -668,7 +650,7 @@ pub fn build_reddit_graph() -> Graph {
             })
         
         .at("subreddit_top")
-            .handler(|_query, ctx| {
+            .handler(|_query, _prefix, ctx| {
                 let subreddit = ctx.get("subreddit").cloned().unwrap_or_default();
                 UIAction::RenderSubredditView {
                     subreddit,
@@ -677,7 +659,7 @@ pub fn build_reddit_graph() -> Graph {
             })
         
         .at("subreddit_new")
-            .handler(|_query, ctx| {
+            .handler(|_query, _prefix, ctx| {
                 let subreddit = ctx.get("subreddit").cloned().unwrap_or_default();
                 UIAction::RenderSubredditView {
                     subreddit,
@@ -686,7 +668,7 @@ pub fn build_reddit_graph() -> Graph {
             })
         
         .at("subreddit_comments")
-            .handler(|_query, ctx| {
+            .handler(|_query, _prefix, ctx| {
                 let subreddit = ctx.get("subreddit").cloned().unwrap_or_default();
                 UIAction::RenderSubredditComments {
                     subreddit,
@@ -695,7 +677,7 @@ pub fn build_reddit_graph() -> Graph {
         
         // === User profile ===
         .at("user_profile")
-            .handler(|_query, ctx| {
+            .handler(|_query, _prefix, ctx| {
                 let username = ctx.get("username").cloned().unwrap_or_default();
                 UIAction::RenderUserProfile {
                     username,
