@@ -1,14 +1,10 @@
-fill in some of these pages with reddit api http requests, which import hot
-random subreddit suggestion from list (rust, programming, askreddit, amitheasshole)
+import successful should show the entities, imported subreddit shoudl show entities
+actually call reddit api with oauth token? or do we need that..
 
-refactor frontend to be more declarative
-
-ns => ns
 make empty homepage better (click to sort subreddits instantly, mobile friendly)
 
 append only log arcitecture
 ranking histories
-reddit import api requests + ui
 
 pair chosing logic
   non n^2 voting test
