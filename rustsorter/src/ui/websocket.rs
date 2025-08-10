@@ -16,6 +16,9 @@ use crate::{
     ui::types::UIResponse,
     ui::action::UIAction,
     ui::composable_parser,
+    entity,
+    entity_relationships,
+    integrations::reddit::{RedditPost, RedditComment},
 };
 
 #[derive(Deserialize, Serialize, JsonSchema, Debug, Clone)]
@@ -25,7 +28,17 @@ pub enum ClientCommand {
     Vote { item_a_id: String, item_b_id: String, preference: VotePreference },
     NavigateToEntity { entity_id: String },
     FetchVotingPairs { context: String },
+    ExecuteRedditImport(RedditImport),
     Ping,
+}
+
+#[derive(Deserialize, Serialize, JsonSchema, Debug, Clone)]
+#[serde(tag = "source", rename_all = "snake_case")]
+pub enum RedditImport {
+    // Import hot posts for a subreddit
+    SubredditHot { subreddit: String, limit: Option<u16> },
+    // Import a specific thread, parser already has these parts
+    ThreadRef { subreddit: String, post_id: String, slug: Option<String> },
 }
 
 #[derive(Deserialize, Serialize, JsonSchema, Debug, Clone)]
@@ -123,6 +136,9 @@ async fn handle_client_message(
         }
         ClientCommand::FetchVotingPairs { context } => {
             handle_fetch_pairs_command(context, app_state).await
+        }
+        ClientCommand::ExecuteRedditImport(import) => {
+            handle_execute_reddit_import_command(import, app_state).await
         }
         ClientCommand::Ping => {
             // Send pong response
@@ -298,5 +314,236 @@ async fn handle_fetch_pairs_command(_context: String, _app_state: &AppState) -> 
         "NotImplemented".to_string(),
         "Voting pairs fetching not yet implemented".to_string(),
     )
+}
+
+async fn handle_execute_reddit_import_command(
+    import: RedditImport,
+    app_state: &AppState,
+) -> UIResponse {
+    log::info!("Executing Reddit import: {:?}", import);
+
+    match reddit_import_logic(import, app_state).await {
+        Ok(response) => response,
+        Err(e) => {
+            log::error!("Import failed: {}", e);
+            UIResponse::error(
+                "ImportFailed".to_string(),
+                e.to_string(),
+            )
+        }
+    }
+}
+
+/// Import Reddit content based on source and context
+async fn reddit_import_logic(
+    import: RedditImport,
+    app_state: &AppState,
+) -> Result<UIResponse, Box<dyn std::error::Error + Send + Sync>> {
+    match import {
+        RedditImport::SubredditHot { subreddit, limit } => {
+            let lim = limit.unwrap_or(25) as usize;
+
+            // Fetch posts from Reddit
+            let listing = app_state
+                .reddit_client
+                .get_subreddit_hot(&subreddit, lim)
+                .await?;
+
+            let posts_owned = listing.into_posts();
+            let post_refs: Vec<&RedditPost> = posts_owned.iter().collect();
+            let imported_count = import_posts_to_database(&post_refs, &subreddit, app_state).await?;
+
+            Ok(UIResponse::not_yet_implemented(
+                format!("Imported r/{}", subreddit),
+                format!("Successfully imported {} posts from r/{}/hot", imported_count, subreddit),
+                None,
+            ))
+        }
+
+        RedditImport::ThreadRef { subreddit, post_id, .. } => {
+            // Fetch post and comments
+            let listings = app_state
+                .reddit_client
+                .get_post(&subreddit, &post_id)
+                .await?;
+
+            let mut imported_posts = 0;
+            let mut imported_comments = 0;
+
+            for listing in listings {
+                let posts = listing.get_posts();
+                let comments = listing.get_comments();
+
+                if !posts.is_empty() {
+                    imported_posts += import_posts_to_database(&posts, &subreddit, app_state).await?;
+                }
+
+                if !comments.is_empty() {
+                    imported_comments += import_comments_to_database(&comments, &subreddit, app_state).await?;
+                }
+            }
+
+            Ok(UIResponse::not_yet_implemented(
+                "Imported Reddit Thread".to_string(),
+                format!(
+                    "Successfully imported {} posts and {} comments from r/{}/comments/{}",
+                    imported_posts, imported_comments, subreddit, post_id
+                ),
+                None,
+            ))
+        }
+    }
+}
+
+/// Import Reddit posts to the database
+async fn import_posts_to_database(
+    posts: &[&RedditPost],
+    subreddit: &str,
+    app_state: &AppState,
+) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+    use chrono::Utc;
+    use serde_json::to_value;
+    
+    let mut imported_count = 0;
+    
+    // Resolve admin user from DB (seeded in migrations)
+    let admin_user_id: uuid::Uuid = sqlx::query_scalar!("SELECT id FROM users WHERE auth0_sub = $1", "admin")
+        .fetch_one(&app_state.db)
+        .await?;
+    
+    // Ensure the subreddit entity exists (minimal metadata)
+    entity::create_entity_ignore_conflict(
+        &app_state.db,
+        "reddit.subreddit",
+        subreddit,
+        None,
+        None,
+        None,
+        admin_user_id,
+    )
+    .await?;
+    
+    for post in posts {
+        let post = *post;
+
+        // Serialize the full RedditPost as metadata
+        let metadata_val = to_value(post)?;
+
+        // Create post entity
+        match entity::create_entity_ignore_conflict(
+            &app_state.db,
+            "reddit.post",
+            &post.id,
+            Some(post.title.as_str()),
+            post.thumbnail.as_deref(),
+            Some(&metadata_val),
+            admin_user_id,
+        )
+        .await
+        {
+            Ok(_) => {
+                // Create relationship: subreddit -> post
+                let payload = entity_relationships::CreateRelationshipPayload {
+                    parent_ns: "reddit.subreddit".to_string(),
+                    parent_pk: subreddit.to_string(),
+                    child_ns: "reddit.post".to_string(),
+                    child_pk: post.id.clone(),
+                };
+                entity_relationships::create_relationship_ignore_conflict(
+                    &app_state.db,
+                    payload,
+                    admin_user_id,
+                )
+                .await?;
+                
+                imported_count += 1;
+                log::debug!("Imported post: {}", post.id);
+            }
+            Err(e) => {
+                log::warn!("Failed to import post {}: {}", post.id, e);
+            }
+        }
+    }
+    
+    log::info!("Imported {} posts to r/{}", imported_count, subreddit);
+    Ok(imported_count)
+}
+
+/// Import Reddit comments to the database
+async fn import_comments_to_database(
+    comments: &[&RedditComment],
+    subreddit: &str,
+    app_state: &AppState,
+) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+    use chrono::Utc;
+    use serde_json::to_value;
+    
+    let mut imported_count = 0;
+    
+    let admin_user_id: uuid::Uuid = sqlx::query_scalar!("SELECT id FROM users WHERE auth0_sub = $1", "admin")
+        .fetch_one(&app_state.db)
+        .await?;
+    
+    for comment in comments {
+        let comment = *comment;
+
+        // Serialize the full RedditComment as metadata
+        let metadata_val = to_value(comment)?;
+
+        // Create comment entity (no title/profile picture)
+        match entity::create_entity_ignore_conflict(
+            &app_state.db,
+            "reddit.comment",
+            &comment.id,
+            None,
+            None,
+            Some(&metadata_val),
+            admin_user_id,
+        )
+        .await
+        {
+            Ok(_) => {
+                // Create relationship based on parent_id
+                if let Some(parent_id) = comment.parent_id.strip_prefix("t3_") {
+                    // Parent is a post
+                    let payload = entity_relationships::CreateRelationshipPayload {
+                        parent_ns: "reddit.post".to_string(),
+                        parent_pk: parent_id.to_string(),
+                        child_ns: "reddit.comment".to_string(),
+                        child_pk: comment.id.clone(),
+                    };
+                    entity_relationships::create_relationship_ignore_conflict(
+                        &app_state.db,
+                        payload,
+                        admin_user_id,
+                    )
+                    .await?;
+                } else if let Some(parent_id) = comment.parent_id.strip_prefix("t1_") {
+                    // Parent is another comment
+                    let payload = entity_relationships::CreateRelationshipPayload {
+                        parent_ns: "reddit.comment".to_string(),
+                        parent_pk: parent_id.to_string(),
+                        child_ns: "reddit.comment".to_string(),
+                        child_pk: comment.id.clone(),
+                    };
+                    entity_relationships::create_relationship_ignore_conflict(
+                        &app_state.db,
+                        payload,
+                        admin_user_id,
+                    )
+                    .await?;
+                }
+                
+                imported_count += 1;
+                log::debug!("Imported comment: {}", comment.id);
+            }
+            Err(e) => {
+                log::warn!("Failed to import comment {}: {}", comment.id, e);
+            }
+        }
+    }
+    
+    log::info!("Imported {} comments", imported_count);
+    Ok(imported_count)
 }
 
