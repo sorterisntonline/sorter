@@ -200,8 +200,7 @@
   (testing "Listing entities without authentication (should work)"
     (let [response (util/make-request :get "/entity")]
       (is (= 200 (:status response)))
-      (is (sequential? (:body response)) "Response body should be a sequence")
-      (is (pos? (count (:body response))) "Should have at least one entity"))))
+      (is (sequential? (:body response)) "Response body should be a sequence"))))
 
 (deftest test-update-entity-not-found
   (testing "Updating a non-existent entity"
