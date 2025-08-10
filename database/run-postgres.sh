@@ -21,8 +21,18 @@ fi
 
 echo "Starting PostgreSQL container..."
 
-# Start container in foreground
-docker run --rm --name $NAME \
+# Determine if we should run in background or foreground
+DETACH_FLAG=""
+if [ "$DETACH" = "true" ]; then
+    echo "Starting container in background..."
+    DETACH_FLAG="-d"
+else
+    echo "Starting container in foreground..."
+    DETACH_FLAG="--rm"
+fi
+
+# Start container
+docker run $DETACH_FLAG --name $NAME \
     --volume `pwd`/pgdata:/var/lib/pgsql/data \
     --volume `pwd`/mnt_data:/mnt/data \
     --volume `pwd`/pg_hba.conf:/etc/postgresql/pg_hba.conf \
