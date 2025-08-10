@@ -1,0 +1,4 @@
+i need clojure for the declarative data matching logic.
+other languages the tests would be piles and piles of asserts, instead of fuzzy matching on data structures.
+
+also, the websocket api is complex and paralell, not necesarily call/response. so clojure.core.async is a huge win.
