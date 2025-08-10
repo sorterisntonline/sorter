@@ -570,12 +570,14 @@ pub fn build_reddit_graph() -> Graph {
         // === Specific subreddit page ===
         .at("subreddit_page")
             .edge(EdgePattern::Literal("/"), "subreddit_slash")
-            .handler(|_query, _prefix, ctx| {
-                let subreddit = ctx.get("subreddit").cloned().unwrap_or_default();
-                // This should trigger importing/loading the subreddit
-                UIAction::RenderSubredditView {
-                    subreddit: subreddit.clone(),
-                    sort: None,
+            .handler(|query, prefix, ctx| {
+                // While typing a subreddit (no trailing slash), show DB-backed suggestions every keystroke
+                let partial = ctx.get("subreddit").cloned().unwrap_or_default();
+                // Compute the base prefix by removing the partial from the end of the prefix
+                let base_prefix = prefix.strip_suffix(&partial).unwrap_or(prefix).to_string();
+                UIAction::SuggestSubredditsFromDb {
+                    partial: partial.clone(),
+                    prefix: base_prefix,
                 }
             })
         

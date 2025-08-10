@@ -266,9 +266,10 @@ fn dispatch_ui_action(action: UIAction, _app_state: &AppState) -> Pin<Box<dyn Fu
         
         UIAction::SuggestSubredditsFromDb { partial, prefix } => {
             // Query database for subreddits starting with partial
+            let pattern = format!("{}%", partial);
             let rows = sqlx::query!(
                 "SELECT pk, title FROM entities WHERE ns = 'reddit.subreddit' AND pk ILIKE $1 ORDER BY pk LIMIT 10",
-                format!("{}%", partial)
+                pattern
             )
             .fetch_all(&_app_state.db)
             .await
