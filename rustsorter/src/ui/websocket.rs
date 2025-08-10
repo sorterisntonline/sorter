@@ -209,14 +209,53 @@ fn dispatch_ui_action(action: UIAction, _app_state: &AppState) -> Pin<Box<dyn Fu
         
         // --- Dynamic actions (database/state required) ---
         UIAction::RenderSubredditView { subreddit, sort } => {
-            // TODO: Implement actual Reddit API integration
-            // For now, return a placeholder
+            // Optimal UX: If subreddit not yet imported, offer import actions first.
+            // Otherwise, show the (placeholder) subreddit view.
             let sort_type = sort.unwrap_or_else(|| "hot".to_string());
-            UIResponse::not_yet_implemented(
-                format!("Subreddit View: r/{}", subreddit),
-                format!("Would show {} posts from r/{}", sort_type, subreddit),
-                Some("https://github.com/yourusername/sorter/issues".to_string()),
+
+            let exists: i64 = sqlx::query_scalar!(
+                "SELECT COUNT(*) as \"count!\" FROM entities WHERE ns = 'reddit.subreddit' AND pk = $1",
+                subreddit
             )
+            .fetch_one(&_app_state.db)
+            .await
+            .unwrap_or(0);
+
+            if exists == 0 {
+                // Build a Selection with an Import action for this subreddit
+                use crate::ui::types::{SelectionItem, ImportAction};
+
+                let typed_command = ClientCommand::ExecuteRedditImport(
+                    RedditImport::SubredditHot { subreddit: subreddit.clone(), limit: Some(25) }
+                );
+                let command = serde_json::to_value(&typed_command)
+                    .unwrap_or_else(|_| serde_json::json!({}));
+
+                let items = vec![SelectionItem {
+                    id: format!("import_{}", subreddit),
+                    title: format!("r/{}", subreddit),
+                    description: Some("Not imported yet".to_string()),
+                    completion: format!("r/{}", subreddit),
+                    import_action: Some(ImportAction {
+                        label: "Import hot posts".to_string(),
+                        description: "Import hot posts from this subreddit".to_string(),
+                        command,
+                    }),
+                }];
+
+                UIResponse::selection(
+                    subreddit,
+                    "Subreddits".to_string(),
+                    "Select a subreddit or import a new one".to_string(),
+                    items,
+                )
+            } else {
+                UIResponse::not_yet_implemented(
+                    format!("Subreddit View: r/{}", subreddit),
+                    format!("Would show {} posts from r/{}", sort_type, subreddit),
+                    Some("https://github.com/yourusername/sorter/issues".to_string()),
+                )
+            }
         }
         
         UIAction::RenderSubredditComments { subreddit } => {
@@ -267,8 +306,31 @@ fn dispatch_ui_action(action: UIAction, _app_state: &AppState) -> Pin<Box<dyn Fu
         UIAction::SuggestSubredditsFromDb { partial, prefix } => {
             use crate::ui::types::{SelectionItem, ImportAction};
 
-            // Query database for existing subreddits starting with partial
-            let pattern = format!("{}%", partial);
+            // Extract a clean subreddit slug from the user's partial input
+            fn extract_subreddit_slug(input: &str) -> Option<String> {
+                let lower = input.trim().to_lowercase();
+                let mut s = lower.as_str();
+
+                for p in [
+                    "https://www.reddit.com/r/",
+                    "http://www.reddit.com/r/",
+                    "https://reddit.com/r/",
+                    "http://reddit.com/r/",
+                    "www.reddit.com/r/",
+                    "reddit.com/r/",
+                ] {
+                    if s.starts_with(p) { s = &s[p.len()..]; break; }
+                }
+                if s.starts_with("r/") { s = &s[2..]; }
+                let slug = s.split('/').next().unwrap_or("");
+                if slug.is_empty() { None } else { Some(slug.to_string()) }
+            }
+
+            let maybe_slug = extract_subreddit_slug(&partial);
+            let slug_for_search = maybe_slug.clone().unwrap_or_default();
+
+            // Query database for existing subreddits starting with the slug
+            let pattern = format!("{}%", slug_for_search);
             let existing_rows = sqlx::query!(
                 "SELECT pk FROM entities WHERE ns = 'reddit.subreddit' AND pk ILIKE $1 ORDER BY pk LIMIT 10",
                 pattern
@@ -288,39 +350,41 @@ fn dispatch_ui_action(action: UIAction, _app_state: &AppState) -> Pin<Box<dyn Fu
                 })
                 .collect();
 
-            // If user typed something that doesn't exactly exist yet, offer an import action
-            if !partial.is_empty() && !partial.contains(' ') {
-                let exact_exists: i64 = sqlx::query_scalar!(
-                    "SELECT COUNT(*) as \"count!\" FROM entities WHERE ns = 'reddit.subreddit' AND pk = $1",
-                    partial
-                )
-                .fetch_one(&_app_state.db)
-                .await
-                .unwrap_or(0);
+            // If user typed a slug that doesn't exactly exist yet, offer an import action
+            if let Some(slug) = maybe_slug {
+                if !slug.is_empty() && !slug.contains(' ') {
+                    let exact_exists: i64 = sqlx::query_scalar!(
+                        "SELECT COUNT(*) as \"count!\" FROM entities WHERE ns = 'reddit.subreddit' AND pk = $1",
+                        slug
+                    )
+                    .fetch_one(&_app_state.db)
+                    .await
+                    .unwrap_or(0);
 
-                if exact_exists == 0 {
-                    // Build full command from typed enums to ensure it matches the server deserializer
-                    let typed_command = ClientCommand::ExecuteRedditImport(
-                        RedditImport::SubredditHot { subreddit: partial.clone(), limit: Some(25) }
-                    );
-                    let command = serde_json::to_value(&typed_command).unwrap_or_else(|_| serde_json::json!({}));
+                    if exact_exists == 0 {
+                        // Build full command from typed enums to ensure it matches the server deserializer
+                        let typed_command = ClientCommand::ExecuteRedditImport(
+                            RedditImport::SubredditHot { subreddit: slug.clone(), limit: Some(25) }
+                        );
+                        let command = serde_json::to_value(&typed_command).unwrap_or_else(|_| serde_json::json!({}));
 
-                    items.insert(0, SelectionItem {
-                        id: format!("import_{}", partial),
-                        title: format!("r/{}", partial),
-                        description: Some("Not imported yet".to_string()),
-                        completion: format!("{}{}", prefix, partial),
-                        import_action: Some(ImportAction {
-                            label: "Import hot posts".to_string(),
-                            description: "Import hot posts from this subreddit".to_string(),
-                            command,
-                        }),
-                    });
+                        items.insert(0, SelectionItem {
+                            id: format!("import_{}", slug),
+                            title: format!("r/{}", slug),
+                            description: Some("Not imported yet".to_string()),
+                            completion: format!("{}{}", prefix, slug),
+                            import_action: Some(ImportAction {
+                                label: "Import hot posts".to_string(),
+                                description: "Import hot posts from this subreddit".to_string(),
+                                command,
+                            }),
+                        });
+                    }
                 }
             }
 
             UIResponse::selection(
-                partial.clone(),
+                slug_for_search.clone(),
                 "Subreddits".to_string(),
                 "Select a subreddit or import a new one".to_string(),
                 items,

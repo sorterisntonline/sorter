@@ -1,6 +1,9 @@
 import successful should show the entities, imported subreddit shoudl show entities
 actually call reddit api with oauth token? or do we need that..
 
+Transaction Boundaries in Imports: In websocket.rs::reddit_import_logic, each entity and relationship is created in a separate database call. If an error occurs halfway through importing 100 posts, you could be left in a partially-imported state.
+
+
 make empty homepage better (click to sort subreddits instantly, mobile friendly)
 
 append only log arcitecture
