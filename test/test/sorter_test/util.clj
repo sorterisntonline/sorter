@@ -293,3 +293,14 @@
       (when (.startsWith file "rustsorter-test-")
         (println "Removing output file:" file)
         (io/delete-file file true)))))
+
+(defn force-cleanup-and-exit []
+  "Emergency cleanup and exit - use when process won't terminate"
+  (println "\n=== Force cleanup and exit ===")
+  (try
+    (stop-cargo-process *cargo-process*)
+    (cleanup-output-files)
+    (catch Exception e
+      (println "Error during cleanup:" (.getMessage e))))
+  (shutdown-agents)
+  (System/exit 0))

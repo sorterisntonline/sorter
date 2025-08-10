@@ -58,8 +58,7 @@
 (deftest reddit-import-flow
   "Test the complete Reddit import flow: query subreddit -> show suggestions -> import posts"
   (letlocals
-   ;; Setup fresh database before test
-   (util/setup-fresh-database)
+   (util/between-test-cleanup-db-only)
    
    (bind client (-> (ws/create-ws-client "ws://localhost:8081/api/ws") ws/connect))
    
