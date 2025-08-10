@@ -507,7 +507,7 @@ pub fn build_reddit_graph() -> Graph {
                                 completion: format!("{}u/", prefix),
                             },
                         ],
-                        1000, // 1 second interval
+                        1400, // 1.4 second interval (slower)
                         true  // loop through
                     ),
                     UIAction::guide(
@@ -559,7 +559,7 @@ pub fn build_reddit_graph() -> Graph {
                                 completion: format!("{}webdev", prefix),
                             },
                         ],
-                        1500, // 1.5 second interval
+                        1600, // 1.6 second interval (slower)
                         true  // loop through
                     ),
                     UIAction::selection(
