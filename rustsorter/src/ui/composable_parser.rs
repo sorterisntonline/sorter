@@ -571,14 +571,14 @@ pub fn build_reddit_graph() -> Graph {
         // === Specific subreddit page ===
         .at("subreddit_page")
             .edge(EdgePattern::Literal("/"), "subreddit_slash")
-            .handler(|_query, _prefix, ctx| {
-                // If we have a complete subreddit name, render the subreddit view
-                let subreddit = ctx.get("subreddit").cloned().unwrap_or_default();
-                UIAction::RenderSubredditView {
-                    subreddit,
-                    sort: None,
-                }
-            })
+                    .handler(|_query, _prefix, ctx| {
+            // If we have a complete subreddit name, render the entity view
+            let subreddit = ctx.get("subreddit").cloned().unwrap_or_default();
+            UIAction::RenderEntityView {
+                ns: "reddit.subreddit".to_string(),
+                pk: subreddit,
+            }
+        })
         
         .at("subreddit_slash")
             .edge(EdgePattern::Literal("hot"), "subreddit_hot")
@@ -644,35 +644,36 @@ pub fn build_reddit_graph() -> Graph {
         .at("subreddit_hot")
             .handler(|_query, _prefix, ctx| {
                 let subreddit = ctx.get("subreddit").cloned().unwrap_or_default();
-                UIAction::RenderSubredditView {
-                    subreddit,
-                    sort: Some("hot".to_string()),
+                UIAction::RenderEntityView {
+                    ns: "reddit.subreddit".to_string(),
+                    pk: subreddit,
                 }
             })
         
         .at("subreddit_top")
             .handler(|_query, _prefix, ctx| {
                 let subreddit = ctx.get("subreddit").cloned().unwrap_or_default();
-                UIAction::RenderSubredditView {
-                    subreddit,
-                    sort: Some("top".to_string()),
+                UIAction::RenderEntityView {
+                    ns: "reddit.subreddit".to_string(),
+                    pk: subreddit,
                 }
             })
         
         .at("subreddit_new")
             .handler(|_query, _prefix, ctx| {
                 let subreddit = ctx.get("subreddit").cloned().unwrap_or_default();
-                UIAction::RenderSubredditView {
-                    subreddit,
-                    sort: Some("new".to_string()),
+                UIAction::RenderEntityView {
+                    ns: "reddit.subreddit".to_string(),
+                    pk: subreddit,
                 }
             })
         
         .at("subreddit_comments")
             .handler(|_query, _prefix, ctx| {
                 let subreddit = ctx.get("subreddit").cloned().unwrap_or_default();
-                UIAction::RenderSubredditComments {
-                    subreddit,
+                UIAction::RenderEntityView {
+                    ns: "reddit.subreddit".to_string(),
+                    pk: subreddit,
                 }
             })
         
@@ -680,8 +681,9 @@ pub fn build_reddit_graph() -> Graph {
         .at("user_profile")
             .handler(|_query, _prefix, ctx| {
                 let username = ctx.get("username").cloned().unwrap_or_default();
-                UIAction::RenderUserProfile {
-                    username,
+                UIAction::RenderEntityView {
+                    ns: "reddit.user".to_string(),
+                    pk: username,
                 }
             })
         
@@ -741,16 +743,16 @@ mod tests {
                 (ExpectedAction::Guide { title_contains }, UIAction::ShowStaticGuide { title, .. }) => {
                     title.contains(title_contains)
                 }
-                (ExpectedAction::RenderSubreddit { subreddit, sort }, 
-                 UIAction::RenderSubredditView { subreddit: s, sort: so }) => {
-                    s == subreddit && so == sort
+                (ExpectedAction::RenderSubreddit { subreddit, sort: _ }, 
+                 UIAction::RenderEntityView { ns, pk }) => {
+                    ns == "reddit.subreddit" && pk == subreddit
                 }
                 (ExpectedAction::RenderSubredditComments { subreddit }, 
-                 UIAction::RenderSubredditComments { subreddit: s }) => {
-                    s == subreddit
+                 UIAction::RenderEntityView { ns, pk }) => {
+                    ns == "reddit.subreddit" && pk == subreddit
                 }
-                (ExpectedAction::RenderUser { username }, UIAction::RenderUserProfile { username: u }) => {
-                    u == username
+                (ExpectedAction::RenderUser { username }, UIAction::RenderEntityView { ns, pk }) => {
+                    ns == "reddit.user" && pk == username
                 }
                 (ExpectedAction::Error { error_type }, UIAction::ShowError(data)) => {
                     data.error_type == *error_type
@@ -916,8 +918,8 @@ mod tests {
                     text == "r/" && matches!(action, UIAction::ShowMultiple { .. })
                 }),
                 Box::new(|text, action| {
-                    // "r/rust" should render the subreddit
-                    text == "r/rust" && matches!(action, UIAction::RenderSubredditView { subreddit, .. } if subreddit == "rust")
+                    // "r/rust" should render the entity view for subreddit
+                    text == "r/rust" && matches!(action, UIAction::RenderEntityView { ns, pk } if ns == "reddit.subreddit" && pk == "rust")
                 }),
             ],
         );
@@ -987,8 +989,8 @@ mod tests {
             vec![
                 Box::new(|text, action| {
                     text == "reddit.com/r/programming/hot" && 
-                    matches!(action, UIAction::RenderSubredditView { subreddit, sort } 
-                        if subreddit == "programming" && sort.as_deref() == Some("hot"))
+                    matches!(action, UIAction::RenderEntityView { ns, pk } 
+                        if ns == "reddit.subreddit" && pk == "programming")
                 }),
             ],
         );
@@ -1005,7 +1007,7 @@ mod tests {
             vec![
                 Box::new(|text, action| {
                     text == "reddit.com/u/spez" && 
-                    matches!(action, UIAction::RenderUserProfile { username } if username == "spez")
+                    matches!(action, UIAction::RenderEntityView { ns, pk } if ns == "reddit.user" && pk == "spez")
                 }),
             ],
         );
@@ -1026,7 +1028,7 @@ mod tests {
                 }),
                 Box::new(|text, action| {
                     text == "r/technology" && 
-                    matches!(action, UIAction::RenderSubredditView { subreddit, .. } if subreddit == "technology")
+                    matches!(action, UIAction::RenderEntityView { ns, pk } if ns == "reddit.subreddit" && pk == "technology")
                 }),
             ],
         );
@@ -1114,10 +1116,10 @@ mod tests {
                     text == "https://reddit.com/r/" && matches!(action, UIAction::ShowMultiple { .. })
                 }),
                 Box::new(|text, action| {
-                    // "https://reddit.com/r/programming" should render subreddit
+                    // "https://reddit.com/r/programming" should render entity view
                     text == "https://reddit.com/r/programming" && 
-                    matches!(action, UIAction::RenderSubredditView { subreddit, sort } 
-                        if subreddit == "programming" && sort.is_none())
+                    matches!(action, UIAction::RenderEntityView { ns, pk } 
+                        if ns == "reddit.subreddit" && pk == "programming")
                 }),
                 Box::new(|text, action| {
                     // "https://reddit.com/r/programming/" should show sort options
@@ -1125,10 +1127,10 @@ mod tests {
                     matches!(action, UIAction::ShowStaticGuide { .. })
                 }),
                 Box::new(|text, action| {
-                    // "https://reddit.com/r/programming/top" should render with top sort
+                    // "https://reddit.com/r/programming/top" should render entity view
                     text == "https://reddit.com/r/programming/top" && 
-                    matches!(action, UIAction::RenderSubredditView { subreddit, sort } 
-                        if subreddit == "programming" && sort.as_deref() == Some("top"))
+                    matches!(action, UIAction::RenderEntityView { ns, pk } 
+                        if ns == "reddit.subreddit" && pk == "programming")
                 }),
             ],
         );
@@ -1722,22 +1724,22 @@ mod tests {
         
         // Test navigation to subreddit
         match graph.parse("reddit.com/r/rust") {
-            UIAction::RenderSubredditView { subreddit, sort } => {
-                assert_eq!(subreddit, "rust");
-                assert_eq!(sort, None);
+            UIAction::RenderEntityView { ns, pk } => {
+                assert_eq!(ns, "reddit.subreddit");
+                assert_eq!(pk, "rust");
                 println!("✓ reddit.com/r/rust recognized");
             }
-            _ => panic!("Expected RenderSubredditView for subreddit"),
+            _ => panic!("Expected RenderEntityView for subreddit"),
         }
         
         // Test with alias (r/ goes directly to subreddit, no double r/)
         match graph.parse("r/programming") {
-            UIAction::RenderSubredditView { subreddit, sort } => {
-                assert_eq!(subreddit, "programming");
-                assert_eq!(sort, None);
+            UIAction::RenderEntityView { ns, pk } => {
+                assert_eq!(ns, "reddit.subreddit");
+                assert_eq!(pk, "programming");
                 println!("✓ r/programming (alias) recognized");
             }
-            _ => panic!("Expected RenderSubredditView for subreddit via alias"),
+            _ => panic!("Expected RenderEntityView for subreddit via alias"),
         }
     }
 }

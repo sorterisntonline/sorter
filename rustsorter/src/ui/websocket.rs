@@ -208,82 +208,6 @@ fn dispatch_ui_action(action: UIAction, _app_state: &AppState) -> Pin<Box<dyn Fu
         }
         
         // --- Dynamic actions (database/state required) ---
-        UIAction::RenderSubredditView { subreddit, sort } => {
-            // Optimal UX: If subreddit not yet imported, offer import actions first.
-            // Otherwise, show the (placeholder) subreddit view.
-            let sort_type = sort.unwrap_or_else(|| "hot".to_string());
-
-            let exists: i64 = sqlx::query_scalar!(
-                "SELECT COUNT(*) as \"count!\" FROM entities WHERE ns = 'reddit.subreddit' AND pk = $1",
-                subreddit
-            )
-            .fetch_one(&_app_state.db)
-            .await
-            .unwrap_or(0);
-
-            if exists == 0 {
-                // Build a Selection with an Import action for this subreddit
-                use crate::ui::types::{SelectionItem, ImportAction};
-
-                let typed_command = ClientCommand::ExecuteRedditImport(
-                    RedditImport::SubredditHot { subreddit: subreddit.clone(), limit: Some(25) }
-                );
-                let command = serde_json::to_value(&typed_command)
-                    .unwrap_or_else(|_| serde_json::json!({}));
-
-                let items = vec![SelectionItem {
-                    id: format!("import_{}", subreddit),
-                    title: format!("r/{}", subreddit),
-                    description: Some("Not imported yet".to_string()),
-                    completion: format!("r/{}", subreddit),
-                    import_action: Some(ImportAction {
-                        label: "Import hot posts".to_string(),
-                        description: "Import hot posts from this subreddit".to_string(),
-                        command,
-                    }),
-                }];
-
-                UIResponse::selection(
-                    subreddit,
-                    "Subreddits".to_string(),
-                    "Select a subreddit or import a new one".to_string(),
-                    items,
-                )
-            } else {
-                UIResponse::not_yet_implemented(
-                    format!("Subreddit View: r/{}", subreddit),
-                    format!("Would show {} posts from r/{}", sort_type, subreddit),
-                    Some("https://github.com/yourusername/sorter/issues".to_string()),
-                )
-            }
-        }
-        
-        UIAction::RenderSubredditComments { subreddit } => {
-            // TODO: Implement comment loading
-            UIResponse::not_yet_implemented(
-                format!("Subreddit Comments: r/{}", subreddit),
-                format!("Would show all comments from r/{}", subreddit),
-                None,
-            )
-        }
-        
-        UIAction::RenderUserProfile { username } => {
-            // TODO: Implement user profile loading
-            UIResponse::not_yet_implemented(
-                format!("User Profile: u/{}", username),
-                format!("Would show posts and comments from u/{}", username),
-                None,
-            )
-        }
-        
-        UIAction::RenderPost { subreddit, post_id } => {
-            // TODO: Implement post loading
-            UIResponse::not_yet_implemented(
-                format!("Post View"),
-                format!("Would show post {} from r/{}", post_id, subreddit),
-                None,
-            )
-        }
         
         UIAction::ImportRedditContent { url, entity_type, context: _ } => {
             // TODO: Implement Reddit content import
@@ -295,12 +219,108 @@ fn dispatch_ui_action(action: UIAction, _app_state: &AppState) -> Pin<Box<dyn Fu
         }
         
         UIAction::RenderEntityView { ns, pk } => {
-            // TODO: Call entity::get_entity here
-            UIResponse::not_yet_implemented(
-                "Entity View".to_string(),
-                format!("Would show entity {}:{}", ns, pk),
-                None,
+            // Get the main entity
+            let main_entity_result = sqlx::query_file_as!(
+                entity::Entity,
+                "../database/sql/entity/select.sql",
+                ns,
+                pk
             )
+            .fetch_optional(&_app_state.db)
+            .await;
+            
+            match main_entity_result {
+                Ok(Some(entity_row)) => {
+                    // Get children entities
+                    let children_result = sqlx::query_file_as!(
+                        entity::Entity,
+                        "../database/sql/entity/select_children.sql",
+                        ns,
+                        pk
+                    )
+                    .fetch_all(&_app_state.db)
+                    .await;
+
+                    let children_entities = children_result.unwrap_or_default();
+
+                    // Convert entity types
+                    let main_entity = crate::ui::types::Entity {
+                        id: format!("{}:{}", entity_row.ns, entity_row.pk),
+                        title: entity_row.title.unwrap_or_else(|| format!("{}:{}", ns, pk)),
+                        url: format!("/{}/{}", ns, pk),
+                        entity_type: match ns.as_str() {
+                            "reddit.subreddit" => crate::ui::types::EntityType::RedditSubreddit,
+                            "reddit.post" => crate::ui::types::EntityType::RedditPost,
+                            "reddit.comment" => crate::ui::types::EntityType::RedditComment,
+                            "reddit.user" => crate::ui::types::EntityType::RedditUser,
+                            _ => crate::ui::types::EntityType::Generic,
+                        },
+                        metadata: entity_row.metadata.unwrap_or_else(|| serde_json::json!({})),
+                    };
+
+                    let children: Vec<crate::ui::types::Entity> = children_entities
+                        .into_iter()
+                        .map(|child| crate::ui::types::Entity {
+                            id: format!("{}:{}", child.ns, child.pk),
+                            title: child.title.unwrap_or_else(|| format!("{}:{}", child.ns, child.pk)),
+                            url: format!("/{}/{}", child.ns, child.pk),
+                            entity_type: match child.ns.as_str() {
+                                "reddit.subreddit" => crate::ui::types::EntityType::RedditSubreddit,
+                                "reddit.post" => crate::ui::types::EntityType::RedditPost,
+                                "reddit.comment" => crate::ui::types::EntityType::RedditComment,
+                                "reddit.user" => crate::ui::types::EntityType::RedditUser,
+                                _ => crate::ui::types::EntityType::Generic,
+                            },
+                            metadata: child.metadata.unwrap_or_else(|| serde_json::json!({})),
+                        })
+                        .collect();
+
+                    let entity_view_data = crate::ui::types::EntityViewData {
+                        entity: main_entity,
+                        children,
+                        rankings: Vec::new(), // TODO: Implement rankings from votes
+                        breadcrumbs: Vec::new(), // TODO: Implement breadcrumbs
+                    };
+
+                    UIResponse::EntityView(entity_view_data)
+                }
+                Ok(None) | Err(_) => {
+                    // Entity not found - offer import if it's a known type
+                    if ns == "reddit.subreddit" {
+                        use crate::ui::types::{SelectionItem, ImportAction};
+
+                        let typed_command = ClientCommand::ExecuteRedditImport(
+                            RedditImport::SubredditHot { subreddit: pk.clone(), limit: Some(25) }
+                        );
+                        let command = serde_json::to_value(&typed_command)
+                            .unwrap_or_else(|_| serde_json::json!({}));
+
+                        let items = vec![SelectionItem {
+                            id: format!("import_{}", pk),
+                            title: format!("r/{}", pk),
+                            description: Some("Not imported yet".to_string()),
+                            completion: format!("r/{}", pk),
+                            import_action: Some(ImportAction {
+                                label: "Import hot posts".to_string(),
+                                description: "Import hot posts from this subreddit".to_string(),
+                                command,
+                            }),
+                        }];
+
+                        UIResponse::selection(
+                            pk,
+                            "Subreddits".to_string(),
+                            "Select a subreddit or import a new one".to_string(),
+                            items,
+                        )
+                    } else {
+                        UIResponse::error(
+                            "EntityNotFound".to_string(),
+                            format!("Entity {}:{} not found", ns, pk),
+                        )
+                    }
+                }
+            }
         }
         
         UIAction::SuggestSubredditsFromDb { partial, prefix } => {
@@ -471,11 +491,76 @@ async fn reddit_import_logic(
             let post_refs: Vec<&RedditPost> = posts_owned.iter().collect();
             let imported_count = import_posts_to_database(&post_refs, &subreddit, app_state).await?;
 
-            Ok(UIResponse::not_yet_implemented(
-                format!("Imported r/{}", subreddit),
-                format!("Successfully imported {} posts from r/{}/hot", imported_count, subreddit),
-                None,
-            ))
+            // After import, get and return the entity view with the imported posts
+            let main_entity_result = sqlx::query_file_as!(
+                entity::Entity,
+                "../database/sql/entity/select.sql",
+                "reddit.subreddit",
+                subreddit
+            )
+            .fetch_optional(&app_state.db)
+            .await;
+            
+            match main_entity_result {
+                Ok(Some(entity_row)) => {
+                    let children_result = sqlx::query_file_as!(
+                        entity::Entity,
+                        "../database/sql/entity/select_children.sql",
+                        "reddit.subreddit",
+                        subreddit
+                    )
+                    .fetch_all(&app_state.db)
+                    .await;
+
+                    let children_entities = children_result.unwrap_or_default();
+                    
+                    let main_entity = crate::ui::types::Entity {
+                        id: format!("reddit.subreddit:{}", subreddit),
+                        title: entity_row.title.unwrap_or_else(|| format!("r/{}", subreddit)),
+                        url: format!("/reddit.subreddit/{}", subreddit),
+                        entity_type: crate::ui::types::EntityType::RedditSubreddit,
+                        metadata: entity_row.metadata.unwrap_or_else(|| serde_json::json!({})),
+                    };
+
+                    let children: Vec<crate::ui::types::Entity> = children_entities
+                        .into_iter()
+                        .map(|child| crate::ui::types::Entity {
+                            id: format!("{}:{}", child.ns, child.pk),
+                            title: child.title.unwrap_or_else(|| format!("{}:{}", child.ns, child.pk)),
+                            url: format!("/{}/{}", child.ns, child.pk),
+                            entity_type: match child.ns.as_str() {
+                                "reddit.post" => crate::ui::types::EntityType::RedditPost,
+                                "reddit.comment" => crate::ui::types::EntityType::RedditComment,
+                                _ => crate::ui::types::EntityType::Generic,
+                            },
+                            metadata: child.metadata.unwrap_or_else(|| serde_json::json!({})),
+                        })
+                        .collect();
+
+                    let entity_view_data = crate::ui::types::EntityViewData {
+                        entity: main_entity,
+                        children,
+                        rankings: Vec::new(),
+                        breadcrumbs: Vec::new(),
+                    };
+
+                    Ok(UIResponse::EntityView(entity_view_data))
+                }
+                Ok(None) => {
+                    log::error!("Entity not found after import");
+                    Ok(UIResponse::error(
+                        "ImportSuccess".to_string(),
+                        format!("Successfully imported {} posts from r/{}/hot", imported_count, subreddit),
+                    ))
+                }
+                Err(e) => {
+                    log::error!("Failed to get entity after import: {:?}", e);
+                    Ok(UIResponse::error(
+                        "ImportSuccess".to_string(),
+                        format!("Successfully imported {} posts from r/{}/hot", imported_count, subreddit),
+                    ))
+                }
+            }
         }
 
         RedditImport::ThreadRef { subreddit, post_id, .. } => {
@@ -501,14 +586,78 @@ async fn reddit_import_logic(
                 }
             }
 
-            Ok(UIResponse::not_yet_implemented(
-                "Imported Reddit Thread".to_string(),
-                format!(
-                    "Successfully imported {} posts and {} comments from r/{}/comments/{}",
-                    imported_posts, imported_comments, subreddit, post_id
-                ),
-                None,
-            ))
+            // After thread import, get and return the entity view
+            let main_entity_result = sqlx::query_file_as!(
+                entity::Entity,
+                "../database/sql/entity/select.sql",
+                "reddit.subreddit",
+                subreddit
+            )
+            .fetch_optional(&app_state.db)
+            .await;
+            
+            match main_entity_result {
+                Ok(Some(entity_row)) => {
+                    let children_result = sqlx::query_file_as!(
+                        entity::Entity,
+                        "../database/sql/entity/select_children.sql",
+                        "reddit.subreddit",
+                        subreddit
+                    )
+                    .fetch_all(&app_state.db)
+                    .await;
+
+                    let children_entities = children_result.unwrap_or_default();
+                    
+                    let main_entity = crate::ui::types::Entity {
+                        id: format!("reddit.subreddit:{}", subreddit),
+                        title: entity_row.title.unwrap_or_else(|| format!("r/{}", subreddit)),
+                        url: format!("/reddit.subreddit/{}", subreddit),
+                        entity_type: crate::ui::types::EntityType::RedditSubreddit,
+                        metadata: entity_row.metadata.unwrap_or_else(|| serde_json::json!({})),
+                    };
+
+                    let children: Vec<crate::ui::types::Entity> = children_entities
+                        .into_iter()
+                        .map(|child| crate::ui::types::Entity {
+                            id: format!("{}:{}", child.ns, child.pk),
+                            title: child.title.unwrap_or_else(|| format!("{}:{}", child.ns, child.pk)),
+                            url: format!("/{}/{}", child.ns, child.pk),
+                            entity_type: match child.ns.as_str() {
+                                "reddit.post" => crate::ui::types::EntityType::RedditPost,
+                                "reddit.comment" => crate::ui::types::EntityType::RedditComment,
+                                _ => crate::ui::types::EntityType::Generic,
+                            },
+                            metadata: child.metadata.unwrap_or_else(|| serde_json::json!({})),
+                        })
+                        .collect();
+
+                    let entity_view_data = crate::ui::types::EntityViewData {
+                        entity: main_entity,
+                        children,
+                        rankings: Vec::new(),
+                        breadcrumbs: Vec::new(),
+                    };
+
+                    Ok(UIResponse::EntityView(entity_view_data))
+                }
+                Ok(None) => {
+                    log::error!("Entity not found after thread import");
+                    Ok(UIResponse::error(
+                        "ImportSuccess".to_string(),
+                        format!("Successfully imported {} posts and {} comments from r/{}/comments/{}",
+                                imported_posts, imported_comments, subreddit, post_id),
+                    ))
+                }
+                Err(e) => {
+                    log::error!("Failed to get entity after thread import: {:?}", e);
+                    Ok(UIResponse::error(
+                        "ImportSuccess".to_string(),
+                        format!("Successfully imported {} posts and {} comments from r/{}/comments/{}",
+                                imported_posts, imported_comments, subreddit, post_id),
+                    ))
+                }
+            }
         }
     }
 }
@@ -519,7 +668,6 @@ async fn import_posts_to_database(
     subreddit: &str,
     app_state: &AppState,
 ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
-    use chrono::Utc;
     use serde_json::to_value;
     
     let mut imported_count = 0;
@@ -590,10 +738,9 @@ async fn import_posts_to_database(
 /// Import Reddit comments to the database
 async fn import_comments_to_database(
     comments: &[&RedditComment],
-    subreddit: &str,
+    _subreddit: &str,
     app_state: &AppState,
 ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
-    use chrono::Utc;
     use serde_json::to_value;
     
     let mut imported_count = 0;

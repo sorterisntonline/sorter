@@ -42,23 +42,6 @@ pub enum UIAction {
     },
     
     // --- Dynamic actions that need database/state ---
-    RenderSubredditView {
-        subreddit: String,
-        sort: Option<String>, // "hot", "top", "new", etc.
-    },
-    
-    RenderSubredditComments {
-        subreddit: String,
-    },
-    
-    RenderUserProfile {
-        username: String,
-    },
-    
-    RenderPost {
-        subreddit: String,
-        post_id: String,
-    },
     
     ImportRedditContent {
         url: String,
