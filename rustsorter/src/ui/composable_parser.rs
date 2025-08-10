@@ -104,6 +104,7 @@ type Handler = Box<dyn Fn(&str, &str, &HashMap<String, String>) -> UIAction>;
 
 /// Node in the graph
 pub struct Node {
+    #[allow(dead_code)]
     id: NodeId,
     edges: Vec<Edge>,
     handler: Option<Handler>,
