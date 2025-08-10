@@ -1,23 +1,20 @@
 import { useState, useEffect, useCallback } from "react";
-import { useSearchParams } from "react-router-dom";
+// eslint-disable-next-line no-unused-vars
+import { motion, AnimatePresence } from "framer-motion";
 import { wsAPI } from "../services/api.js";
 import UIView from "../components/UIView.jsx";
 import useUIStore, { ViewTypes } from "../store/uiStore.js";
 
 const HomePage = () => {
-  const [searchParams, setSearchParams] = useSearchParams();
   const [inputValue, setInputValue] = useState("");
   const [isConnected, setIsConnected] = useState(false);
   
   // Get state and actions from the store
   const { 
-    view,
-    isLoading,
     handleUIResponse,
     setLoading,
     setError,
     getViewData,
-    hasViewType
   } = useUIStore();
 
   // Get suggestion data if present
@@ -25,7 +22,6 @@ const HomePage = () => {
   const scrollingSuggestions = getViewData(ViewTypes.SCROLLING_SUGGESTIONS);
   
   // State for scrolling suggestions
-  const [scrollingIndex, setScrollingIndex] = useState(0);
   const [currentScrollingSuggestion, setCurrentScrollingSuggestion] = useState(null);
 
   // Initialize WebSocket connection on mount
@@ -65,7 +61,7 @@ const HomePage = () => {
     return () => {
       wsAPI.disconnect();
     };
-  }, []);
+  }, [handleUIResponse, setError, setLoading]);
 
   // Initialize from URL on first load
   useEffect(() => {
@@ -90,17 +86,14 @@ const HomePage = () => {
 
     // Set initial suggestion
     setCurrentScrollingSuggestion(suggestions[0]);
-    setScrollingIndex(0);
 
+    let currentIndex = 0;
     const scrollInterval = setInterval(() => {
-      setScrollingIndex(prevIndex => {
-        const nextIndex = loopThrough 
-          ? (prevIndex + 1) % suggestions.length
-          : Math.min(prevIndex + 1, suggestions.length - 1);
-        
-        setCurrentScrollingSuggestion(suggestions[nextIndex]);
-        return nextIndex;
-      });
+      currentIndex = loopThrough 
+        ? (currentIndex + 1) % suggestions.length
+        : Math.min(currentIndex + 1, suggestions.length - 1);
+      
+      setCurrentScrollingSuggestion(suggestions[currentIndex]);
     }, interval);
 
     return () => clearInterval(scrollInterval);
@@ -112,7 +105,7 @@ const HomePage = () => {
     wsAPI.updateQuery(value);
 
     // Also update the URL in the background
-    const newSearchParams = new URLSearchParams(searchParams);
+    const newSearchParams = new URLSearchParams(window.location.search);
     if (value.trim()) {
         newSearchParams.set("q", encodeURIComponent(value));
     } else {
@@ -121,7 +114,7 @@ const HomePage = () => {
     // Use replace to avoid polluting browser history on every keystroke
     const newUrl = value.trim() ? `?${newSearchParams.toString()}` : window.location.pathname;
     window.history.replaceState({}, '', newUrl);
-  }, [isConnected, searchParams]);
+  }, [isConnected]);
 
   // Handle input change
   const handleInputChange = (e) => {
@@ -170,25 +163,47 @@ const HomePage = () => {
               style={{ position: 'relative', zIndex: 2 }}
             />
             {/* Regular suggestion takes priority, then scrolling suggestion */}
-            {(() => {
-              const activeSuggestion = suggestion || currentScrollingSuggestion;
-              const isScrolling = !suggestion && currentScrollingSuggestion;
-              
-              if (activeSuggestion && inputValue && activeSuggestion.completion.startsWith(inputValue)) {
-                return (
-                  <div 
-                    className={`absolute top-0 left-0 w-96 px-4 py-2 text-base pointer-events-none transition-opacity duration-300 ${
-                      isScrolling ? 'text-purple-400 opacity-75' : 'text-gray-400'
-                    }`}
-                    style={{ zIndex: 1 }}
-                  >
-                    <span className="text-transparent">{inputValue}</span>
-                    {activeSuggestion.completion.substring(inputValue.length)}
-                  </div>
-                );
-              }
-              return null;
-            })()}
+            <AnimatePresence mode="popLayout">
+              {(() => {
+                const activeSuggestion = suggestion || currentScrollingSuggestion;
+                const isScrolling = !suggestion && currentScrollingSuggestion;
+                
+                if (activeSuggestion && inputValue && activeSuggestion.completion.startsWith(inputValue)) {
+                  return (
+                    <motion.div
+                      key={activeSuggestion.completion}
+                      initial={{ 
+                        opacity: 0,
+                        y: isScrolling ? 8 : 0
+                      }}
+                      animate={{ 
+                        opacity: 1,
+                        y: 0,
+                        transition: {
+                          duration: isScrolling ? 0.3 : 0.1,
+                          ease: "easeOut",
+                          delay: isScrolling ? 0.1 : 0
+                        }
+                      }}
+                      exit={{ 
+                        opacity: 0,
+                        y: isScrolling ? -8 : 0,
+                        transition: {
+                          duration: isScrolling ? 0.2 : 0.1,
+                          ease: "easeIn"
+                        }
+                      }}
+                      className="absolute top-0 left-0 w-96 px-4 py-2 text-base text-gray-400 pointer-events-none"
+                      style={{ zIndex: 1 }}
+                    >
+                      <span className="text-transparent">{inputValue}</span>
+                      {activeSuggestion.completion.substring(inputValue.length)}
+                    </motion.div>
+                  );
+                }
+                return null;
+              })()}
+            </AnimatePresence>
             {/* Connection status indicator */}
             <div className={`absolute right-2 top-1/2 transform -translate-y-1/2 w-2 h-2 rounded-full ${
               isConnected ? 'bg-green-500' : 'bg-red-500'
