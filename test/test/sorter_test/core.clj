@@ -21,8 +21,8 @@
 (deftest websocket-hello-world
   "Basic test to verify WebSocket connection and message exchange"
   (letlocals
-   ;; Setup fresh database before test
-   (util/setup-fresh-database)
+   ;; Fast reset - just clear tables and restart cargo
+   (util/between-test-cleanup-db-only) ; Much faster than full container restart
    
    (bind client (-> (ws/create-ws-client "ws://localhost:8081/api/ws") ws/connect))
    
@@ -140,8 +140,8 @@
 (deftest database-setup-test
   "Test that our database setup function works correctly"
   (letlocals
-   ;; Setup fresh database
-   (util/setup-fresh-database)
+   ;; Fast reset - just clear tables (no cargo restart needed for DB-only test)
+   (util/between-test-cleanup-db-only)
    
    ;; Verify initial state - should have no reddit entities yet
    (bind subreddit-count (util/count-entities "reddit.subreddit"))
@@ -151,4 +151,29 @@
    (bind admin-result (util/query-database "SELECT username FROM users WHERE auth0_sub = 'admin'"))
    (is (= ["admin"] admin-result) "Should have admin user from migrations")
    
-   (println "Database setup test passed!")))
+   (println "Database setup test passed!"))
+
+;; Test suite lifecycle management
+(defn test-ns-setup []
+  "Called once before running all tests in this namespace"
+  (println "\n=== Starting test suite ===")
+  ;; Full setup only once - starts container if needed
+  (util/setup-test-environment))
+
+(defn test-ns-teardown []
+  "Called once after all tests in this namespace complete"
+  (println "\n=== Test suite complete ===")
+  (util/teardown-test-environment)
+  (util/cleanup-output-files))
+
+;; Example of how to use the lifecycle functions in your test runner
+(comment
+  ;; If using kaocha, you can add this to your tests.edn:
+  ;; {:ns-patterns ["sorter-test.*"]
+  ;;  :pre-test [sorter-test.core/test-ns-setup]
+  ;;  :post-test [sorter-test.core/test-ns-teardown]}
+  
+  ;; Or run manually:
+  (test-ns-setup)
+  (run-tests)
+  (test-ns-teardown)))
