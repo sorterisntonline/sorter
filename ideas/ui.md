@@ -36,7 +36,7 @@ Paste: reddit.com/r/movies
 Paste: reddit.com/r/movies/comments/abc123/
 → Imports that specific post, shows its comments
 
-Paste: reddit.com/user/shittymorph
+Paste: reddit.com/u/shittymorph
 → Shows user's posts across subreddits
 
 Type: r/movies
