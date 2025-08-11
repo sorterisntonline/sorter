@@ -23,10 +23,10 @@
 ;; - Full reset: restart container + migrations (only for initial setup)
 ;;
 ;; Usage in tests:
-;; - Call (setup-test-environment) once at start of test suite (full setup)
-;; - Call (between-test-cleanup-db-only) for each test (fast DB reset only)
+;; - (setup-test-environment) called automatically by kaocha at start of test suite (full setup)
+;; - Call (between-test-cleanup-db-only) for each test (fast DB reset + ensures cargo running)
 ;; - Call (between-test-cleanup) if you need cargo restart too
-;; - Call (teardown-test-environment) once at end of test suite
+;; - (teardown-test-environment) called automatically by kaocha at end of test suite
 ;;
 (def ^:dynamic *cargo-process* nil)
 (def ^:dynamic *test-counter* (atom 0))
@@ -62,10 +62,12 @@
 (defn start-cargo-process []
   "Start cargo run process in background with output capture"
   (let [output-file (get-output-file)
+        current-env (into {} (System/getenv))
+        test-env (merge current-env {"RUST_LOG" "debug"})
         proc (p/process {:dir "../rustsorter"
                         :out output-file
                         :err :out  ; redirect stderr to stdout
-                        :env {"RUST_LOG" "debug"}}
+                        :env test-env}
                        "cargo" "run")]
     (println (str "Starting cargo run process, output saved to: " output-file))
     proc))
@@ -108,10 +110,15 @@
 (defn ensure-cargo-running []
   "Ensure cargo process is running and healthy"
   (if (and *cargo-process* (p/alive? *cargo-process*))
-    (if (= "healthy" (:status (:body (make-request :get "/health"))))
-      (println "Cargo process already running and healthy")
-      (restart-cargo-process))
+    (try
+      (if (= "healthy" (:status (:body (make-request :get "/health"))))
+        (println "Cargo process already running and healthy")
+        (restart-cargo-process))
+      (catch Exception e
+        (println "Health check failed, restarting cargo process:" (.getMessage e))
+        (restart-cargo-process)))
     (do
+      (println "Starting new cargo process...")
       (alter-var-root #'*cargo-process* (constantly (start-cargo-process)))
       (if (wait-for-rustsorter-health 30)
         (println "Cargo process started and healthy")
@@ -281,7 +288,9 @@
 
 (defn between-test-cleanup-db-only []
   "Even faster cleanup - just reset database, keep cargo running"
-  (fast-database-reset))
+  (fast-database-reset)
+  ;; Ensure cargo is still running and healthy after DB reset
+  (ensure-cargo-running))
 
 (defn cleanup-output-files []
   "Remove all rustsorter output files"
