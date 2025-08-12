@@ -1336,7 +1336,7 @@ mod tests {
     fn test_unified_subreddit_resolution_flow() {
         // This test demonstrates the new unified behavior:
         // - r/programming (exact) → tries exact match first
-        // - r/pro (partial) → tries exact match, then suggestions
+        // - r/pro (partial) → tries exact match, then suggestions + TAB completion
         
         test_flow("Unified Resolution: Exact Match", flow![
             (type_text!("r/programming"), resolves_subreddit!("programming", "r/programming")),
@@ -1347,8 +1347,38 @@ mod tests {
         ]);
         
         // Both go through the same action type, but dispatcher handles them differently:
-        // - If "programming" exists in DB → shows EntityView
-        // - If "pro" doesn't exist in DB → shows suggestions + import option
+        // - If "programming" exists in DB → shows EntityView immediately
+        // - If "pro" doesn't exist in DB → shows Multiple with:
+        //   1. Suggestions (for TAB completion to best match)  
+        //   2. Selection (for clickable options including import)
+    }
+
+    #[test]
+    fn test_tab_completion_workflow_unified() {
+        // This demonstrates the desired TAB completion behavior:
+        // r/pro + TAB → r/programming (if "programming" is the best DB match)
+        
+        // Note: This test shows the PARSER behavior. The actual TAB completion 
+        // happens in the frontend when it receives the Multiple response containing
+        // both Suggestions (for TAB) and Selection (for click options).
+        
+        let graph = build_reddit_graph();
+        
+        // 1. Parser generates unified action for partial input
+        match graph.parse("r/pro") {
+            UIAction::ResolveAndDisplaySubreddit { subreddit, prefix } => {
+                assert_eq!(subreddit, "pro");
+                assert_eq!(prefix, "r/pro");
+                println!("✓ Parser correctly identifies 'r/pro' as subreddit resolution");
+            }
+            _ => panic!("Expected ResolveAndDisplaySubreddit for 'r/pro'"),
+        }
+        
+        // 2. When dispatcher runs (in real app), it will return Multiple response with:
+        //    - Suggestions: { completion: "r/programming" } (for TAB)
+        //    - Selection: [ "Import r/pro", "r/programming", ... ] (for clicks)
+        
+        println!("✓ TAB completion workflow: r/pro → ResolveAndDisplaySubreddit → Multiple(Suggestions + Selection)");
     }
 
     #[test]

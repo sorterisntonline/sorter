@@ -479,7 +479,7 @@ fn dispatch_ui_action(action: UIAction, _app_state: &AppState) -> Pin<Box<dyn Fu
             .unwrap_or_default();
 
             let mut suggestion_items: Vec<crate::ui::types::SelectionItem> = suggestions_result
-                .into_iter()
+                .iter()
                 .map(|r| crate::ui::types::SelectionItem {
                     id: r.pk.clone(),
                     title: format!("r/{}", r.pk),
@@ -515,19 +515,43 @@ fn dispatch_ui_action(action: UIAction, _app_state: &AppState) -> Pin<Box<dyn Fu
             // Always show the import option for what they actually typed
             suggestion_items.insert(0, import_item);
 
-            // 4. Return the combined result
-            let title = if suggestion_items.len() > 1 {
+            // 4. Create responses for both TAB completion AND selection UI
+            let mut responses = Vec::new();
+
+            // First: Add a Suggestions response for TAB completion (if we have DB suggestions)
+            if !suggestions_result.is_empty() {
+                let best_match = &suggestions_result[0]; // Use the first/best match for TAB completion
+                let tab_completion = format!("{}{}", 
+                    prefix.trim_end_matches(&subreddit), 
+                    best_match.pk
+                );
+                
+                responses.push(UIResponse::Suggestions(crate::ui::types::SuggestionsData {
+                    query: prefix.clone(),
+                    suggestion: Some(crate::ui::types::Suggestion {
+                        text: tab_completion.clone(),
+                        completion: tab_completion,
+                        description: Some(format!("Complete to r/{}", best_match.pk)),
+                        score: 1.0,
+                    }),
+                }));
+            }
+
+            // Second: Add the Selection response for clickable options
+            let title = if suggestions_result.len() > 0 {
                 format!("r/{} not found. Did you mean...", subreddit)
             } else {
                 format!("Import r/{}", subreddit)
             };
 
-            UIResponse::selection(
+            responses.push(UIResponse::selection(
                 subreddit.clone(),
                 title,
                 format!("Options for 'r/{}'", subreddit),
                 suggestion_items,
-            )
+            ));
+
+            UIResponse::multiple(responses)
         }
         
         UIAction::SearchEntities { query, entity_type } => {
