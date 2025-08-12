@@ -571,14 +571,14 @@ pub fn build_reddit_graph() -> Graph {
         // === Specific subreddit page ===
         .at("subreddit_page")
             .edge(EdgePattern::Literal("/"), "subreddit_slash")
-                    .handler(|_query, _prefix, ctx| {
-            // If we have a complete subreddit name, render the entity view
-            let subreddit = ctx.get("subreddit").cloned().unwrap_or_default();
-            UIAction::RenderEntityView {
-                ns: "reddit.subreddit".to_string(),
-                pk: subreddit,
-            }
-        })
+            .handler(|_query, prefix, ctx| {
+                // Use the new unified subreddit resolution logic
+                let subreddit = ctx.get("subreddit").cloned().unwrap_or_default();
+                UIAction::ResolveAndDisplaySubreddit {
+                    subreddit,
+                    prefix: prefix.to_string(),
+                }
+            })
         
         .at("subreddit_slash")
             .edge(EdgePattern::Literal("hot"), "subreddit_hot")
@@ -721,6 +721,7 @@ mod tests {
         RenderSubreddit { subreddit: String, sort: Option<String> },
         RenderSubredditComments { subreddit: String },
         RenderUser { username: String },
+        ResolveSubreddit { subreddit: String, prefix: String },  // New unified subreddit resolution
         Error { error_type: String },
         Multiple { expected_actions: Vec<ExpectedAction> },  // Multiple responses with specific expectations
         MultipleAny,  // Multiple responses (any sub-actions - legacy)
@@ -753,6 +754,10 @@ mod tests {
                 }
                 (ExpectedAction::RenderUser { username }, UIAction::RenderEntityView { ns, pk }) => {
                     ns == "reddit.user" && pk == username
+                }
+                (ExpectedAction::ResolveSubreddit { subreddit, prefix }, 
+                 UIAction::ResolveAndDisplaySubreddit { subreddit: s, prefix: p }) => {
+                    s == subreddit && p == prefix
                 }
                 (ExpectedAction::Error { error_type }, UIAction::ShowError(data)) => {
                     data.error_type == *error_type
@@ -918,8 +923,8 @@ mod tests {
                     text == "r/" && matches!(action, UIAction::ShowMultiple { .. })
                 }),
                 Box::new(|text, action| {
-                    // "r/rust" should render the entity view for subreddit
-                    text == "r/rust" && matches!(action, UIAction::RenderEntityView { ns, pk } if ns == "reddit.subreddit" && pk == "rust")
+                    // "r/rust" should resolve the subreddit
+                    text == "r/rust" && matches!(action, UIAction::ResolveAndDisplaySubreddit { subreddit, prefix } if subreddit == "rust" && prefix == "r/rust")
                 }),
             ],
         );
@@ -1028,7 +1033,7 @@ mod tests {
                 }),
                 Box::new(|text, action| {
                     text == "r/technology" && 
-                    matches!(action, UIAction::RenderEntityView { ns, pk } if ns == "reddit.subreddit" && pk == "technology")
+                    matches!(action, UIAction::ResolveAndDisplaySubreddit { subreddit, prefix } if subreddit == "technology" && prefix == "r/technology")
                 }),
             ],
         );
@@ -1116,10 +1121,10 @@ mod tests {
                     text == "https://reddit.com/r/" && matches!(action, UIAction::ShowMultiple { .. })
                 }),
                 Box::new(|text, action| {
-                    // "https://reddit.com/r/programming" should render entity view
+                    // "https://reddit.com/r/programming" should resolve subreddit
                     text == "https://reddit.com/r/programming" && 
-                    matches!(action, UIAction::RenderEntityView { ns, pk } 
-                        if ns == "reddit.subreddit" && pk == "programming")
+                    matches!(action, UIAction::ResolveAndDisplaySubreddit { subreddit, prefix } 
+                        if subreddit == "programming" && prefix == "https://reddit.com/r/programming")
                 }),
                 Box::new(|text, action| {
                     // "https://reddit.com/r/programming/" should show sort options
@@ -1200,6 +1205,15 @@ mod tests {
         };
     }
     
+    macro_rules! resolves_subreddit {
+        ($subreddit:expr, $prefix:expr) => {
+            ExpectedAction::ResolveSubreddit { 
+                subreddit: $subreddit.to_string(),
+                prefix: $prefix.to_string()
+            }
+        };
+    }
+    
     macro_rules! shows_guide {
         ($title_contains:expr) => {
             ExpectedAction::Guide { title_contains: $title_contains.to_string() }
@@ -1247,7 +1261,7 @@ mod tests {
             (KeyAction::Tab, 
              ExpectedAction::MultipleAny), // r/ shows subreddit selection
             (KeyAction::Type("rust".to_string()),
-             ExpectedAction::RenderSubreddit { subreddit: "rust".to_string(), sort: None }),
+             ExpectedAction::ResolveSubreddit { subreddit: "rust".to_string(), prefix: "r/rust".to_string() }),
         ]);
     }
 
@@ -1319,6 +1333,25 @@ mod tests {
     }
 
     #[test]
+    fn test_unified_subreddit_resolution_flow() {
+        // This test demonstrates the new unified behavior:
+        // - r/programming (exact) → tries exact match first
+        // - r/pro (partial) → tries exact match, then suggestions
+        
+        test_flow("Unified Resolution: Exact Match", flow![
+            (type_text!("r/programming"), resolves_subreddit!("programming", "r/programming")),
+        ]);
+        
+        test_flow("Unified Resolution: Partial Match", flow![
+            (type_text!("r/pro"), resolves_subreddit!("pro", "r/pro")),
+        ]);
+        
+        // Both go through the same action type, but dispatcher handles them differently:
+        // - If "programming" exists in DB → shows EntityView
+        // - If "pro" doesn't exist in DB → shows suggestions + import option
+    }
+
+    #[test]
     fn test_ultra_clean_user_journey() {
         test_flow("Ultra Clean User Journey", flow![
             (type_text!("h"), suggests!("https://")),
@@ -1365,9 +1398,9 @@ mod tests {
 
     #[test]
     fn test_tdsl_subreddit_view() {
-        // reddit.com/r/{sub} -> {show subreddit view}
+        // reddit.com/r/{sub} -> {resolve subreddit (exact match or suggestions)}
         test_flow("TDSL Subreddit View", flow![
-            (type_text!("reddit.com/r/programming"), renders_subreddit!("programming")),
+            (type_text!("reddit.com/r/programming"), resolves_subreddit!("programming", "reddit.com/r/programming")),
         ]);
     }
 
@@ -1722,24 +1755,24 @@ mod tests {
     fn test_deep_navigation() {
         let graph = build_reddit_graph();
         
-        // Test navigation to subreddit
+        // Test navigation to subreddit - now uses ResolveAndDisplaySubreddit
         match graph.parse("reddit.com/r/rust") {
-            UIAction::RenderEntityView { ns, pk } => {
-                assert_eq!(ns, "reddit.subreddit");
-                assert_eq!(pk, "rust");
+            UIAction::ResolveAndDisplaySubreddit { subreddit, prefix } => {
+                assert_eq!(subreddit, "rust");
+                assert_eq!(prefix, "reddit.com/r/rust");
                 println!("✓ reddit.com/r/rust recognized");
             }
-            _ => panic!("Expected RenderEntityView for subreddit"),
+            _ => panic!("Expected ResolveAndDisplaySubreddit for subreddit"),
         }
         
         // Test with alias (r/ goes directly to subreddit, no double r/)
         match graph.parse("r/programming") {
-            UIAction::RenderEntityView { ns, pk } => {
-                assert_eq!(ns, "reddit.subreddit");
-                assert_eq!(pk, "programming");
+            UIAction::ResolveAndDisplaySubreddit { subreddit, prefix } => {
+                assert_eq!(subreddit, "programming");
+                assert_eq!(prefix, "r/programming");
                 println!("✓ r/programming (alias) recognized");
             }
-            _ => panic!("Expected RenderEntityView for subreddit via alias"),
+            _ => panic!("Expected ResolveAndDisplaySubreddit for subreddit via alias"),
         }
     }
 }

@@ -66,6 +66,12 @@ pub enum UIAction {
         query: String,
         entity_type: Option<String>,
     },
+    
+    // Unified subreddit resolution: try exact match, then suggestions, then import
+    ResolveAndDisplaySubreddit {
+        subreddit: String,
+        prefix: String, // The part of the URL before the subreddit name
+    },
 }
 
 impl UIAction {

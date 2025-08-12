@@ -411,6 +411,125 @@ fn dispatch_ui_action(action: UIAction, _app_state: &AppState) -> Pin<Box<dyn Fu
             )
         }
         
+        UIAction::ResolveAndDisplaySubreddit { subreddit, prefix } => {
+            // 1. First, try an EXACT match on the entity
+            let exact_match_result = sqlx::query_file_as!(
+                entity::Entity,
+                "../database/sql/entity/select.sql",
+                "reddit.subreddit",
+                subreddit
+            )
+            .fetch_optional(&_app_state.db)
+            .await;
+
+            if let Ok(Some(entity_row)) = exact_match_result {
+                // SUCCESS: Found an exact match. Render its page immediately.
+                let children_result = sqlx::query_file_as!(
+                    entity::Entity,
+                    "../database/sql/entity/select_children.sql",
+                    "reddit.subreddit",
+                    subreddit
+                )
+                .fetch_all(&_app_state.db)
+                .await;
+
+                let children_entities = children_result.unwrap_or_default();
+
+                let main_entity = crate::ui::types::Entity {
+                    id: format!("reddit.subreddit:{}", subreddit),
+                    title: entity_row.title.unwrap_or_else(|| format!("r/{}", subreddit)),
+                    url: format!("/reddit.subreddit/{}", subreddit),
+                    entity_type: crate::ui::types::EntityType::RedditSubreddit,
+                    metadata: entity_row.metadata.unwrap_or_else(|| serde_json::json!({})),
+                };
+
+                let children: Vec<crate::ui::types::Entity> = children_entities
+                    .into_iter()
+                    .map(|child| crate::ui::types::Entity {
+                        id: format!("{}:{}", child.ns, child.pk),
+                        title: child.title.unwrap_or_else(|| format!("{}:{}", child.ns, child.pk)),
+                        url: format!("/{}/{}", child.ns, child.pk),
+                        entity_type: match child.ns.as_str() {
+                            "reddit.post" => crate::ui::types::EntityType::RedditPost,
+                            "reddit.comment" => crate::ui::types::EntityType::RedditComment,
+                            _ => crate::ui::types::EntityType::Generic,
+                        },
+                        metadata: child.metadata.unwrap_or_else(|| serde_json::json!({})),
+                    })
+                    .collect();
+
+                let entity_view_data = crate::ui::types::EntityViewData {
+                    entity: main_entity,
+                    children,
+                    rankings: Vec::new(),
+                    breadcrumbs: Vec::new(),
+                };
+
+                return UIResponse::EntityView(entity_view_data);
+            }
+
+            // 2. No exact match found. Now, do a PARTIAL search for suggestions.
+            let pattern = format!("{}%", subreddit);
+            let suggestions_result = sqlx::query!(
+                "SELECT pk FROM entities WHERE ns = 'reddit.subreddit' AND pk ILIKE $1 ORDER BY pk LIMIT 10",
+                pattern
+            )
+            .fetch_all(&_app_state.db)
+            .await
+            .unwrap_or_default();
+
+            let mut suggestion_items: Vec<crate::ui::types::SelectionItem> = suggestions_result
+                .into_iter()
+                .map(|r| crate::ui::types::SelectionItem {
+                    id: r.pk.clone(),
+                    title: format!("r/{}", r.pk),
+                    description: Some("Already imported".to_string()),
+                    // Remove the subreddit part from prefix and add the full suggestion
+                    completion: format!("{}{}", 
+                        prefix.trim_end_matches(&subreddit), 
+                        r.pk
+                    ),
+                    import_action: None,
+                })
+                .collect();
+
+            // 3. Create the "Import this subreddit" item for what they actually typed
+            let import_command = ClientCommand::ExecuteRedditImport(
+                RedditImport::SubredditHot { 
+                    subreddit: subreddit.clone(), 
+                    limit: Some(25) 
+                }
+            );
+            let import_item = crate::ui::types::SelectionItem {
+                id: format!("import_{}", subreddit),
+                title: format!("r/{}", subreddit),
+                description: Some("Not yet imported".to_string()),
+                completion: prefix.clone(),
+                import_action: Some(crate::ui::types::ImportAction {
+                    label: "Import".to_string(),
+                    description: "Import hot posts from this subreddit".to_string(),
+                    command: serde_json::to_value(&import_command).unwrap_or_else(|_| serde_json::json!({})),
+                }),
+            };
+
+            // Always show the import option for what they actually typed
+            suggestion_items.insert(0, import_item);
+
+            // 4. Return the combined result
+            let title = if suggestion_items.len() > 1 {
+                format!("r/{} not found. Did you mean...", subreddit)
+            } else {
+                format!("Import r/{}", subreddit)
+            };
+
+            UIResponse::selection(
+                subreddit.clone(),
+                title,
+                format!("Options for 'r/{}'", subreddit),
+                suggestion_items,
+            )
+        }
+        
         UIAction::SearchEntities { query, entity_type } => {
             // TODO: Search database for entities
             let type_str = entity_type.unwrap_or_else(|| "all".to_string());
