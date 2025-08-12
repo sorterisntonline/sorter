@@ -105,6 +105,19 @@
     (println (str "Starting cargo run process, output saved to: " output-file))
     proc))
 
+(defn kill-processes-on-port [port]
+  "Force kill any processes using the specified port"
+  (try
+    (let [lsof-result (shell/sh "lsof" "-ti" (str ":" port))]
+      (when (= 0 (:exit lsof-result))
+        (let [pids (clojure.string/split (clojure.string/trim (:out lsof-result)) #"\n")]
+          (doseq [pid pids]
+            (when-not (empty? pid)
+              (println (str "Killing process " pid " on port " port))
+              (shell/sh "kill" "-9" pid))))))
+    (catch Exception e
+      (println "Error killing processes on port" port ":" (.getMessage e)))))
+
 (defn stop-cargo-process [proc]
   "Stop the cargo process gracefully"
   (when proc
@@ -112,7 +125,9 @@
       (p/destroy-tree proc)
       (println "Cargo process stopped")
       (catch Exception e
-        (println "Error stopping cargo process:" (.getMessage e))))))
+        (println "Error stopping cargo process:" (.getMessage e)))))
+  ;; Force kill any remaining processes on port 8081
+  (kill-processes-on-port 8081))
 
 (defn wait-for-rustsorter-health [max-attempts]
   "Wait for rustsorter to become healthy"
@@ -142,6 +157,10 @@
 
 (defn ensure-cargo-running []
   "Ensure cargo process is running and healthy"
+  ;; First, kill any stray processes on port 8081
+  (kill-processes-on-port 8081)
+  (Thread/sleep 1000) ; Give the port time to free up
+  
   (if (and *cargo-process* (p/alive? *cargo-process*))
     (try
       (if (= "healthy" (:status (:body (make-request :get "/health"))))
@@ -371,11 +390,26 @@
         (println "Removing output file:" file)
         (io/delete-file file true)))))
 
+(defn force-kill-all-rustsorter-processes []
+  "Nuclear option: kill all rustsorter and cargo processes"
+  (println "\n=== Force killing all rustsorter processes ===")
+  (try
+    ;; Kill by port first
+    (kill-processes-on-port 8081)
+    ;; Kill by process name as backup
+    (shell/sh "pkill" "-f" "rustsorter")
+    (shell/sh "pkill" "-f" "cargo.*run")
+    (Thread/sleep 2000)
+    (println "All rustsorter processes killed")
+    (catch Exception e
+      (println "Error during force kill:" (.getMessage e)))))
+
 (defn force-cleanup-and-exit []
   "Emergency cleanup and exit - use when process won't terminate"
   (println "\n=== Force cleanup and exit ===")
   (try
     (stop-cargo-process *cargo-process*)
+    (force-kill-all-rustsorter-processes)
     (cleanup-output-files)
     (catch Exception e
       (println "Error during cleanup:" (.getMessage e))))

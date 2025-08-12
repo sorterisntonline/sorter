@@ -5,6 +5,23 @@
             [clojure.string :as str]
             [sorter-test.util :as util]))
 
+;; Test fixtures: simplify lifecycle management.
+;; - Suite fixture sets up environment once and tears it down at the end.
+;; - Each-test fixture performs a fast DB reset between tests and ensures cargo stays healthy.
+(defn suite-fixture [f]
+  (util/setup-test-environment)
+  (try
+    (f)
+    (finally
+      (util/teardown-test-environment))))
+
+(defn each-test-fixture [f]
+  (util/between-test-cleanup-db-only)
+  (f))
+
+(use-fixtures :once suite-fixture)
+(use-fixtures :each each-test-fixture)
+
 ;; Test state for managing created keys across tests
 (def test-state (atom {:created-key-name nil
                        :created-full-key nil
