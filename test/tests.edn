@@ -1,6 +1,4 @@
 #kaocha/v1
 {:tests [{:id          :unit
           :test-paths  ["test"]
-          :ns-patterns [".*"]}]
- :kaocha.hooks/pre-suite [sorter-test.core/test-ns-setup]
- :kaocha.hooks/post-suite [sorter-test.core/test-ns-teardown]}
+          :ns-patterns [".*"]}]}

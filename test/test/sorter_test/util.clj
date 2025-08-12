@@ -204,46 +204,24 @@
     (println "Migrations completed successfully")))
 
 (defn clear-all-tables []
-  "Clear all tables in the database (faster than container restart)"
-  (println "Clearing all database tables...")
+  "Clear DB fast by dropping and recreating the public schema."
+  (println "Resetting database schema (DROP SCHEMA public CASCADE; CREATE SCHEMA public;)...")
   (try
-    ;; First check if container is running
+    ;; Ensure container is running
     (let [container-check (shell/sh "docker" "ps" "--filter" (str "name=" db-container-name) "--format" "{{.Names}}")]
       (when-not (clojure.string/includes? (:out container-check) db-container-name)
         (throw (ex-info "PostgreSQL container not running" {}))))
-    
-    ;; Get list of all tables
-    (let [tables-result (shell/sh "docker" "exec" db-container-name 
-                                 "psql" "-U" "postgres" "-d" "postgres" 
-                                 "-t" "-c" 
-                                 "SELECT tablename FROM pg_tables WHERE schemaname = 'public'")]
-      (when (not= 0 (:exit tables-result))
-        (println "Failed to list tables:" (:err tables-result))
-        (throw (ex-info "Failed to list tables" tables-result)))
-      
-      (let [tables (->> (:out tables-result)
-                       clojure.string/trim
-                       clojure.string/split-lines
-                       (map clojure.string/trim)
-                       (remove empty?))]
-        
-        ;; Drop all tables if any exist
-        (if (seq tables)
-          (let [drop-tables-sql (str "DROP TABLE IF EXISTS " 
-                                    (clojure.string/join ", " tables) 
-                                    " CASCADE")]
-            (println "Dropping tables:" (clojure.string/join ", " tables))
-            (let [drop-result (shell/sh "docker" "exec" db-container-name 
-                                       "psql" "-U" "postgres" "-d" "postgres" 
-                                       "-c" drop-tables-sql)]
-              (when (not= 0 (:exit drop-result))
-                (println "Failed to drop tables:" (:err drop-result))
-                (throw (ex-info "Failed to drop tables" drop-result)))))
-          (println "No tables found to drop"))
-        
-        (println "All tables cleared successfully")))
+    ;; Drop and recreate schema in a single psql call
+    (let [reset-sql "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;"
+          reset-result (shell/sh "docker" "exec" db-container-name
+                                 "psql" "-U" "postgres" "-d" "postgres"
+                                 "-v" "ON_ERROR_STOP=1" "-c" reset-sql)]
+      (when (not= 0 (:exit reset-result))
+        (println "Failed to reset schema:" (:err reset-result))
+        (throw (ex-info "Failed to reset schema" reset-result)))
+      (println "Database schema reset successfully"))
     (catch Exception e
-      (println "Error clearing tables:" (.getMessage e))
+      (println "Error during schema reset:" (.getMessage e))
       (throw e))))
 
 (defn fast-database-reset []

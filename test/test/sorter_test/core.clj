@@ -18,12 +18,27 @@
     `(let ~bindings
        ~body)))
 
+;; Test fixtures: simplify lifecycle management.
+;; - Suite fixture sets up environment once and tears it down at the end.
+;; - Each-test fixture performs a fast DB reset between tests and ensures cargo stays healthy.
+(defn suite-fixture [f]
+  (util/setup-test-environment)
+  (try
+    (f)
+    (finally
+      (util/teardown-test-environment))))
+
+(defn each-test-fixture [f]
+  (util/between-test-cleanup-db-only)
+  (f))
+
+(use-fixtures :once suite-fixture)
+(use-fixtures :each each-test-fixture)
+
 (deftest websocket-hello-world
   "Basic test to verify WebSocket connection and message exchange"
   (letlocals
-   ;; Fast reset - just clear tables and restart cargo
-   (util/between-test-cleanup-db-only) ; Much faster than full container restart
-   
+   ;; Environment is prepared by fixtures
    (bind client (-> (ws/create-ws-client "ws://localhost:8081/api/ws") ws/connect))
    
    ;; Send a simple query
@@ -58,8 +73,7 @@
 (deftest reddit-import-flow
   "Test the complete Reddit import flow: query subreddit -> show suggestions -> import posts"
   (letlocals
-   (util/between-test-cleanup-db-only)
-   
+   ;; Environment is prepared by fixtures
    (bind client (-> (ws/create-ws-client "ws://localhost:8081/api/ws") ws/connect))
    
    ;; Drain initial HomePage sent on connect
@@ -129,8 +143,7 @@
 (deftest tab-completion-flow
   "Test TAB completion behavior: import subreddit, then test partial matches get suggestions"
   (letlocals
-   (util/between-test-cleanup-db-only)
-   
+   ;; Environment is prepared by fixtures
    (bind client (-> (ws/create-ws-client "ws://localhost:8081/api/ws") ws/connect))
    
    ;; Drain initial HomePage sent on connect
@@ -212,9 +225,7 @@
 (deftest database-setup-test
   "Test that our database setup function works correctly"
   (letlocals
-   ;; Fast reset - just clear tables (no cargo restart needed for DB-only test)
-   (util/between-test-cleanup-db-only)
-   
+   ;; Environment is prepared by fixtures
    ;; Verify initial state - should have no reddit entities yet
    (bind subreddit-count (util/count-entities "reddit.subreddit"))
    (is (= 0 subreddit-count) "Should have 0 subreddit entities initially")
