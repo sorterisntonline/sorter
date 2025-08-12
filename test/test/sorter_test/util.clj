@@ -10,23 +10,56 @@
 (def base-url "http://localhost:8081/api")
 (def static-admin-key (env :static-admin-key "STATIC_TEST_KEY_FOR_ADMIN_USER_123"))
 
-;; Cargo process management using babashka.process
-;; 
-;; This manages a long-running `cargo run` process for tests:
-;; - Each test gets a fresh restart with output saved to rustsorter-test-N.out
-;; - Process runs in background and doesn't block test execution
-;; - Automatic health checks ensure rustsorter is ready before tests
-;; - Clean shutdown and cleanup of output files when tests complete
+;; ============================================================================
+;; SORTER TEST ENVIRONMENT MANAGEMENT
+;; ============================================================================
 ;;
-;; Database management optimized for speed:
-;; - Fast reset: clear tables + run migrations (no container restart)
-;; - Full reset: restart container + migrations (only for initial setup)
+;; This module manages the complete test environment for the Sorter project,
+;; including PostgreSQL database and Rust cargo process lifecycle.
 ;;
-;; Usage in tests:
-;; - (setup-test-environment) called automatically by kaocha at start of test suite (full setup)
-;; - Call (between-test-cleanup-db-only) for each test (fast DB reset + ensures cargo running)
-;; - Call (between-test-cleanup) if you need cargo restart too
-;; - (teardown-test-environment) called automatically by kaocha at end of test suite
+;; ARCHITECTURE:
+;; - PostgreSQL runs in Docker container (postgres-dev)
+;; - Rust server runs via `cargo run` in background with health monitoring
+;; - Tests use WebSocket connections to interact with the server
+;;
+;; LIFECYCLE:
+;; 1. Suite Setup (once): smart-database-setup + start cargo process
+;; 2. Between Tests: fast DB reset (clear tables + migrate) + keep cargo running
+;; 3. Suite Teardown (once): stop cargo + stop container
+;;
+;; DATABASE MANAGEMENT:
+;; - Smart Setup: detects if container exists and chooses fast vs fresh setup
+;; - Fast Reset: clear all tables + run migrations (no container restart) 
+;; - Fresh Setup: stop container + clear data + start container + migrate
+;; - All functions handle edge cases (missing containers, failed connections)
+;;
+;; CARGO PROCESS MANAGEMENT:
+;; - Long-running background process with output capture (rustsorter-test-N.out)
+;; - Health checks with automatic restart if process dies
+;; - Optimized to avoid unnecessary restarts between tests
+;;
+;; USAGE IN TESTS:
+;; 1. kaocha calls (setup-test-environment) automatically at suite start
+;; 2. Each test calls (between-test-cleanup-db-only) for fast reset
+;; 3. kaocha calls (teardown-test-environment) automatically at suite end
+;;
+;; RUNNING TESTS:
+;; From test/ directory:
+;; - ./run.sh                           # Run all tests
+;; - ./run.sh sorter-test.core          # Run specific namespace  
+;; - ./run.sh sorter-test.core websocket-hello-world  # Run specific test
+;;
+;; FIRST TIME SETUP:
+;; No special setup needed! The smart-database-setup function will:
+;; - Detect if PostgreSQL container exists
+;; - Create fresh container if needed
+;; - Handle all Docker and migration setup automatically
+;;
+;; TROUBLESHOOTING:
+;; - If tests hang: Check rustsorter-test-N.out files for cargo errors
+;; - If DB connection fails: Container might be stopped, restart will be automatic
+;; - If cargo won't start: Check that rustsorter/ directory has valid Cargo.toml
+;; - For manual cleanup: (force-cleanup-and-exit) stops everything and exits
 ;;
 (def ^:dynamic *cargo-process* nil)
 (def ^:dynamic *test-counter* (atom 0))
@@ -133,8 +166,13 @@
 (defn stop-postgres-container []
   "Stop the PostgreSQL container if running"
   (println "Stopping PostgreSQL container...")
-  (shell/sh "docker" "stop" db-container-name)
-  (shell/sh "docker" "rm" db-container-name))
+  ;; Check if container exists before stopping
+  (let [check-result (shell/sh "docker" "ps" "-a" "--filter" (str "name=" db-container-name) "--format" "{{.Names}}")]
+    (when (clojure.string/includes? (:out check-result) db-container-name)
+      (println (str "Container " db-container-name " found, stopping..."))
+      (shell/sh "docker" "stop" db-container-name)
+      (shell/sh "docker" "rm" db-container-name))
+    (println "PostgreSQL container cleanup complete")))
 
 (defn clear-postgres-data []
   "Remove PostgreSQL data directory"
@@ -146,11 +184,15 @@
 (defn start-postgres-container []
   "Start PostgreSQL container in background"
   (println "Starting PostgreSQL container...")
-  (let [result (shell/sh "bash" "../database/run-postgres.sh" :dir "../database" :env {"DETACH" "true"})]
-    (when (not= 0 (:exit result))
-      (println "Failed to start PostgreSQL:" (:err result))
-      (throw (ex-info "Failed to start PostgreSQL container" result)))
-    (Thread/sleep 3000))) ; Give PostgreSQL time to start
+  ;; Check if container is already running
+  (let [check-result (shell/sh "docker" "ps" "--filter" (str "name=" db-container-name) "--format" "{{.Names}}")]
+    (if (clojure.string/includes? (:out check-result) db-container-name)
+      (println "PostgreSQL container already running")
+      (let [result (shell/sh "bash" "run-postgres.sh" :dir "../database" :env {"DETACH" "true"})]
+        (when (not= 0 (:exit result))
+          (println "Failed to start PostgreSQL:" (:err result))
+          (throw (ex-info "Failed to start PostgreSQL container" result)))
+        (Thread/sleep 3000))))) ; Give PostgreSQL time to start
 
 (defn run-migrations []
   "Run database migrations"
@@ -165,32 +207,41 @@
   "Clear all tables in the database (faster than container restart)"
   (println "Clearing all database tables...")
   (try
+    ;; First check if container is running
+    (let [container-check (shell/sh "docker" "ps" "--filter" (str "name=" db-container-name) "--format" "{{.Names}}")]
+      (when-not (clojure.string/includes? (:out container-check) db-container-name)
+        (throw (ex-info "PostgreSQL container not running" {}))))
+    
     ;; Get list of all tables
     (let [tables-result (shell/sh "docker" "exec" db-container-name 
                                  "psql" "-U" "postgres" "-d" "postgres" 
                                  "-t" "-c" 
-                                 "SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
-          tables (when (= 0 (:exit tables-result))
-                   (->> (:out tables-result)
-                        clojure.string/trim
-                        clojure.string/split-lines
-                        (map clojure.string/trim)
-                        (remove empty?)))]
+                                 "SELECT tablename FROM pg_tables WHERE schemaname = 'public'")]
+      (when (not= 0 (:exit tables-result))
+        (println "Failed to list tables:" (:err tables-result))
+        (throw (ex-info "Failed to list tables" tables-result)))
       
-      ;; Drop all tables if any exist
-      (when (seq tables)
-        (let [drop-tables-sql (str "DROP TABLE IF EXISTS " 
-                                  (clojure.string/join ", " tables) 
-                                  " CASCADE")]
-          (println "Dropping tables:" (clojure.string/join ", " tables))
-          (let [drop-result (shell/sh "docker" "exec" db-container-name 
-                                     "psql" "-U" "postgres" "-d" "postgres" 
-                                     "-c" drop-tables-sql)]
-            (when (not= 0 (:exit drop-result))
-              (println "Failed to drop tables:" (:err drop-result))
-              (throw (ex-info "Failed to drop tables" drop-result))))))
-      
-      (println "All tables cleared successfully"))
+      (let [tables (->> (:out tables-result)
+                       clojure.string/trim
+                       clojure.string/split-lines
+                       (map clojure.string/trim)
+                       (remove empty?))]
+        
+        ;; Drop all tables if any exist
+        (if (seq tables)
+          (let [drop-tables-sql (str "DROP TABLE IF EXISTS " 
+                                    (clojure.string/join ", " tables) 
+                                    " CASCADE")]
+            (println "Dropping tables:" (clojure.string/join ", " tables))
+            (let [drop-result (shell/sh "docker" "exec" db-container-name 
+                                       "psql" "-U" "postgres" "-d" "postgres" 
+                                       "-c" drop-tables-sql)]
+              (when (not= 0 (:exit drop-result))
+                (println "Failed to drop tables:" (:err drop-result))
+                (throw (ex-info "Failed to drop tables" drop-result)))))
+          (println "No tables found to drop"))
+        
+        (println "All tables cleared successfully")))
     (catch Exception e
       (println "Error clearing tables:" (.getMessage e))
       (throw e))))
@@ -233,6 +284,28 @@
       (println "Database setup failed:" (.getMessage e))
       (throw e))))
 
+(defn smart-database-setup []
+  "Smart database setup: detect current state and set up accordingly"
+  (println "\n=== Smart database setup ===")
+  (try
+    ;; Check if container is already running
+    (let [container-check (shell/sh "docker" "ps" "--filter" (str "name=" db-container-name) "--format" "{{.Names}}")]
+      (if (clojure.string/includes? (:out container-check) db-container-name)
+        (do
+          (println "PostgreSQL container already running, doing fast reset...")
+          (fast-database-reset))
+        (do
+          (println "No PostgreSQL container found, doing fresh setup...")
+          (setup-fresh-database))))
+    (println "=== Smart database setup complete ===\n")
+    (catch Exception e
+      (println "Smart database setup failed, falling back to fresh setup:" (.getMessage e))
+      (try
+        (setup-fresh-database)
+        (catch Exception e2
+          (println "Fresh database setup also failed:" (.getMessage e2))
+          (throw e2))))))
+
 (defn query-database 
   "Execute a SQL query against the test database"
   [query & params]
@@ -263,7 +336,7 @@
 (defn setup-test-environment []
   "Complete test environment setup: database + cargo process"
   (println "\n=== Setting up test environment ===")
-  (setup-fresh-database)
+  (smart-database-setup)
   (ensure-cargo-running)
   (println "=== Test environment ready ===\n"))
 
@@ -288,9 +361,26 @@
 
 (defn between-test-cleanup-db-only []
   "Even faster cleanup - just reset database, keep cargo running"
-  (fast-database-reset)
-  ;; Ensure cargo is still running and healthy after DB reset
-  (ensure-cargo-running))
+  ;; Check if we need to do initial setup (handles single test runs)
+  (let [container-check (shell/sh "docker" "ps" "--filter" (str "name=" db-container-name) "--format" "{{.Names}}")]
+    (if-not (clojure.string/includes? (:out container-check) db-container-name)
+      (do
+        (println "No database container found, doing initial setup...")
+        (setup-test-environment))
+      (do
+        ;; Normal fast reset path
+        (fast-database-reset)
+        ;; Ensure cargo is still running and healthy after DB reset
+        ;; This should be quick since we expect it to already be running
+        (when-not (and *cargo-process* (p/alive? *cargo-process*))
+          (println "Cargo process died, restarting...")
+          (ensure-cargo-running))
+        ;; Quick health check without restart
+        (when-not (try
+                    (= "healthy" (:status (:body (make-request :get "/health"))))
+                    (catch Exception _ false))
+          (println "Cargo health check failed, restarting...")
+          (restart-cargo-process))))))
 
 (defn cleanup-output-files []
   "Remove all rustsorter output files"
