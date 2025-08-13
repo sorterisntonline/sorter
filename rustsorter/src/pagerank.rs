@@ -297,3 +297,598 @@ pub fn routes() -> ApiRouter<AppState> {
         }),
     )
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use log::debug;
+
+    fn init_logger() {
+        let _ = env_logger::builder()
+            .filter_module("rustsorter", log::LevelFilter::Debug) // your crate
+            .filter_level(log::LevelFilter::Off)
+            .is_test(true) // Don't spam normal builds, just tests
+            .try_init();
+    }
+
+    // Helper function to create test entities
+    fn create_entity(namespace: &str, pk: &str) -> EntityIdentifier {
+        EntityIdentifier {
+            pk_namespace: namespace.to_string(),
+            pk: pk.to_string(),
+        }
+    }
+
+    // Helper function to create a vote
+    fn create_vote(
+        left_ns: &str,
+        left_pk: &str,
+        right_ns: &str,
+        right_pk: &str,
+        magnitude: i32,
+    ) -> RelevantVote {
+        RelevantVote {
+            left_entity_pk_namespace: left_ns.to_string(),
+            left_entity_pk: left_pk.to_string(),
+            right_entity_pk_namespace: right_ns.to_string(),
+            right_entity_pk: right_pk.to_string(),
+            magnitude,
+        }
+    }
+
+    mod build_rank_graph_tests {
+        use env_logger::init;
+
+        use super::*;
+
+        #[test]
+        fn test_empty_entities_and_votes() {
+            let entities = vec![];
+            let votes = vec![];
+            
+            let graph = build_rank_graph(&entities, &votes).unwrap();
+            
+            // The graph builder seems to create a default node
+            assert_eq!(graph.graph.node_count(), 0);
+            assert_eq!(graph.graph.edge_count(), 0);
+            assert!(graph.index_to_entity_identifier.is_empty());
+        }
+
+        #[test]
+        fn test_entities_no_votes() {
+            let entities = vec![
+                create_entity("ns1", "a"),
+                create_entity("ns1", "b"),
+                create_entity("ns2", "c"),
+            ];
+            let votes = vec![];
+            
+            let graph = build_rank_graph(&entities, &votes).unwrap();
+            
+            assert_eq!(graph.graph.node_count(), 3);
+            assert_eq!(graph.graph.edge_count(), 0);
+            assert_eq!(graph.index_to_entity_identifier.len(), 3);
+        }
+
+        #[test]
+        fn test_single_vote_extreme_left() {
+            let entities = vec![
+                create_entity("ns", "A"),
+                create_entity("ns", "B"),
+            ];
+            let votes = vec![
+                create_vote("ns", "A", "ns", "B", -50), // Complete preference for A
+            ];
+            
+            let graph = build_rank_graph(&entities, &votes).unwrap();
+            
+            assert_eq!(graph.graph.node_count(), 2);
+            assert_eq!(graph.graph.edge_count(), 2); // Bidirectional edges
+            
+            // Check edge weights: A->B should be 0, B->A should be 100
+            // magnitude -50 => weight_left_wins = -50 + 50 = 0
+            // weight_right_wins = 100 - 0 = 100
+            let mut found_edges = vec![];
+            for idx in 0..2 {
+                for edge in graph.graph.out_neighbors_with_values(idx) {
+                    found_edges.push((idx, edge.target, edge.value));
+                }
+            }
+            
+            // Find which index corresponds to A and B
+            let a_idx = graph._entity_key_to_index.get("ns:A").unwrap();
+            let b_idx = graph._entity_key_to_index.get("ns:B").unwrap();
+            
+            let a_to_b = found_edges.iter().find(|(from, to, _)| from == a_idx && to == b_idx).unwrap();
+            let b_to_a = found_edges.iter().find(|(from, to, _)| from == b_idx && to == a_idx).unwrap();
+            
+            assert_eq!(a_to_b.2, 0.0);   // A->B weight is 0
+            assert_eq!(b_to_a.2, 100.0); // B->A weight is 100
+        }
+
+        #[test]
+        fn test_single_vote_extreme_right() {
+            let entities = vec![
+                create_entity("ns", "A"),
+                create_entity("ns", "B"),
+            ];
+            let votes = vec![
+                create_vote("ns", "A", "ns", "B", 50), // Complete preference for B
+            ];
+            
+            let graph = build_rank_graph(&entities, &votes).unwrap();
+            
+            let a_idx = graph._entity_key_to_index.get("ns:A").unwrap();
+            let b_idx = graph._entity_key_to_index.get("ns:B").unwrap();
+            
+            let mut found_edges = vec![];
+            for idx in 0..2 {
+                for edge in graph.graph.out_neighbors_with_values(idx) {
+                    found_edges.push((idx, edge.target, edge.value));
+                }
+            }
+            
+            let a_to_b = found_edges.iter().find(|(from, to, _)| from == a_idx && to == b_idx).unwrap();
+            let b_to_a = found_edges.iter().find(|(from, to, _)| from == b_idx && to == a_idx).unwrap();
+            
+            assert_eq!(a_to_b.2, 100.0); // A->B weight is 100
+            assert_eq!(b_to_a.2, 0.0);   // B->A weight is 0
+        }
+
+        #[test]
+        fn test_neutral_vote() {
+            let entities = vec![
+                create_entity("ns", "A"),
+                create_entity("ns", "B"),
+            ];
+            let votes = vec![
+                create_vote("ns", "A", "ns", "B", 0), // Neutral (50-50)
+            ];
+            
+            let graph = build_rank_graph(&entities, &votes).unwrap();
+            
+            // Both edges should have weight 50
+            for idx in 0..2 {
+                for edge in graph.graph.out_neighbors_with_values(idx) {
+                    assert_eq!(edge.value, 50.0);
+                }
+            }
+        }
+
+        #[test]
+        fn test_duplicate_votes_accumulation() {
+            init_logger();
+            let entities = vec![
+                create_entity("ns", "A"),
+                create_entity("ns", "B"),
+            ];
+            let votes = vec![
+                create_vote("ns", "A", "ns", "B", -30), // weight_left = 20, weight_right = 80
+                create_vote("ns", "A", "ns", "B", -10), // weight_left = 40, weight_right = 60
+                create_vote("ns", "A", "ns", "B", 20),  // weight_left = 70, weight_right = 30
+            ];
+            
+            let graph = build_rank_graph(&entities, &votes).unwrap();
+            
+            let a_idx = *graph._entity_key_to_index.get("ns:A").unwrap();
+            let b_idx = *graph._entity_key_to_index.get("ns:B").unwrap();
+            
+            // Total: A->B gets 20+40+70=130, B->A gets 80+60+30=170
+            let mut total_a_to_b = 0.0;
+            let mut total_b_to_a = 0.0;
+            
+            for edge in graph.graph.out_neighbors_with_values(a_idx) {
+                if edge.target == b_idx {
+                    total_a_to_b += edge.value;
+                }
+            }
+            for edge in graph.graph.out_neighbors_with_values(b_idx) {
+                if edge.target == a_idx {
+                    total_b_to_a += edge.value;
+                }
+            }
+
+            assert_eq!(total_a_to_b, 130.0);
+            assert_eq!(total_b_to_a, 170.0);
+        }
+
+        #[test]
+        fn test_votes_with_missing_entities() {
+            let entities = vec![
+                create_entity("ns", "A"),
+                create_entity("ns", "B"),
+            ];
+            let votes = vec![
+                create_vote("ns", "A", "ns", "B", -20),
+                create_vote("ns", "A", "ns", "C", 30),  // C not in entities
+                create_vote("ns", "D", "ns", "B", 10),  // D not in entities
+            ];
+            
+            let graph = build_rank_graph(&entities, &votes).unwrap();
+            
+            // Only the A-B vote should be included
+            assert_eq!(graph.graph.node_count(), 2);
+            assert_eq!(graph.graph.edge_count(), 2); // Bidirectional
+        }
+
+        #[test]
+        fn test_circular_voting() {
+            let entities = vec![
+                create_entity("ns", "A"),
+                create_entity("ns", "B"),
+                create_entity("ns", "C"),
+            ];
+            let votes = vec![
+                create_vote("ns", "A", "ns", "B", -20), // A > B (30-70)
+                create_vote("ns", "B", "ns", "C", -20), // B > C (30-70)
+                create_vote("ns", "C", "ns", "A", -20), // C > A (30-70)
+            ];
+            
+            let graph = build_rank_graph(&entities, &votes).unwrap();
+            
+            assert_eq!(graph.graph.node_count(), 3);
+            assert_eq!(graph.graph.edge_count(), 6); // 3 pairs, bidirectional
+            
+            // Each winning edge should be 30, each losing edge should be 70
+            for idx in 0..3 {
+                let out_edges: Vec<_> = graph.graph.out_neighbors_with_values(idx).collect();
+                assert_eq!(out_edges.len(), 2);
+                // One edge should be 30 (winning), one should be 70 (losing)
+                let mut weights: Vec<f32> = out_edges.iter().map(|e| e.value).collect();
+                weights.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                assert_eq!(weights, vec![30.0, 70.0]);
+            }
+        }
+
+        #[test]
+        fn test_clamping_extreme_magnitudes() {
+            init_logger();
+            let entities = vec![
+                create_entity("ns", "A"),
+                create_entity("ns", "B"),
+                create_entity("ns", "C"),
+            ];
+            let votes = vec![
+                create_vote("ns", "A", "ns", "C", -10120), // Should be clamped to -50
+                create_vote("ns", "B", "ns", "C", 10120), // Should be clamped to 50
+            ];
+            
+            let graph = build_rank_graph(&entities, &votes).unwrap();
+            
+            // Find which index corresponds to A and B
+            let a_idx = *graph._entity_key_to_index.get("ns:A").unwrap();
+            let b_idx = *graph._entity_key_to_index.get("ns:B").unwrap();
+            let a_to_c = graph.graph.out_neighbors_with_values(a_idx).next().unwrap().value;
+            let b_to_c = graph.graph.out_neighbors_with_values(b_idx).next().unwrap().value;
+            assert_eq!(a_to_c, 0.0);
+            assert_eq!(b_to_c, 100.0);
+        }
+
+        #[test]
+        fn test_different_namespaces() {
+            let entities = vec![
+                create_entity("ns1", "A"),
+                create_entity("ns2", "A"), // Same pk, different namespace
+                create_entity("ns1", "B"),
+            ];
+            let votes = vec![
+                create_vote("ns1", "A", "ns2", "A", -30),
+                create_vote("ns1", "A", "ns1", "B", 20),
+                create_vote("ns2", "A", "ns1", "B", -10),
+            ];
+            
+            let graph = build_rank_graph(&entities, &votes).unwrap();
+            
+            assert_eq!(graph.graph.node_count(), 3);
+            // Should have 6 edges (3 pairs, bidirectional)
+            assert_eq!(graph.graph.edge_count(), 6);
+        }
+    }
+
+    mod calculate_rank_centrality_tests {
+        use super::*;
+
+        #[test]
+        fn test_empty_graph() {
+            let entities = vec![];
+            let votes = vec![];
+            let graph = build_rank_graph(&entities, &votes).unwrap();
+            
+            let scores = calculate_rank_centrality(&graph.graph, 1000, 1e-6);
+            
+            assert!(scores.is_empty());
+        }
+
+        #[test]
+        fn test_single_node() {
+            let entities = vec![create_entity("ns", "A")];
+            let votes = vec![];
+            let graph = build_rank_graph(&entities, &votes).unwrap();
+            
+            let scores = calculate_rank_centrality(&graph.graph, 1000, 1e-6);
+            
+            assert_eq!(scores.len(), 1);
+            assert_eq!(scores[0], 1.0); // Single node gets score 1
+        }
+
+        #[test]
+        fn test_clear_linear_ranking_5_entities() {
+            // A > B > C > D > E
+            let entities = vec![
+                create_entity("ns", "A"),
+                create_entity("ns", "B"),
+                create_entity("ns", "C"),
+                create_entity("ns", "D"),
+                create_entity("ns", "E"),
+            ];
+            let votes = vec![
+                create_vote("ns", "A", "ns", "B", -40), // A strongly beats B
+                create_vote("ns", "B", "ns", "C", -40), // B strongly beats C
+                create_vote("ns", "C", "ns", "D", -40), // C strongly beats D
+                create_vote("ns", "D", "ns", "E", -40), // D strongly beats E
+            ];
+            
+            let graph = build_rank_graph(&entities, &votes).unwrap();
+            let scores = calculate_rank_centrality(&graph.graph, 10000, 1e-8);
+            
+            // Get scores in entity order
+            let mut entity_scores = vec![];
+            for i in 0..5 {
+                let entity = &graph.index_to_entity_identifier[&i];
+                entity_scores.push((entity.pk.clone(), scores[i]));
+            }
+            entity_scores.sort_by_key(|(pk, _)| pk.clone());
+            
+            // Verify A > B > C > D > E
+            assert!(entity_scores[0].1 > entity_scores[1].1); // A > B
+            assert!(entity_scores[1].1 > entity_scores[2].1); // B > C
+            assert!(entity_scores[2].1 > entity_scores[3].1); // C > D
+            assert!(entity_scores[3].1 > entity_scores[4].1); // D > E
+        }
+
+        #[test]
+        fn test_tournament_style_6_entities() {
+            // Each entity beats all lower-ranked entities
+            let entities = vec![
+                create_entity("ns", "First"),
+                create_entity("ns", "Second"),
+                create_entity("ns", "Third"),
+                create_entity("ns", "Fourth"),
+                create_entity("ns", "Fifth"),
+                create_entity("ns", "Sixth"),
+            ];
+            
+            let mut votes = vec![];
+            let names = ["First", "Second", "Third", "Fourth", "Fifth", "Sixth"];
+            
+            // Each entity beats all entities ranked below it
+            for i in 0..names.len() {
+                for j in (i + 1)..names.len() {
+                    votes.push(create_vote("ns", names[i], "ns", names[j], -35));
+                }
+            }
+            
+            let graph = build_rank_graph(&entities, &votes).unwrap();
+            let scores = calculate_rank_centrality(&graph.graph, 10000, 1e-8);
+            
+            // Map scores back to entities
+            let mut entity_scores: Vec<(String, f32)> = vec![];
+            for i in 0..6 {
+                let entity = &graph.index_to_entity_identifier[&i];
+                entity_scores.push((entity.pk.clone(), scores[i]));
+            }
+            
+            // Sort by score descending
+            entity_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            
+            // Verify ranking order
+            assert_eq!(entity_scores[0].0, "First");
+            assert_eq!(entity_scores[1].0, "Second");
+            assert_eq!(entity_scores[2].0, "Third");
+            assert_eq!(entity_scores[3].0, "Fourth");
+            assert_eq!(entity_scores[4].0, "Fifth");
+            assert_eq!(entity_scores[5].0, "Sixth");
+        }
+
+        #[test]
+        fn test_rock_paper_scissors_pattern() {
+            // A beats B, B beats C, C beats A (circular)
+            let entities = vec![
+                create_entity("ns", "Rock"),
+                create_entity("ns", "Paper"),
+                create_entity("ns", "Scissors"),
+            ];
+            let votes = vec![
+                create_vote("ns", "Rock", "ns", "Scissors", -40),    // Rock beats Scissors
+                create_vote("ns", "Scissors", "ns", "Paper", -40),   // Scissors beats Paper
+                create_vote("ns", "Paper", "ns", "Rock", -40),       // Paper beats Rock
+            ];
+            
+            let graph = build_rank_graph(&entities, &votes).unwrap();
+            let scores = calculate_rank_centrality(&graph.graph, 10000, 1e-8);
+            
+            // In a perfect cycle, all scores should be approximately equal
+            let mean_score = scores.iter().sum::<f32>() / scores.len() as f32;
+            for score in &scores {
+                assert!((score - mean_score).abs() < 0.01, 
+                    "Score {} deviates too much from mean {}", score, mean_score);
+            }
+        }
+
+        #[test]
+        fn test_dominant_entity_beats_all() {
+            // Champion beats everyone, others have mixed results
+            let entities = vec![
+                create_entity("ns", "Champion"),
+                create_entity("ns", "PlayerA"),
+                create_entity("ns", "PlayerB"),
+                create_entity("ns", "PlayerC"),
+                create_entity("ns", "PlayerD"),
+            ];
+            let votes = vec![
+                // Champion beats everyone
+                create_vote("ns", "Champion", "ns", "PlayerA", -45),
+                create_vote("ns", "Champion", "ns", "PlayerB", -45),
+                create_vote("ns", "Champion", "ns", "PlayerC", -45),
+                create_vote("ns", "Champion", "ns", "PlayerD", -45),
+                // Others have some wins
+                create_vote("ns", "PlayerA", "ns", "PlayerB", -20),
+                create_vote("ns", "PlayerB", "ns", "PlayerC", -20),
+                create_vote("ns", "PlayerC", "ns", "PlayerD", -20),
+                create_vote("ns", "PlayerD", "ns", "PlayerA", -20), // Creates a cycle
+            ];
+            
+            let graph = build_rank_graph(&entities, &votes).unwrap();
+            let scores = calculate_rank_centrality(&graph.graph, 10000, 1e-8);
+            
+            // Find Champion's score
+            let mut champion_score = 0.0;
+            let mut other_scores = vec![];
+            
+            for i in 0..5 {
+                let entity = &graph.index_to_entity_identifier[&i];
+                if entity.pk == "Champion" {
+                    champion_score = scores[i];
+                } else {
+                    other_scores.push(scores[i]);
+                }
+            }
+            
+            // Champion should have the highest score
+            for other_score in &other_scores {
+                assert!(champion_score > *other_score,
+                    "Champion score {} should be higher than {}", champion_score, other_score);
+            }
+        }
+
+        #[test]
+        fn test_two_tier_ranking() {
+            // Top tier (A, B) both beat bottom tier (C, D, E)
+            let entities = vec![
+                create_entity("ns", "A"),
+                create_entity("ns", "B"),
+                create_entity("ns", "C"),
+                create_entity("ns", "D"),
+                create_entity("ns", "E"),
+            ];
+            let votes = vec![
+                // Top tier beats bottom tier
+                create_vote("ns", "A", "ns", "C", -40),
+                create_vote("ns", "A", "ns", "D", -40),
+                create_vote("ns", "A", "ns", "E", -40),
+                create_vote("ns", "B", "ns", "C", -40),
+                create_vote("ns", "B", "ns", "D", -40),
+                create_vote("ns", "B", "ns", "E", -40),
+                // Within tiers
+                create_vote("ns", "A", "ns", "B", -10), // Slight preference
+                create_vote("ns", "C", "ns", "D", -20),
+                create_vote("ns", "D", "ns", "E", -20),
+            ];
+            
+            let graph = build_rank_graph(&entities, &votes).unwrap();
+            let scores = calculate_rank_centrality(&graph.graph, 10000, 1e-8);
+            
+            let mut entity_scores: Vec<(String, f32)> = vec![];
+            for i in 0..5 {
+                let entity = &graph.index_to_entity_identifier[&i];
+                entity_scores.push((entity.pk.clone(), scores[i]));
+            }
+            entity_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            
+            // Top two should be A and B (in some order)
+            let top_two: HashSet<_> = entity_scores[0..2].iter().map(|(name, _)| name.clone()).collect();
+            assert!(top_two.contains("A"));
+            assert!(top_two.contains("B"));
+            
+            // Bottom three should be C, D, E
+            let bottom_three: HashSet<_> = entity_scores[2..5].iter().map(|(name, _)| name.clone()).collect();
+            assert!(bottom_three.contains("C"));
+            assert!(bottom_three.contains("D"));
+            assert!(bottom_three.contains("E"));
+        }
+
+        #[test]
+        fn test_disconnected_components() {
+            // Two separate groups with no votes between them
+            let entities = vec![
+                create_entity("ns", "Group1A"),
+                create_entity("ns", "Group1B"),
+                create_entity("ns", "Group2X"),
+                create_entity("ns", "Group2Y"),
+                create_entity("ns", "Group2Z"),
+            ];
+            let votes = vec![
+                // Group 1
+                create_vote("ns", "Group1A", "ns", "Group1B", -30),
+                // Group 2
+                create_vote("ns", "Group2X", "ns", "Group2Y", -30),
+                create_vote("ns", "Group2Y", "ns", "Group2Z", -30),
+            ];
+            
+            let graph = build_rank_graph(&entities, &votes).unwrap();
+            let scores = calculate_rank_centrality(&graph.graph, 10000, 1e-8);
+            
+            // Collect scores by group
+            let mut group1_scores = vec![];
+            let mut group2_scores = vec![];
+            
+            for i in 0..5 {
+                let entity = &graph.index_to_entity_identifier[&i];
+                if entity.pk.starts_with("Group1") {
+                    group1_scores.push((entity.pk.clone(), scores[i]));
+                } else {
+                    group2_scores.push((entity.pk.clone(), scores[i]));
+                }
+            }
+            
+            // Within each group, verify the expected ordering
+            group1_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            group2_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            
+            assert_eq!(group1_scores[0].0, "Group1A"); // A beats B
+            assert_eq!(group2_scores[0].0, "Group2X"); // X > Y > Z
+            assert_eq!(group2_scores[1].0, "Group2Y");
+            assert_eq!(group2_scores[2].0, "Group2Z");
+        }
+
+        #[test]
+        fn test_convergence_with_complex_votes() {
+            // Complex voting pattern with mixed preferences
+            let entities = vec![
+                create_entity("ns", "Alpha"),
+                create_entity("ns", "Beta"),
+                create_entity("ns", "Gamma"),
+                create_entity("ns", "Delta"),
+                create_entity("ns", "Epsilon"),
+                create_entity("ns", "Zeta"),
+            ];
+            let votes = vec![
+                // Strong preferences
+                create_vote("ns", "Alpha", "ns", "Beta", -45),
+                create_vote("ns", "Alpha", "ns", "Gamma", -40),
+                create_vote("ns", "Beta", "ns", "Delta", -50),
+                create_vote("ns", "Gamma", "ns", "Epsilon", -35),
+                // Weak preferences
+                create_vote("ns", "Delta", "ns", "Epsilon", -5),
+                create_vote("ns", "Epsilon", "ns", "Zeta", -10),
+                create_vote("ns", "Zeta", "ns", "Beta", -15),
+                // Some reverse preferences
+                create_vote("ns", "Gamma", "ns", "Beta", 20),
+                create_vote("ns", "Delta", "ns", "Alpha", 25),
+            ];
+            
+            let graph = build_rank_graph(&entities, &votes).unwrap();
+            let scores = calculate_rank_centrality(&graph.graph, 100000, 1e-8);
+            
+            // Just verify it converges and produces valid scores
+            assert_eq!(scores.len(), 6);
+            for score in &scores {
+                assert!(score.is_finite());
+                assert!(*score >= 0.0);
+            }
+            
+            // Sum of scores should be close to number of nodes (for this algorithm)
+            let sum: f32 = scores.iter().sum();
+            assert!((sum - 6.0).abs() < 0.1, "Sum of scores {} should be close to 6", sum);
+        }
+    }
+}
