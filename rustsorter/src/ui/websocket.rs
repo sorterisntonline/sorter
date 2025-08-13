@@ -805,7 +805,7 @@ async fn reddit_import_logic(
     }
 }
 
-/// Import Reddit posts to the database
+/// Import Reddit posts to the database within a single transaction
 async fn import_posts_to_database(
     posts: &[&RedditPost],
     subreddit: &str,
@@ -813,24 +813,26 @@ async fn import_posts_to_database(
 ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
     use serde_json::to_value;
     
+    // Start a database transaction for atomicity
+    let mut tx = app_state.db.begin().await?;
     let mut imported_count = 0;
     
     // Resolve admin user from DB (seeded in migrations)
     let admin_user_id: uuid::Uuid = sqlx::query_scalar!("SELECT id FROM users WHERE auth0_sub = $1", "admin")
-        .fetch_one(&app_state.db)
+        .fetch_one(&mut *tx)
         .await?;
     
-    // Ensure the subreddit entity exists (minimal metadata)
-    entity::create_entity_ignore_conflict(
-        &app_state.db,
-        "reddit.subreddit",
-        subreddit,
-        None,
-        None,
-        None,
-        admin_user_id,
-    )
-    .await?;
+            // Ensure the subreddit entity exists (minimal metadata)
+        entity::create_entity_ignore_conflict(
+            &mut *tx,
+            "reddit.subreddit",
+            subreddit,
+            None,
+            None,
+            None,
+            admin_user_id,
+        )
+        .await?;
     
     for post in posts {
         let post = *post;
@@ -838,9 +840,9 @@ async fn import_posts_to_database(
         // Serialize the full RedditPost as metadata
         let metadata_val = to_value(post)?;
 
-        // Create post entity
-        match entity::create_entity_ignore_conflict(
-            &app_state.db,
+        // Create post entity within the transaction
+        entity::create_entity_ignore_conflict(
+            &mut *tx,
             "reddit.post",
             &post.id,
             Some(post.title.as_str()),
@@ -848,37 +850,34 @@ async fn import_posts_to_database(
             Some(&metadata_val),
             admin_user_id,
         )
-        .await
-        {
-            Ok(_) => {
-                // Create relationship: subreddit -> post
-                let payload = entity_relationships::CreateRelationshipPayload {
-                    parent_ns: "reddit.subreddit".to_string(),
-                    parent_pk: subreddit.to_string(),
-                    child_ns: "reddit.post".to_string(),
-                    child_pk: post.id.clone(),
-                };
-                entity_relationships::create_relationship_ignore_conflict(
-                    &app_state.db,
-                    payload,
-                    admin_user_id,
-                )
-                .await?;
-                
-                imported_count += 1;
-                log::debug!("Imported post: {}", post.id);
-            }
-            Err(e) => {
-                log::warn!("Failed to import post {}: {}", post.id, e);
-            }
-        }
+        .await?;
+
+        // Create relationship: subreddit -> post
+        let payload = entity_relationships::CreateRelationshipPayload {
+            parent_ns: "reddit.subreddit".to_string(),
+            parent_pk: subreddit.to_string(),
+            child_ns: "reddit.post".to_string(),
+            child_pk: post.id.clone(),
+        };
+        entity_relationships::create_relationship_ignore_conflict(
+            &mut *tx,
+            payload,
+            admin_user_id,
+        )
+        .await?;
+        
+        imported_count += 1;
+        log::debug!("Imported post: {}", post.id);
     }
     
-    log::info!("Imported {} posts to r/{}", imported_count, subreddit);
+    // Commit the transaction - all operations succeed or all fail
+    tx.commit().await?;
+    
+    log::info!("Successfully imported {} posts to r/{} in transaction", imported_count, subreddit);
     Ok(imported_count)
 }
 
-/// Import Reddit comments to the database
+/// Import Reddit comments to the database within a single transaction
 async fn import_comments_to_database(
     comments: &[&RedditComment],
     _subreddit: &str,
@@ -886,10 +885,12 @@ async fn import_comments_to_database(
 ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
     use serde_json::to_value;
     
+    // Start a database transaction for atomicity
+    let mut tx = app_state.db.begin().await?;
     let mut imported_count = 0;
     
     let admin_user_id: uuid::Uuid = sqlx::query_scalar!("SELECT id FROM users WHERE auth0_sub = $1", "admin")
-        .fetch_one(&app_state.db)
+        .fetch_one(&mut *tx)
         .await?;
     
     for comment in comments {
@@ -898,9 +899,9 @@ async fn import_comments_to_database(
         // Serialize the full RedditComment as metadata
         let metadata_val = to_value(comment)?;
 
-        // Create comment entity (no title/profile picture)
-        match entity::create_entity_ignore_conflict(
-            &app_state.db,
+        // Create comment entity within the transaction
+        entity::create_entity_ignore_conflict(
+            &mut *tx,
             "reddit.comment",
             &comment.id,
             None,
@@ -908,50 +909,47 @@ async fn import_comments_to_database(
             Some(&metadata_val),
             admin_user_id,
         )
-        .await
-        {
-            Ok(_) => {
-                // Create relationship based on parent_id
-                if let Some(parent_id) = comment.parent_id.strip_prefix("t3_") {
-                    // Parent is a post
-                    let payload = entity_relationships::CreateRelationshipPayload {
-                        parent_ns: "reddit.post".to_string(),
-                        parent_pk: parent_id.to_string(),
-                        child_ns: "reddit.comment".to_string(),
-                        child_pk: comment.id.clone(),
-                    };
-                    entity_relationships::create_relationship_ignore_conflict(
-                        &app_state.db,
-                        payload,
-                        admin_user_id,
-                    )
-                    .await?;
-                } else if let Some(parent_id) = comment.parent_id.strip_prefix("t1_") {
-                    // Parent is another comment
-                    let payload = entity_relationships::CreateRelationshipPayload {
-                        parent_ns: "reddit.comment".to_string(),
-                        parent_pk: parent_id.to_string(),
-                        child_ns: "reddit.comment".to_string(),
-                        child_pk: comment.id.clone(),
-                    };
-                    entity_relationships::create_relationship_ignore_conflict(
-                        &app_state.db,
-                        payload,
-                        admin_user_id,
-                    )
-                    .await?;
-                }
-                
-                imported_count += 1;
-                log::debug!("Imported comment: {}", comment.id);
-            }
-            Err(e) => {
-                log::warn!("Failed to import comment {}: {}", comment.id, e);
-            }
+        .await?;
+
+        // Create relationship based on parent_id
+        if let Some(parent_id) = comment.parent_id.strip_prefix("t3_") {
+            // Parent is a post
+            let payload = entity_relationships::CreateRelationshipPayload {
+                parent_ns: "reddit.post".to_string(),
+                parent_pk: parent_id.to_string(),
+                child_ns: "reddit.comment".to_string(),
+                child_pk: comment.id.clone(),
+            };
+            entity_relationships::create_relationship_ignore_conflict(
+                &mut *tx,
+                payload,
+                admin_user_id,
+            )
+            .await?;
+        } else if let Some(parent_id) = comment.parent_id.strip_prefix("t1_") {
+            // Parent is another comment
+            let payload = entity_relationships::CreateRelationshipPayload {
+                parent_ns: "reddit.comment".to_string(),
+                parent_pk: parent_id.to_string(),
+                child_ns: "reddit.comment".to_string(),
+                child_pk: comment.id.clone(),
+            };
+            entity_relationships::create_relationship_ignore_conflict(
+                &mut *tx,
+                payload,
+                admin_user_id,
+            )
+            .await?;
         }
+        
+        imported_count += 1;
+        log::debug!("Imported comment: {}", comment.id);
     }
     
-    log::info!("Imported {} comments", imported_count);
+    // Commit the transaction - all operations succeed or all fail
+    tx.commit().await?;
+    
+    log::info!("Successfully imported {} comments in transaction", imported_count);
     Ok(imported_count)
 }
 
