@@ -26,7 +26,22 @@ cargo install sqlx-cli
 cd database && ./run-postgres.sh
 
 # new terminal
-cd rustsorter && sqlx migrate --source ../database/migrations
+cd rustsorter 
+cp .env.example .env
+sqlx migrate run --source ../database/migrations
 
 RUST_LOG=debug cargo run
+```
+
+# pytest integration testing
+(first set up a venv if you would like)
+Once the migrations are run and the DB and server are running 
+```bash
+pip install -r ./tests/requirements.txt
+pytest
+```
+or
+```bash
+pip install -r ./tests/requirements.txt
+python -m pytest
 ```
