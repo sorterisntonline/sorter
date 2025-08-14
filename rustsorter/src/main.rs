@@ -12,8 +12,7 @@ use std::{env, sync::Arc};
 
 use aide::{
     axum::{
-        ApiRouter,
-        IntoApiResponse,
+        ApiRouter, IntoApiResponse,
         routing::{get, get_with},
     },
     openapi::{self, OpenApi, SecurityScheme},
@@ -23,8 +22,7 @@ use aide::{
 use anyhow::Result;
 use app_state::AppState;
 use axum::{
-    Extension,
-    Router,
+    Extension, Router,
     http::StatusCode,
     middleware,
     response::{IntoResponse, Response},
