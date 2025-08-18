@@ -338,8 +338,6 @@ mod tests {
     }
 
     mod build_rank_graph_tests {
-        use env_logger::init;
-
         use super::*;
 
         #[test]
