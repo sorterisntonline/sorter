@@ -4,4 +4,4 @@
 pkill -f "rustsorter"
 
 # Run new instance
-cargo run
+RUST_LOG=debug cargo run
