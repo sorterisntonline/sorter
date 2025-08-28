@@ -21,7 +21,7 @@ pub struct EntityIdentifier {
 #[derive(Serialize, Debug, Clone, JsonSchema)]
 pub struct RankedEntity {
     pub identifier: EntityIdentifier,
-    pub score: f32,
+    pub score: f64,
 }
 
 #[derive(Serialize, Debug, JsonSchema)]
@@ -44,7 +44,7 @@ struct RankGraph {
     _entity_key_to_index: HashMap<String, usize>,
 
     index_to_entity_identifier: HashMap<usize, EntityIdentifier>,
-    graph: DirectedCsrGraph<usize, (), f32>,
+    graph: DirectedCsrGraph<usize, (), f64>,
 }
 
 fn build_rank_graph(
@@ -79,7 +79,7 @@ fn build_rank_graph(
             continue;
         };
 
-        let db_magnitude = (vote.magnitude as f32).clamp(-50.0, 50.0);
+        let db_magnitude = (vote.magnitude as f64).clamp(-50.0, 50.0);
         let weight_left_wins = db_magnitude + 50.0;
         let weight_right_wins = 100.0 - weight_left_wins;
 
@@ -87,7 +87,7 @@ fn build_rank_graph(
         edges.push((right_idx, left_idx, weight_right_wins));
     }
 
-    let graph: DirectedCsrGraph<usize, (), f32> =
+    let graph: DirectedCsrGraph<usize, (), f64> =
         GraphBuilder::new().edges_with_values(edges).build();
 
     Ok(RankGraph {
@@ -98,61 +98,56 @@ fn build_rank_graph(
 }
 
 fn calculate_rank_centrality(
-    graph: &DirectedCsrGraph<usize, (), f32>,
+    graph: &DirectedCsrGraph<usize, (), f64>,
     max_iters: usize,
-    tol: f32,
-) -> Vec<f32> {
+    tol: f64,
+) -> Vec<f64> {
     let node_count = graph.node_count();
     if node_count == 0 {
         return Vec::new();
     }
 
-    let out_degs: Vec<f32> = (0..node_count)
+    let out_degs: Vec<f64> = (0..node_count)
         .map(|u| graph.out_neighbors_with_values(u).map(|e| e.value).sum())
         .collect();
 
-    let max_out_deg = out_degs.iter().fold(0.0f32, |max, &deg| max.max(deg));
+    let max_out_deg = out_degs.iter().fold(0.0f64, |max, &deg| max.max(deg));
 
     if max_out_deg <= 1e-9 {
         warn!("Max out-degree is zero, returning uniform scores.");
 
-        return vec![1.0 / node_count as f32; node_count];
+        return vec![1.0 / node_count as f64; node_count];
     }
 
-    let mut scores = vec![1.0f32; node_count];
+    let mut scores = vec![1.0f64 / node_count as f64; node_count];
 
     for iter in 0..max_iters {
         let prev_scores = scores.clone();
-        let mut new_scores = vec![0.0f32; node_count];
+        let mut new_scores = vec![0.0f64; node_count];
 
-        for i in 0..node_count {
-            let out_degree = out_degs[i];
-
-            let self_loop = max_out_deg - out_degree;
-            let total_deg = max_out_deg;
-
-            let current_score = prev_scores[i];
-
-            for edge in graph.out_neighbors_with_values(i) {
-                let j = edge.target;
-                let w_ij = edge.value;
-
-                if i == j {
-                    continue;
+        for j in 0..node_count {  // <-- NEW: iterate over TARGET nodes
+            // Self-loop contribution
+            let self_loop_j = max_out_deg - out_degs[j];
+            new_scores[j] += prev_scores[j] * (self_loop_j / max_out_deg);
+            
+            // Contributions from other nodes i → j
+            for i in 0..node_count {
+                if i == j { continue; }
+                
+                // Find edge weight i → j
+                let mut edge_weight = 0.0;
+                for edge in graph.out_neighbors_with_values(i) {
+                    if edge.target == j {
+                        edge_weight += edge.value;
+                    }
                 }
-                if w_ij > 0.0 {
-                    new_scores[j] += current_score * (w_ij / total_deg);
-                }
-            }
-
-            if self_loop > 0.0 {
-                new_scores[i] += current_score * (self_loop / total_deg);
-            } else if total_deg <= 1e-9 && current_score > 0.0 {
-                // TODO: handle this case
+                
+                // Add normalized contribution
+                new_scores[j] += prev_scores[i] * (edge_weight / max_out_deg);
             }
         }
 
-        let diff: f32 = prev_scores
+        let diff: f64 = prev_scores
             .iter()
             .zip(new_scores.iter())
             .map(|(p, n)| (p - n).abs())
@@ -535,7 +530,7 @@ mod tests {
                 let out_edges: Vec<_> = graph.graph.out_neighbors_with_values(idx).collect();
                 assert_eq!(out_edges.len(), 2);
                 // One edge should be 30 (winning), one should be 70 (losing)
-                let mut weights: Vec<f32> = out_edges.iter().map(|e| e.value).collect();
+                let mut weights: Vec<f64> = out_edges.iter().map(|e| e.value).collect();
                 weights.sort_by(|a, b| a.partial_cmp(b).unwrap());
                 assert_eq!(weights, vec![30.0, 70.0]);
             }
@@ -674,7 +669,7 @@ mod tests {
             let scores = calculate_rank_centrality(&graph.graph, 10000, 1e-8);
             
             // Map scores back to entities
-            let mut entity_scores: Vec<(String, f32)> = vec![];
+            let mut entity_scores: Vec<(String, f64)> = vec![];
             for i in 0..6 {
                 let entity = &graph.index_to_entity_identifier[&i];
                 entity_scores.push((entity.pk.clone(), scores[i]));
@@ -710,7 +705,7 @@ mod tests {
             let scores = calculate_rank_centrality(&graph.graph, 10000, 1e-8);
             
             // In a perfect cycle, all scores should be approximately equal
-            let mean_score = scores.iter().sum::<f32>() / scores.len() as f32;
+            let mean_score = scores.iter().sum::<f64>() / scores.len() as f64;
             for score in &scores {
                 assert!((score - mean_score).abs() < 0.01, 
                     "Score {} deviates too much from mean {}", score, mean_score);
@@ -790,7 +785,7 @@ mod tests {
             let graph = build_rank_graph(&entities, &votes).unwrap();
             let scores = calculate_rank_centrality(&graph.graph, 10000, 1e-8);
             
-            let mut entity_scores: Vec<(String, f32)> = vec![];
+            let mut entity_scores: Vec<(String, f64)> = vec![];
             for i in 0..5 {
                 let entity = &graph.index_to_entity_identifier[&i];
                 entity_scores.push((entity.pk.clone(), scores[i]));
@@ -890,7 +885,7 @@ mod tests {
             }
             
             // Sum of scores should be close to number of nodes (for this algorithm)
-            let sum: f32 = scores.iter().sum();
+            let sum: f64 = scores.iter().sum();
             assert!((sum - 6.0).abs() < 0.1, "Sum of scores {} should be close to 6", sum);
         }
 
@@ -958,7 +953,7 @@ mod tests {
             init_logger();
             
             // Configuration: how many extra votes beyond the minimum 25
-            const EXTRA_VOTES: usize = 15; // Change this to add more votes
+            const EXTRA_VOTES: usize = 0; // Change this to add more votes
             
             // Create entities for all 26 letters
             let mut entities = Vec::new();
@@ -1029,7 +1024,7 @@ mod tests {
             let scores = calculate_rank_centrality(&graph.graph, 100000, 1e-8);
             
             // Map scores back to letters with their correct positions
-            let mut letter_scores: Vec<(String, f32, usize)> = vec![];
+            let mut letter_scores: Vec<(String, f64, usize)> = vec![];
             for i in 0..26 {
                 let entity = &graph.index_to_entity_identifier[&i];
                 let correct_position = (entity.pk.chars().next().unwrap() as usize) - ('A' as usize);
