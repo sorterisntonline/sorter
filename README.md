@@ -33,6 +33,23 @@ sqlx migrate run --source ../database/migrations
 RUST_LOG=debug cargo run
 ```
 
+# resetting the databse and normal database container workflow (written by gemini)
+*   **To Start & See Logs:**
+    1.  Open a terminal.
+    2.  Go to the `database` directory.
+    3.  Run `./run-postgres.sh`.
+    4.  Your terminal will now be filled with PostgreSQL logs. Keep this terminal open as long as you need the database.
+
+*   **To Stop:**
+    1.  Go to the terminal where the database is running.
+    2.  Press **`Ctrl-C`**.
+    3.  The container will stop cleanly, and because of the `--rm` flag, it will also be removed.
+
+*   **To Reset the Database:**
+    1.  Make sure the database is **stopped** first (press `Ctrl-C` in its terminal).
+    2.  Run `./run-postgres.sh --reset`. This will nuke the data and exit.
+    3.  You can then start it again normally.
+
 # pytest integration testing
 (first set up a venv if you would like)
 Once the migrations are run and the DB and server are running 

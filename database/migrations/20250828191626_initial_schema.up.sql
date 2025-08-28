@@ -39,7 +39,17 @@ CREATE TABLE entity_relationships(
   child_pk_namespace text NOT NULL,
   child_pk text NOT NULL,
   created_at timestamp DEFAULT now(),
-  PRIMARY KEY (parent_pk_namespace, parent_pk, child_pk_namespace, child_pk)
+  PRIMARY KEY (parent_pk_namespace, parent_pk, child_pk_namespace, child_pk),
+
+  -- NEW: Foreign key for the parent entity
+  FOREIGN KEY (parent_pk_namespace, parent_pk) 
+    REFERENCES entities (pk_namespace, pk) 
+    ON DELETE CASCADE,
+
+  -- NEW: Foreign key for the child entity
+  FOREIGN KEY (child_pk_namespace, child_pk) 
+    REFERENCES entities (pk_namespace, pk) 
+    ON DELETE CASCADE
 );
 
 CREATE TABLE attributes(
@@ -94,4 +104,5 @@ CREATE INDEX ON entity_relationships(parent_pk_namespace, parent_pk);
 CREATE INDEX ON entity_relationships(child_pk_namespace, child_pk);
 
 CREATE INDEX ON users(auth0_sub);
+
 
