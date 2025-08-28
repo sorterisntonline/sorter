@@ -4,6 +4,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react'; // Import useState
 import { useNavigate } from 'react-router-dom'; // Import useNavigate
 
+import { fetchPairFn, submitVoteFn } from '../fetchers/voteEndpoints';
+
 // Helper function to get the smallest image URL (can be moved to a utils file)
 const getSmallestImageUrl = (images) => {
     if (!images || images.length === 0) return null;
@@ -11,106 +13,38 @@ const getSmallestImageUrl = (images) => {
     return images[images.length - 1].url;
 };
 
-// --- API Fetching Function for a PAIR ---
-const fetchPairFn = async ({ queryKey }) => {
-    // Destructure parameters from the queryKey
-    const [_key, type, param1, param2, param3, param4] = queryKey; // e.g., ['pair', 'specific', ns, pk, ns, pk] or ['pair', 'children', ns, pk]
+const buildQueryKey = params => {
+        // Get potential pair identifiers from URL
+    const url_left_ns = params.get('left_ns');
+    const url_left_pk = params.get('left_pk');
+    const url_right_ns = params.get('right_ns');
+    const url_right_pk = params.get('right_pk');
+    // Get parent context parameters
+    const parent_pk_namespace = params.get('pk_namespace');
+    const parent_pk = params.get('pk');
 
-    let apiUrl = '/api/pair';
-    const params = new URLSearchParams();
+    // --- Determine Query Type and Construct Query Key ---
+    let queryType = 'default'; // Assume default if no specific params match
+    let queryKeyParams = [];
 
-    if (type === 'specific' && param1 && param2 && param3 && param4) {
-        params.append('left_ns', param1);
-        params.append('left_pk', param2);
-        params.append('right_ns', param3);
-        params.append('right_pk', param4);
-    } else if (type === 'children' && param1 && param2) {
-        params.append('pk_namespace', param1);
-        params.append('pk', param2);
+    if (url_left_ns && url_left_pk && url_right_ns && url_right_pk) {
+        queryType = 'specific';
+        queryKeyParams = [url_left_ns, url_left_pk, url_right_ns, url_right_pk];
+    } else if (parent_pk_namespace && parent_pk) {
+        // Only treat as 'children' if specific params are NOT set
+        queryType = 'children';
+        queryKeyParams = [parent_pk_namespace, parent_pk];
     }
-    // If type is 'default' or params are missing for specific/children,
-    // we send no query parameters, letting the backend provide a default pair.
+    // else: queryType remains 'default', queryKeyParams remains empty
 
-    const queryString = params.toString();
-    if (queryString) {
-        apiUrl += `?${queryString}`;
-    }
+    const queryKey = ['pair', queryType, ...queryKeyParams];
+    // Examples:
+    // ['pair', 'specific', 'ns1', 'pk1', 'ns2', 'pk2']
+    // ['pair', 'children', 'parent_ns', 'parent_pk']
+    // ['pair', 'default']
 
-    console.log(`Fetching pair (${type}) from:`, apiUrl);
-    const response = await fetch(apiUrl);
-
-    if (!response.ok) {
-        const errorText = await response.text();
-        const error = new Error(`HTTP error! status: ${response.status} for ${apiUrl}. ${errorText}`);
-        error.status = response.status; // Attach status code
-        throw error;
-    }
-    const data = await response.json();
-    if (data.error) {
-        throw new Error(data.error);
-    }
-    if (!data.left_entity || !data.right_entity) {
-         console.warn("API response missing left_entity or right_entity:", data);
-         throw new Error("Incomplete pair data received from API.");
-    }
-    return data;
-};
-
-// --- API Function to Submit a Vote (Append-Only) ---
-const submitVoteFn = async ({
-    left_ns, left_pk, right_ns, right_pk, attribute_id, magnitude
-    // voter_user_id is no longer needed, obtained from auth token
-}) => {
-
-    // TODO: Allow selecting attribute_id (defaulting to 'like' = 1)
-    // NOTE: The 'like' attribute ID is 1 based on the migration, not 0.
-    const attributeIdToUse = attribute_id !== undefined ? attribute_id : 1; // Default to 1 for 'like'
-
-    const createUrl = '/api/vote'; // Only POST endpoint is used now
-
-    const createPayload = {
-        left_entity_pk_namespace: left_ns,
-        left_entity_pk: left_pk,
-        right_entity_pk_namespace: right_ns,
-        right_entity_pk: right_pk,
-        attribute_id: attributeIdToUse,
-        magnitude: magnitude,
-        // No voter_user_id here, backend gets it from auth
-    };
-
-    console.log("Submitting vote (POST):", createUrl, createPayload);
-
-    const response = await fetch(createUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(createPayload),
-    });
-
-    if (response.ok) {
-         console.log("Vote created successfully");
-        return await response.json(); // Return created vote data
-    }
-
-     // Handle specific errors like Conflict (409) or Bad Request (400)
-    if (response.status === 409) {
-         console.warn("Vote conflict detected.");
-         // This might happen if the exact same vote (same pair, user, attr, timestamp) was somehow submitted twice,
-         // or if the PK doesn't include timestamp and a vote already exists for the pair/user/attr.
-         throw new Error("Vote conflict. It might already exist.");
-    }
-    if (response.status === 400) {
-        const errorText = await response.text();
-        console.error("Bad request (400):", errorText);
-        throw new Error(`Invalid vote data: ${errorText}`);
-    }
-
-    // Handle other errors
-    const errorText = await response.text();
-    console.error(`Failed to submit vote. Status: ${response.status}. Body: ${errorText}`);
-    const error = new Error(`Failed to submit vote. Status: ${response.status}.`);
-    error.status = response.status;
-    throw error;
-};
+    return [queryKey, queryType]
+}
 
 // --- Vote Item Component (Now just displays, no voting click) ---
 function VoteItemDisplay({ item, isDisabled }) { // Removed isSelected, pk is unused now
@@ -171,37 +105,9 @@ function VotePage() {
     const [searchParams, setSearchParams] = useSearchParams();
     const navigate = useNavigate();
     const queryClient = useQueryClient();
-
-    // Get potential pair identifiers from URL
-    const url_left_ns = searchParams.get('left_ns');
-    const url_left_pk = searchParams.get('left_pk');
-    const url_right_ns = searchParams.get('right_ns');
-    const url_right_pk = searchParams.get('right_pk');
-    // Get parent context parameters
-    const parent_pk_namespace = searchParams.get('pk_namespace');
-    const parent_pk = searchParams.get('pk');
-
     const [sliderValue, setSliderValue] = useState(0);
 
-    // --- Determine Query Type and Construct Query Key ---
-    let queryType = 'default'; // Assume default if no specific params match
-    let queryKeyParams = [];
-
-    if (url_left_ns && url_left_pk && url_right_ns && url_right_pk) {
-        queryType = 'specific';
-        queryKeyParams = [url_left_ns, url_left_pk, url_right_ns, url_right_pk];
-    } else if (parent_pk_namespace && parent_pk) {
-        // Only treat as 'children' if specific params are NOT set
-        queryType = 'children';
-        queryKeyParams = [parent_pk_namespace, parent_pk];
-    }
-    // else: queryType remains 'default', queryKeyParams remains empty
-
-    const queryKey = ['pair', queryType, ...queryKeyParams];
-    // Examples:
-    // ['pair', 'specific', 'ns1', 'pk1', 'ns2', 'pk2']
-    // ['pair', 'children', 'parent_ns', 'parent_pk']
-    // ['pair', 'default']
+    const [queryKey, queryType] = buildQueryKey(searchParams)
 
     const queryOptions = {
         staleTime: 5 * 60 * 1000,
@@ -209,8 +115,9 @@ function VotePage() {
         refetchOnWindowFocus: false, // Usually good for voting pages
     };
 
+    // --- Pair Query setup ---
     // Single query, but the key now reflects the request type
-    const pairQuery = useQuery({
+    const pair = useQuery({
         queryKey: queryKey, // Use the dynamically constructed key
         queryFn: fetchPairFn, // fetchPairFn now uses the queryKey
         enabled: true,
@@ -251,7 +158,6 @@ function VotePage() {
                 }
             }
 
-
              if (changed) {
                 setSearchParams(currentParams, { replace: true });
                 console.log("Updated URL parameters based on fetched pair.");
@@ -259,8 +165,7 @@ function VotePage() {
         }
     });
 
-
-    // --- Mutation Setup ---
+    // --- Vote Mutation Setup ---
     const voteMutation = useMutation({
         mutationFn: submitVoteFn,
         onSuccess: (data) => {
@@ -285,11 +190,11 @@ function VotePage() {
     };
 
     const handleVoteSubmit = () => {
-        // Use data directly from pairQuery
-        const leftItem = pairQuery.data?.left_entity;
-        const rightItem = pairQuery.data?.right_entity;
+        // Use data directly from pair
+        const leftItem = pair.data?.left_entity;
+        const rightItem = pair.data?.right_entity;
 
-        if (!leftItem || !rightItem || voteMutation.isPending || pairQuery.isLoading) return;
+        if (!leftItem || !rightItem || voteMutation.isPending || pair.isPending) return;
 
         console.log("Submitting Vote:");
         const voteData = {
@@ -307,31 +212,32 @@ function VotePage() {
     };
 
     // --- Render Logic ---
-    const isLoading = pairQuery.isLoading;
+    const loadingPair = pair.isPending;
+    const submittingVote = voteMutation.isPending
     // Combine potential errors (fetch or mutation)
-    const combinedError = pairQuery.error || voteMutation.error;
-    const isSuccess = pairQuery.isSuccess;
+    const combinedError = pair.error || voteMutation.error;
+    const isSuccess = pair.isSuccess;
     // Extract items from the fetched pair data
-    const leftItem = pairQuery.data?.left_entity;
-    const rightItem = pairQuery.data?.right_entity;
+    const leftItem = pair.data?.left_entity;
+    const rightItem = pair.data?.right_entity;
 
     // --- Main Return ---
     return (
         <div className="min-h-screen bg-gray-50/60 flex flex-col items-center pt-10 pb-10 px-4">
             <div className="w-full max-w-4xl"> {/* Increased max-width slightly for wider embeds */}
-                {isLoading && (
+                {loadingPair && (
                     <div className="text-center text-gray-500 py-10">Loading pair...</div>
                 )}
 
                  {/* Display combined errors (fetch or mutation) */}
-                {combinedError && !isLoading && ( // Show only if not loading initially
+                {combinedError && !loadingPair && ( // Show only if not loading initially
                     <div className="text-center text-red-600 bg-red-50 border border-red-200 p-4 rounded-md mb-4">
                         <p>Error loading or submitting vote:</p>
-                        {pairQuery.isError && <p className="text-sm mt-1">Loading pair: {pairQuery.error?.message || 'Unknown error'}</p>}
+                        {pair.isError && <p className="text-sm mt-1">Loading pair: {pair.error?.message || 'Unknown error'}</p>}
                         {voteMutation.isError && <p className="text-sm mt-1">Submitting vote: {voteMutation.error?.message || 'Unknown error'}</p>}
                         {/* Specific error message for API not finding a pair */}
-                        {pairQuery.error?.message?.includes("Could not find") && <p className="text-sm mt-1">{pairQuery.error.message}</p>}
-                        {pairQuery.error?.status === 404 && <p className="text-sm mt-1">Could not find the requested pair.</p>}
+                        {pair.error?.message?.includes("Could not find") && <p className="text-sm mt-1">{pair.error.message}</p>}
+                        {pair.error?.status === 404 && <p className="text-sm mt-1">Could not find the requested pair.</p>}
                     </div>
                 )}
 
@@ -342,12 +248,12 @@ function VotePage() {
                         <div className="flex w-full items-start justify-around gap-4">
                             {/* Left Item - Wrapped in Link */}
                              <Link to={`/?pk_namespace=${encodeURIComponent(leftItem.pk_namespace)}&pk=${encodeURIComponent(leftItem.pk)}`} className="no-underline hover:opacity-80 transition-opacity">
-                                <VoteItemDisplay item={leftItem} isDisabled={voteMutation.isPending || isLoading}/>
+                                <VoteItemDisplay item={leftItem} isDisabled={submittingVote || loadingPair}/>
                             </Link>
 
                             {/* Right Item - Wrapped in Link */}
                             <Link to={`/?pk_namespace=${encodeURIComponent(rightItem.pk_namespace)}&pk=${encodeURIComponent(rightItem.pk)}`} className="no-underline hover:opacity-80 transition-opacity">
-                                <VoteItemDisplay item={rightItem} isDisabled={voteMutation.isPending || isLoading}/>
+                                <VoteItemDisplay item={rightItem} isDisabled={submittingVote || loadingPair}/>
                             </Link>
                         </div>
 
@@ -367,27 +273,27 @@ function VotePage() {
                                 value={sliderValue}
                                 onChange={handleSliderChange}
                                 className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-blue-500"
-                                disabled={voteMutation.isPending || isLoading} // Disable slider during submission or loading
+                                disabled={submittingVote || loadingPair} // Disable slider during submission or loading
                             />
                         </div>
 
                         {/* Submit Button */}
                         <button
                             onClick={handleVoteSubmit}
-                            disabled={voteMutation.isPending || isLoading} // Disable if loading pair or submitting
+                            disabled={submittingVote || loadingPair} // Disable if loading pair or submitting
                             className={`mt-4 px-6 py-2 cursor-pointer text-white rounded font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                                voteMutation.isPending || isLoading
+                                submittingVote || loadingPair
                                 ? 'bg-gray-400 cursor-not-allowed'
                                 : 'bg-blue-500 hover:bg-blue-600'
                             }`}
                         >
-                            {voteMutation.isPending ? 'Submitting...' : 'Submit Vote'}
+                            {submittingVote ? 'Submitting...' : 'Submit Vote'}
                         </button>
                     </div>
                 )}
 
                  {/* Message when no pair is available (e.g., API returns error or empty) */}
-                 {isSuccess && !leftItem && !rightItem && !isLoading && (
+                 {isSuccess && !leftItem && !rightItem && !loadingPair && (
                     <div className="text-center text-gray-500 py-10">
                         No pair available for voting at the moment.
                     </div>
