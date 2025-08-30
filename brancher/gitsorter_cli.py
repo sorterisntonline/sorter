@@ -576,74 +576,72 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
         sorted_list = rank.get("sorted", [])
         print(f"[vote-llm][insert] Rank: unsorted={len(unsorted)} sorted={len(sorted_list)}")
 
-    # Phase 2: adjacent sweeps until stable or budget exhausted
-    stable_passes = 0
-    while votes_done < max_votes and sorted_list:
-        prev_order = [e["identifier"] for e in sorted_list]
-        swaps = 0
-        print(f"[vote-llm][adjacent] Sweep over {len(prev_order)} items (votes={votes_done}/{max_votes})")
-        for i in range(1, len(prev_order)):
-            if votes_done >= max_votes:
-                break
-            left_ident = prev_order[i - 1]
-            right_ident = prev_order[i]
-            a = get_entity_by_ident(left_ident)
-            b = get_entity_by_ident(right_ident)
-            a_meta = a.get("metadata") or {}
-            b_meta = b.get("metadata") or {}
-            print(f"[vote-llm][adjacent] Pair {i}/{len(prev_order)-1}: {left_ident['pk']} ({a_meta.get('branch')}@{a_meta.get('commit_sha')}) vs {right_ident['pk']} ({b_meta.get('branch')}@{b_meta.get('commit_sha')})")
-            messages_payload = build_prompt_for_pair(lens_text, a_meta, b_meta)
-            if args.dry_run:
-                print(json.dumps({"pair": [left_ident, right_ident], "prompt": messages_payload}, indent=2))
-                return
-            print(f"[vote-llm][adjacent] Calling LLM model={args.model} temp={args.temperature}")
-            resp = call_openrouter_chat(args.model, llm_key, messages_payload["messages"], temperature=args.temperature)
-            print("[vote-llm][adjacent] LLM response received")
-            content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
-            try:
-                decision = parse_llm_decision(content)
-            except Exception:
-                reprompt = messages_payload["messages"] + [{
-                    "role": "user",
-                    "content": "Your previous response was invalid. Reply ONLY with a single JSON object: {\"winner\":\"A|B|tie\",\"score\":0..100,\"confidence\":0..1,\"rationale\":\"...\"}"
-                }]
-                print("[vote-llm][adjacent] Reprompting due to invalid JSON...")
-                resp = call_openrouter_chat(args.model, llm_key, reprompt, temperature=args.temperature)
-                print("[vote-llm][adjacent] LLM response received (reprompt)")
+    # Phase 2: run up to N adjacent sweeps, then stop (ignore remaining budget)
+    if sorted_list and getattr(args, "sweeps", 1) > 0:
+        for sweep_idx in range(int(getattr(args, "sweeps", 1))):
+            prev_order = [e["identifier"] for e in sorted_list]
+            swaps = 0
+            print(f"[vote-llm][adjacent] Sweep {sweep_idx+1}/{args.sweeps} over {len(prev_order)} items (votes={votes_done}/{max_votes})")
+            for i in range(1, len(prev_order)):
+                if votes_done >= max_votes:
+                    break
+                left_ident = prev_order[i - 1]
+                right_ident = prev_order[i]
+                a = get_entity_by_ident(left_ident)
+                b = get_entity_by_ident(right_ident)
+                a_meta = a.get("metadata") or {}
+                b_meta = b.get("metadata") or {}
+                print(f"[vote-llm][adjacent] Pair {i}/{len(prev_order)-1}: {left_ident['pk']} ({a_meta.get('branch')}@{a_meta.get('commit_sha')}) vs {right_ident['pk']} ({b_meta.get('branch')}@{b_meta.get('commit_sha')})")
+                messages_payload = build_prompt_for_pair(lens_text, a_meta, b_meta)
+                if args.dry_run:
+                    print(json.dumps({"pair": [left_ident, right_ident], "prompt": messages_payload}, indent=2))
+                    return
+                print(f"[vote-llm][adjacent] Calling LLM model={args.model} temp={args.temperature}")
+                resp = call_openrouter_chat(args.model, llm_key, messages_payload["messages"], temperature=args.temperature)
+                print("[vote-llm][adjacent] LLM response received")
                 content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
                 try:
                     decision = parse_llm_decision(content)
                 except Exception:
-                    print("Strict JSON parse failed twice; skipping this adjacent pair.")
-                    continue
-            winner = decision["winner"]
-            score = decision["score"]
-            magnitude = magnitude_from_score(winner, score)
-            if winner == "b":
-                swaps += 1
-            payload = {
-                "left_entity_pk_namespace": left_ident["pk_namespace"],
-                "left_entity_pk": left_ident["pk"],
-                "right_entity_pk_namespace": right_ident["pk_namespace"],
-                "right_entity_pk": right_ident["pk"],
-                "magnitude": magnitude if winner == "a" else (-magnitude if winner == "b" else 0),
-                "attribute_id": 1,
-            }
-            print(f"[vote-llm][adjacent] Decision winner={winner} score={score} magnitude={payload['magnitude']} -> POST /vote")
-            http_post_json(f"{api}/vote", payload, headers=auth_headers(api_key))
-            votes_done += 1
+                    reprompt = messages_payload["messages"] + [{
+                        "role": "user",
+                        "content": "Your previous response was invalid. Reply ONLY with a single JSON object: {\"winner\":\"A|B|tie\",\"score\":0..100,\"confidence\":0..1,\"rationale\":\"...\"}"
+                    }]
+                    print("[vote-llm][adjacent] Reprompting due to invalid JSON...")
+                    resp = call_openrouter_chat(args.model, llm_key, reprompt, temperature=args.temperature)
+                    print("[vote-llm][adjacent] LLM response received (reprompt)")
+                    content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
+                    try:
+                        decision = parse_llm_decision(content)
+                    except Exception:
+                        print("Strict JSON parse failed twice; skipping this adjacent pair.")
+                        continue
+                winner = decision["winner"]
+                score = decision["score"]
+                magnitude = magnitude_from_score(winner, score)
+                if winner == "b":
+                    swaps += 1
+                payload = {
+                    "left_entity_pk_namespace": left_ident["pk_namespace"],
+                    "left_entity_pk": left_ident["pk"],
+                    "right_entity_pk_namespace": right_ident["pk_namespace"],
+                    "right_entity_pk": right_ident["pk"],
+                    "magnitude": magnitude if winner == "a" else (-magnitude if winner == "b" else 0),
+                    "attribute_id": 1,
+                }
+                print(f"[vote-llm][adjacent] Decision winner={winner} score={score} magnitude={payload['magnitude']} -> POST /vote")
+                http_post_json(f"{api}/vote", payload, headers=auth_headers(api_key))
+                votes_done += 1
 
-        # Re-rank and check stability
-        print("[vote-llm][adjacent] Re-ranking after sweep...")
-        rank = rank_entities(api, idents, api_key)
-        new_sorted = rank.get("sorted", [])
-        new_order = [e["identifier"] for e in new_sorted]
-        print(f"[vote-llm][adjacent] Sweep done. swaps={swaps} stable={new_order == prev_order}")
-        if new_order == prev_order or swaps == 0:
-            stable_passes += 1
-            break
-        else:
+            # Re-rank after sweep and decide whether to continue
+            print("[vote-llm][adjacent] Re-ranking after sweep...")
+            rank = rank_entities(api, idents, api_key)
+            new_sorted = rank.get("sorted", [])
+            new_order = [e["identifier"] for e in new_sorted]
+            print(f"[vote-llm][adjacent] Sweep {sweep_idx+1} done. swaps={swaps} stable={new_order == prev_order}")
             sorted_list = new_sorted
+            if swaps == 0 or new_order == prev_order:
+                break
 
     print(f"[vote-llm] Complete. votes_cast={votes_done}")
 
@@ -743,6 +741,7 @@ def build_parser() -> argparse.ArgumentParser:
     vl.add_argument("--llm-key-env", default="OPENROUTER_API_KEY", help="Env var containing provider API key")
     vl.add_argument("--temperature", type=float, default=0.1)
     vl.add_argument("--count", type=int, help="Max votes to cast (spanning tree + sweeps)")
+    vl.add_argument("--sweeps", type=int, default=1, help="Number of adjacent sweeps in phase 2 (default: %(default)s)")
     vl.add_argument("--dry-run", action="store_true")
     vl.add_argument("--lens-text", help="Override lens prompt text if lens entity has none")
     vl.set_defaults(func=cmd_vote_llm)
