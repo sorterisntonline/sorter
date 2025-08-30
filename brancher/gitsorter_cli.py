@@ -9,7 +9,6 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from urllib import request, error
-import fnmatch
 from typing import Optional, List, Dict
 
 
@@ -40,83 +39,36 @@ def run_cmd(cmd: List[str], cwd: Optional[str] = None) -> str:
         raise SystemExit(f"Command failed: {' '.join(cmd)} (exit {e.returncode})")
 
 
-def load_ignore_patterns(repo_path: Path) -> List[str]:
-    patterns: list[str] = []
-    # Repomix ignore (if present)
-    rm_ignore = repo_path / ".repomixignore"
-    if rm_ignore.exists():
-        for line in rm_ignore.read_text().splitlines():
-            line = line.strip()
-            if not line or line.startswith('#'):
-                continue
-            patterns.append(line)
-    # Reasonable defaults
-    patterns += [
-        ".git/", "node_modules/", "target/", "dist/", "build/", ".venv/", "venv/",
-        "__pycache__/", ".idea/", ".vscode/", ".DS_Store", "*.lock", "*.min.js", "*.min.css",
-        "*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", "*.svg", "*.pdf", "*.zip", "*.tar", "*.gz",
-        "*.mp4", "*.mov", "*.mp3", "*.wav",
-    ]
-    return patterns
-
-
-def path_is_ignored(path: str, patterns: List[str]) -> bool:
-    # Normalize to forward slashes for matching consistency
-    p = path.replace('\\', '/')
-    for pat in patterns:
-        if fnmatch.fnmatch(p, pat) or p.startswith(pat.rstrip('/')):
-            return True
-    return False
-
-
-def list_branch_files(repo_path: Path, branch: str) -> List[str]:
-    out = run_cmd(["git", "-C", str(repo_path), "ls-tree", "-r", "--name-only", branch])
-    files = [line.strip() for line in out.splitlines() if line.strip()]
-    return files
-
-
-def get_file_content(repo_path: Path, branch: str, file_path: str) -> bytes:
-    # Extract file as bytes at specific branch (HEAD of branch)
-    return subprocess.check_output(["git", "-C", str(repo_path), "show", f"{branch}:{file_path}"])
-
-
-def pack_branch(repo_path: Path, branch: str, out_file: Path, max_file_bytes: int = 800_000) -> Dict:
-    patterns = load_ignore_patterns(repo_path)
-    files = list_branch_files(repo_path, branch)
-    kept = []
-    skipped = []
-    total_bytes = 0
-    with out_file.open("w", encoding="utf-8", newline="\n") as f:
-        for rel in files:
-            if path_is_ignored(rel, patterns):
-                skipped.append(rel)
-                continue
-            try:
-                raw = get_file_content(repo_path, branch, rel)
-            except subprocess.CalledProcessError:
-                skipped.append(rel)
-                continue
-            # Skip likely-binary files
-            if b"\x00" in raw:
-                skipped.append(rel)
-                continue
-            # Heuristic: limit very large single files
-            if len(raw) > max_file_bytes:
-                skipped.append(rel)
-                continue
-            text = raw.decode("utf-8", errors="replace")
-            f.write(f"===== FILE: {rel} =====\n")
-            f.write(text)
-            if not text.endswith("\n"):
-                f.write("\n")
-            f.write("\n")
-            kept.append(rel)
-            total_bytes += len(raw)
-    return {
-        "kept_count": len(kept),
-        "skipped_count": len(skipped),
-        "approx_bytes": total_bytes,
-    }
+def pack_branch_repomix(repo_path: Path, branch: str, out_file: Path, style: str = "xml") -> Dict:
+    """Use repomix to pack a branch honoring .repomixignore and config.
+    Requires Node+npx and repomix. No fallback.
+    """
+    # Create a temporary git worktree for the target branch to let repomix
+    # operate on the correct tree with proper .git context.
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    worktree_dir = Path(tempfile.mkdtemp(prefix="gitsorter-wt-"))
+    try:
+        run_cmd(["git", "-C", str(repo_path), "worktree", "add", "--detach", str(worktree_dir), branch])
+        cmd = [
+            "npx",
+            "repomix",
+            "--output",
+            str(out_file),
+            "--style",
+            style,
+        ]
+        # Run in the worktree so config/ignore applies naturally
+        subprocess.check_call(cmd, cwd=str(worktree_dir))
+        approx_bytes = out_file.stat().st_size if out_file.exists() else 0
+        return {"approx_bytes": approx_bytes, "packer": "repomix", "style": style}
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        raise SystemExit(f"repomix packing failed for branch '{branch}': {e}")
+    finally:
+        # Clean up worktree regardless of success
+        try:
+            run_cmd(["git", "-C", str(repo_path), "worktree", "remove", "--force", str(worktree_dir)])
+        except Exception:
+            pass
 
 
 def cmd_health(args: argparse.Namespace) -> None:
@@ -158,14 +110,17 @@ def cmd_prepare(args: argparse.Namespace) -> None:
     }
     (out_dir / "run_config.json").write_text(json.dumps(config, indent=2))
 
-    # Pack each branch
+    # Pack each branch with repomix only
     stats = {}
     for br in branches:
-        target = out_dir / f"{br.replace('/', '_')}.txt"
+        ext = ".xml" if args.style == "xml" else ".txt" if args.style == "plain" else ".md"
+        target = out_dir / f"{br.replace('/', '_')}{ext}"
         print(f"Packing branch '{br}' -> {target}")
-        st = pack_branch(repo, br, target)
+        st = pack_branch_repomix(repo, br, target, style=args.style)
         stats[br] = st
-        print(f"  kept={st['kept_count']} skipped={st['skipped_count']} bytes≈{st['approx_bytes']}")
+        approx = st.get("approx_bytes")
+        packer_used = st.get("packer")
+        print(f"  packer={packer_used} style={args.style} bytes≈{approx}")
 
     (out_dir / "pack_stats.json").write_text(json.dumps(stats, indent=2))
     print("Done.")
@@ -189,6 +144,7 @@ def build_parser() -> argparse.ArgumentParser:
     pp.add_argument("--model", default="openai/gpt-4o", help="Model identifier for later voting")
     pp.add_argument("--lens", default="architectural_vision_v1", help="Lens primary key")
     pp.add_argument("--api", default=DEFAULT_API_BASE, help="API base URL to embed in config")
+    pp.add_argument("--style", choices=["xml", "markdown", "plain"], default="xml", help="Repomix output style (default: xml)")
     pp.set_defaults(func=cmd_prepare)
 
     return p

@@ -62,3 +62,7 @@ or
 pip install -r ./tests/requirements.txt
 python -m pytest
 ```
+
+- Health: python3 brancher/gitsorter_cli.py health --api http://127.0.0.1:8081/api
+- Prepare (XML, default): python3 brancher/gitsorter_cli.py prepare --repo . --branch master --out .gitsorter/run1
+- Other styles: --style markdown or --style plain (outputs .md or .txt).

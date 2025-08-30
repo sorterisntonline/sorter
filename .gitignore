@@ -9,3 +9,5 @@ repomix-output.txt
 !.clj-kondo/config.edn
 all.txt
 rustsorter/.idea
+
+.gitsorter/
