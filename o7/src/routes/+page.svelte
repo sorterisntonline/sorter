@@ -7,6 +7,15 @@
 
 <main class="flex h-screen flex-col items-center justify-center">
 	<img src="/favicon.png" class="w-32" alt="o7 Logo" />
+
+	<!-- Add a link to your new Gitsorter area -->
+	<a
+		href="/runs"
+		class="my-4 rounded-lg bg-blue-600 px-4 py-2 font-bold text-white transition-colors hover:bg-blue-700"
+	>
+		View Gitsorter Runs
+	</a>
+
 	<!--
 		Notice how there's no flash of `undefined` here: that's because of the
 		SSR in `+page.server.ts`! Try changing the `name` to see the difference.
