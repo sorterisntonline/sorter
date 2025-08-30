@@ -30,6 +30,23 @@ def http_get_json(url: str, headers: Optional[Dict[str, str]] = None) -> Dict:
         raise SystemExit(f"Failed to reach {url}: {e}")
 
 
+def http_post_json(url: str, payload: Dict, headers: Optional[Dict[str, str]] = None) -> Dict:
+    body = json.dumps(payload).encode("utf-8")
+    req = request.Request(url, method="POST", data=body)
+    req.add_header("Content-Type", "application/json")
+    for k, v in (headers or {}).items():
+        req.add_header(k, v)
+    try:
+        with request.urlopen(req) as resp:
+            data = resp.read()
+            return json.loads(data.decode("utf-8"))
+    except error.HTTPError as e:
+        msg = e.read().decode("utf-8", errors="ignore")
+        raise SystemExit(f"HTTP {e.code} error for {url}: {msg}")
+    except error.URLError as e:
+        raise SystemExit(f"Failed to reach {url}: {e}")
+
+
 def run_cmd(cmd: List[str], cwd: Optional[str] = None) -> str:
     try:
         out = subprocess.check_output(cmd, cwd=cwd)
@@ -106,6 +123,7 @@ def cmd_prepare(args: argparse.Namespace) -> None:
         "branches": branches,
         "model": args.model,
         "lens_pk": args.lens,
+        "style": args.style,
         "api_base": args.api,
     }
     (out_dir / "run_config.json").write_text(json.dumps(config, indent=2))
@@ -124,6 +142,484 @@ def cmd_prepare(args: argparse.Namespace) -> None:
 
     (out_dir / "pack_stats.json").write_text(json.dumps(stats, indent=2))
     print("Done.")
+
+
+def auth_headers(api_key: Optional[str]) -> Dict[str, str]:
+    headers: Dict[str, str] = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    return headers
+
+
+def git_branch_sha(repo: Path, branch: str) -> str:
+    return run_cmd(["git", "-C", str(repo), "rev-parse", branch]).strip()
+
+
+def cmd_ingest(args: argparse.Namespace) -> None:
+    out_dir = Path(args.dir)
+    cfg = json.loads((out_dir / "run_config.json").read_text())
+    repo = Path(cfg["repo_path"]).resolve()
+    branches = cfg["branches"]
+    run_id = cfg["run_id"]
+    run_name = cfg.get("run_name")
+    style = args.style or cfg.get("style", "xml")
+    api = args.api.rstrip('/')
+    api_key = args.api_key or os.environ.get("SORTER_API_KEY")
+    hdrs = auth_headers(api_key)
+
+    # 1) Create run entity
+    run_payload = {
+        "pk_namespace": "gitsort.run",
+        "pk": run_id,
+        "title": run_name,
+        "metadata": cfg,
+        "profile_picture_url": None,
+    }
+    run_entity = http_post_json(f"{api}/entity", run_payload, headers=hdrs)
+    print(f"Created run entity: gitsort.run/{run_id}")
+
+    # 2) Create/ensure lens entity
+    lens_pk = cfg.get("lens_pk", args.lens)
+    if lens_pk:
+        lens_payload = {
+            "pk_namespace": "gitsort.lens",
+            "pk": lens_pk,
+            "title": lens_pk,
+            "metadata": None,
+            "profile_picture_url": None,
+        }
+        http_post_json(f"{api}/entity", lens_payload, headers=hdrs)
+        rel = {
+            "parent_pk_namespace": "gitsort.run",
+            "parent_pk": run_id,
+            "child_pk_namespace": "gitsort.lens",
+            "child_pk": lens_pk,
+        }
+        http_post_json(f"{api}/entity_relationships", rel, headers=hdrs)
+        print(f"Linked lens gitsort.lens/{lens_pk} to run")
+
+    # 3) Create snapshot entities and relationships
+    stats = json.loads((out_dir / "pack_stats.json").read_text())
+    for br in branches:
+        sha = git_branch_sha(repo, br)
+        ext = ".xml" if style == "xml" else ".md" if style == "markdown" else ".txt"
+        packed_path = out_dir / f"{br.replace('/', '_')}{ext}"
+        content = packed_path.read_text(encoding="utf-8")
+        pk = f"{br}:{sha}"
+        payload = {
+            "pk_namespace": "gitsort.branch_snapshot",
+            "pk": pk,
+            "title": br,
+            "metadata": {
+                "branch": br,
+                "commit_sha": sha,
+                "packed_style": style,
+                "packed_bytes": (out_dir / f"{br.replace('/', '_')}{ext}").stat().st_size,
+                "repomix_output": content,
+            },
+            "profile_picture_url": None,
+        }
+        http_post_json(f"{api}/entity", payload, headers=hdrs)
+        rel = {
+            "parent_pk_namespace": "gitsort.run",
+            "parent_pk": run_id,
+            "child_pk_namespace": "gitsort.branch_snapshot",
+            "child_pk": pk,
+        }
+        http_post_json(f"{api}/entity_relationships", rel, headers=hdrs)
+        print(f"Linked snapshot {pk}")
+
+    print("Ingestion complete.")
+
+
+# ------------------------- LLM Voting Orchestrator -------------------------
+
+def default_lens_prompts() -> Dict[str, str]:
+    return {
+        "system": (
+            "You are a principal software architect and product strategist. "
+            "You compare two entire codebases (A and B) and judge them strictly against the provided lens. "
+            "Be rigorous, consistent, and decisive. Respond ONLY with a single JSON object as instructed; do not include prose, code fences, or any extra characters."
+        ),
+        "user_template": (
+            "Lens Criteria:\n{{LENS}}\n\n"
+            "Compare two codebases labeled <A> and <B>.\n"
+            "Return ONLY a single JSON object (no other text, no code fences) exactly of the form:\n"
+            "{\n  \"winner\": \"A|B|tie\",\n  \"score\": 0..100,\n  \"confidence\": 0..1,\n  \"rationale\": \"short reason\"\n}\n\n"
+            "Codebase A (metadata):\nBranch: {{A_BRANCH}}\nCommit: {{A_SHA}}\nBytes: {{A_BYTES}}\n\n"
+            "<A_CODE>\n{{A_CONTENT}}\n</A_CODE>\n\n"
+            "Codebase B (metadata):\nBranch: {{B_BRANCH}}\nCommit: {{B_SHA}}\nBytes: {{B_BYTES}}\n\n"
+            "<B_CODE>\n{{B_CONTENT}}\n</B_CODE>\n"
+        ),
+    }
+
+
+def build_prompt_for_pair(lens_text: str, a_meta: Dict, b_meta: Dict) -> Dict[str, List[Dict[str, str]]]:
+    prompts = default_lens_prompts()
+    system = prompts["system"]
+    user = prompts["user_template"]
+    user_filled = (
+        user
+        .replace("{{LENS}}", lens_text)
+        .replace("{{A_BRANCH}}", str(a_meta.get("branch", "")))
+        .replace("{{A_SHA}}", str(a_meta.get("commit_sha", "")))
+        .replace("{{A_BYTES}}", str(a_meta.get("packed_bytes", "")))
+        .replace("{{A_CONTENT}}", a_meta.get("repomix_output", ""))
+        .replace("{{B_BRANCH}}", str(b_meta.get("branch", "")))
+        .replace("{{B_SHA}}", str(b_meta.get("commit_sha", "")))
+        .replace("{{B_BYTES}}", str(b_meta.get("packed_bytes", "")))
+        .replace("{{B_CONTENT}}", b_meta.get("repomix_output", ""))
+    )
+    return {
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_filled},
+        ]
+    }
+
+
+def call_openrouter_chat(model: str, api_key: str, messages: List[Dict[str, str]], temperature: float = 0.1, extra: Optional[Dict] = None) -> Dict:
+    import ssl
+    from urllib import request as _req
+    body = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        # Ask for structured output when supported
+        "response_format": {"type": "json_object"},
+    }
+    if extra:
+        body.update(extra)
+    data = json.dumps(body).encode("utf-8")
+    req = _req.Request("https://openrouter.ai/api/v1/chat/completions", data=data, method="POST")
+    req.add_header("Content-Type", "application/json")
+    req.add_header("Authorization", f"Bearer {api_key}")
+    # Some environments require this user-agent per OpenRouter policy
+    req.add_header("HTTP-Referer", "https://sorter.local/cli")
+    req.add_header("X-Title", "gitsorter-cli")
+    try:
+        # default SSL context
+        with _req.urlopen(req, context=ssl.create_default_context()) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except error.HTTPError as e:
+        raise SystemExit(f"OpenRouter HTTP {e.code}: {e.read().decode('utf-8', errors='ignore')}")
+    except error.URLError as e:
+        raise SystemExit(f"OpenRouter request failed: {e}")
+
+
+def parse_llm_decision(text: str) -> Dict:
+    # Strict JSON only; no fallback parsing.
+    obj = json.loads(text)
+    winner = str(obj.get("winner", "")).lower()
+    if winner not in ("a", "b", "tie"):
+        raise ValueError("invalid winner")
+    score = float(obj.get("score", 50))
+    confidence = float(obj.get("confidence", 0.5))
+    rationale = str(obj.get("rationale", ""))
+    return {"winner": winner, "score": score, "confidence": confidence, "rationale": rationale}
+
+
+def magnitude_from_score(winner: str, score: float) -> int:
+    # score is 0..100; map to [-50, 50] where positive favors listed left
+    # We'll always set left=A; if winner B, we negate later when posting (server canonicalizes anyway)
+    mag = int(round(score - 50))
+    if winner == "tie":
+        return 0
+    return max(-50, min(50, mag))
+
+
+def get_run_children(api: str, run_id: str, api_key: Optional[str]) -> Dict[str, Dict]:
+    data = http_get_json(
+        f"{api.rstrip('/')}/entity/gitsort.run/{run_id}?children=true",
+        headers=auth_headers(api_key),
+    )
+    # Normalize shape
+    children = data.get("children")
+    if children is None and isinstance(data, dict):
+        children = data.get("entity", {}).get("children")
+    if children is None:
+        children = []
+    # Build map by (ns,pk)
+    by_id: Dict[str, Dict] = {}
+    for e in children:
+        key = f"{e['pk_namespace']}::{e['pk']}"
+        by_id[key] = e
+    return by_id
+
+
+def rank_entities(api: str, entities: List[Dict[str, str]], api_key: Optional[str]) -> Dict:
+    return http_post_json(f"{api.rstrip('/')}/rank", entities, headers=auth_headers(api_key))
+
+
+def cmd_vote_llm(args: argparse.Namespace) -> None:
+    api = args.api.rstrip('/')
+    api_key = args.api_key or os.environ.get("SORTER_API_KEY")
+    llm_key = os.environ.get(args.llm_key_env)
+    if not llm_key:
+        raise SystemExit(f"Missing LLM API key in env var {args.llm_key_env}")
+
+    # Load run children and separate snapshots and lens
+    child_map = get_run_children(api, args.run_id, api_key)
+    snapshots: List[Dict] = []
+    lens_entities: List[Dict] = []
+    for e in child_map.values():
+        if e.get("pk_namespace") == "gitsort.branch_snapshot":
+            snapshots.append(e)
+        elif e.get("pk_namespace") == "gitsort.lens":
+            lens_entities.append(e)
+    if not snapshots:
+        print("No snapshots found; run ingest first.")
+        return
+
+    # Determine lens text
+    lens_text = args.lens_text or ""
+    if not lens_text and lens_entities:
+        lens_meta = lens_entities[0].get("metadata") or {}
+        lens_text = lens_meta.get("prompt_template") or lens_meta.get("text") or lens_meta.get("prompt") or ""
+    if not lens_text:
+        lens_text = (
+            "Evaluate architectural clarity, modularity, cohesion/coupling, naming, testability, documentation, "
+            "and execution quality. Prefer clean, maintainable, well-structured designs aligned with the stated goals."
+        )
+
+    # Build identifiers list for rank
+    idents = [{"pk_namespace": s["pk_namespace"], "pk": s["pk"]} for s in snapshots]
+    rank = rank_entities(api, idents, api_key)
+    unsorted = rank.get("unsorted", [])
+    sorted_list = rank.get("sorted", [])
+
+    # Helper to lookup entity metadata by identifier
+    def get_entity_by_ident(ident: Dict) -> Dict:
+        key = f"{ident['pk_namespace']}::{ident['pk']}"
+        return child_map[key]
+
+    votes_done = 0
+    max_votes = int(args.count) if args.count else 1_000_000_000
+
+    # Phase 1: single-edge inserts
+    if not sorted_list and len(unsorted) >= 2 and votes_done < max_votes:
+        a_ident = unsorted[0]
+        b_ident = unsorted[1]
+        a = get_entity_by_ident(a_ident)
+        b = get_entity_by_ident(b_ident)
+        messages_payload = build_prompt_for_pair(
+            lens_text, a.get("metadata") or {}, b.get("metadata") or {}
+        )
+        if args.dry_run:
+            print(json.dumps({"pair": [a_ident, b_ident], "prompt": messages_payload}, indent=2))
+            return
+        resp = call_openrouter_chat(args.model, llm_key, messages_payload["messages"], temperature=args.temperature)
+        content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
+        try:
+            decision = parse_llm_decision(content)
+        except Exception:
+            # Single strict reprompt, then skip on failure
+            reprompt = messages_payload["messages"] + [{
+                "role": "user",
+                "content": "Your previous response was invalid. Reply ONLY with a single JSON object: {\"winner\":\"A|B|tie\",\"score\":0..100,\"confidence\":0..1,\"rationale\":\"...\"}"
+            }]
+            resp = call_openrouter_chat(args.model, llm_key, reprompt, temperature=args.temperature)
+            content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
+            try:
+                decision = parse_llm_decision(content)
+            except Exception:
+                print("Strict JSON parse failed twice; skipping this pair.")
+                decision = None
+        if not decision:
+            # Skip posting a vote
+            # Re-rank to see if other changes happened; then continue
+            rank = rank_entities(api, idents, api_key)
+            unsorted = rank.get("unsorted", [])
+            sorted_list = rank.get("sorted", [])
+            # Continue with next step
+            pass
+        else:
+            winner = decision["winner"]
+            score = decision["score"]
+            magnitude = magnitude_from_score(winner, score)
+            # Post vote using A vs B; server canonicalizes
+            payload = {
+                "left_entity_pk_namespace": a_ident["pk_namespace"],
+                "left_entity_pk": a_ident["pk"],
+                "right_entity_pk_namespace": b_ident["pk_namespace"],
+                "right_entity_pk": b_ident["pk"],
+                "magnitude": magnitude if winner == "a" else (-magnitude if winner == "b" else 0),
+                "attribute_id": 1,
+            }
+            http_post_json(f"{api}/vote", payload, headers=auth_headers(api_key))
+            votes_done += 1
+        winner = decision["winner"]
+        score = decision["score"]
+        magnitude = magnitude_from_score(winner, score)
+        # Post vote using A vs B; server canonicalizes
+        payload = {
+            "left_entity_pk_namespace": a_ident["pk_namespace"],
+            "left_entity_pk": a_ident["pk"],
+            "right_entity_pk_namespace": b_ident["pk_namespace"],
+            "right_entity_pk": b_ident["pk"],
+            "magnitude": magnitude if winner == "a" else (-magnitude if winner == "b" else 0),
+            "attribute_id": 1,
+        }
+        http_post_json(f"{api}/vote", payload, headers=auth_headers(api_key))
+        votes_done += 1
+
+        # Re-rank after seeding
+        rank = rank_entities(api, idents, api_key)
+        unsorted = rank.get("unsorted", [])
+        sorted_list = rank.get("sorted", [])
+
+    # Insert remaining unsorted items with single comparison to an anchor
+    while unsorted and votes_done < max_votes:
+        anchor_idx = len(sorted_list) // 2 if sorted_list else 0
+        anchor_ident = (sorted_list[anchor_idx]["identifier"] if sorted_list else unsorted[0])
+        item_ident = unsorted[0]
+        a = get_entity_by_ident(item_ident)
+        b = get_entity_by_ident(anchor_ident)
+        messages_payload = build_prompt_for_pair(
+            lens_text, a.get("metadata") or {}, b.get("metadata") or {}
+        )
+        if args.dry_run:
+            print(json.dumps({"pair": [item_ident, anchor_ident], "prompt": messages_payload}, indent=2))
+            return
+        resp = call_openrouter_chat(args.model, llm_key, messages_payload["messages"], temperature=args.temperature)
+        content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
+        try:
+            decision = parse_llm_decision(content)
+        except Exception:
+            reprompt = messages_payload["messages"] + [{
+                "role": "user",
+                "content": "Your previous response was invalid. Reply ONLY with a single JSON object: {\"winner\":\"A|B|tie\",\"score\":0..100,\"confidence\":0..1,\"rationale\":\"...\"}"
+            }]
+            resp = call_openrouter_chat(args.model, llm_key, reprompt, temperature=args.temperature)
+            content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
+            try:
+                decision = parse_llm_decision(content)
+            except Exception:
+                print("Strict JSON parse failed twice; skipping this insertion.")
+                decision = None
+        if not decision:
+            rank = rank_entities(api, idents, api_key)
+            unsorted = rank.get("unsorted", [])
+            sorted_list = rank.get("sorted", [])
+            continue
+        winner = decision["winner"]
+        score = decision["score"]
+        magnitude = magnitude_from_score(winner, score)
+        payload = {
+            "left_entity_pk_namespace": item_ident["pk_namespace"],
+            "left_entity_pk": item_ident["pk"],
+            "right_entity_pk_namespace": anchor_ident["pk_namespace"],
+            "right_entity_pk": anchor_ident["pk"],
+            "magnitude": magnitude if winner == "a" else (-magnitude if winner == "b" else 0),
+            "attribute_id": 1,
+        }
+        http_post_json(f"{api}/vote", payload, headers=auth_headers(api_key))
+        votes_done += 1
+
+        # Optionally re-rank in batches; keep simple: re-rank every insertion or when unsorted shrinks
+        rank = rank_entities(api, idents, api_key)
+        unsorted = rank.get("unsorted", [])
+        sorted_list = rank.get("sorted", [])
+
+    # Phase 2: adjacent sweeps until stable or budget exhausted
+    stable_passes = 0
+    while votes_done < max_votes and sorted_list:
+        prev_order = [e["identifier"] for e in sorted_list]
+        swaps = 0
+        for i in range(1, len(prev_order)):
+            if votes_done >= max_votes:
+                break
+            left_ident = prev_order[i - 1]
+            right_ident = prev_order[i]
+            a = get_entity_by_ident(left_ident)
+            b = get_entity_by_ident(right_ident)
+            messages_payload = build_prompt_for_pair(
+                lens_text, a.get("metadata") or {}, b.get("metadata") or {}
+            )
+            if args.dry_run:
+                print(json.dumps({"pair": [left_ident, right_ident], "prompt": messages_payload}, indent=2))
+                return
+            resp = call_openrouter_chat(args.model, llm_key, messages_payload["messages"], temperature=args.temperature)
+            content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
+            try:
+                decision = parse_llm_decision(content)
+            except Exception:
+                reprompt = messages_payload["messages"] + [{
+                    "role": "user",
+                    "content": "Your previous response was invalid. Reply ONLY with a single JSON object: {\"winner\":\"A|B|tie\",\"score\":0..100,\"confidence\":0..1,\"rationale\":\"...\"}"
+                }]
+                resp = call_openrouter_chat(args.model, llm_key, reprompt, temperature=args.temperature)
+                content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
+                try:
+                    decision = parse_llm_decision(content)
+                except Exception:
+                    print("Strict JSON parse failed twice; skipping this adjacent pair.")
+                    continue
+            winner = decision["winner"]
+            score = decision["score"]
+            magnitude = magnitude_from_score(winner, score)
+            if winner == "b":
+                swaps += 1
+            payload = {
+                "left_entity_pk_namespace": left_ident["pk_namespace"],
+                "left_entity_pk": left_ident["pk"],
+                "right_entity_pk_namespace": right_ident["pk_namespace"],
+                "right_entity_pk": right_ident["pk"],
+                "magnitude": magnitude if winner == "a" else (-magnitude if winner == "b" else 0),
+                "attribute_id": 1,
+            }
+            http_post_json(f"{api}/vote", payload, headers=auth_headers(api_key))
+            votes_done += 1
+
+        # Re-rank and check stability
+        rank = rank_entities(api, idents, api_key)
+        new_sorted = rank.get("sorted", [])
+        new_order = [e["identifier"] for e in new_sorted]
+        if new_order == prev_order or swaps == 0:
+            stable_passes += 1
+            break
+        else:
+            sorted_list = new_sorted
+
+    print(f"vote-llm complete. votes={votes_done}")
+
+
+def cmd_pair(args: argparse.Namespace) -> None:
+    api = args.api.rstrip('/')
+    params = {
+        "pk_namespace": "gitsort.run",
+        "pk": args.run_id,
+    }
+    if args.left_ns: params["left_pin_ns"] = args.left_ns
+    if args.left_pk: params["left_pin_pk"] = args.left_pk
+    if args.right_ns: params["right_pin_ns"] = args.right_ns
+    if args.right_pk: params["right_pin_pk"] = args.right_pk
+    # urllib doesn't have easy query builder here; just build manually
+    from urllib.parse import urlencode
+    url = f"{api}/pair?{urlencode(params)}"
+    data = http_get_json(url, headers=auth_headers(args.api_key or os.environ.get("SORTER_API_KEY")))
+    left = data.get("left_entity", {})
+    right = data.get("right_entity", {})
+    print(json.dumps({"left": left, "right": right}, indent=2))
+
+
+def cmd_rank(args: argparse.Namespace) -> None:
+    api = args.api.rstrip('/')
+    # Fetch run with children
+    run = http_get_json(
+        f"{api}/entity/gitsort.run/{args.run_id}?children=true",
+        headers=auth_headers(args.api_key or os.environ.get("SORTER_API_KEY")),
+    )
+    children = run.get("children") or run.get("entity", {}).get("children") or []
+    # Depending on response structure, normalize
+    entities = []
+    for e in children:
+        entities.append({"pk_namespace": e["pk_namespace"], "pk": e["pk"]})
+    if not entities:
+        print("No child entities found for run.")
+        return
+    resp = http_post_json(f"{api}/rank", entities, headers=auth_headers(args.api_key or os.environ.get("SORTER_API_KEY")))
+    print(json.dumps(resp, indent=2))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -146,6 +642,47 @@ def build_parser() -> argparse.ArgumentParser:
     pp.add_argument("--api", default=DEFAULT_API_BASE, help="API base URL to embed in config")
     pp.add_argument("--style", choices=["xml", "markdown", "plain"], default="xml", help="Repomix output style (default: xml)")
     pp.set_defaults(func=cmd_prepare)
+
+    # ingest
+    pi = sub.add_parser("ingest", help="Create entities and relationships from prepared artifacts")
+    pi.add_argument("--dir", required=True, help="Path to prepare output directory containing run_config.json")
+    pi.add_argument("--api", default=DEFAULT_API_BASE, help="API base URL")
+    pi.add_argument("--api-key", help="API key, or set SORTER_API_KEY env var")
+    pi.add_argument("--lens", help="Lens pk if not in config")
+    pi.add_argument("--style", choices=["xml", "markdown", "plain"], help="Style used during prepare")
+    pi.set_defaults(func=cmd_ingest)
+
+    # pair
+    pr = sub.add_parser("pair", help="Fetch a random pair from a run's children")
+    pr.add_argument("--run-id", required=True, help="Run ID (gitsort.run pk)")
+    pr.add_argument("--api", default=DEFAULT_API_BASE, help="API base URL")
+    pr.add_argument("--api-key", help="API key, or set SORTER_API_KEY env var")
+    pr.add_argument("--left-ns")
+    pr.add_argument("--left-pk")
+    pr.add_argument("--right-ns")
+    pr.add_argument("--right-pk")
+    pr.set_defaults(func=cmd_pair)
+
+    # rank
+    rk = sub.add_parser("rank", help="Rank a run's children using accumulated votes")
+    rk.add_argument("--run-id", required=True)
+    rk.add_argument("--api", default=DEFAULT_API_BASE)
+    rk.add_argument("--api-key", help="API key, or set SORTER_API_KEY env var")
+    rk.set_defaults(func=cmd_rank)
+
+    # vote-llm
+    vl = sub.add_parser("vote-llm", help="Automate voting via LLM using lens and snapshots")
+    vl.add_argument("--run-id", required=True)
+    vl.add_argument("--api", default=DEFAULT_API_BASE)
+    vl.add_argument("--api-key", help="API key for Rust server, or SORTER_API_KEY env var")
+    vl.add_argument("--provider", default="openrouter")
+    vl.add_argument("--model", default="openai/gpt-4o")
+    vl.add_argument("--llm-key-env", default="OPENROUTER_API_KEY", help="Env var containing provider API key")
+    vl.add_argument("--temperature", type=float, default=0.1)
+    vl.add_argument("--count", type=int, help="Max votes to cast (spanning tree + sweeps)")
+    vl.add_argument("--dry-run", action="store_true")
+    vl.add_argument("--lens-text", help="Override lens prompt text if lens entity has none")
+    vl.set_defaults(func=cmd_vote_llm)
 
     return p
 
