@@ -47,6 +47,26 @@ def http_post_json(url: str, payload: Dict, headers: Optional[Dict[str, str]] = 
         raise SystemExit(f"Failed to reach {url}: {e}")
 
 
+def http_post_json_ignore_conflict(url: str, payload: Dict, headers: Optional[Dict[str, str]] = None) -> Optional[Dict]:
+    body = json.dumps(payload).encode("utf-8")
+    req = request.Request(url, method="POST", data=body)
+    req.add_header("Content-Type", "application/json")
+    for k, v in (headers or {}).items():
+        req.add_header(k, v)
+    try:
+        with request.urlopen(req) as resp:
+            data = resp.read()
+            return json.loads(data.decode("utf-8"))
+    except error.HTTPError as e:
+        if e.code == 409:
+            # Conflict: resource already exists. Ignore per idempotent ingest.
+            return None
+        msg = e.read().decode("utf-8", errors="ignore")
+        raise SystemExit(f"HTTP {e.code} error for {url}: {msg}")
+    except error.URLError as e:
+        raise SystemExit(f"Failed to reach {url}: {e}")
+
+
 def run_cmd(cmd: List[str], cwd: Optional[str] = None) -> str:
     try:
         out = subprocess.check_output(cmd, cwd=cwd)
@@ -63,6 +83,7 @@ def pack_branch_repomix(repo_path: Path, branch: str, out_file: Path, style: str
     # Create a temporary git worktree for the target branch to let repomix
     # operate on the correct tree with proper .git context.
     out_file.parent.mkdir(parents=True, exist_ok=True)
+    abs_out = str(out_file.resolve())
     worktree_dir = Path(tempfile.mkdtemp(prefix="gitsorter-wt-"))
     try:
         run_cmd(["git", "-C", str(repo_path), "worktree", "add", "--detach", str(worktree_dir), branch])
@@ -70,7 +91,7 @@ def pack_branch_repomix(repo_path: Path, branch: str, out_file: Path, style: str
             "npx",
             "repomix",
             "--output",
-            str(out_file),
+            abs_out,
             "--style",
             style,
         ]
@@ -99,46 +120,67 @@ def cmd_prepare(args: argparse.Namespace) -> None:
     if not (repo / ".git").exists():
         raise SystemExit(f"Not a git repository: {repo}")
 
-    # Determine branches
-    branches = list(args.branch)
-    if not branches:
-        # All local branches
+    out_dir = Path(args.out or f".gitsorter/{uuid.uuid4()}")
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Determine requested branches
+    requested_branches = list(args.branch)
+    if not requested_branches:
         out = run_cmd(["git", "-C", str(repo), "branch", "--format", "%(refname:short)"])
-        branches = [b.strip("* ") for b in out.splitlines() if b.strip()]
-    if not branches:
+        requested_branches = [b.strip("* ") for b in out.splitlines() if b.strip()]
+    if not requested_branches:
         raise SystemExit("No branches detected.")
 
-    run_id = str(uuid.uuid4())
-    run_name = args.name or f"gitsorter-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}"
-    out_dir = Path(args.out or f".gitsorter/{run_id}")
-    out_dir.mkdir(parents=True, exist_ok=True)
+    cfg_path = out_dir / "run_config.json"
+    existing_cfg = None
+    if args.append:
+        if not cfg_path.exists():
+            raise SystemExit(f"--append specified but {cfg_path} not found")
+        existing_cfg = json.loads(cfg_path.read_text())
+
+    if existing_cfg:
+        run_id = existing_cfg.get("run_id")
+        run_name = existing_cfg.get("run_name") or args.name or f"gitsorter-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}"
+        combined = sorted(list({*existing_cfg.get("branches", []), *requested_branches}))
+        config = existing_cfg
+        config.update({
+            "run_name": run_name,
+            "repo_path": str(repo),
+            "branches": combined,
+            "model": args.model or existing_cfg.get("model"),
+            "lens_pk": args.lens or existing_cfg.get("lens_pk"),
+            "style": "xml",
+            "api_base": args.api or existing_cfg.get("api_base"),
+        })
+    else:
+        run_id = str(uuid.uuid4())
+        run_name = args.name or f"gitsorter-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}"
+        config = {
+            "run_id": run_id,
+            "run_name": run_name,
+            "repo_path": str(repo),
+            "branches": requested_branches,
+            "model": args.model,
+            "lens_pk": args.lens,
+            "style": "xml",
+            "api_base": args.api,
+        }
 
     print(f"Preparing run '{run_name}' (ID: {run_id}) -> {out_dir}")
 
-    # Write run_config.json
-    config = {
-        "run_id": run_id,
-        "run_name": run_name,
-        "repo_path": str(repo),
-        "branches": branches,
-        "model": args.model,
-        "lens_pk": args.lens,
-        "style": args.style,
-        "api_base": args.api,
-    }
-    (out_dir / "run_config.json").write_text(json.dumps(config, indent=2))
+    # Persist/Update config
+    cfg_path.write_text(json.dumps(config, indent=2))
 
     # Pack each branch with repomix only
     stats = {}
-    for br in branches:
-        ext = ".xml" if args.style == "xml" else ".txt" if args.style == "plain" else ".md"
-        target = out_dir / f"{br.replace('/', '_')}{ext}"
+    for br in requested_branches:
+        target = out_dir / f"{br.replace('/', '_')}.xml"
         print(f"Packing branch '{br}' -> {target}")
-        st = pack_branch_repomix(repo, br, target, style=args.style)
+        st = pack_branch_repomix(repo, br, target, style="xml")
         stats[br] = st
         approx = st.get("approx_bytes")
         packer_used = st.get("packer")
-        print(f"  packer={packer_used} style={args.style} bytes≈{approx}")
+        print(f"  packer={packer_used} style=xml bytes≈{approx}")
 
     (out_dir / "pack_stats.json").write_text(json.dumps(stats, indent=2))
     print("Done.")
@@ -176,8 +218,11 @@ def cmd_ingest(args: argparse.Namespace) -> None:
         "metadata": cfg,
         "profile_picture_url": None,
     }
-    run_entity = http_post_json(f"{api}/entity", run_payload, headers=hdrs)
-    print(f"Created run entity: gitsort.run/{run_id}")
+    run_entity = http_post_json_ignore_conflict(f"{api}/entity", run_payload, headers=hdrs)
+    if run_entity is None:
+        print(f"Run entity already exists: gitsort.run/{run_id}")
+    else:
+        print(f"Created run entity: gitsort.run/{run_id}")
 
     # 2) Create/ensure lens entity
     lens_pk = cfg.get("lens_pk", args.lens)
@@ -189,15 +234,15 @@ def cmd_ingest(args: argparse.Namespace) -> None:
             "metadata": None,
             "profile_picture_url": None,
         }
-        http_post_json(f"{api}/entity", lens_payload, headers=hdrs)
+        http_post_json_ignore_conflict(f"{api}/entity", lens_payload, headers=hdrs)
         rel = {
             "parent_pk_namespace": "gitsort.run",
             "parent_pk": run_id,
             "child_pk_namespace": "gitsort.lens",
             "child_pk": lens_pk,
         }
-        http_post_json(f"{api}/entity_relationships", rel, headers=hdrs)
-        print(f"Linked lens gitsort.lens/{lens_pk} to run")
+        http_post_json_ignore_conflict(f"{api}/entity_relationships", rel, headers=hdrs)
+        print(f"Linked lens gitsort.lens/{lens_pk} to run (or already linked)")
 
     # 3) Create snapshot entities and relationships
     stats = json.loads((out_dir / "pack_stats.json").read_text())
@@ -224,15 +269,15 @@ def cmd_ingest(args: argparse.Namespace) -> None:
             },
             "profile_picture_url": None,
         }
-        http_post_json(f"{api}/entity", payload, headers=hdrs)
+        http_post_json_ignore_conflict(f"{api}/entity", payload, headers=hdrs)
         rel = {
             "parent_pk_namespace": "gitsort.run",
             "parent_pk": run_id,
             "child_pk_namespace": "gitsort.branch_snapshot",
             "child_pk": pk,
         }
-        http_post_json(f"{api}/entity_relationships", rel, headers=hdrs)
-        print(f"Linked snapshot {pk}")
+        http_post_json_ignore_conflict(f"{api}/entity_relationships", rel, headers=hdrs)
+        print(f"Linked snapshot {pk} (or already linked)")
 
     print("Ingestion complete.")
 
@@ -407,13 +452,16 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
         b_ident = unsorted[1]
         a = get_entity_by_ident(a_ident)
         b = get_entity_by_ident(b_ident)
-        messages_payload = build_prompt_for_pair(
-            lens_text, a.get("metadata") or {}, b.get("metadata") or {}
-        )
+        a_meta = a.get("metadata") or {}
+        b_meta = b.get("metadata") or {}
+        print(f"[vote-llm][seed] Pair A={a_ident['pk']} ({a_meta.get('branch')}@{a_meta.get('commit_sha')}) vs B={b_ident['pk']} ({b_meta.get('branch')}@{b_meta.get('commit_sha')})")
+        messages_payload = build_prompt_for_pair(lens_text, a_meta, b_meta)
         if args.dry_run:
             print(json.dumps({"pair": [a_ident, b_ident], "prompt": messages_payload}, indent=2))
             return
+        print(f"[vote-llm][seed] Calling LLM model={args.model} temp={args.temperature}")
         resp = call_openrouter_chat(args.model, llm_key, messages_payload["messages"], temperature=args.temperature)
+        print("[vote-llm][seed] LLM response received")
         content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
         try:
             decision = parse_llm_decision(content)
@@ -423,16 +471,19 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
                 "role": "user",
                 "content": "Your previous response was invalid. Reply ONLY with a single JSON object: {\"winner\":\"A|B|tie\",\"score\":0..100,\"confidence\":0..1,\"rationale\":\"...\"}"
             }]
+            print("[vote-llm][seed] Reprompting due to invalid JSON...")
             resp = call_openrouter_chat(args.model, llm_key, reprompt, temperature=args.temperature)
+            print("[vote-llm][seed] LLM response received (reprompt)")
             content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
             try:
                 decision = parse_llm_decision(content)
             except Exception:
-                print("Strict JSON parse failed twice; skipping this pair.")
+                print("[vote-llm][seed] Strict JSON parse failed twice; skipping this pair.")
                 decision = None
         if not decision:
             # Skip posting a vote
             # Re-rank to see if other changes happened; then continue
+            print("[vote-llm][seed] Re-ranking after skip...")
             rank = rank_entities(api, idents, api_key)
             unsorted = rank.get("unsorted", [])
             sorted_list = rank.get("sorted", [])
@@ -451,27 +502,16 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
                 "magnitude": magnitude if winner == "a" else (-magnitude if winner == "b" else 0),
                 "attribute_id": 1,
             }
+            print(f"[vote-llm][seed] Decision winner={winner} score={score} magnitude={payload['magnitude']} -> POST /vote")
             http_post_json(f"{api}/vote", payload, headers=auth_headers(api_key))
             votes_done += 1
-        winner = decision["winner"]
-        score = decision["score"]
-        magnitude = magnitude_from_score(winner, score)
-        # Post vote using A vs B; server canonicalizes
-        payload = {
-            "left_entity_pk_namespace": a_ident["pk_namespace"],
-            "left_entity_pk": a_ident["pk"],
-            "right_entity_pk_namespace": b_ident["pk_namespace"],
-            "right_entity_pk": b_ident["pk"],
-            "magnitude": magnitude if winner == "a" else (-magnitude if winner == "b" else 0),
-            "attribute_id": 1,
-        }
-        http_post_json(f"{api}/vote", payload, headers=auth_headers(api_key))
-        votes_done += 1
 
         # Re-rank after seeding
+        print("[vote-llm][seed] Re-ranking after vote...")
         rank = rank_entities(api, idents, api_key)
         unsorted = rank.get("unsorted", [])
         sorted_list = rank.get("sorted", [])
+        print(f"[vote-llm][seed] Rank: unsorted={len(unsorted)} sorted={len(sorted_list)}")
 
     # Insert remaining unsorted items with single comparison to an anchor
     while unsorted and votes_done < max_votes:
@@ -480,13 +520,16 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
         item_ident = unsorted[0]
         a = get_entity_by_ident(item_ident)
         b = get_entity_by_ident(anchor_ident)
-        messages_payload = build_prompt_for_pair(
-            lens_text, a.get("metadata") or {}, b.get("metadata") or {}
-        )
+        a_meta = a.get("metadata") or {}
+        b_meta = b.get("metadata") or {}
+        print(f"[vote-llm][insert] Item={item_ident['pk']} ({a_meta.get('branch')}@{a_meta.get('commit_sha')} bytes={a_meta.get('packed_bytes')}) vs Anchor={anchor_ident['pk']} ({b_meta.get('branch')}@{b_meta.get('commit_sha')} bytes={b_meta.get('packed_bytes')})")
+        messages_payload = build_prompt_for_pair(lens_text, a_meta, b_meta)
         if args.dry_run:
             print(json.dumps({"pair": [item_ident, anchor_ident], "prompt": messages_payload}, indent=2))
             return
+        print(f"[vote-llm][insert] Calling LLM model={args.model} temp={args.temperature}")
         resp = call_openrouter_chat(args.model, llm_key, messages_payload["messages"], temperature=args.temperature)
+        print("[vote-llm][insert] LLM response received")
         content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
         try:
             decision = parse_llm_decision(content)
@@ -495,7 +538,9 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
                 "role": "user",
                 "content": "Your previous response was invalid. Reply ONLY with a single JSON object: {\"winner\":\"A|B|tie\",\"score\":0..100,\"confidence\":0..1,\"rationale\":\"...\"}"
             }]
+            print("[vote-llm][insert] Reprompting due to invalid JSON...")
             resp = call_openrouter_chat(args.model, llm_key, reprompt, temperature=args.temperature)
+            print("[vote-llm][insert] LLM response received (reprompt)")
             content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
             try:
                 decision = parse_llm_decision(content)
@@ -503,9 +548,11 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
                 print("Strict JSON parse failed twice; skipping this insertion.")
                 decision = None
         if not decision:
+            print("[vote-llm][insert] Re-ranking after skip...")
             rank = rank_entities(api, idents, api_key)
             unsorted = rank.get("unsorted", [])
             sorted_list = rank.get("sorted", [])
+            print(f"[vote-llm][insert] Rank: unsorted={len(unsorted)} sorted={len(sorted_list)}")
             continue
         winner = decision["winner"]
         score = decision["score"]
@@ -518,19 +565,23 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
             "magnitude": magnitude if winner == "a" else (-magnitude if winner == "b" else 0),
             "attribute_id": 1,
         }
+        print(f"[vote-llm][insert] Decision winner={winner} score={score} magnitude={payload['magnitude']} -> POST /vote")
         http_post_json(f"{api}/vote", payload, headers=auth_headers(api_key))
         votes_done += 1
 
         # Optionally re-rank in batches; keep simple: re-rank every insertion or when unsorted shrinks
+        print("[vote-llm][insert] Re-ranking after vote...")
         rank = rank_entities(api, idents, api_key)
         unsorted = rank.get("unsorted", [])
         sorted_list = rank.get("sorted", [])
+        print(f"[vote-llm][insert] Rank: unsorted={len(unsorted)} sorted={len(sorted_list)}")
 
     # Phase 2: adjacent sweeps until stable or budget exhausted
     stable_passes = 0
     while votes_done < max_votes and sorted_list:
         prev_order = [e["identifier"] for e in sorted_list]
         swaps = 0
+        print(f"[vote-llm][adjacent] Sweep over {len(prev_order)} items (votes={votes_done}/{max_votes})")
         for i in range(1, len(prev_order)):
             if votes_done >= max_votes:
                 break
@@ -538,13 +589,16 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
             right_ident = prev_order[i]
             a = get_entity_by_ident(left_ident)
             b = get_entity_by_ident(right_ident)
-            messages_payload = build_prompt_for_pair(
-                lens_text, a.get("metadata") or {}, b.get("metadata") or {}
-            )
+            a_meta = a.get("metadata") or {}
+            b_meta = b.get("metadata") or {}
+            print(f"[vote-llm][adjacent] Pair {i}/{len(prev_order)-1}: {left_ident['pk']} ({a_meta.get('branch')}@{a_meta.get('commit_sha')}) vs {right_ident['pk']} ({b_meta.get('branch')}@{b_meta.get('commit_sha')})")
+            messages_payload = build_prompt_for_pair(lens_text, a_meta, b_meta)
             if args.dry_run:
                 print(json.dumps({"pair": [left_ident, right_ident], "prompt": messages_payload}, indent=2))
                 return
+            print(f"[vote-llm][adjacent] Calling LLM model={args.model} temp={args.temperature}")
             resp = call_openrouter_chat(args.model, llm_key, messages_payload["messages"], temperature=args.temperature)
+            print("[vote-llm][adjacent] LLM response received")
             content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
             try:
                 decision = parse_llm_decision(content)
@@ -553,7 +607,9 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
                     "role": "user",
                     "content": "Your previous response was invalid. Reply ONLY with a single JSON object: {\"winner\":\"A|B|tie\",\"score\":0..100,\"confidence\":0..1,\"rationale\":\"...\"}"
                 }]
+                print("[vote-llm][adjacent] Reprompting due to invalid JSON...")
                 resp = call_openrouter_chat(args.model, llm_key, reprompt, temperature=args.temperature)
+                print("[vote-llm][adjacent] LLM response received (reprompt)")
                 content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
                 try:
                     decision = parse_llm_decision(content)
@@ -573,20 +629,23 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
                 "magnitude": magnitude if winner == "a" else (-magnitude if winner == "b" else 0),
                 "attribute_id": 1,
             }
+            print(f"[vote-llm][adjacent] Decision winner={winner} score={score} magnitude={payload['magnitude']} -> POST /vote")
             http_post_json(f"{api}/vote", payload, headers=auth_headers(api_key))
             votes_done += 1
 
         # Re-rank and check stability
+        print("[vote-llm][adjacent] Re-ranking after sweep...")
         rank = rank_entities(api, idents, api_key)
         new_sorted = rank.get("sorted", [])
         new_order = [e["identifier"] for e in new_sorted]
+        print(f"[vote-llm][adjacent] Sweep done. swaps={swaps} stable={new_order == prev_order}")
         if new_order == prev_order or swaps == 0:
             stable_passes += 1
             break
         else:
             sorted_list = new_sorted
 
-    print(f"vote-llm complete. votes={votes_done}")
+    print(f"[vote-llm] Complete. votes_cast={votes_done}")
 
 
 def cmd_pair(args: argparse.Namespace) -> None:
@@ -642,10 +701,10 @@ def build_parser() -> argparse.ArgumentParser:
     pp.add_argument("--branch", action="append", default=[], help="Branch to include (repeatable). If omitted, include all local branches.")
     pp.add_argument("--name", help="Run name")
     pp.add_argument("--out", help="Output directory for artifacts")
+    pp.add_argument("--append", action="store_true", help="Append to an existing out dir: reuse run_id and update run_config; pack only specified branches or all local if none specified")
     pp.add_argument("--model", default="openai/gpt-4o", help="Model identifier for later voting")
     pp.add_argument("--lens", default="architectural_vision_v1", help="Lens primary key")
     pp.add_argument("--api", default=DEFAULT_API_BASE, help="API base URL to embed in config")
-    pp.add_argument("--style", choices=["xml", "markdown", "plain"], default="xml", help="Repomix output style (default: xml)")
     pp.set_defaults(func=cmd_prepare)
 
     # ingest
@@ -654,7 +713,6 @@ def build_parser() -> argparse.ArgumentParser:
     pi.add_argument("--api", default=DEFAULT_API_BASE, help="API base URL")
     pi.add_argument("--api-key", help="API key, or set SORTER_API_KEY env var")
     pi.add_argument("--lens", help="Lens pk if not in config")
-    pi.add_argument("--style", choices=["xml", "markdown", "plain"], help="Style used during prepare")
     pi.set_defaults(func=cmd_ingest)
 
     # pair
