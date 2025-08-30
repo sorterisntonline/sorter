@@ -94,24 +94,35 @@
 				{:else if $votesQuery.data && $votesQuery.data.length > 0}
 					<div class="space-y-2">
 						{#each $votesQuery.data as vote}
-							<div class="flex items-center justify-between border-b border-zinc-700 p-2">
-								<div class="flex-1">
-									<span class="font-mono text-sm text-zinc-300">
-										{vote.left_entity_pk_namespace}:{vote.left_entity_pk.split(':')[0]}
-									</span>
-									<span class="mx-2 text-zinc-500">vs</span>
-									<span class="font-mono text-sm text-zinc-300">
-										{vote.right_entity_pk_namespace}:{vote.right_entity_pk.split(':')[0]}
-									</span>
+							<div class="border-b border-zinc-700 p-2">
+								<div class="flex items-center justify-between">
+									<div class="flex-1">
+										<span class="font-mono text-sm text-zinc-300">
+											{vote.left_entity_pk_namespace}:{vote.left_entity_pk.split(':')[0]}
+										</span>
+										<span class="mx-2 text-zinc-500">vs</span>
+										<span class="font-mono text-sm text-zinc-300">
+											{vote.right_entity_pk_namespace}:{vote.right_entity_pk.split(':')[0]}
+										</span>
+									</div>
+									<div class="flex items-center gap-2">
+										<span class="text-sm text-zinc-400">
+											Magnitude: {vote.magnitude > 0 ? '+' : ''}{vote.magnitude}
+										</span>
+										<span class="text-xs text-zinc-500">
+											{new Date(vote.created_at).toLocaleDateString()}
+										</span>
+									</div>
 								</div>
-								<div class="flex items-center gap-2">
-									<span class="text-sm text-zinc-400">
-										Magnitude: {vote.magnitude > 0 ? '+' : ''}{vote.magnitude}
-									</span>
-									<span class="text-xs text-zinc-500">
-										{new Date(vote.created_at).toLocaleDateString()}
-									</span>
-								</div>
+
+								<!-- Display rationale if present -->
+								{#if vote.rationale}
+									<div class="mt-2 rounded bg-zinc-900/50 p-2">
+										<p class="text-sm italic text-zinc-400">
+											&ldquo;{vote.rationale}&rdquo;
+										</p>
+									</div>
+								{/if}
 							</div>
 						{/each}
 					</div>
