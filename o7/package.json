@@ -22,6 +22,7 @@
 		"kysely": "^0.28.5",
 		"kysely-planetscale": "^1.7.1",
 		"lucide-svelte": "^0.542.0",
+		"superjson": "^2.2.2",
 		"trpc-svelte-query": "^3.0.3",
 		"zod": "^4.0.17"
 	},
