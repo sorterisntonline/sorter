@@ -28,8 +28,9 @@ interface RankingResponse {
 	unsorted: EntityIdentifier[];
 }
 
-interface EntityWithChildren {
-	entity: Entity & { children?: Entity[] };
+interface EntityWithParentsAndChildren {
+	entity: Entity;
+	parents?: Entity[];
 	children?: Entity[];
 }
 
@@ -70,11 +71,11 @@ export const gitsorterRouter = router({
 		.input(z.object({ runId: z.string() }))
 		.query(async ({ input }) => {
 			// 1. Fetch the run and all its children (snapshots, lens) in one go
-			const runData: EntityWithChildren = await fetchSorterAPI(
+			const runData: EntityWithParentsAndChildren = await fetchSorterAPI(
 				`/entity/gitsort.run/${input.runId}?children=true`,
 			);
 			const runEntity = runData.entity;
-			const children = runEntity.children || [];
+			const children = runData.children || [];
 
 			// 2. Separate snapshots from other children (like the lens)
 			const snapshots = children.filter(
