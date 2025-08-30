@@ -21,26 +21,33 @@
 		return null;
 	});
 
-	// NEW: Helper function to toggle entity selection
-	function toggleSelection(identifier: { pk_namespace: string; pk: string }) {
-		const index = selectedIdentifiers.findIndex(
-			(i) => i.pk === identifier.pk && i.pk_namespace === identifier.pk_namespace
-		);
-
-		if (index > -1) {
-			// Deselect if already selected
-			selectedIdentifiers.splice(index, 1);
-		} else {
-			// Add to selection, but max out at 2
-			if (selectedIdentifiers.length < 2) {
-				selectedIdentifiers.push(identifier);
-			} else {
-				// If 2 are already selected, replace the last one
-				selectedIdentifiers[1] = identifier;
+	// NEW: Click handling — single click selects only that entry; Shift+Click adds a second for pair filter
+	function handleRowClick(event: MouseEvent, identifier: { pk_namespace: string; pk: string }) {
+		if (event.shiftKey) {
+			if (selectedIdentifiers.length === 0) {
+				selectedIdentifiers = [identifier];
+				return;
 			}
+
+			const first = selectedIdentifiers[0];
+			if (selectedIdentifiers.length === 1) {
+				if (first && !(first.pk === identifier.pk && first.pk_namespace === identifier.pk_namespace)) {
+					selectedIdentifiers = [first, identifier];
+					return;
+				}
+			}
+
+			// If already have two or Shift+Click same as first, set pair with first + current
+			if (first) {
+				selectedIdentifiers = [first, identifier];
+			} else {
+				selectedIdentifiers = [identifier];
+			}
+			return;
 		}
-		// This assignment is needed to trigger reactivity for arrays/objects in Svelte 5 runes
-		selectedIdentifiers = [...selectedIdentifiers];
+
+		// Regular click: select only this entry
+		selectedIdentifiers = [identifier];
 	}
 
 	// NEW: Helper function to check if an entity is selected
@@ -131,7 +138,7 @@
 						{#each ranking.sorted as item, i (item.identifier.pk)}
 							<tr
 								class="cursor-pointer border-t border-zinc-700 transition-colors hover:bg-zinc-700/30 {isSelected(item.identifier) ? 'bg-blue-900/50' : ''}"
-								onclick={() => toggleSelection(item.identifier)}
+								onclick={(e) => handleRowClick(e, item.identifier)}
 							>
 								<td class="p-3 text-center font-bold">{i + 1}</td>
 								<td class="p-3 font-mono text-zinc-100"
