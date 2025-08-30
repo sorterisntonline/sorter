@@ -34,6 +34,18 @@ interface EntityWithParentsAndChildren {
 	children?: Entity[];
 }
 
+interface Vote {
+	left_entity_pk_namespace: string;
+	left_entity_pk: string;
+	right_entity_pk_namespace: string;
+	right_entity_pk: string;
+	user_id: string;
+	magnitude: number;
+	attribute_id: number;
+	created_at: string;
+	deleted_at?: string;
+}
+
 // Helper function to make authenticated requests to the Rust API
 async function fetchSorterAPI<T = unknown>(
 	endpoint: string,
@@ -117,6 +129,32 @@ export const gitsorterRouter = router({
 				run: runEntity,
 				ranking: enrichedRanking,
 			};
+		}),
+
+	getVotes: publicProcedure
+		.input(
+			z.array(
+				z.object({
+					pk_namespace: z.string(),
+					pk: z.string(),
+				}),
+			)
+				.min(1)
+				.max(2),
+		)
+		.query(async ({ input }) => {
+			// 1. Format the input identifiers for the Rust API's query parameter
+			const involvedEntitiesParam = input
+				.map((e) => `${e.pk_namespace}:${e.pk}`)
+				.join(',');
+
+			// 2. Call the new Rust endpoint
+			const votes: Vote[] = await fetchSorterAPI(
+				`/vote/filtered?involved_entities=${encodeURIComponent(involvedEntitiesParam)}`,
+			);
+
+			// 3. Return the votes
+			return votes;
 		}),
 });
 

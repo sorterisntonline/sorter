@@ -10,6 +10,46 @@
 		runId: runId || '',
 	});
 
+	// NEW: State for selected entities (up to 2 entities can be selected)
+	let selectedIdentifiers = $state([] as Array<{ pk_namespace: string; pk: string }>);
+
+	// NEW: Reactive query that runs when selectedIdentifiers changes
+	let votesQuery = $derived.by(() => {
+		if (selectedIdentifiers.length > 0 && selectedIdentifiers.length <= 2) {
+			return trpc.gitsorter.getVotes.query(selectedIdentifiers);
+		}
+		return null;
+	});
+
+	// NEW: Helper function to toggle entity selection
+	function toggleSelection(identifier: { pk_namespace: string; pk: string }) {
+		const index = selectedIdentifiers.findIndex(
+			(i) => i.pk === identifier.pk && i.pk_namespace === identifier.pk_namespace
+		);
+
+		if (index > -1) {
+			// Deselect if already selected
+			selectedIdentifiers.splice(index, 1);
+		} else {
+			// Add to selection, but max out at 2
+			if (selectedIdentifiers.length < 2) {
+				selectedIdentifiers.push(identifier);
+			} else {
+				// If 2 are already selected, replace the last one
+				selectedIdentifiers[1] = identifier;
+			}
+		}
+		// This assignment is needed to trigger reactivity for arrays/objects in Svelte 5 runes
+		selectedIdentifiers = [...selectedIdentifiers];
+	}
+
+	// NEW: Helper function to check if an entity is selected
+	function isSelected(identifier: { pk_namespace: string; pk: string }): boolean {
+		return selectedIdentifiers.some(
+			(i) => i.pk === identifier.pk && i.pk_namespace === identifier.pk_namespace
+		);
+	}
+
 	// Helper to format scores
 	const formatScore = (score: number) => (score * 100).toFixed(2);
 </script>
@@ -28,6 +68,52 @@
 		<h1 class="mb-2 text-4xl font-bold text-zinc-100">{run.title}</h1>
 		<p class="mb-8 font-mono text-sm text-zinc-500">{run.pk}</p>
 
+		<!-- NEW: Vote Inspector Section -->
+		{#if selectedIdentifiers.length > 0}
+			<section class="mb-12 rounded-lg bg-zinc-800 p-4">
+				<h2 class="mb-4 text-xl font-semibold">
+					{#if selectedIdentifiers.length === 1}
+						Votes involving "{selectedIdentifiers[0]?.pk?.split(':')[0] || 'Unknown'}"
+					{:else}
+						Vote between "{selectedIdentifiers[0]?.pk?.split(':')[0] || 'Unknown'}" and "{selectedIdentifiers[1]?.pk?.split(':')[0] || 'Unknown'}"
+					{/if}
+				</h2>
+				{#if !votesQuery || !$votesQuery}
+					<p class="text-zinc-400">Select entities to view votes.</p>
+				{:else if $votesQuery.isLoading}
+					<p>Loading votes...</p>
+				{:else if $votesQuery.error}
+					<p class="text-red-400">Error loading votes: {$votesQuery.error.message}</p>
+				{:else if $votesQuery.data && $votesQuery.data.length > 0}
+					<div class="space-y-2">
+						{#each $votesQuery.data as vote}
+							<div class="flex items-center justify-between border-b border-zinc-700 p-2">
+								<div class="flex-1">
+									<span class="font-mono text-sm text-zinc-300">
+										{vote.left_entity_pk_namespace}:{vote.left_entity_pk.split(':')[0]}
+									</span>
+									<span class="mx-2 text-zinc-500">vs</span>
+									<span class="font-mono text-sm text-zinc-300">
+										{vote.right_entity_pk_namespace}:{vote.right_entity_pk.split(':')[0]}
+									</span>
+								</div>
+								<div class="flex items-center gap-2">
+									<span class="text-sm text-zinc-400">
+										Magnitude: {vote.magnitude > 0 ? '+' : ''}{vote.magnitude}
+									</span>
+									<span class="text-xs text-zinc-500">
+										{new Date(vote.created_at).toLocaleDateString()}
+									</span>
+								</div>
+							</div>
+						{/each}
+					</div>
+				{:else}
+					<p class="text-zinc-400">No votes found for the selected entities.</p>
+				{/if}
+			</section>
+		{/if}
+
 		<!-- Ranked Branches -->
 		<h2 class="mb-4 text-2xl font-semibold text-zinc-200">Ranked Branches</h2>
 		{#if ranking.sorted.length > 0}
@@ -43,7 +129,10 @@
 					</thead>
 					<tbody>
 						{#each ranking.sorted as item, i (item.identifier.pk)}
-							<tr class="border-t border-zinc-700">
+							<tr
+								class="cursor-pointer border-t border-zinc-700 transition-colors hover:bg-zinc-700/30 {isSelected(item.identifier) ? 'bg-blue-900/50' : ''}"
+								onclick={() => toggleSelection(item.identifier)}
+							>
 								<td class="p-3 text-center font-bold">{i + 1}</td>
 								<td class="p-3 font-mono text-zinc-100"
 									>{item.snapshot?.title}</td
