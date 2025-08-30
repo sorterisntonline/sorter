@@ -143,17 +143,16 @@ export const gitsorterRouter = router({
 				.max(2),
 		)
 		.query(async ({ input }) => {
-			// 1. Format the input identifiers for the Rust API's query parameter
-			const involvedEntitiesParam = input
-				.map((e) => `${e.pk_namespace}:${e.pk}`)
-				.join(',');
+			// Build tagged union payload
+			const payload =
+				input.length === 1
+					? { kind: 'Single', entity: input[0] }
+					: { kind: 'Pair', entities: [input[0], input[1]] };
 
-			// 2. Call the new Rust endpoint
-			const votes: Vote[] = await fetchSorterAPI(
-				`/vote/filtered?involved_entities=${encodeURIComponent(involvedEntitiesParam)}`,
-			);
-
-			// 3. Return the votes
+			const votes: Vote[] = await fetchSorterAPI('/vote/filtered', {
+				method: 'POST',
+				body: JSON.stringify(payload),
+			});
 			return votes;
 		}),
 });

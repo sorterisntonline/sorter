@@ -143,7 +143,22 @@ struct VoteFilterParams {
 
 #[derive(Deserialize, Debug, JsonSchema)]
 struct VotesQueryParams {
-    involved_entities: String,
+    // Arrays of ns and pk with equal length (1-2)
+    ns: Vec<String>,
+    pk: Vec<String>,
+}
+
+#[derive(Deserialize, Debug, JsonSchema)]
+struct EntityIdentifierPayload {
+    pk_namespace: String,
+    pk: String,
+}
+
+#[derive(Deserialize, Debug, JsonSchema)]
+#[serde(tag = "kind")]
+enum VotesFilterPayload {
+    Single { entity: EntityIdentifierPayload },
+    Pair { entities: [EntityIdentifierPayload; 2] },
 }
 
 async fn list_votes(State(state): State<AppState>) -> Result<(StatusCode, Json<Vec<Vote>>), Error> {
@@ -155,30 +170,45 @@ async fn list_votes(State(state): State<AppState>) -> Result<(StatusCode, Json<V
     Ok((StatusCode::OK, Json(votes)))
 }
 
-async fn get_votes_filtered(
+async fn get_votes_filtered_get(
     State(state): State<AppState>,
     Query(params): Query<VotesQueryParams>,
 ) -> Result<(StatusCode, Json<Vec<Vote>>), Error> {
-    // Parse the involved_entities parameter (comma-separated list of namespace:pk)
-    let entities: Vec<&str> = params.involved_entities.split(',').collect();
-
-    if entities.is_empty() || entities.len() > 2 {
-        return Err(Error::BadRequest {
-            message: "involved_entities must contain 1 or 2 entities".into(),
-        });
+    // Required: ns/pk arrays only
+    if params.ns.len() != params.pk.len() || params.ns.is_empty() || params.ns.len() > 2 {
+        return Err(Error::BadRequest { message: "ns and pk must be equal length, 1 or 2".into() });
     }
 
-    // Parse each entity identifier
-    let mut parsed_entities = Vec::new();
-    for entity_str in &entities {
-        let parts: Vec<&str> = entity_str.split(':').collect();
-        if parts.len() != 2 {
-            return Err(Error::BadRequest {
-                message: format!("Invalid entity identifier: {}", entity_str).into(),
-            });
-        }
-        parsed_entities.push((parts[0].to_string(), parts[1].to_string()));
-    }
+    let parsed_entities: Vec<(String, String)> = params
+        .ns
+        .into_iter()
+        .zip(params.pk.into_iter())
+        .map(|(n, p)| (n, p))
+        .collect();
+
+    // Reuse common logic below
+    fetch_votes_by_entities(state, parsed_entities).await
+}
+
+async fn get_votes_filtered_post(
+    State(state): State<AppState>,
+    Json(payload): Json<VotesFilterPayload>,
+) -> Result<(StatusCode, Json<Vec<Vote>>), Error> {
+    let parsed_entities: Vec<(String, String)> = match payload {
+        VotesFilterPayload::Single { entity } => vec![(entity.pk_namespace, entity.pk)],
+        VotesFilterPayload::Pair { entities } => entities
+            .into_iter()
+            .map(|e| (e.pk_namespace, e.pk))
+            .collect(),
+    };
+
+    fetch_votes_by_entities(state, parsed_entities).await
+}
+
+async fn fetch_votes_by_entities(
+    state: AppState,
+    parsed_entities: Vec<(String, String)>,
+) -> Result<(StatusCode, Json<Vec<Vote>>), Error> {
 
     let votes = if parsed_entities.len() == 1 {
         // Single entity: find all votes involving this entity
@@ -241,8 +271,12 @@ pub fn routes() -> ApiRouter<AppState> {
         )
         .api_route(
             "/filtered",
-            get_with(get_votes_filtered, |op| {
-                op.description("Get votes filtered by involved entities.")
+            get_with(get_votes_filtered_get, |op| {
+                op.description("Get votes filtered by involved entities (GET ns/pk arrays).")
+                    .response::<200, Json<Vec<Vote>>>()
+            })
+            .post_with(get_votes_filtered_post, |op| {
+                op.description("Get votes filtered by involved entities (POST tagged union).")
                     .response::<200, Json<Vec<Vote>>>()
             }),
         )
