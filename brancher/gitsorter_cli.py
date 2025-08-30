@@ -162,7 +162,8 @@ def cmd_ingest(args: argparse.Namespace) -> None:
     branches = cfg["branches"]
     run_id = cfg["run_id"]
     run_name = cfg.get("run_name")
-    style = args.style or cfg.get("style", "xml")
+    # Enforce XML artifacts regardless of per-branch repomix configs
+    style = "xml"
     api = args.api.rstrip('/')
     api_key = args.api_key or os.environ.get("SORTER_API_KEY")
     hdrs = auth_headers(api_key)
@@ -202,8 +203,12 @@ def cmd_ingest(args: argparse.Namespace) -> None:
     stats = json.loads((out_dir / "pack_stats.json").read_text())
     for br in branches:
         sha = git_branch_sha(repo, br)
-        ext = ".xml" if style == "xml" else ".md" if style == "markdown" else ".txt"
-        packed_path = out_dir / f"{br.replace('/', '_')}{ext}"
+        # Require XML files only
+        packed_path = out_dir / f"{br.replace('/', '_')}.xml"
+        if not packed_path.exists():
+            raise SystemExit(
+                f"Missing XML artifact for branch '{br}': {packed_path}. Re-run prepare to generate XML (default)."
+            )
         content = packed_path.read_text(encoding="utf-8")
         pk = f"{br}:{sha}"
         payload = {
@@ -214,7 +219,7 @@ def cmd_ingest(args: argparse.Namespace) -> None:
                 "branch": br,
                 "commit_sha": sha,
                 "packed_style": style,
-                "packed_bytes": (out_dir / f"{br.replace('/', '_')}{ext}").stat().st_size,
+                "packed_bytes": packed_path.stat().st_size,
                 "repomix_output": content,
             },
             "profile_picture_url": None,
