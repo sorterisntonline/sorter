@@ -26,7 +26,6 @@ pub struct Vote {
     pub right_entity_pk: String,
     pub user_id: Uuid,
     pub magnitude: i32,
-    pub rationale: Option<String>,
     pub attribute_id: i32,
     pub created_at: NaiveDateTime,
     pub deleted_at: Option<NaiveDateTime>,
@@ -49,7 +48,6 @@ pub struct VotePayload {
     right_entity_pk_namespace: String,
     right_entity_pk: String,
     magnitude: i32,
-    rationale: Option<String>,
     attribute_id: i32,
 }
 
@@ -90,7 +88,6 @@ async fn create_vote(
         right_ns,
         right_pk,
         magnitude,
-        payload.rationale,
         payload.attribute_id,
         user.id,
     )

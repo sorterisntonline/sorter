@@ -41,7 +41,6 @@ interface Vote {
 	right_entity_pk: string;
 	user_id: string;
 	magnitude: number;
-	rationale?: string;
 	attribute_id: number;
 	created_at: string;
 	deleted_at?: string;

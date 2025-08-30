@@ -499,8 +499,7 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
                 "left_entity_pk": a_ident["pk"],
                 "right_entity_pk_namespace": b_ident["pk_namespace"],
                 "right_entity_pk": b_ident["pk"],
-                "magnitude": magnitude if winner == "a" else (-magnitude if winner == "b" else 0),
-                "rationale": decision.get("rationale"),
+                "magnitude": magnitude,
                 "attribute_id": 1,
             }
             print(f"[vote-llm][seed] Decision winner={winner} score={score} magnitude={payload['magnitude']} -> POST /vote")
@@ -563,8 +562,7 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
             "left_entity_pk": item_ident["pk"],
             "right_entity_pk_namespace": anchor_ident["pk_namespace"],
             "right_entity_pk": anchor_ident["pk"],
-            "magnitude": magnitude if winner == "a" else (-magnitude if winner == "b" else 0),
-            "rationale": decision.get("rationale"),
+            "magnitude": magnitude,
             "attribute_id": 1,
         }
         print(f"[vote-llm][insert] Decision winner={winner} score={score} magnitude={payload['magnitude']} -> POST /vote")
@@ -629,7 +627,6 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
                     "right_entity_pk_namespace": right_ident["pk_namespace"],
                     "right_entity_pk": right_ident["pk"],
                     "magnitude": magnitude if winner == "a" else (-magnitude if winner == "b" else 0),
-                    "rationale": decision.get("rationale"),
                     "attribute_id": 1,
                 }
                 print(f"[vote-llm][adjacent] Decision winner={winner} score={score} magnitude={payload['magnitude']} -> POST /vote")

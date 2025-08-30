@@ -7,7 +7,6 @@ SELECT
     right_entity_pk,
     user_id,
     magnitude,
-    rationale,
     attribute_id,
     created_at,
     deleted_at
