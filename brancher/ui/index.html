@@ -88,6 +88,29 @@
             max-height: 80vh;
             overflow-y: auto;
         }
+        /* NEW: Styles for dialog buttons */
+        .dialog-buttons {
+            margin-top: 20px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+        .dialog-buttons button {
+            padding: 8px 16px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            cursor: pointer;
+            background-color: #f0f0f0;
+        }
+        .dialog-buttons button:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+        .dialog-buttons .add-vote-btn {
+            background-color: #28a745;
+            color: white;
+            border-color: #28a745;
+        }
     </style>
 </head>
 
@@ -241,23 +264,68 @@
                 return parts[0] || str; // Return first part before ':', or whole string if no ':'
             };
 
-            // --- NEW: Handler for cell clicks ---
             const handleCellClick = (rowItem, colItem, rowIdx, colIdx) => {
-                // Prevent clicking during another vote
                 if (voteMutation.isLoading) return;
 
-                // Don't vote an item against itself
-                if (rowItem.originalIndex === colItem.originalIndex) return;
+                const cell = (finalMatrix[rowItem.originalIndex] && finalMatrix[rowItem.originalIndex][colItem.originalIndex]) || {};
+                const voteCount = cell.vote_count || 0;
 
-                console.log(`Voting on ${rowItem.item} vs ${colItem.item}`);
-                setVotingCell({ row: rowIdx, col: colIdx });
+                // If a vote exists, show dialog. Otherwise, trigger a new vote.
+                if (voteCount > 0 && cell.details) {
+                    const details = cell.details; // The most recent vote details
+                    const leftEntity = formatId(details.left_entity_pk);
+                    const rightEntity = formatId(details.right_entity_pk);
+                    const magnitude = details.magnitude;
+                    const rationale = details.rationale;
+                    let winner, loser, confidence;
 
-                // The entity identifiers for the API call (shape expected by Flask /vote-pair)
+                    if (magnitude < 0) {
+                        winner = leftEntity; loser = rightEntity; confidence = Math.abs(magnitude);
+                    } else if (magnitude > 0) {
+                        winner = rightEntity; loser = leftEntity; confidence = magnitude;
+                    } else {
+                        winner = null; loser = null; confidence = 0;
+                    }
+
+                    // MODIFIED: Store the items and indices needed to trigger a new vote
+                    setDialogData({
+                        leftEntity, rightEntity, magnitude, winner, loser, confidence, rationale,
+                        weight: cell.weight,
+                        voteCount: voteCount,
+                        // NEW: Pass context to the dialog for the re-vote action
+                        rowItem,
+                        colItem,
+                        displayRowIdx: rowIdx,
+                        displayColIdx: colIdx
+                    });
+                } else if (rowItem.originalIndex !== colItem.originalIndex) {
+                    // No vote exists, trigger one
+                    console.log(`Voting on ${rowItem.item} vs ${colItem.item}`);
+                    setVotingCell({ row: rowIdx, col: colIdx });
+                    const pair = {
+                        entity_a: { pk_namespace: "gitsort.branch_snapshot", pk: rowItem.item },
+                        entity_b: { pk_namespace: "gitsort.branch_snapshot", pk: colItem.item }
+                    };
+                    voteMutation.mutate(pair);
+                }
+            };
+
+            // NEW: Handler for the "Add Another Vote" button in the dialog
+            const handleAddVoteFromDialog = () => {
+                if (!dialogData || voteMutation.isLoading) return;
+
+                const { rowItem, colItem, displayRowIdx, displayColIdx } = dialogData;
+
+                // 1. Close the dialog
+                setDialogData(null);
+                // 2. Set the loading state on the correct cell
+                setVotingCell({ row: displayRowIdx, col: displayColIdx });
+                // 3. Construct the pair and trigger the mutation
                 const pair = {
                     entity_a: { pk_namespace: "gitsort.branch_snapshot", pk: rowItem.item },
                     entity_b: { pk_namespace: "gitsort.branch_snapshot", pk: colItem.item }
                 };
-
+                console.log(`Adding another vote for ${rowItem.item} vs ${colItem.item}`);
                 voteMutation.mutate(pair);
             };
 
@@ -395,53 +463,12 @@
                                                                 color: 'inherit',
                                                                 opacity: isVoting ? 0.5 : 1,
                                                             }}
-                                                            onClick={() => {
-                                                                if (rowIdx === colIdx) return; // Don't allow self-voting
-
-                                                                if (details) {
-                                                                    // Existing behavior: show vote details dialog
-                                                                    const leftEntity = formatId(details.left_entity_pk);
-                                                                    const rightEntity = formatId(details.right_entity_pk);
-                                                                    const magnitude = details.magnitude;
-                                                                    const rationale = details.rationale;
-
-                                                                    // Determine winner based on magnitude
-                                                                    let winner, loser, confidence;
-                                                                    if (magnitude < 0) {
-                                                                        winner = leftEntity;
-                                                                        loser = rightEntity;
-                                                                        confidence = Math.abs(magnitude);
-                                                                    } else if (magnitude > 0) {
-                                                                        winner = rightEntity;
-                                                                        loser = leftEntity;
-                                                                        confidence = magnitude;
-                                                                    } else {
-                                                                        winner = null;
-                                                                        loser = null;
-                                                                        confidence = 0;
-                                                                    }
-
-                                                                    setDialogData({
-                                                                        leftEntity,
-                                                                        rightEntity,
-                                                                        magnitude,
-                                                                        winner,
-                                                                        loser,
-                                                                        confidence,
-                                                                        rationale,
-                                                                        weight: safeCell.weight,
-                                                                        voteCount: voteCount
-                                                                    });
-                                                                } else {
-                                                                    // New behavior: trigger LLM vote
-                                                                    handleCellClick(
-                                                                        { item: rowItem, originalIndex: rowIdx },
-                                                                        { item: colItem, originalIndex: colIdx },
-                                                                        displayRowIdx,
-                                                                        displayColIdx
-                                                                    );
-                                                                }
-                                                            }}>
+                                                            onClick={() => handleCellClick(
+                                                                { item: rowItem, originalIndex: rowIdx },
+                                                                { item: colItem, originalIndex: colIdx },
+                                                                displayRowIdx,
+                                                                displayColIdx
+                                                            )}>
                                                                 {rowIdx === colIdx ? '×' :
                                                                  isVoting ? '...' :
                                                                  voteCount > 0 ? `${safeCell.weight.toFixed(1)} (${voteCount})` :
@@ -464,11 +491,11 @@
                                 <h3>Vote Details</h3>
                                 <div style={{ marginBottom: '15px' }}>
                                     <p><strong>Comparison:</strong> {dialogData.leftEntity} vs {dialogData.rightEntity}</p>
+                                    <p><strong>Avg. Matrix Weight:</strong> {dialogData.weight ? dialogData.weight.toFixed(1) : 'N/A'}</p>
+                                    <p><strong>Total Votes:</strong> {dialogData.voteCount}</p>
+                                    <hr style={{margin: '10px 0'}} />
+                                    <p><em>Details from most recent vote:</em></p>
                                     <p><strong>Raw Magnitude:</strong> {dialogData.magnitude} (range: -50 to +50)</p>
-                                    <p><strong>Matrix Weight:</strong> {dialogData.weight ? dialogData.weight.toFixed(1) : 'N/A'}</p>
-                                    {dialogData.voteCount && dialogData.voteCount > 1 && (
-                                        <p><strong>Vote Count:</strong> {dialogData.voteCount} (averaged)</p>
-                                    )}
                                     {dialogData.winner ? (
                                         <p><strong>Winner:</strong> {dialogData.winner} (confidence: {dialogData.confidence}/50)</p>
                                     ) : (
@@ -478,9 +505,9 @@
                                 {dialogData.rationale ? (
                                     <div style={{ marginBottom: '15px' }}>
                                         <p><strong>Rationale:</strong></p>
-                                        <div style={{ 
-                                            backgroundColor: '#f5f5f5', 
-                                            padding: '10px', 
+                                        <div style={{
+                                            backgroundColor: '#f5f5f5',
+                                            padding: '10px',
                                             borderRadius: '5px',
                                             fontStyle: 'italic',
                                             whiteSpace: 'pre-wrap'
@@ -491,7 +518,17 @@
                                 ) : (
                                     <p style={{ fontStyle: 'italic', color: '#666' }}>No rationale provided for this vote.</p>
                                 )}
-                                <button onClick={() => setDialogData(null)}>Close</button>
+                                {/* NEW: Button container for actions */}
+                                <div className="dialog-buttons">
+                                    <button onClick={() => setDialogData(null)}>Close</button>
+                                    <button
+                                        className="add-vote-btn"
+                                        onClick={handleAddVoteFromDialog}
+                                        disabled={voteMutation.isLoading}
+                                    >
+                                        {voteMutation.isLoading ? 'Voting...' : 'Add Another Vote'}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     )}
