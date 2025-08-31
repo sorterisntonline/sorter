@@ -26,28 +26,28 @@ pub struct RankedEntity {
 
 #[derive(Serialize, Debug, JsonSchema)]
 pub struct RankingResponse {
-    unsorted: Vec<EntityIdentifier>,
-    sorted: Vec<RankedEntity>,
+    pub unsorted: Vec<EntityIdentifier>,
+    pub sorted: Vec<RankedEntity>,
 }
 
 #[derive(sqlx::FromRow, Debug)]
-struct RelevantVote {
-    left_entity_pk_namespace: String,
-    left_entity_pk: String,
-    right_entity_pk_namespace: String,
-    right_entity_pk: String,
+pub struct RelevantVote {
+    pub left_entity_pk_namespace: String,
+    pub left_entity_pk: String,
+    pub right_entity_pk_namespace: String,
+    pub right_entity_pk: String,
 
-    magnitude: i32,
+    pub magnitude: i32,
 }
 
-struct RankGraph {
+pub struct RankGraph {
     _entity_key_to_index: HashMap<String, usize>,
 
-    index_to_entity_identifier: HashMap<usize, EntityIdentifier>,
-    graph: DirectedCsrGraph<usize, (), f64>,
+    pub index_to_entity_identifier: HashMap<usize, EntityIdentifier>,
+    pub graph: DirectedCsrGraph<usize, (), f64>,
 }
 
-fn build_rank_graph(
+pub fn build_rank_graph(
     entities: &[EntityIdentifier],
     votes: &[RelevantVote],
 ) -> Result<RankGraph, Error> {
@@ -97,7 +97,7 @@ fn build_rank_graph(
     })
 }
 
-fn calculate_rank_centrality(
+pub fn calculate_rank_centrality(
     graph: &DirectedCsrGraph<usize, (), f64>,
     max_iters: usize,
     tol: f64,

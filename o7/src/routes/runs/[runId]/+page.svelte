@@ -65,9 +65,14 @@
 </script>
 
 <main class="container mx-auto p-8">
-	<a href="/runs" class="mb-6 block text-blue-400 hover:underline"
-		>&larr; Back to all runs</a
-	>
+	<div class="mb-6 flex items-center justify-between">
+		<a href="/runs" class="text-blue-400 hover:underline"
+			>&larr; Back to all runs</a
+		>
+		<a href="/runs/{runId}/replay" class="rounded-lg bg-purple-600 px-4 py-2 text-white hover:bg-purple-700 transition-colors">
+			📊 View Ranking History
+		</a>
+	</div>
 
 	{#if $detailsQuery.isLoading}
 		<p class="text-zinc-400">Loading run details...</p>

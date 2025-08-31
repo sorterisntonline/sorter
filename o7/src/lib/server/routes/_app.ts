@@ -47,6 +47,17 @@ interface Vote {
 	deleted_at?: string;
 }
 
+interface HistoryStep {
+	vote_added: Vote;
+	current_rankings: RankedEntity[];
+	unsorted_items: EntityIdentifier[];
+}
+
+interface ReplayResponse {
+	items: EntityIdentifier[];
+	history: HistoryStep[];
+}
+
 // Helper function to make authenticated requests to the Rust API
 async function fetchSorterAPI<T = unknown>(
 	endpoint: string,
@@ -159,6 +170,17 @@ export const gitsorterRouter = router({
 				body: JSON.stringify(payload),
 			});
 			return votes;
+		}),
+
+	getRunReplay: publicProcedure
+		.input(z.object({ runId: z.string() }))
+		.query(async ({ input }) => {
+			// Simply proxy the call to the Rust backend
+			const replayData: ReplayResponse = await fetchSorterAPI(
+				`/run/${input.runId}/history`
+			);
+
+			return replayData;
 		}),
 });
 

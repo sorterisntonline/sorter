@@ -7,6 +7,7 @@ pub mod extractors;
 pub mod models;
 pub mod pagerank;
 pub mod pair;
+pub mod replay;
 pub mod vote;
 use std::{env, sync::Arc};
 
@@ -135,6 +136,7 @@ fn router(app_state: AppState) -> Router {
         .nest("/pair", pair::routes())
         .nest("/vote", vote::routes())
         .nest("/rank", pagerank::routes())
+        .nest("/run", replay::routes())
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
             auth_middleware::try_auth,
