@@ -401,6 +401,34 @@ def rank_entities(api: str, entities: List[Dict[str, str]], api_key: Optional[st
     return http_post_json(f"{api.rstrip('/')}/rank", entities, headers=auth_headers(api_key))
 
 
+def check_existing_vote_for_pair(api: str, left_entity: Dict[str, str], right_entity: Dict[str, str], api_key: Optional[str]) -> bool:
+    """Check if a vote already exists for the given pair of entities.
+
+    Returns True if a vote exists, False otherwise.
+    """
+    payload = {
+        "kind": "Pair",
+        "entities": [
+            {
+                "pk_namespace": left_entity["pk_namespace"],
+                "pk": left_entity["pk"]
+            },
+            {
+                "pk_namespace": right_entity["pk_namespace"],
+                "pk": right_entity["pk"]
+            }
+        ]
+    }
+
+    try:
+        response = http_post_json(f"{api.rstrip('/')}/vote/filtered", payload, headers=auth_headers(api_key))
+        # If we get votes back, one already exists
+        return len(response) > 0
+    except SystemExit:
+        # If the API call fails, assume no vote exists to be safe (don't skip unnecessarily)
+        return False
+
+
 def cmd_vote_llm(args: argparse.Namespace) -> None:
     api = args.api.rstrip('/')
     api_key = args.api_key or os.environ.get("SORTER_API_KEY")
@@ -447,7 +475,7 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
     max_votes = int(args.count) if args.count else 1_000_000_000
 
     # Phase 1: single-edge inserts
-    if not sorted_list and len(unsorted) >= 2 and votes_done < max_votes:
+    while not sorted_list and len(unsorted) >= 2 and votes_done < max_votes:
         a_ident = unsorted[0]
         b_ident = unsorted[1]
         a = get_entity_by_ident(a_ident)
@@ -455,6 +483,17 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
         a_meta = a.get("metadata") or {}
         b_meta = b.get("metadata") or {}
         print(f"[vote-llm][seed] Pair A={a_ident['pk']} ({a_meta.get('branch')}@{a_meta.get('commit_sha')}) vs B={b_ident['pk']} ({b_meta.get('branch')}@{b_meta.get('commit_sha')})")
+
+        # Check if vote already exists for this pair
+        if check_existing_vote_for_pair(api, a, b, api_key):
+            print(f"[vote-llm][seed] Vote already exists for this pair, skipping...")
+            votes_done += 1  # Still count as "done" since we're not processing it
+            # Re-rank and continue
+            rank = rank_entities(api, idents, api_key)
+            unsorted = rank.get("unsorted", [])
+            sorted_list = rank.get("sorted", [])
+            continue
+
         messages_payload = build_prompt_for_pair(lens_text, a_meta, b_meta)
         if args.dry_run:
             print(json.dumps({"pair": [a_ident, b_ident], "prompt": messages_payload}, indent=2))
@@ -524,6 +563,13 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
         a_meta = a.get("metadata") or {}
         b_meta = b.get("metadata") or {}
         print(f"[vote-llm][insert] Item={item_ident['pk']} ({a_meta.get('branch')}@{a_meta.get('commit_sha')} bytes={a_meta.get('packed_bytes')}) vs Anchor={anchor_ident['pk']} ({b_meta.get('branch')}@{b_meta.get('commit_sha')} bytes={b_meta.get('packed_bytes')})")
+
+        # Check if vote already exists for this pair
+        if check_existing_vote_for_pair(api, a, b, api_key):
+            print(f"[vote-llm][insert] Vote already exists for this pair, skipping...")
+            votes_done += 1  # Still count as "done" since we're not processing it
+            continue
+
         messages_payload = build_prompt_for_pair(lens_text, a_meta, b_meta)
         if args.dry_run:
             print(json.dumps({"pair": [item_ident, anchor_ident], "prompt": messages_payload}, indent=2))
@@ -594,6 +640,13 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
                 a_meta = a.get("metadata") or {}
                 b_meta = b.get("metadata") or {}
                 print(f"[vote-llm][adjacent] Pair {i}/{len(prev_order)-1}: {left_ident['pk']} ({a_meta.get('branch')}@{a_meta.get('commit_sha')}) vs {right_ident['pk']} ({b_meta.get('branch')}@{b_meta.get('commit_sha')})")
+
+                # Check if vote already exists for this pair
+                if check_existing_vote_for_pair(api, a, b, api_key):
+                    print(f"[vote-llm][adjacent] Vote already exists for this pair, skipping...")
+                    votes_done += 1  # Still count as "done" since we're not processing it
+                    continue
+
                 messages_payload = build_prompt_for_pair(lens_text, a_meta, b_meta)
                 if args.dry_run:
                     print(json.dumps({"pair": [left_ident, right_ident], "prompt": messages_payload}, indent=2))
