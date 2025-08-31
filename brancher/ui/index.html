@@ -234,7 +234,11 @@
                             maintainAspectRatio: false,
                             animation: false,
                             scales: {
-                                y: { beginAtZero: true }
+                                y: { 
+                                    beginAtZero: true,
+                                    min: 0,
+                                    max: 100
+                                }
                             },
                             plugins: {
                                 legend: {
@@ -279,7 +283,9 @@
                     chart.data.datasets[i].data = data.history
                         .slice(0, currentStep + 1)
                         .map(step => {
-                            const ranking = step.current_rankings.find(r => r.identifier && r.identifier.pk === item);
+                            // Apply rescaling to current rankings before extracting scores
+                            const rescaledRankings = rescaleScores(step.current_rankings);
+                            const ranking = rescaledRankings.find(r => r.identifier && r.identifier.pk === item);
                             return ranking ? ranking.score : null;
                         });
                 });
@@ -297,6 +303,35 @@
                 if (!str) return '';
                 const parts = str.split(':');
                 return parts[0] || str; // Return first part before ':', or whole string if no ':'
+            };
+
+            // Function to rescale scores using linear interpolation based on ranking position
+            const rescaleScores = (rankings) => {
+                if (!rankings || rankings.length === 0) return rankings;
+                
+                // Sort by original score (highest to lowest)
+                const sorted = [...rankings].sort((a, b) => b.score - a.score);
+                
+                // Calculate new scores using linear interpolation
+                // Top ranked gets 100, bottom gets 0, others distributed linearly
+                const maxScore = 100;
+                const minScore = 0;
+                
+                return sorted.map((ranking, index) => {
+                    let newScore;
+                    if (sorted.length === 1) {
+                        newScore = maxScore;
+                    } else {
+                        // Linear interpolation: newScore = maxScore - (index / (length - 1)) * (maxScore - minScore)
+                        newScore = maxScore - (index / (sorted.length - 1)) * (maxScore - minScore);
+                    }
+                    
+                    return {
+                        ...ranking,
+                        score: newScore,
+                        originalScore: ranking.score // Keep original for reference
+                    };
+                });
             };
 
             const handleCellClick = (rowItem, colItem, rowIdx, colIdx) => {
@@ -408,14 +443,16 @@
                         </div>
                         <div className="rankings-legend">
                             <h3>Current Rankings</h3>
-                            {currentHistory && currentHistory.current_rankings
-                                .sort((a, b) => b.score - a.score)
-                                .map((r, i) => (
-                                    <div key={r.identifier ? r.identifier.pk : i} title={r.identifier ? r.identifier.pk : ''}>
-                                        {i+1}. {r.identifier ? formatId(r.identifier.pk) : 'Unknown'} ({r.score.toFixed(4)})
-                                    </div>
-                                ))
-                            }
+                            {currentHistory && (() => {
+                                const rescaledRankings = rescaleScores(currentHistory.current_rankings);
+                                return rescaledRankings
+                                    .sort((a, b) => b.score - a.score)
+                                    .map((r, i) => (
+                                        <div key={r.identifier ? r.identifier.pk : i} title={`${r.identifier ? r.identifier.pk : ''}\nOriginal: ${r.originalScore ? r.originalScore.toFixed(4) : 'N/A'}\nRescaled: ${r.score.toFixed(1)}`}>
+                                            {i+1}. {r.identifier ? formatId(r.identifier.pk) : 'Unknown'} ({r.score.toFixed(1)})
+                                        </div>
+                                    ));
+                            })()}
                             <h3>Unsorted Items</h3>
                             {currentHistory && currentHistory.unsorted_items &&
                                 currentHistory.unsorted_items.map(item => (
