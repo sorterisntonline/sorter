@@ -10,6 +10,7 @@ import random
 from datetime import datetime
 from pathlib import Path
 from urllib import request, error
+from urllib.parse import quote
 from typing import Optional, List, Dict
 
 from flask import Flask, jsonify, send_from_directory
@@ -595,8 +596,10 @@ def _perform_llm_vote_for_pair(
     """
     # 1. Fetch full entity metadata required for the prompt
     hdrs = auth_headers(api_key)
-    entity_a = http_get_json(f"{api_base}/entity/{entity_a_ident['pk_namespace']}/{entity_a_ident['pk']}", headers=hdrs).get("entity", {})
-    entity_b = http_get_json(f"{api_base}/entity/{entity_b_ident['pk_namespace']}/{entity_b_ident['pk']}", headers=hdrs).get("entity", {})
+    a_pk_enc = quote(entity_a_ident['pk'], safe='')
+    b_pk_enc = quote(entity_b_ident['pk'], safe='')
+    entity_a = http_get_json(f"{api_base}/entity/{entity_a_ident['pk_namespace']}/{a_pk_enc}", headers=hdrs).get("entity", {})
+    entity_b = http_get_json(f"{api_base}/entity/{entity_b_ident['pk_namespace']}/{b_pk_enc}", headers=hdrs).get("entity", {})
 
     a_meta = entity_a.get("metadata", {})
     b_meta = entity_b.get("metadata", {})
@@ -999,7 +1002,8 @@ def cmd_serve(args: argparse.Namespace) -> None:
                 entity_b_ident=entity_b_ident,
             )
             return jsonify({"status": "success", "vote": new_vote})
-        except Exception as e:
+        except BaseException as e:
+            # Catch SystemExit from helper HTTP/LLM functions and any other base exceptions
             print(f"Error in /vote-pair: {e}", file=sys.stderr)
             return jsonify({"status": "error", "message": str(e)}), 500
 

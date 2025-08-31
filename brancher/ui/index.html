@@ -85,6 +85,8 @@
             border-radius: 8px;
             max-width: 500px;
             width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
         }
     </style>
 </head>
@@ -119,8 +121,10 @@
                         setCurrentStep(newData.history.length - 1);
                     }
                 },
-                refetchInterval: 5000,
-                refetchIntervalInBackground: true
+                refetchOnWindowFocus: false,
+                refetchOnReconnect: false
+                // refetchInterval: 5000,
+                // refetchIntervalInBackground: true
             });
 
             // --- NEW: Mutation for triggering a vote ---
@@ -248,7 +252,7 @@
                 console.log(`Voting on ${rowItem.item} vs ${colItem.item}`);
                 setVotingCell({ row: rowIdx, col: colIdx });
 
-                // The entity identifiers for the API call
+                // The entity identifiers for the API call (shape expected by Flask /vote-pair)
                 const pair = {
                     entity_a: { pk_namespace: "gitsort.branch_snapshot", pk: rowItem.item },
                     entity_b: { pk_namespace: "gitsort.branch_snapshot", pk: colItem.item }
