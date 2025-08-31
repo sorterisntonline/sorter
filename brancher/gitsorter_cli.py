@@ -455,21 +455,29 @@ def default_lens_prompts() -> Dict[str, str]:
             "Be rigorous, consistent, and decisive. Respond ONLY with a single JSON object as instructed; do not include prose, code fences, or any extra characters."
         ),
         "user_template": (
-            "Lens Criteria:\n{{LENS}}\n\n"
-            "Compare two codebases labeled <A> and <B>.\n"
-            "You MUST return ONLY a single JSON object (no other text or code fences) with two keys: 'score' and 'rationale'.\n\n"
-            "The 'score' MUST be an integer between -50 and 50.\n"
-            "- A negative score (-1 to -50) means Codebase A is better. -50 is a decisive win for A.\n"
-            "- A positive score (1 to 50) means Codebase B is better. +50 is a decisive win for B.\n"
-            "- A score of 0 means it is a perfect tie.\n\n"
-            "The 'rationale' MUST be a long, clear explanation for your score.\n\n"
-            "In your rationale, you MUST refer to the codebases by their branch names, '{{A_BRANCH}}' and '{{B_BRANCH}}'.\n\n"
-            "JSON Response Format:\n"
-            "{\n  \"score\": -50..50,\n  \"rationale\": \"short reason\"\n}\n\n"
-            "Codebase A (metadata):\nBranch: {{A_BRANCH}}\nCommit: {{A_SHA}}\nBytes: {{A_BYTES}}\n\n"
+            "Evaluation Criteria:\n{{LENS}}\n\n"
+            "Compare two codebases ({{A_BRANCH}} vs {{B_BRANCH}}) against the above criteria.\n\n"
+            "IMPORTANT: Work through your reasoning step-by-step before deciding on a final score.\n\n"
+            "Your response must be a JSON object with exactly two fields:\n"
+            "1. 'thinking': Your complete reasoning process - examine each codebase, compare them, and work toward a conclusion\n"
+            "2. 'score': Your final integer score (-50 to +50)\n\n"
+            "Scoring Guidelines:\n"
+            "- Negative scores (-1 to -50): {{A_BRANCH}} is better\n"
+            "- Positive scores (1 to +50): {{B_BRANCH}} is better\n"
+            "- Score 0: Perfect tie or negligible difference\n"
+            "- Larger absolute values (±30 to ±50): Clear, significant advantages\n"
+            "- Smaller absolute values (±1 to ±20): Subtle or minor advantages\n"
+            "- Be conservative with extreme scores (±40 to ±50) - reserve for truly decisive differences\n\n"
+            "Response Format:\n"
+            "{\n"
+            "  \"thinking\": \"Let me examine {{A_BRANCH}}: [analysis]. Now {{B_BRANCH}}: [analysis]. Comparing them: [comparison]. Therefore: [conclusion]\",\n"
+            "  \"score\": [integer from -50 to 50]\n"
+            "}\n\n"
+            "Codebase A ({{A_BRANCH}}):\nCommit: {{A_SHA}} | Size: {{A_BYTES}} bytes\n\n"
             "<A_CODE>\n{{A_CONTENT}}\n</A_CODE>\n\n"
-            "Codebase B (metadata):\nBranch: {{B_BRANCH}}\nCommit: {{B_SHA}}\nBytes: {{B_BYTES}}\n\n"
-            "<B_CODE>\n{{B_CONTENT}}\n</B_CODE>\n"
+            "Codebase B ({{B_BRANCH}}):\nCommit: {{B_SHA}} | Size: {{B_BYTES}} bytes\n\n"
+            "<B_CODE>\n{{B_CONTENT}}\n</B_CODE>\n\n"
+            "Now, analyze each codebase thoroughly before determining your score:"
         ),
     }
 
@@ -528,11 +536,15 @@ def call_openrouter_chat(model: str, api_key: str, messages: List[Dict[str, str]
 
 
 def parse_llm_decision_signed(text: str) -> Dict:
-    # Expect strict JSON with 'score' in [-50, 50] and 'rationale'
+    # Expect JSON with 'thinking' and 'score' fields
     obj = json.loads(text)
     score_val = int(obj.get("score", 0))
     score_val = max(-50, min(50, score_val))
-    rationale = str(obj.get("rationale", ""))
+    
+    # Use the thinking field as the rationale
+    thinking = str(obj.get("thinking", "")).strip()
+    rationale = thinking if thinking else "No reasoning provided"
+    
     return {"magnitude": score_val, "rationale": rationale}
 
 
@@ -631,8 +643,8 @@ def _perform_llm_vote_for_pair(
         reprompt = messages_payload["messages"] + [{
             "role": "user",
             "content": (
-                "Your previous response was invalid. Reply ONLY with a single JSON object: "
-                + "{\"score\":-50..50,\"rationale\":\"short reason\"}"
+                "Your previous response was invalid. Reply ONLY with a single JSON object with exactly two fields: "
+                + "{\"thinking\":\"your complete reasoning process\",\"score\":-50..50}"
             )
         }]
         print("[on-demand-vote] Reprompting due to invalid JSON...")
