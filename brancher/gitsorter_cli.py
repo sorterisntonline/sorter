@@ -285,6 +285,86 @@ def cmd_ingest(args: argparse.Namespace) -> None:
 
 # ------------------------- LLM Voting Orchestrator -------------------------
 
+def cmd_run(args: argparse.Namespace) -> None:
+    # Orchestrate: prepare -> ingest -> vote-llm -> rank using a temp dir
+    repo = Path(args.repo or ".").resolve()
+    if not (repo / ".git").exists():
+        raise SystemExit(f"Not a git repository: {repo}")
+
+    run_name = args.name or f"gitsorter-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}"
+    print(f"Starting run '{run_name}'")
+
+    with tempfile.TemporaryDirectory(prefix="gitsorter-run-") as tmpdir:
+        out_dir = Path(tmpdir)
+        # 1) prepare
+        prep_args = argparse.Namespace(
+            repo=str(repo),
+            branch=list(args.branch or []),
+            name=run_name,
+            out=str(out_dir),
+            append=False,
+            model=args.model,
+            lens=args.lens,
+            api=args.api,
+        )
+        cmd_prepare(prep_args)
+
+        # Read run_id from generated config
+        cfg = json.loads((out_dir / "run_config.json").read_text())
+        run_id = cfg.get("run_id")
+        if not run_id:
+            raise SystemExit("run_id missing after prepare")
+
+        # 2) ingest
+        ing_args = argparse.Namespace(
+            dir=str(out_dir),
+            api=args.api,
+            api_key=args.api_key,
+            lens=args.lens,
+        )
+        cmd_ingest(ing_args)
+
+        # 3) vote-llm
+        vote_args = argparse.Namespace(
+            run_id=run_id,
+            api=args.api,
+            api_key=args.api_key,
+            provider="openrouter",
+            model=args.model,
+            llm_key_env=args.llm_key_env,
+            temperature=args.temperature,
+            count=args.count,
+            sweeps=args.sweeps,
+            dry_run=False,
+            lens_text=args.lens_text,
+        )
+        cmd_vote_llm(vote_args)
+
+        # 4) rank
+        rk_args = argparse.Namespace(
+            run_id=run_id,
+            api=args.api,
+            api_key=args.api_key,
+        )
+        cmd_rank(rk_args)
+
+    print(f"Run '{run_name}' complete.")
+
+def cmd_run_id(args: argparse.Namespace) -> None:
+    out_dir = Path(args.dir)
+    cfg_path = out_dir / "run_config.json"
+    if not cfg_path.exists():
+        raise SystemExit(f"run_config.json not found in {out_dir}")
+    try:
+        cfg = json.loads(cfg_path.read_text())
+    except Exception as e:
+        raise SystemExit(f"Failed to read {cfg_path}: {e}")
+    run_id = cfg.get("run_id", "")
+    if not run_id:
+        raise SystemExit("run_id missing from run_config.json")
+    # Print plain so it can be captured in shells easily
+    print(run_id)
+
 def default_lens_prompts() -> Dict[str, str]:
     return {
         "system": (
@@ -805,6 +885,27 @@ def build_parser() -> argparse.ArgumentParser:
     vl.add_argument("--dry-run", action="store_true")
     vl.add_argument("--lens-text", help="Override lens prompt text if lens entity has none")
     vl.set_defaults(func=cmd_vote_llm)
+
+    # run (orchestrated; no dir or run-id exposed)
+    rn = sub.add_parser("run", help="Orchestrate prepare→ingest→vote→rank with a temp workspace")
+    rn.add_argument("--repo", default=".", help="Path to a local Git repository")
+    rn.add_argument("--branch", action="append", default=[], help="Branch to include (repeatable). If omitted, include all local branches.")
+    rn.add_argument("--name", help="Run name (optional; default timestamped)")
+    rn.add_argument("--model", default="openai/gpt-4o", help="Model identifier for voting")
+    rn.add_argument("--lens", default="architectural_vision_v1", help="Lens primary key")
+    rn.add_argument("--api", default=DEFAULT_API_BASE, help="API base URL")
+    rn.add_argument("--api-key", help="API key, or set SORTER_API_KEY env var")
+    rn.add_argument("--llm-key-env", default="OPENROUTER_API_KEY", help="Env var containing provider API key")
+    rn.add_argument("--temperature", type=float, default=0.1)
+    rn.add_argument("--count", type=int, help="Max votes to cast")
+    rn.add_argument("--sweeps", type=int, default=1, help="Number of adjacent sweeps")
+    rn.add_argument("--lens-text", help="Override lens prompt text if lens entity has none")
+    rn.set_defaults(func=cmd_run)
+
+    # run-id
+    rid = sub.add_parser("run-id", help="Print run_id from a prepared output directory")
+    rid.add_argument("--dir", required=True, help="Path to prepare output directory containing run_config.json")
+    rid.set_defaults(func=cmd_run_id)
 
     return p
 
