@@ -294,8 +294,9 @@ def default_lens_prompts() -> Dict[str, str]:
         "user_template": (
             "Lens Criteria:\n{{LENS}}\n\n"
             "Compare two codebases labeled <A> and <B>.\n"
-            "Return ONLY a single JSON object (no other text, no code fences) exactly of the form:\n"
-            "{\n  \"winner\": \"A|B|tie\",\n  \"score\": 0..100,\n  \"confidence\": 0..1,\n  \"rationale\": \"short reason\"\n}\n\n"
+            "In your rationale, you MUST refer to the codebases by their branch names, '{{A_BRANCH}}' and '{{B_BRANCH}}'.\n"
+            "Your JSON response MUST be exactly:\n"
+            "{\n  \"winner\": \"{{A_BRANCH}}|{{B_BRANCH}}|tie\",\n  \"score\": 0..100,\n  \"confidence\": 0..1,\n  \"rationale\": \"short reason using branch names\"\n}\n\n"
             "Codebase A (metadata):\nBranch: {{A_BRANCH}}\nCommit: {{A_SHA}}\nBytes: {{A_BYTES}}\n\n"
             "<A_CODE>\n{{A_CONTENT}}\n</A_CODE>\n\n"
             "Codebase B (metadata):\nBranch: {{B_BRANCH}}\nCommit: {{B_SHA}}\nBytes: {{B_BYTES}}\n\n"
@@ -357,12 +358,27 @@ def call_openrouter_chat(model: str, api_key: str, messages: List[Dict[str, str]
         raise SystemExit(f"OpenRouter request failed: {e}")
 
 
-def parse_llm_decision(text: str) -> Dict:
+def parse_llm_decision(text: str, a_branch: Optional[str] = None, b_branch: Optional[str] = None) -> Dict:
     # Strict JSON only; no fallback parsing.
     obj = json.loads(text)
-    winner = str(obj.get("winner", "")).lower()
-    if winner not in ("a", "b", "tie"):
-        raise ValueError("invalid winner")
+    raw_winner = str(obj.get("winner", "")).strip()
+    wl = raw_winner.lower()
+    winner: str
+    if a_branch is not None and b_branch is not None:
+        a_lower = str(a_branch).lower()
+        b_lower = str(b_branch).lower()
+        if wl == "tie":
+            winner = "tie"
+        elif wl == a_lower:
+            winner = "a"
+        elif wl == b_lower:
+            winner = "b"
+        else:
+            raise ValueError("invalid winner")
+    else:
+        if wl not in ("a", "b", "tie"):
+            raise ValueError("invalid winner")
+        winner = wl
     score = float(obj.get("score", 50))
     confidence = float(obj.get("confidence", 0.5))
     rationale = str(obj.get("rationale", ""))
@@ -503,19 +519,24 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
         print("[vote-llm][seed] LLM response received")
         content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
         try:
-            decision = parse_llm_decision(content)
+            decision = parse_llm_decision(content, a_meta.get("branch"), b_meta.get("branch"))
         except Exception:
             # Single strict reprompt, then skip on failure
             reprompt = messages_payload["messages"] + [{
                 "role": "user",
-                "content": "Your previous response was invalid. Reply ONLY with a single JSON object: {\"winner\":\"A|B|tie\",\"score\":0..100,\"confidence\":0..1,\"rationale\":\"...\"}"
+                "content": (
+                    "Your previous response was invalid. Reply ONLY with a single JSON object: "
+                    + "{\"winner\":\"" + str(a_meta.get("branch", "")).replace("\"", "'")
+                    + "|" + str(b_meta.get("branch", "")).replace("\"", "'")
+                    + "|tie\",\"score\":0..100,\"confidence\":0..1,\"rationale\":\"short reason using branch names\"}"
+                )
             }]
             print("[vote-llm][seed] Reprompting due to invalid JSON...")
             resp = call_openrouter_chat(args.model, llm_key, reprompt, temperature=args.temperature)
             print("[vote-llm][seed] LLM response received (reprompt)")
             content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
             try:
-                decision = parse_llm_decision(content)
+                decision = parse_llm_decision(content, a_meta.get("branch"), b_meta.get("branch"))
             except Exception:
                 print("[vote-llm][seed] Strict JSON parse failed twice; skipping this pair.")
                 decision = None
@@ -579,18 +600,23 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
         print("[vote-llm][insert] LLM response received")
         content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
         try:
-            decision = parse_llm_decision(content)
+            decision = parse_llm_decision(content, a_meta.get("branch"), b_meta.get("branch"))
         except Exception:
             reprompt = messages_payload["messages"] + [{
                 "role": "user",
-                "content": "Your previous response was invalid. Reply ONLY with a single JSON object: {\"winner\":\"A|B|tie\",\"score\":0..100,\"confidence\":0..1,\"rationale\":\"...\"}"
+                "content": (
+                    "Your previous response was invalid. Reply ONLY with a single JSON object: "
+                    + "{\"winner\":\"" + str(a_meta.get("branch", "")).replace("\"", "'")
+                    + "|" + str(b_meta.get("branch", "")).replace("\"", "'")
+                    + "|tie\",\"score\":0..100,\"confidence\":0..1,\"rationale\":\"short reason using branch names\"}"
+                )
             }]
             print("[vote-llm][insert] Reprompting due to invalid JSON...")
             resp = call_openrouter_chat(args.model, llm_key, reprompt, temperature=args.temperature)
             print("[vote-llm][insert] LLM response received (reprompt)")
             content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
             try:
-                decision = parse_llm_decision(content)
+                decision = parse_llm_decision(content, a_meta.get("branch"), b_meta.get("branch"))
             except Exception:
                 print("Strict JSON parse failed twice; skipping this insertion.")
                 decision = None
@@ -656,18 +682,23 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
                 print("[vote-llm][adjacent] LLM response received")
                 content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
                 try:
-                    decision = parse_llm_decision(content)
+                    decision = parse_llm_decision(content, a_meta.get("branch"), b_meta.get("branch"))
                 except Exception:
                     reprompt = messages_payload["messages"] + [{
                         "role": "user",
-                        "content": "Your previous response was invalid. Reply ONLY with a single JSON object: {\"winner\":\"A|B|tie\",\"score\":0..100,\"confidence\":0..1,\"rationale\":\"...\"}"
+                        "content": (
+                            "Your previous response was invalid. Reply ONLY with a single JSON object: "
+                            + "{\"winner\":\"" + str(a_meta.get("branch", "")).replace("\"", "'")
+                            + "|" + str(b_meta.get("branch", "")).replace("\"", "'")
+                            + "|tie\",\"score\":0..100,\"confidence\":0..1,\"rationale\":\"short reason using branch names\"}"
+                        )
                     }]
                     print("[vote-llm][adjacent] Reprompting due to invalid JSON...")
                     resp = call_openrouter_chat(args.model, llm_key, reprompt, temperature=args.temperature)
                     print("[vote-llm][adjacent] LLM response received (reprompt)")
                     content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
                     try:
-                        decision = parse_llm_decision(content)
+                        decision = parse_llm_decision(content, a_meta.get("branch"), b_meta.get("branch"))
                     except Exception:
                         print("Strict JSON parse failed twice; skipping this adjacent pair.")
                         continue
