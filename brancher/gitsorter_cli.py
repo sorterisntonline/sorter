@@ -804,61 +804,83 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
         sorted_list = rank.get("sorted", [])
         print(f"[vote-llm][insert] Rank: unsorted={len(unsorted)} sorted={len(sorted_list)}")
 
-    # Phase 2: run up to N adjacent sweeps, then stop (ignore remaining budget)
-    if sorted_list and getattr(args, "sweeps", 1) > 0:
-        for sweep_idx in range(int(getattr(args, "sweeps", 1))):
-            prev_order = [e["identifier"] for e in sorted_list]
-            swaps = 0
-            print(f"[vote-llm][adjacent] Sweep {sweep_idx+1}/{args.sweeps} over {len(prev_order)} items (votes={votes_done}/{max_votes})")
-            for i in range(1, len(prev_order)):
-                if votes_done >= max_votes:
-                    break
-                left_ident = prev_order[i - 1]
-                right_ident = prev_order[i]
-                a = get_entity_by_ident(left_ident)
-                b = get_entity_by_ident(right_ident)
-                a_meta = a.get("metadata") or {}
-                b_meta = b.get("metadata") or {}
-                print(f"[vote-llm][adjacent] Pair {i}/{len(prev_order)-1}: {left_ident['pk']} ({a_meta.get('branch')}@{a_meta.get('commit_sha')}) vs {right_ident['pk']} ({b_meta.get('branch')}@{b_meta.get('commit_sha')})")
-
-                # Check if vote already exists for this pair
-                if check_existing_vote_for_pair(api, a, b, api_key):
-                    print(f"[vote-llm][adjacent] Vote already exists for this pair, skipping...")
-                    votes_done += 1  # Still count as "done" since we're not processing it
-                    continue
-
-                if args.dry_run:
-                    print(json.dumps({"pair": [left_ident, right_ident], "prompt": build_prompt_for_pair(lens_text, a_meta, b_meta)}, indent=2))
-                    return
-
-                try:
-                    new_vote = _perform_llm_vote_for_pair(
-                        api_base=api,
-                        api_key=api_key,
-                        llm_key=llm_key,
-                        model=args.model,
-                        temperature=args.temperature,
-                        lens_text=lens_text,
-                        entity_a_ident=left_ident,
-                        entity_b_ident=right_ident,
-                    )
-                    votes_done += 1
-                    # Check if this vote would cause a swap (magnitude > 0 means right entity won)
-                    if new_vote.get("magnitude", 0) > 0:
-                        swaps += 1
-                except ValueError:
-                    print("[vote-llm][adjacent] Skipping this adjacent pair due to LLM error.")
-                    continue
-
-            # Re-rank after sweep and decide whether to continue
-            print("[vote-llm][adjacent] Re-ranking after sweep...")
-            rank = rank_entities(api, idents, api_key)
-            new_sorted = rank.get("sorted", [])
-            new_order = [e["identifier"] for e in new_sorted]
-            print(f"[vote-llm][adjacent] Sweep {sweep_idx+1} done. swaps={swaps} stable={new_order == prev_order}")
-            sorted_list = new_sorted
-            if swaps == 0 or new_order == prev_order:
+    # Phase 2: intelligent adjacent voting - prioritize highest-ranked adjacent pairs
+    adjacent_votes = 0
+    max_adjacent_votes = int(getattr(args, "sweeps", 1)) * len(sorted_list) if sorted_list else 0
+    
+    while sorted_list and adjacent_votes < max_adjacent_votes and votes_done < max_votes:
+        # Re-rank before each vote to get current order
+        print(f"[vote-llm][adjacent] Re-ranking to find best adjacent pair (votes={votes_done}/{max_votes}, adjacent={adjacent_votes}/{max_adjacent_votes})...")
+        rank = rank_entities(api, idents, api_key)
+        sorted_list = rank.get("sorted", [])
+        current_order = [e["identifier"] for e in sorted_list]
+        
+        # Print current ranking
+        print(f"[vote-llm][adjacent] Current ranking:")
+        for i, item in enumerate(current_order[:10]):  # Show top 10
+            entity = get_entity_by_ident(item)
+            meta = entity.get("metadata", {})
+            branch = meta.get("branch", "unknown")
+            print(f"  {i+1:2d}. {branch} ({item['pk'][:8]})")
+        if len(current_order) > 10:
+            print(f"     ... and {len(current_order) - 10} more")
+        
+        # Find the highest-ranked adjacent pair that hasn't been voted on
+        best_pair = None
+        for i in range(len(current_order) - 1):
+            left_ident = current_order[i]
+            right_ident = current_order[i + 1]
+            
+            # Check if vote already exists for this pair
+            a = get_entity_by_ident(left_ident)
+            b = get_entity_by_ident(right_ident)
+            if not check_existing_vote_for_pair(api, a, b, api_key):
+                best_pair = (left_ident, right_ident, i + 1)  # Store position for logging
                 break
+        
+        if not best_pair:
+            print("[vote-llm][adjacent] No more adjacent pairs need voting")
+            break
+            
+        left_ident, right_ident, position = best_pair
+        a = get_entity_by_ident(left_ident)
+        b = get_entity_by_ident(right_ident)
+        a_meta = a.get("metadata", {})
+        b_meta = b.get("metadata", {})
+        
+        print(f"[vote-llm][adjacent] Voting on position {position}: {left_ident['pk'][:8]} ({a_meta.get('branch')}) vs {right_ident['pk'][:8]} ({b_meta.get('branch')})")
+
+        if args.dry_run:
+            print(json.dumps({"pair": [left_ident, right_ident], "prompt": build_prompt_for_pair(lens_text, a_meta, b_meta)}, indent=2))
+            return
+
+        try:
+            new_vote = _perform_llm_vote_for_pair(
+                api_base=api,
+                api_key=api_key,
+                llm_key=llm_key,
+                model=args.model,
+                temperature=args.temperature,
+                lens_text=lens_text,
+                entity_a_ident=left_ident,
+                entity_b_ident=right_ident,
+            )
+            votes_done += 1
+            adjacent_votes += 1
+            
+            # Report the vote result
+            magnitude = new_vote.get("magnitude", 0)
+            if magnitude > 0:
+                print(f"[vote-llm][adjacent] Vote result: {b_meta.get('branch')} won (magnitude={magnitude})")
+            elif magnitude < 0:
+                print(f"[vote-llm][adjacent] Vote result: {a_meta.get('branch')} won (magnitude={magnitude})")
+            else:
+                print(f"[vote-llm][adjacent] Vote result: tie (magnitude={magnitude})")
+                
+        except ValueError:
+            print("[vote-llm][adjacent] Skipping this adjacent pair due to LLM error.")
+            adjacent_votes += 1  # Still count to avoid infinite loop
+            continue
 
     print(f"[vote-llm] Complete. votes_cast={votes_done}")
 
