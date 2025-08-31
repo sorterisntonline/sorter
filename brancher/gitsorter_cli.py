@@ -369,6 +369,7 @@ def cmd_run(args: argparse.Namespace) -> None:
     out_dir = repo / ".gitsorter" / run_name
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f"Using persistent directory: {out_dir}")
+    print(f"To serve UI: python3 brancher/gitsorter_cli.py serve --dir {out_dir}")
     
     try:
         # 1) prepare
@@ -422,8 +423,13 @@ def cmd_run(args: argparse.Namespace) -> None:
             api_key=args.api_key,
         )
         cmd_rank(rk_args)
+        
+    except Exception as e:
+        print(f"Run '{run_name}' failed: {e}")
+        raise
 
     print(f"Run '{run_name}' complete.")
+    print(f"Artifacts saved in: {out_dir}")
 
 def cmd_run_id(args: argparse.Namespace) -> None:
     out_dir = Path(args.dir)
