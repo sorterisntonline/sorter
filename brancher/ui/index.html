@@ -280,23 +280,24 @@
                                     ? currentHistory.current_rankings.sort((a, b) => b.score - a.score)
                                     : [];
                                 
-                                // Create sorted item indices based on final rankings
-                                const sortedIndices = [];
-                                const usedIndices = new Set();
+                                // Create sorted items array with their original indices
+                                const sortedItems = [];
+                                const usedItems = new Set();
                                 
                                 // First, add items that appear in current rankings (sorted by score)
                                 finalRankings.forEach(ranking => {
-                                    const originalIndex = data.items.findIndex(item => item === (ranking.identifier ? ranking.identifier.pk : ranking));
-                                    if (originalIndex !== -1 && !usedIndices.has(originalIndex)) {
-                                        sortedIndices.push(originalIndex);
-                                        usedIndices.add(originalIndex);
+                                    const itemId = ranking.identifier ? ranking.identifier.pk : ranking;
+                                    const originalIndex = data.items.findIndex(item => item === itemId);
+                                    if (originalIndex !== -1 && !usedItems.has(itemId)) {
+                                        sortedItems.push({ item: itemId, originalIndex });
+                                        usedItems.add(itemId);
                                     }
                                 });
                                 
                                 // Then add any remaining items that weren't in rankings
                                 data.items.forEach((item, index) => {
-                                    if (!usedIndices.has(index)) {
-                                        sortedIndices.push(index);
+                                    if (!usedItems.has(item)) {
+                                        sortedItems.push({ item, originalIndex: index });
                                     }
                                 });
                                 
@@ -305,90 +306,83 @@
                                         <thead>
                                             <tr>
                                                 <th></th>
-                                                {sortedIndices.map(j => {
-                                                    const item = data.items[j];
-                                                    return (
-                                                        <th key={item} style={{ padding: '4px' }} title={item}>{formatId(item)}</th>
-                                                    );
-                                                })}
+                                                {sortedItems.map(({ item }) => (
+                                                    <th key={item} style={{ padding: '4px' }} title={item}>{formatId(item)}</th>
+                                                ))}
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {sortedIndices.map(i => {
-                                                const row_item = data.items[i];
-                                                return (
-                                                    <tr key={row_item}>
-                                                        <td style={{ padding: '4px' }} title={row_item}>{formatId(row_item)}</td>
-                                                        {sortedIndices.map(sortedJ => {
-                                                            const j = sortedIndices[sortedJ];
-                                                            const cell = (finalMatrix[i] && finalMatrix[i][j]) || { weight: 0 };
-                                                            const safeCell = cell || { weight: 0 };
-                                                            const mirrorCell = (finalMatrix[j] && finalMatrix[j][i]) ? finalMatrix[j][i] : null;
-                                                            const details = (safeCell.details) || (mirrorCell && mirrorCell.details);
-                                                            
-                                                            // Calculate color based on weight
-                                                            let backgroundColor = 'white';
-                                                            if (safeCell.weight > 0) {
-                                                                if (safeCell.weight < 50) {
-                                                                    const intensity = Math.floor((safeCell.weight / 50) * 255);
-                                                                    backgroundColor = `rgb(255, ${intensity}, ${intensity})`;
-                                                                } else {
-                                                                    const intensity = Math.floor(((100 - safeCell.weight) / 50) * 255);
-                                                                    backgroundColor = `rgb(${intensity}, 255, ${intensity})`;
-                                                                }
+                                            {sortedItems.map(({ item: rowItem, originalIndex: rowIdx }) => (
+                                                <tr key={rowItem}>
+                                                    <td style={{ padding: '4px' }} title={rowItem}>{formatId(rowItem)}</td>
+                                                    {sortedItems.map(({ item: colItem, originalIndex: colIdx }, displayColIdx) => {
+                                                        const cell = (finalMatrix[rowIdx] && finalMatrix[rowIdx][colIdx]) || { weight: 0 };
+                                                        const safeCell = cell || { weight: 0 };
+                                                        const mirrorCell = (finalMatrix[colIdx] && finalMatrix[colIdx][rowIdx]) ? finalMatrix[colIdx][rowIdx] : null;
+                                                        const details = (safeCell.details) || (mirrorCell && mirrorCell.details);
+                                                        
+                                                        // Calculate color based on weight
+                                                        let backgroundColor = 'white';
+                                                        if (safeCell.weight > 0) {
+                                                            if (safeCell.weight < 50) {
+                                                                const intensity = Math.floor((safeCell.weight / 50) * 255);
+                                                                backgroundColor = `rgb(255, ${intensity}, ${intensity})`;
+                                                            } else {
+                                                                const intensity = Math.floor(((100 - safeCell.weight) / 50) * 255);
+                                                                backgroundColor = `rgb(${intensity}, 255, ${intensity})`;
                                                             }
-                                                            
-                                                            return (
-                                                                <td key={j} style={{ 
-                                                                    padding: '4px', 
-                                                                    border: '1px solid #ccc',
-                                                                    cursor: details ? 'pointer' : 'default',
-                                                                    backgroundColor,
-                                                                    color: 'inherit'
-                                                                }}
-                                                                onClick={() => {
-                                                                    if (details) {
-                                                                        // Format vote data for dialog
-                                                                        const leftEntity = formatId(details.left_entity_pk);
-                                                                        const rightEntity = formatId(details.right_entity_pk);
-                                                                        const magnitude = details.magnitude;
-                                                                        const rationale = details.rationale;
-                                                                        
-                                                                        // Determine winner based on magnitude
-                                                                        let winner, loser, confidence;
-                                                                        if (magnitude < 0) {
-                                                                            winner = leftEntity;
-                                                                            loser = rightEntity;
-                                                                            confidence = Math.abs(magnitude);
-                                                                        } else if (magnitude > 0) {
-                                                                            winner = rightEntity;
-                                                                            loser = leftEntity;
-                                                                            confidence = magnitude;
-                                                                        } else {
-                                                                            winner = null;
-                                                                            loser = null;
-                                                                            confidence = 0;
-                                                                        }
-                                                                        
-                                                                        setDialogData({
-                                                                            leftEntity,
-                                                                            rightEntity,
-                                                                            magnitude,
-                                                                            winner,
-                                                                            loser,
-                                                                            confidence,
-                                                                            rationale,
-                                                                            weight: safeCell.weight
-                                                                        });
+                                                        }
+                                                        
+                                                        return (
+                                                            <td key={displayColIdx} style={{ 
+                                                                padding: '4px', 
+                                                                border: '1px solid #ccc',
+                                                                cursor: details ? 'pointer' : 'default',
+                                                                backgroundColor,
+                                                                color: 'inherit'
+                                                            }}
+                                                            onClick={() => {
+                                                                if (details) {
+                                                                    // Format vote data for dialog
+                                                                    const leftEntity = formatId(details.left_entity_pk);
+                                                                    const rightEntity = formatId(details.right_entity_pk);
+                                                                    const magnitude = details.magnitude;
+                                                                    const rationale = details.rationale;
+                                                                    
+                                                                    // Determine winner based on magnitude
+                                                                    let winner, loser, confidence;
+                                                                    if (magnitude < 0) {
+                                                                        winner = leftEntity;
+                                                                        loser = rightEntity;
+                                                                        confidence = Math.abs(magnitude);
+                                                                    } else if (magnitude > 0) {
+                                                                        winner = rightEntity;
+                                                                        loser = leftEntity;
+                                                                        confidence = magnitude;
+                                                                    } else {
+                                                                        winner = null;
+                                                                        loser = null;
+                                                                        confidence = 0;
                                                                     }
-                                                                }}>
-                                                                    {i === j ? '×' : safeCell.weight > 0 ? safeCell.weight.toFixed(1) : ''}
-                                                                </td>
-                                                            );
-                                                        })}
-                                                    </tr>
-                                                );
-                                            })}
+                                                                    
+                                                                    setDialogData({
+                                                                        leftEntity,
+                                                                        rightEntity,
+                                                                        magnitude,
+                                                                        winner,
+                                                                        loser,
+                                                                        confidence,
+                                                                        rationale,
+                                                                        weight: safeCell.weight
+                                                                    });
+                                                                }
+                                                            }}>
+                                                                {rowIdx === colIdx ? '×' : safeCell.weight > 0 ? safeCell.weight.toFixed(1) : ''}
+                                                            </td>
+                                                        );
+                                                    })}
+                                                </tr>
+                                            ))}
                                         </tbody>
                                     </table>
                                 );
