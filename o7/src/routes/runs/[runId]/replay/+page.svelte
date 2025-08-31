@@ -1,8 +1,20 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { trpc } from '$lib/trpc';
-	import { onMount, onDestroy } from 'svelte';
-	import Chart from 'chart.js/auto';
+	import { Line } from 'svelte5-chartjs';
+	import {
+		Chart as ChartJS,
+		Title,
+		Tooltip,
+		Legend,
+		LineElement,
+		LinearScale,
+		PointElement,
+		CategoryScale
+	} from 'chart.js';
+
+	// Register Chart.js components
+	ChartJS.register(Title, Tooltip, Legend, LineElement, LinearScale, PointElement, CategoryScale);
 
 	// Get runId from the URL and fetch data
 	const runId = $page.params.runId;
@@ -13,9 +25,6 @@
 	let currentStep = $state(0);
 	let isPlaying = $state(false);
 	let playbackSpeed = $state(1);
-	// Keep these non-reactive to avoid UpdatedAtError feedback loops
-	let chartInstance: Chart | null = null;
-	let canvasElement = $state<HTMLCanvasElement | null>(null);
 
 	// --- Derived state is clean in Svelte ---
 	const history = $derived($replayQuery.data?.history ?? []);
@@ -23,124 +32,100 @@
 	const maxSteps = $derived(history.length > 0 ? history.length - 1 : 0);
 	const currentHistoryStep = $derived(history[currentStep]);
 
-	// --- Chart Logic ---
-	function createChart() {
-		if (!canvasElement || chartInstance || items.length === 0) return;
 
-		chartInstance = new Chart(canvasElement, {
-			type: 'line',
-			data: {
-				labels: [],
-				datasets: items.map((item: { pk: string }, i: number) => ({
-					label: item.pk.split(':')[0], // Extract branch name
-					data: [],
-					borderColor: `hsl(${(i * 360) / items.length}, 70%, 50%)`,
-					backgroundColor: `hsl(${(i * 360) / items.length}, 70%, 50%, 0.1)`,
-					tension: 0.4,
-					fill: false
-				}))
-			},
-			options: {
-				responsive: true,
-				maintainAspectRatio: false,
-				interaction: {
-					mode: 'index',
-					intersect: false,
-				},
-				scales: {
-					x: {
-						display: true,
-						title: {
-							display: true,
-							text: 'Vote Number',
-							color: '#d1d5db'
-						},
-						ticks: {
-							color: '#9ca3af'
-						},
-						grid: {
-							color: '#374151'
-						}
-					},
-					y: {
-						display: true,
-						title: {
-							display: true,
-							text: 'Ranking Score',
-							color: '#d1d5db'
-						},
-						min: 0,
-						max: 1,
-						ticks: {
-							color: '#9ca3af'
-						},
-						grid: {
-							color: '#374151'
-						}
-					}
-				},
-				plugins: {
-					legend: {
-						display: true,
-						position: 'top',
-						labels: {
-							color: '#d1d5db'
-						}
-					},
-					tooltip: {
-						callbacks: {
-							label: function(context) {
-								return `${context.dataset.label}: ${context.parsed.y.toFixed(4)}`;
-							}
-						}
-					}
-				}
-			}
-		});
-	}
-
-	// Create chart when canvas and items are ready (once)
-	$effect.pre(() => {
-		if (canvasElement && items.length > 0 && !chartInstance) {
-			createChart();
-		}
+	// --- Chart Data (reactive with svelte-chartjs) ---
+	let chartData = $state({
+		labels: [] as number[],
+		datasets: [] as {
+			label: string;
+			data: (number | null)[];
+			borderColor: string;
+			backgroundColor: string;
+			tension: number;
+			fill: boolean;
+		}[]
 	});
 
-	onMount(() => {
-		// Destroy chart when component is removed
-		return () => {
-			if (chartInstance) {
-				chartInstance.destroy();
-				chartInstance = null;
-			}
-		};
-	});
-
-	function updateChart() {
-		if (!chartInstance || !currentHistoryStep) return;
-
-		chartInstance.data.labels = Array.from({length: currentStep + 1}, (_, i: number) => i + 1);
-
-		items.forEach((item: { pk: string }, i: number) => {
-			if (chartInstance) {
-				const dataset = chartInstance.data.datasets[i];
-				if (dataset) {
-					dataset.data = history
-						.slice(0, currentStep + 1)
-						.map((step: any) => step.current_rankings.find((r: any) => r.identifier.pk === item.pk)?.score ?? null);
-				}
-			}
-		});
-
-		chartInstance.update('none'); // 'none' for no animation, making it snappier
-	}
-
-	// --- Reactive Effects for Logic ---
 	$effect(() => {
-		if (chartInstance && currentHistoryStep) {
-			updateChart(); // Update chart whenever step changes
+		if (items.length === 0) {
+			chartData = { labels: [], datasets: [] };
+			return;
 		}
+
+		const labels = Array.from({length: currentStep + 1}, (_, i) => i + 1);
+
+		const datasets = items.map((item: { pk: string }, i: number) => ({
+			label: item.pk.split(':')[0] || 'Unknown', // Extract branch name
+			data: history
+				.slice(0, currentStep + 1)
+				.map((step: any) => step.current_rankings.find((r: any) => r.identifier.pk === item.pk)?.score ?? null),
+			borderColor: `hsl(${(i * 360) / items.length}, 70%, 50%)`,
+			backgroundColor: `hsl(${(i * 360) / items.length}, 70%, 50%, 0.1)`,
+			tension: 0.4,
+			fill: false
+		}));
+
+		chartData = { labels, datasets };
 	});
+
+	const chartOptions = {
+		responsive: true,
+		maintainAspectRatio: false,
+		interaction: {
+			mode: 'index' as const,
+			intersect: false,
+		},
+		scales: {
+			x: {
+				display: true,
+				title: {
+					display: true,
+					text: 'Vote Number',
+					color: '#d1d5db'
+				},
+				ticks: {
+					color: '#9ca3af'
+				},
+				grid: {
+					color: '#374151'
+				}
+			},
+			y: {
+				display: true,
+				title: {
+					display: true,
+					text: 'Ranking Score',
+					color: '#d1d5db'
+				},
+				min: 0,
+				max: 1,
+				ticks: {
+					color: '#9ca3af'
+				},
+				grid: {
+					color: '#374151'
+				}
+			}
+		},
+		plugins: {
+			legend: {
+				display: true,
+				position: 'top' as const,
+				labels: {
+					color: '#d1d5db'
+				}
+			},
+			tooltip: {
+				callbacks: {
+					label: function(context: any) {
+						return `${context.dataset.label}: ${context.parsed.y.toFixed(4)}`;
+					}
+				}
+			}
+		}
+	};
+
+
 
 	$effect(() => { // Playback timer logic
 		let timer: ReturnType<typeof setTimeout> | undefined;
@@ -241,7 +226,12 @@
 			<div class="lg:col-span-2">
 				<div class="bg-gray-800 rounded-lg shadow-lg p-6 border border-gray-700">
 					<div class="h-[500px] mb-4">
-						<canvas bind:this={canvasElement}></canvas>
+						<Line
+							data={chartData}
+							options={chartOptions}
+							width={null}
+							height={null}
+						/>
 					</div>
 
 					<!-- CONTROLS -->
