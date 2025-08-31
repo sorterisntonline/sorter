@@ -100,7 +100,9 @@ def pack_branch_repomix(repo_path: Path, branch: str, out_file: Path, style: str
             style,
         ]
         # Run in the worktree so config/ignore applies naturally
-        subprocess.check_call(cmd, cwd=str(worktree_dir))
+        # Suppress output but print once per repomix execution
+        print(f"Running repomix for branch '{branch}'...")
+        subprocess.check_call(cmd, cwd=str(worktree_dir), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         approx_bytes = out_file.stat().st_size if out_file.exists() else 0
         return {"approx_bytes": approx_bytes, "packer": "repomix", "style": style}
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
@@ -355,7 +357,7 @@ def cmd_ingest(args: argparse.Namespace) -> None:
 # ------------------------- LLM Voting Orchestrator -------------------------
 
 def cmd_run(args: argparse.Namespace) -> None:
-    # Orchestrate: prepare -> ingest -> vote-llm -> rank using a temp dir
+    # Orchestrate: prepare -> ingest -> vote-llm -> rank using a persistent dir
     repo = Path(args.repo or ".").resolve()
     if not (repo / ".git").exists():
         raise SystemExit(f"Not a git repository: {repo}")
@@ -363,8 +365,12 @@ def cmd_run(args: argparse.Namespace) -> None:
     run_name = args.name or f"gitsorter-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}"
     print(f"Starting run '{run_name}'")
 
-    with tempfile.TemporaryDirectory(prefix="gitsorter-run-") as tmpdir:
-        out_dir = Path(tmpdir)
+    # Use persistent directory instead of temporary
+    out_dir = repo / ".gitsorter" / run_name
+    out_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Using persistent directory: {out_dir}")
+    
+    try:
         # 1) prepare
         prep_args = argparse.Namespace(
             repo=str(repo),
