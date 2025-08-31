@@ -294,9 +294,14 @@ def default_lens_prompts() -> Dict[str, str]:
         "user_template": (
             "Lens Criteria:\n{{LENS}}\n\n"
             "Compare two codebases labeled <A> and <B>.\n"
-            "In your rationale, you MUST refer to the codebases by their branch names, '{{A_BRANCH}}' and '{{B_BRANCH}}'.\n"
-            "Your JSON response MUST be exactly:\n"
-            "{\n  \"winner\": \"{{A_BRANCH}}|{{B_BRANCH}}|tie\",\n  \"score\": 0..100,\n  \"confidence\": 0..1,\n  \"rationale\": \"short reason using branch names\"\n}\n\n"
+            "You MUST return ONLY a single JSON object (no other text or code fences) with two keys: 'score' and 'rationale'.\n\n"
+            "The 'score' MUST be an integer between -50 and 50.\n"
+            "- A negative score (-1 to -50) means Codebase A is better. -50 is a decisive win for A.\n"
+            "- A positive score (1 to 50) means Codebase B is better. +50 is a decisive win for B.\n"
+            "- A score of 0 means it is a perfect tie.\n\n"
+            "The 'rationale' MUST be a long, clear explanation for your score.\n\n"
+            "JSON Response Format:\n"
+            "{\n  \"score\": -50..50,\n  \"rationale\": \"short reason\"\n}\n\n"
             "Codebase A (metadata):\nBranch: {{A_BRANCH}}\nCommit: {{A_SHA}}\nBytes: {{A_BYTES}}\n\n"
             "<A_CODE>\n{{A_CONTENT}}\n</A_CODE>\n\n"
             "Codebase B (metadata):\nBranch: {{B_BRANCH}}\nCommit: {{B_SHA}}\nBytes: {{B_BYTES}}\n\n"
@@ -358,39 +363,18 @@ def call_openrouter_chat(model: str, api_key: str, messages: List[Dict[str, str]
         raise SystemExit(f"OpenRouter request failed: {e}")
 
 
-def parse_llm_decision(text: str, a_branch: Optional[str] = None, b_branch: Optional[str] = None) -> Dict:
-    # Strict JSON only; no fallback parsing.
+def parse_llm_decision_signed(text: str) -> Dict:
+    # Expect strict JSON with 'score' in [-50, 50] and 'rationale'
     obj = json.loads(text)
-    raw_winner = str(obj.get("winner", "")).strip()
-    wl = raw_winner.lower()
-    winner: str
-    if a_branch is not None and b_branch is not None:
-        a_lower = str(a_branch).lower()
-        b_lower = str(b_branch).lower()
-        if wl == "tie":
-            winner = "tie"
-        elif wl == a_lower:
-            winner = "a"
-        elif wl == b_lower:
-            winner = "b"
-        else:
-            raise ValueError("invalid winner")
-    else:
-        if wl not in ("a", "b", "tie"):
-            raise ValueError("invalid winner")
-        winner = wl
-    score = float(obj.get("score", 50))
-    confidence = float(obj.get("confidence", 0.5))
+    score_val = int(obj.get("score", 0))
+    score_val = max(-50, min(50, score_val))
     rationale = str(obj.get("rationale", ""))
-    return {"winner": winner, "score": score, "confidence": confidence, "rationale": rationale}
+    return {"magnitude": score_val, "rationale": rationale}
 
 
 def magnitude_from_score(winner: str, score: float) -> int:
-    # score is 0..100; map to [-50, 50] where positive favors listed left
-    # We'll always set left=A; if winner B, we negate later when posting (server canonicalizes anyway)
-    mag = int(round(score - 50))
-    if winner == "tie":
-        return 0
+    # Backcompat shim: if called, just clamp signed score
+    mag = int(round(score))
     return max(-50, min(50, mag))
 
 
@@ -519,16 +503,14 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
         print("[vote-llm][seed] LLM response received")
         content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
         try:
-            decision = parse_llm_decision(content, a_meta.get("branch"), b_meta.get("branch"))
+            decision = parse_llm_decision_signed(content)
         except Exception:
             # Single strict reprompt, then skip on failure
             reprompt = messages_payload["messages"] + [{
                 "role": "user",
                 "content": (
                     "Your previous response was invalid. Reply ONLY with a single JSON object: "
-                    + "{\"winner\":\"" + str(a_meta.get("branch", "")).replace("\"", "'")
-                    + "|" + str(b_meta.get("branch", "")).replace("\"", "'")
-                    + "|tie\",\"score\":0..100,\"confidence\":0..1,\"rationale\":\"short reason using branch names\"}"
+                    + "{\"score\":-50..50,\"rationale\":\"short reason\"}"
                 )
             }]
             print("[vote-llm][seed] Reprompting due to invalid JSON...")
@@ -536,7 +518,7 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
             print("[vote-llm][seed] LLM response received (reprompt)")
             content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
             try:
-                decision = parse_llm_decision(content, a_meta.get("branch"), b_meta.get("branch"))
+                decision = parse_llm_decision_signed(content)
             except Exception:
                 print("[vote-llm][seed] Strict JSON parse failed twice; skipping this pair.")
                 decision = None
@@ -550,9 +532,7 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
             # Continue with next step
             pass
         else:
-            winner = decision["winner"]
-            score = decision["score"]
-            magnitude = magnitude_from_score(winner, score)
+            magnitude = int(decision.get("magnitude", 0))
             # Post vote using A vs B; server canonicalizes
             payload = {
                 "left_entity_pk_namespace": a_ident["pk_namespace"],
@@ -563,7 +543,7 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
                 "rationale": decision.get("rationale"),
                 "attribute_id": 1,
             }
-            print(f"[vote-llm][seed] Decision winner={winner} score={score} magnitude={payload['magnitude']} -> POST /vote")
+            print(f"[vote-llm][seed] Decision magnitude={payload['magnitude']} -> POST /vote")
             http_post_json(f"{api}/vote", payload, headers=auth_headers(api_key))
             votes_done += 1
 
@@ -600,15 +580,13 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
         print("[vote-llm][insert] LLM response received")
         content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
         try:
-            decision = parse_llm_decision(content, a_meta.get("branch"), b_meta.get("branch"))
+            decision = parse_llm_decision_signed(content)
         except Exception:
             reprompt = messages_payload["messages"] + [{
                 "role": "user",
                 "content": (
                     "Your previous response was invalid. Reply ONLY with a single JSON object: "
-                    + "{\"winner\":\"" + str(a_meta.get("branch", "")).replace("\"", "'")
-                    + "|" + str(b_meta.get("branch", "")).replace("\"", "'")
-                    + "|tie\",\"score\":0..100,\"confidence\":0..1,\"rationale\":\"short reason using branch names\"}"
+                    + "{\"score\":-50..50,\"rationale\":\"short reason\"}"
                 )
             }]
             print("[vote-llm][insert] Reprompting due to invalid JSON...")
@@ -616,7 +594,7 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
             print("[vote-llm][insert] LLM response received (reprompt)")
             content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
             try:
-                decision = parse_llm_decision(content, a_meta.get("branch"), b_meta.get("branch"))
+                decision = parse_llm_decision_signed(content)
             except Exception:
                 print("Strict JSON parse failed twice; skipping this insertion.")
                 decision = None
@@ -627,9 +605,7 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
             sorted_list = rank.get("sorted", [])
             print(f"[vote-llm][insert] Rank: unsorted={len(unsorted)} sorted={len(sorted_list)}")
             continue
-        winner = decision["winner"]
-        score = decision["score"]
-        magnitude = magnitude_from_score(winner, score)
+        magnitude = int(decision.get("magnitude", 0))
         payload = {
             "left_entity_pk_namespace": item_ident["pk_namespace"],
             "left_entity_pk": item_ident["pk"],
@@ -639,7 +615,7 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
             "rationale": decision.get("rationale"),
             "attribute_id": 1,
         }
-        print(f"[vote-llm][insert] Decision winner={winner} score={score} magnitude={payload['magnitude']} -> POST /vote")
+        print(f"[vote-llm][insert] Decision magnitude={payload['magnitude']} -> POST /vote")
         http_post_json(f"{api}/vote", payload, headers=auth_headers(api_key))
         votes_done += 1
 
@@ -682,15 +658,13 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
                 print("[vote-llm][adjacent] LLM response received")
                 content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
                 try:
-                    decision = parse_llm_decision(content, a_meta.get("branch"), b_meta.get("branch"))
+                    decision = parse_llm_decision_signed(content)
                 except Exception:
                     reprompt = messages_payload["messages"] + [{
                         "role": "user",
                         "content": (
                             "Your previous response was invalid. Reply ONLY with a single JSON object: "
-                            + "{\"winner\":\"" + str(a_meta.get("branch", "")).replace("\"", "'")
-                            + "|" + str(b_meta.get("branch", "")).replace("\"", "'")
-                            + "|tie\",\"score\":0..100,\"confidence\":0..1,\"rationale\":\"short reason using branch names\"}"
+                            + "{\"score\":-50..50,\"rationale\":\"short reason\"}"
                         )
                     }]
                     print("[vote-llm][adjacent] Reprompting due to invalid JSON...")
@@ -698,14 +672,12 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
                     print("[vote-llm][adjacent] LLM response received (reprompt)")
                     content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
                     try:
-                        decision = parse_llm_decision(content, a_meta.get("branch"), b_meta.get("branch"))
+                        decision = parse_llm_decision_signed(content)
                     except Exception:
                         print("Strict JSON parse failed twice; skipping this adjacent pair.")
                         continue
-                winner = decision["winner"]
-                score = decision["score"]
-                magnitude = magnitude_from_score(winner, score)
-                if winner == "b":
+                magnitude = int(decision.get("magnitude", 0))
+                if magnitude > 0:
                     swaps += 1
                 payload = {
                     "left_entity_pk_namespace": left_ident["pk_namespace"],
@@ -716,7 +688,7 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
                     "rationale": decision.get("rationale"),
                     "attribute_id": 1,
                 }
-                print(f"[vote-llm][adjacent] Decision winner={winner} score={score} magnitude={payload['magnitude']} -> POST /vote")
+                print(f"[vote-llm][adjacent] Decision magnitude={payload['magnitude']} -> POST /vote")
                 http_post_json(f"{api}/vote", payload, headers=auth_headers(api_key))
                 votes_done += 1
 
