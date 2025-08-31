@@ -99,7 +99,6 @@
         const queryClient = new QueryClient();
 
         function RankingApp() {
-            const [selectedFile, setSelectedFile] = useState('');
             const [currentStep, setCurrentStep] = useState(0);
             const [isPlaying, setIsPlaying] = useState(false);
             const [playbackSpeed, setPlaybackSpeed] = useState(1);
@@ -107,63 +106,17 @@
             const chartInstance = useRef(null);
             const [dialogData, setDialogData] = useState(null);
 
-            // Query for file list
-            const { data: files = [] } = useQuery({
-                queryKey: ['files'],
-                queryFn: () => 
-                    fetch('/list-files')
-                        .then(res => res.json())
-                        .then(files => files.filter(f => f.endsWith('.json')))
-            });
+            // No longer need to fetch a list of files.
+            // We will directly fetch the data served by our CLI.
 
-            // Update URL when file changes
-            useEffect(() => {
-                if (selectedFile) {
-                    const newUrl = `${window.location.pathname}?file=${selectedFile}`;
-                    window.history.pushState({}, '', newUrl);
-                }
-            }, [selectedFile]);
-
-            // Read URL parameter on mount
-            useEffect(() => {
-                const params = new URLSearchParams(window.location.search);
-                const fileParam = params.get('file');
-                if (fileParam && files.includes(fileParam)) {
-                    setSelectedFile(fileParam);
-                }
-            }, [files]);
-
-            // Handle browser back/forward buttons
-            useEffect(() => {
-                const handlePopState = () => {
-                    const params = new URLSearchParams(window.location.search);
-                    const fileParam = params.get('file');
-                    if (fileParam && files.includes(fileParam)) {
-                        setSelectedFile(fileParam);
-                    } else {
-                        setSelectedFile('');
-                    }
-                };
-
-                window.addEventListener('popstate', handlePopState);
-                return () => window.removeEventListener('popstate', handlePopState);
-            }, [files]);
-
-            // Query for selected file data
+            // Query for run data
             const { data, isLoading, isError } = useQuery({
-                queryKey: ['fileData', selectedFile],
-                queryFn: () => 
-                    fetch(`/static/${selectedFile}`).then(res => res.json()),
-                enabled: !!selectedFile,
-                onSuccess: (newData) => {
-                    // Only reset to beginning if this is a new file
-                    if (!data) {
-                        setCurrentStep(0);  // Start at beginning instead of end
-                        setIsPlaying(true);
-                    } else if (currentStep >= data.history.length - 1) {
-                        // If we're at the end, move to the new end
-                        setCurrentStep(newData.history.length - 1);
-                    }
+                queryKey: ['runData'], // A simple, static key
+                queryFn: () =>
+                    fetch('/data.json').then(res => res.json()), // Fetch the specific endpoint
+                onSuccess: () => {
+                    setCurrentStep(0); // Always start at the beginning
+                    setIsPlaying(true);
                 },
                 refetchInterval: 5000,
                 refetchIntervalInBackground: true
@@ -255,24 +208,7 @@
                 chart.update();
             };
 
-            // File selector only if no file selected
-            if (!selectedFile) {
-                return (
-                    <div className="container">
-                        <div className="controls">
-                            <select 
-                                value={selectedFile} 
-                                onChange={(e) => setSelectedFile(e.target.value)}
-                            >
-                                <option value="">Select a file...</option>
-                                {files.map((file) => (
-                                    <option key={file} value={file}>{file}</option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
-                );
-            }
+            // No longer need file selector - we always use the same data source
 
             // Loading state
             if (isLoading) {
@@ -288,17 +224,7 @@
 
             return (
                 <div className="container">
-                    <div className="controls">
-                        <select 
-                            value={selectedFile} 
-                            onChange={(e) => setSelectedFile(e.target.value)}
-                        >
-                            <option value="">Select a file...</option>
-                            {files.map((file) => (
-                                <option key={file} value={file}>{file}</option>
-                            ))}
-                        </select>
-                    </div>
+                    <!-- No file selector needed - we always use the same data source -->
 
                     <div className="controls">
                         <button onClick={() => setIsPlaying(!isPlaying)}>

@@ -7,6 +7,8 @@ import subprocess
 import tempfile
 import uuid
 import random
+import http.server
+import socketserver
 from datetime import datetime
 from pathlib import Path
 from urllib import request, error
@@ -824,6 +826,88 @@ def cmd_rank(args: argparse.Namespace) -> None:
     print(json.dumps(resp, indent=2))
 
 
+def cmd_rank_history(args: argparse.Namespace) -> None:
+    out_dir = Path(args.dir)
+    cfg_path = out_dir / "run_config.json"
+    if not cfg_path.exists():
+        raise SystemExit(f"Run directory not found or is missing run_config.json: {out_dir}")
+
+    cfg = json.loads(cfg_path.read_text())
+    run_id = cfg["run_id"]
+    api = args.api.rstrip('/')
+    api_key = args.api_key or os.environ.get("SORTER_API_KEY")
+    hdrs = auth_headers(api_key)
+
+    print(f"Fetching ranking history for run ID: {run_id}...")
+    history_data = http_get_json(f"{api}/run/{run_id}/history", headers=hdrs)
+
+    # The UI expects a slightly different format (from the prototype). Let's adapt it.
+    # The Rust endpoint gives `items` and `history`. The prototype also expected `final_matrix` and `criteria`.
+    # We can omit the matrix for now or compute a simple version if needed.
+    ui_data = {
+        "criteria": cfg.get("lens_pk", "N/A"),
+        "items": [item['pk'] for item in history_data.get("items", [])],
+        "history": history_data.get("history", []),
+        "final_matrix": [] # Placeholder, the UI can handle this being empty.
+    }
+
+    history_file = out_dir / "rank_history.json"
+    history_file.write_text(json.dumps(ui_data, indent=2))
+    print(f"Successfully saved ranking history to {history_file}")
+
+
+def cmd_serve(args: argparse.Namespace) -> None:
+    run_dir = Path(args.dir).resolve()
+    history_file = run_dir / "rank_history.json"
+    if not history_file.exists():
+        raise SystemExit(f"History file not found: {history_file}\nRun 'gitsorter rank-history' first.")
+
+    # Path to the UI directory relative to this script
+    script_dir = Path(__file__).parent.resolve()
+    ui_dir = script_dir / "ui"
+    index_html_file = ui_dir / "index.html"
+    if not index_html_file.exists():
+        raise SystemExit(f"UI file not found: {index_html_file}")
+
+    class GitsorterHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
+        def do_GET(self):
+            if self.path == '/':
+                self.path = str(index_html_file)
+            elif self.path == '/data.json':
+                self.path = str(history_file)
+
+            # For GET requests to '/' or '/data.json', serve the respective files
+            if self.path == str(index_html_file) or self.path == str(history_file):
+                try:
+                    with open(self.path, 'rb') as f:
+                        self.send_response(200)
+                        # Determine content type
+                        if self.path.endswith('.json'):
+                            self.send_header('Content-type', 'application/json')
+                        else:
+                            self.send_header('Content-type', 'text/html')
+                        self.end_headers()
+                        self.wfile.write(f.read())
+                except FileNotFoundError:
+                    self.send_error(404, "File not found")
+            else:
+                # For any other request, send a 404
+                self.send_error(404, "File not found")
+
+    Handler = GitsorterHTTPRequestHandler
+    host = "127.0.0.1"
+    port = args.port
+
+    with socketserver.TCPServer((host, port), Handler) as httpd:
+        print(f"Serving gitsorter UI for run '{run_dir.name}'")
+        print(f"Navigate to http://{host}:{port}/")
+        try:
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            print("\nServer stopped.")
+            httpd.server_close()
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="gitsorter", description="Gitsorter CLI orchestrator")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -870,6 +954,19 @@ def build_parser() -> argparse.ArgumentParser:
     rk.add_argument("--api", default=DEFAULT_API_BASE)
     rk.add_argument("--api-key", help="API key, or set SORTER_API_KEY env var")
     rk.set_defaults(func=cmd_rank)
+
+    # rank-history (new)
+    rh = sub.add_parser("rank-history", help="Fetch the full ranking history and save it for visualization")
+    rh.add_argument("--dir", required=True, help="Path to the run output directory")
+    rh.add_argument("--api", default=DEFAULT_API_BASE, help="API base URL")
+    rh.add_argument("--api-key", help="API key, or set SORTER_API_KEY env var")
+    rh.set_defaults(func=cmd_rank_history)
+
+    # serve (new)
+    ps = sub.add_parser("serve", help="Serve the interactive ranking history UI for a run")
+    ps.add_argument("--dir", required=True, help="Path to the run output directory")
+    ps.add_argument("--port", type=int, default=8000, help="Port to serve on (default: 8000)")
+    ps.set_defaults(func=cmd_serve)
 
     # vote-llm
     vl = sub.add_parser("vote-llm", help="Automate voting via LLM using lens and snapshots")
