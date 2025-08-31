@@ -201,18 +201,14 @@
 
             // No longer need file selector - we always use the same data source
 
-            // Helper to format long identifiers by splitting on ':' and truncating the tail
+            // Helper to format identifiers by splitting on ':' and taking the first part
             const formatId = (value) => {
                 const str = typeof value === 'string'
                     ? value
                     : (value && (value.pk || (value.identifier && value.identifier.pk))) || '';
                 if (!str) return '';
-                const [ns, rest] = str.split(':');
-                if (rest === undefined) {
-                    return str.length > 16 ? str.slice(0, 16) + '…' : str;
-                }
-                const shortRest = rest.length > 10 ? rest.slice(0, 10) + '…' : rest;
-                return `${ns}:${shortRest}`;
+                const parts = str.split(':');
+                return parts[0] || str; // Return first part before ':', or whole string if no ':'
             };
 
             // Loading state
