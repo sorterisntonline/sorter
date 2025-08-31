@@ -100,8 +100,6 @@
 
         function RankingApp() {
             const [currentStep, setCurrentStep] = useState(0);
-            const [isPlaying, setIsPlaying] = useState(false);
-            const [playbackSpeed, setPlaybackSpeed] = useState(1);
             const chartRef = useRef(null);
             const chartInstance = useRef(null);
             const [dialogData, setDialogData] = useState(null);
@@ -114,9 +112,11 @@
                 queryKey: ['runData'], // A simple, static key
                 queryFn: () =>
                     fetch('/data.json').then(res => res.json()), // Fetch the specific endpoint
-                onSuccess: () => {
-                    setCurrentStep(0); // Always start at the beginning
-                    setIsPlaying(true);
+                onSuccess: (newData) => {
+                    // Set to the latest step when new data arrives
+                    if (newData && newData.history) {
+                        setCurrentStep(newData.history.length - 1);
+                    }
                 },
                 refetchInterval: 5000,
                 refetchIntervalInBackground: true
@@ -135,7 +135,7 @@
                         data: {
                             labels: [],
                             datasets: data.items.map((item, i) => ({
-                                label: item,
+                                label: formatId ? formatId(item) : item,
                                 data: [],
                                 borderColor: `hsl(${(i * 360) / data.items.length}, 70%, 50%)`,
                                 tension: 0.4
@@ -176,16 +176,7 @@
                 updateChart();
             }, [currentStep]);
 
-            // Playback effect
-            useEffect(() => {
-                if (isPlaying && data && currentStep < data.history.length - 1) {
-                    const timer = setTimeout(() => {
-                        setCurrentStep(step => step + 1);
-                        updateChart();
-                    }, 1000 / playbackSpeed);
-                    return () => clearTimeout(timer);
-                }
-            }, [isPlaying, currentStep, data, playbackSpeed]);
+
 
             const updateChart = () => {
                 if (!data || !data.items || !Array.isArray(data.items) || !chartInstance.current) return;
@@ -210,6 +201,20 @@
 
             // No longer need file selector - we always use the same data source
 
+            // Helper to format long identifiers by splitting on ':' and truncating the tail
+            const formatId = (value) => {
+                const str = typeof value === 'string'
+                    ? value
+                    : (value && (value.pk || (value.identifier && value.identifier.pk))) || '';
+                if (!str) return '';
+                const [ns, rest] = str.split(':');
+                if (rest === undefined) {
+                    return str.length > 16 ? str.slice(0, 16) + '…' : str;
+                }
+                const shortRest = rest.length > 10 ? rest.slice(0, 10) + '…' : rest;
+                return `${ns}:${shortRest}`;
+            };
+
             // Loading state
             if (isLoading) {
                 return <div className="loading">Loading...</div>;
@@ -233,32 +238,18 @@
             return (
                 <div className="container">
                     <div className="controls">
-                        <button onClick={() => setIsPlaying(!isPlaying)}>
-                            {isPlaying ? '⏸' : '⏵'}
-                        </button>
                         {data && data.history && (
                             <div>
-                                <input 
-                                    type="range" 
-                                    min="0" 
+                                <input
+                                    type="range"
+                                    min="0"
                                     max={data.history.length - 1}
                                     value={currentStep}
                                     onChange={(e) => setCurrentStep(Number(e.target.value))}
                                 />
-                                <span>{currentStep} / {data.history.length - 1}</span>
+                                <span>Step: {currentStep} / {data.history.length - 1}</span>
                             </div>
                         )}
-                        <div>
-                        <input 
-                            type="range" 
-                                min="0.25" 
-                                max="4" 
-                                step="0.25" 
-                                value={playbackSpeed}
-                                onChange={(e) => setPlaybackSpeed(Number(e.target.value))}
-                            />
-                            <span>{playbackSpeed}x</span>
-                        </div>
                     </div>
 
                     <div className="chart-container">
@@ -270,15 +261,15 @@
                             {currentHistory && currentHistory.current_rankings
                                 .sort((a, b) => b.score - a.score)
                                 .map((r, i) => (
-                                    <div key={r.identifier ? r.identifier.pk : i}>
-                                        {i+1}. {r.identifier ? r.identifier.pk : 'Unknown'} ({r.score.toFixed(4)})
+                                    <div key={r.identifier ? r.identifier.pk : i} title={r.identifier ? r.identifier.pk : ''}>
+                                        {i+1}. {r.identifier ? formatId(r.identifier.pk) : 'Unknown'} ({r.score.toFixed(4)})
                                     </div>
                                 ))
                             }
                             <h3>Unsorted Items</h3>
                             {currentHistory && currentHistory.unsorted_items &&
                                 currentHistory.unsorted_items.map(item => (
-                                    <div key={item.pk || item}>• {item.pk || item}</div>
+                                    <div key={item.pk || item} title={item.pk || item}>• {formatId(item.pk || item)}</div>
                                 ))
                             }
                         </div>
@@ -293,14 +284,14 @@
                                         <tr>
                                             <th></th>
                                             {data.items.map(item => (
-                                                <th key={item} style={{ padding: '4px' }}>{item}</th>
+                                                <th key={item} style={{ padding: '4px' }} title={item}>{formatId(item)}</th>
                                             ))}
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {data.items.map((row_item, i) => (
                                             <tr key={row_item}>
-                                                <td style={{ padding: '4px' }}>{row_item}</td>
+                                                <td style={{ padding: '4px' }} title={row_item}>{formatId(row_item)}</td>
                                                 {(finalMatrix[i] || []).map((cell, j) => {
                                                     const safeCell = cell || { weight: 0 };
                                                     const mirrorCell = (finalMatrix[j] && finalMatrix[j][i]) ? finalMatrix[j][i] : null;
