@@ -578,7 +578,7 @@
                                                             )}>
                                                                 {rowIdx === colIdx ? '×' :
                                                                  isVoting ? '...' :
-                                                                 voteCount > 0 ? `${safeCell.weight.toFixed(1)} (${voteCount})` :
+                                                                 voteCount > 0 ? `${safeCell.weight.toFixed(1)}${voteCount > 1 ? ` (${voteCount})` : ''}` :
                                                                  ''}
                                                             </td>
                                                         );
@@ -599,7 +599,7 @@
                                 <div style={{ marginBottom: '15px' }}>
                                     <p><strong>Comparison:</strong> {dialogData.leftEntity} vs {dialogData.rightEntity}</p>
                                     <p><strong>Avg. Matrix Weight:</strong> {dialogData.weight ? dialogData.weight.toFixed(1) : 'N/A'}</p>
-                                    <p><strong>Total Votes:</strong> {dialogData.voteCount}</p>
+                                    {dialogData.voteCount > 1 && <p><strong>Total Votes:</strong> {dialogData.voteCount}</p>}
                                 </div>
 
                                 {/* NEW: Tab navigation for multiple votes */}
