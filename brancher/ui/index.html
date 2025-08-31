@@ -155,15 +155,23 @@
             const [dialogData, setDialogData] = useState(null);
             const [votingCells, setVotingCells] = useState(new Set()); // Track multiple voting cells
             const [selectedVoteTab, setSelectedVoteTab] = useState(0); // Track which vote tab is selected
+            const [selectedRun, setSelectedRun] = useState(null); // Track selected run
 
-            // No longer need to fetch a list of files.
-            // We will directly fetch the data served by our CLI.
+            // Query for available runs
+            const { data: runsData, isLoading: runsLoading } = useQuery({
+                queryKey: ['runs'],
+                queryFn: () => fetch('/runs').then(res => res.json()),
+                refetchOnWindowFocus: false,
+                refetchOnReconnect: false
+            });
 
             // Query for run data
             const { data, isLoading, isError } = useQuery({
-                queryKey: ['runData'], // A simple, static key
-                queryFn: () =>
-                    fetch('/data.json').then(res => res.json()), // Fetch the specific endpoint
+                queryKey: ['runData', selectedRun],
+                queryFn: () => {
+                    const url = selectedRun ? `/data/${selectedRun}` : '/data.json';
+                    return fetch(url).then(res => res.json());
+                },
                 onSuccess: (newData) => {
                     // Set to the latest step when new data arrives
                     if (newData && newData.history) {
@@ -422,6 +430,31 @@
 
             return (
                 <div className="container">
+                    {/* Run Selector */}
+                    <div className="run-selector" style={{padding: '10px', borderBottom: '1px solid #ccc', marginBottom: '10px'}}>
+                        <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+                            <label htmlFor="run-select">Select Run:</label>
+                            <select 
+                                id="run-select"
+                                value={selectedRun || ''}
+                                onChange={(e) => setSelectedRun(e.target.value || null)}
+                                style={{padding: '5px', minWidth: '200px'}}
+                            >
+                                <option value="">Latest Run</option>
+                                {runsData && runsData.map(run => (
+                                    <option key={run.name} value={run.name}>
+                                        {run.run_name} ({run.branches} branches, {run.model})
+                                    </option>
+                                ))}
+                            </select>
+                            {data && data.current_run && (
+                                <span style={{marginLeft: '20px', color: '#666', fontSize: '0.9em'}}>
+                                    Current: {data.current_run.run_name} | ID: {data.current_run.run_id?.slice(0, 8)}...
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
                     <div className="controls">
                         {data && data.history && (
                             <div>

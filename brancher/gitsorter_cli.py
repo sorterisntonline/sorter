@@ -430,6 +430,7 @@ def cmd_run(args: argparse.Namespace) -> None:
 
     print(f"Run '{run_name}' complete.")
     print(f"Artifacts saved in: {out_dir}")
+    print(f"To serve UI: python3 brancher/gitsorter_cli.py serve")
 
 def cmd_run_id(args: argparse.Namespace) -> None:
     out_dir = Path(args.dir)
@@ -927,10 +928,12 @@ def cmd_rank(args: argparse.Namespace) -> None:
 
 
 def cmd_serve(args: argparse.Namespace) -> None:
-    run_dir = Path(args.dir).resolve()
-    cfg_path = run_dir / "run_config.json"
-    if not cfg_path.exists():
-        raise SystemExit(f"Run directory not found or is missing run_config.json: {run_dir}")
+    # Find .gitsorter directory in current repo or specified directory
+    base_dir = Path(args.dir).resolve() if args.dir else Path(".").resolve()
+    gitsorter_dir = base_dir / ".gitsorter"
+    
+    if not gitsorter_dir.exists():
+        raise SystemExit(f"No .gitsorter directory found in {base_dir}. Run 'gitsorter run' first to create some runs.")
 
     # Path to the UI directory relative to this script
     script_dir = Path(__file__).parent.resolve()
@@ -947,10 +950,62 @@ def cmd_serve(args: argparse.Namespace) -> None:
         """Serves the main UI file."""
         return send_from_directory(ui_dir, 'index.html')
 
+    @app.route('/runs')
+    def list_runs():
+        """List available runs in .gitsorter directory."""
+        try:
+            runs = []
+            for run_dir in gitsorter_dir.iterdir():
+                if run_dir.is_dir():
+                    cfg_path = run_dir / "run_config.json"
+                    if cfg_path.exists():
+                        try:
+                            cfg = json.loads(cfg_path.read_text())
+                            runs.append({
+                                "name": run_dir.name,
+                                "run_id": cfg.get("run_id"),
+                                "run_name": cfg.get("run_name", run_dir.name),
+                                "model": cfg.get("model"),
+                                "lens_pk": cfg.get("lens_pk"),
+                                "branches": len(cfg.get("branches", [])),
+                                "path": str(run_dir)
+                            })
+                        except (json.JSONDecodeError, KeyError):
+                            continue  # Skip invalid configs
+            
+            # Sort by most recent (directory name if timestamped, or by modification time)
+            runs.sort(key=lambda x: x["name"], reverse=True)
+            return jsonify(runs)
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
     @app.route('/data.json')
-    def get_run_data():
+    @app.route('/data/<run_name>')
+    def get_run_data(run_name=None):
         """Acts as a live proxy to the Rust API's history and vote endpoints."""
         try:
+            # Determine which run to load
+            if run_name:
+                # Load specific run
+                run_dir = gitsorter_dir / run_name
+                cfg_path = run_dir / "run_config.json"
+                if not cfg_path.exists():
+                    return jsonify({"error": f"Run '{run_name}' not found"}), 404
+            else:
+                # Try to find the most recent run
+                runs = []
+                for run_dir in gitsorter_dir.iterdir():
+                    if run_dir.is_dir() and (run_dir / "run_config.json").exists():
+                        runs.append(run_dir)
+                
+                if not runs:
+                    return jsonify({"error": "No runs found"}), 404
+                
+                # Sort by directory name (most recent first if timestamped)
+                runs.sort(key=lambda x: x.name, reverse=True)
+                run_dir = runs[0]
+                cfg_path = run_dir / "run_config.json"
+            
             # Load config to get run_id and api info on each request
             cfg = json.loads(cfg_path.read_text())
             run_id = cfg["run_id"]
@@ -988,6 +1043,15 @@ def cmd_serve(args: argparse.Namespace) -> None:
                 "history": history_data.get("history", []),
                 # Pass the newly constructed matrix to the UI
                 "final_matrix": final_matrix,
+                # Include current run info
+                "current_run": {
+                    "name": run_dir.name,
+                    "run_name": cfg.get("run_name", run_dir.name),
+                    "run_id": run_id,
+                    "model": cfg.get("model"),
+                    "lens_pk": cfg.get("lens_pk"),
+                    "branches": len(cfg.get("branches", []))
+                }
             }
             return jsonify(ui_data)
         except Exception as e:
@@ -999,7 +1063,30 @@ def cmd_serve(args: argparse.Namespace) -> None:
     def vote_pair():
         from flask import request as flask_request  # Avoid name clash with urllib
         try:
-            # 1. Get config and keys
+            # 1. Get config and keys - determine run from request or use latest
+            data = flask_request.get_json()
+            run_name = data.get('run_name') if data else None
+            
+            # Determine which run to use (same logic as get_run_data)
+            if run_name:
+                run_dir = gitsorter_dir / run_name
+                cfg_path = run_dir / "run_config.json"
+                if not cfg_path.exists():
+                    return jsonify({"status": "error", "message": f"Run '{run_name}' not found"}), 404
+            else:
+                # Find the most recent run
+                runs = []
+                for run_dir in gitsorter_dir.iterdir():
+                    if run_dir.is_dir() and (run_dir / "run_config.json").exists():
+                        runs.append(run_dir)
+                
+                if not runs:
+                    return jsonify({"status": "error", "message": "No runs found"}), 404
+                
+                runs.sort(key=lambda x: x.name, reverse=True)
+                run_dir = runs[0]
+                cfg_path = run_dir / "run_config.json"
+            
             cfg = json.loads(cfg_path.read_text())
             api_base = (args.api or cfg.get("api_base", DEFAULT_API_BASE)).rstrip('/')
             api_key = args.api_key or os.environ.get("SORTER_API_KEY")
@@ -1043,9 +1130,17 @@ def cmd_serve(args: argparse.Namespace) -> None:
 
     host = "127.0.0.1"
     port = args.port
-    print(f"Serving gitsorter UI for run in '{run_dir.name}'")
+    print(f"Serving gitsorter UI for runs in '{gitsorter_dir}'")
     print(f"Backend API Target: {args.api or 'from config'}")
     print(f"Navigate to http://{host}:{port}/")
+    
+    # List available runs
+    runs = []
+    for run_dir in gitsorter_dir.iterdir():
+        if run_dir.is_dir() and (run_dir / "run_config.json").exists():
+            runs.append(run_dir.name)
+    if runs:
+        print(f"Available runs: {', '.join(sorted(runs, reverse=True)[:5])}" + ("..." if len(runs) > 5 else ""))
 
     # Use Flask's development server (perfect for this local tool)
     app.run(host=host, port=port, debug=False)
@@ -1099,8 +1194,8 @@ def build_parser() -> argparse.ArgumentParser:
     rk.set_defaults(func=cmd_rank)
 
     # serve
-    ps = sub.add_parser("serve", help="Serve the interactive ranking history UI for a run")
-    ps.add_argument("--dir", required=True, help="Path to the run output directory")
+    ps = sub.add_parser("serve", help="Serve the interactive ranking history UI for runs")
+    ps.add_argument("--dir", help="Base directory to look for .gitsorter/ (default: current directory)")
     ps.add_argument("--port", type=int, default=8000, help="Port to serve on (default: 8000)")
     # Add these arguments to allow overriding what's in the config file
     ps.add_argument("--api", default=DEFAULT_API_BASE, help="API base URL to proxy to")
