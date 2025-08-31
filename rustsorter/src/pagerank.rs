@@ -30,7 +30,7 @@ pub struct RankingResponse {
     pub sorted: Vec<RankedEntity>,
 }
 
-#[derive(sqlx::FromRow, Debug)]
+#[derive(sqlx::FromRow, Debug, Serialize, JsonSchema)]
 pub struct RelevantVote {
     pub left_entity_pk_namespace: String,
     pub left_entity_pk: String,
@@ -38,6 +38,7 @@ pub struct RelevantVote {
     pub right_entity_pk: String,
 
     pub magnitude: i32,
+    pub rationale: Option<String>,
 }
 
 pub struct RankGraph {

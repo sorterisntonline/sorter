@@ -16,6 +16,7 @@ use crate::{
     app_state::AppState,
     extractors::maybe_user::AuthenticatedUser,
     models::{Error, IntoNotFound, Json, MapErrorSqlx},
+    pagerank::{RelevantVote, EntityIdentifier},
 };
 
 #[derive(Serialize, Debug, sqlx::FromRow, JsonSchema)]
@@ -259,6 +260,32 @@ async fn fetch_votes_by_entities(
     Ok((StatusCode::OK, Json(votes)))
 }
 
+async fn get_votes_for_itemset(
+    State(state): State<AppState>,
+    Json(payload): Json<Vec<EntityIdentifier>>,
+) -> Result<(StatusCode, Json<Vec<RelevantVote>>), Error> {
+    if payload.is_empty() {
+        return Ok((StatusCode::OK, Json(vec![])));
+    }
+
+    let entity_keys: Vec<String> = payload
+        .iter()
+        .map(|e| format!("{}:{}", e.pk_namespace, e.pk))
+        .collect();
+
+    // This reuses the powerful query from pagerank.rs!
+    let votes = sqlx::query_file_as!(
+        RelevantVote,
+        "../database/sql/vote/select_partial.sql",
+        &entity_keys
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_error("votes for itemset")?;
+
+    Ok((StatusCode::OK, Json(votes)))
+}
+
 pub fn routes() -> ApiRouter<AppState> {
     ApiRouter::new()
         .api_route(
@@ -281,6 +308,13 @@ pub fn routes() -> ApiRouter<AppState> {
             .post_with(get_votes_filtered_post, |op| {
                 op.description("Get votes filtered by involved entities (POST tagged union).")
                     .response::<200, Json<Vec<Vote>>>()
+            }),
+        )
+        .api_route(
+            "/bulk-query",
+            post_with(get_votes_for_itemset, |op| {
+                op.description("Get all votes between a specific set of entities.")
+                    .response::<200, Json<Vec<RelevantVote>>>()
             }),
         )
         .api_route(

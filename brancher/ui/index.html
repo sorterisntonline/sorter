@@ -315,7 +315,38 @@
                                                         }}
                                                         onClick={() => {
                                                             if (details) {
-                                                                setDialogData(details);
+                                                                // Format vote data for dialog
+                                                                const leftEntity = formatId(details.left_entity_pk);
+                                                                const rightEntity = formatId(details.right_entity_pk);
+                                                                const magnitude = details.magnitude;
+                                                                const rationale = details.rationale;
+                                                                
+                                                                // Determine winner based on magnitude
+                                                                let winner, loser, confidence;
+                                                                if (magnitude < 0) {
+                                                                    winner = leftEntity;
+                                                                    loser = rightEntity;
+                                                                    confidence = Math.abs(magnitude);
+                                                                } else if (magnitude > 0) {
+                                                                    winner = rightEntity;
+                                                                    loser = leftEntity;
+                                                                    confidence = magnitude;
+                                                                } else {
+                                                                    winner = null;
+                                                                    loser = null;
+                                                                    confidence = 0;
+                                                                }
+                                                                
+                                                                setDialogData({
+                                                                    leftEntity,
+                                                                    rightEntity,
+                                                                    magnitude,
+                                                                    winner,
+                                                                    loser,
+                                                                    confidence,
+                                                                    rationale,
+                                                                    weight: safeCell.weight
+                                                                });
                                                             }
                                                         }}>
                                                             {i === j ? '×' : safeCell.weight > 0 ? safeCell.weight.toFixed(1) : ''}
@@ -333,9 +364,33 @@
                     {dialogData && (
                         <div className="dialog-overlay" onClick={() => setDialogData(null)}>
                             <div className="dialog-content" onClick={e => e.stopPropagation()}>
-                                <h3>Comparison Details</h3>
-                                <p><strong>Score: </strong>{dialogData.score}</p>
-                                <p>{dialogData.explanation}</p>
+                                <h3>Vote Details</h3>
+                                <div style={{ marginBottom: '15px' }}>
+                                    <p><strong>Comparison:</strong> {dialogData.leftEntity} vs {dialogData.rightEntity}</p>
+                                    <p><strong>Raw Magnitude:</strong> {dialogData.magnitude} (range: -50 to +50)</p>
+                                    <p><strong>Matrix Weight:</strong> {dialogData.weight ? dialogData.weight.toFixed(1) : 'N/A'}</p>
+                                    {dialogData.winner ? (
+                                        <p><strong>Winner:</strong> {dialogData.winner} (confidence: {dialogData.confidence}/50)</p>
+                                    ) : (
+                                        <p><strong>Result:</strong> Tie (neutral vote)</p>
+                                    )}
+                                </div>
+                                {dialogData.rationale ? (
+                                    <div style={{ marginBottom: '15px' }}>
+                                        <p><strong>Rationale:</strong></p>
+                                        <div style={{ 
+                                            backgroundColor: '#f5f5f5', 
+                                            padding: '10px', 
+                                            borderRadius: '5px',
+                                            fontStyle: 'italic',
+                                            whiteSpace: 'pre-wrap'
+                                        }}>
+                                            {dialogData.rationale}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <p style={{ fontStyle: 'italic', color: '#666' }}>No rationale provided for this vote.</p>
+                                )}
                                 <button onClick={() => setDialogData(null)}>Close</button>
                             </div>
                         </div>

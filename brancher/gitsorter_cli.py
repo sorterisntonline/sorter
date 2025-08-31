@@ -196,6 +196,52 @@ def auth_headers(api_key: Optional[str]) -> Dict[str, str]:
     return headers
 
 
+def build_matrix_from_votes(items: List[Dict], votes: List[Dict]) -> List[List[Dict]]:
+    """Builds a 2D matrix from a flat list of votes and an ordered list of items."""
+    num_items = len(items)
+    # Create a mapping from entity PK to its index in the matrix
+    item_map = {item['pk']: i for i, item in enumerate(items)}
+
+    # Initialize an empty matrix
+    matrix = [[{"weight": 0, "details": None} for _ in range(num_items)] for _ in range(num_items)]
+
+    for vote in votes:
+        left_pk = vote['left_entity_pk']
+        right_pk = vote['right_entity_pk']
+
+        # Use the item_map to find matrix indices
+        if left_pk not in item_map or right_pk not in item_map:
+            continue  # Skip votes for entities not in our primary item list
+
+        i = item_map[left_pk]
+        j = item_map[right_pk]
+
+        # The vote magnitude is from the perspective of the canonical "left" entity
+        # A vs B, magnitude -50 means A won decisively. The UI expects A->B weight to be high.
+        # So we need to translate the signed magnitude to a 0-100 score where >50 means left won.
+        # magnitude [-50, 50] -> weight [0, 100]. weight = 50 - magnitude
+        # THIS LOGIC IS CRUCIAL AND MUST MATCH YOUR MENTAL MODEL.
+        # Example: A vs B, magnitude = -50 (A wins). weight_A_vs_B = 50 - (-50) = 100. Correct.
+        # Example: A vs B, magnitude = +50 (B wins). weight_A_vs_B = 50 - 50 = 0. Correct.
+        weight_left_vs_right = 50 - vote['magnitude']
+
+        # Create vote details with rationale
+        vote_details = {
+            "left_entity_pk": vote['left_entity_pk'],
+            "left_entity_pk_namespace": vote['left_entity_pk_namespace'],
+            "right_entity_pk": vote['right_entity_pk'],
+            "right_entity_pk_namespace": vote['right_entity_pk_namespace'],
+            "magnitude": vote['magnitude'],
+            "rationale": vote.get('rationale')
+        }
+
+        # Populate the matrix for both directions
+        matrix[i][j] = {"weight": weight_left_vs_right, "details": vote_details}
+        matrix[j][i] = {"weight": 100 - weight_left_vs_right, "details": vote_details}
+
+    return matrix
+
+
 def git_branch_sha(repo: Path, branch: str) -> str:
     return run_cmd(["git", "-C", str(repo), "rev-parse", branch]).strip()
 
@@ -852,7 +898,7 @@ def cmd_serve(args: argparse.Namespace) -> None:
 
     @app.route('/data.json')
     def get_run_data():
-        """Acts as a live proxy to the Rust API's history endpoint."""
+        """Acts as a live proxy to the Rust API's history and vote endpoints."""
         try:
             # Load config to get run_id and api info on each request
             cfg = json.loads(cfg_path.read_text())
@@ -865,15 +911,32 @@ def cmd_serve(args: argparse.Namespace) -> None:
             api_key = args.api_key or os.environ.get("SORTER_API_KEY")
             hdrs = auth_headers(api_key)
 
-            print(f"Proxying request for run '{run_id}' to {api}")
+            print(f"Proxying history request for run '{run_id}' to {api}")
             history_data = http_get_json(f"{api}/run/{run_id}/history", headers=hdrs)
+
+            # --- NEW LOGIC STARTS HERE ---
+            items_for_run = history_data.get("items", [])
+            all_votes = []
+            if items_for_run:
+                print(f"Proxying bulk vote query for {len(items_for_run)} items...")
+                # The payload is a list of EntityIdentifiers
+                vote_payload = [
+                    {"pk_namespace": item['pk_namespace'], "pk": item['pk']}
+                    for item in items_for_run
+                ]
+                # Call our new endpoint
+                all_votes = http_post_json(f"{api}/vote/bulk-query", vote_payload, headers=hdrs)
+
+            final_matrix = build_matrix_from_votes(items_for_run, all_votes)
+            # --- NEW LOGIC ENDS HERE ---
 
             # Adapt the data from the Rust API to the format the UI expects
             ui_data = {
                 "criteria": cfg.get("lens_pk", "N/A"),
-                "items": [item['pk'] for item in history_data.get("items", [])],
+                "items": [item['pk'] for item in items_for_run],
                 "history": history_data.get("history", []),
-                "final_matrix": [] # Placeholder, UI can handle this
+                # Pass the newly constructed matrix to the UI
+                "final_matrix": final_matrix,
             }
             return jsonify(ui_data)
         except Exception as e:

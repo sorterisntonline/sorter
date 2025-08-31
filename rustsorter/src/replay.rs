@@ -56,6 +56,7 @@ struct RelevantVote {
     right_entity_pk: String,
     magnitude: i32,
     created_at: NaiveDateTime,
+    rationale: Option<String>,
 }
 
 pub async fn calculate_run_history(
@@ -100,6 +101,7 @@ pub async fn calculate_run_history(
                 right_entity_pk_namespace: v.right_entity_pk_namespace.clone(),
                 right_entity_pk: v.right_entity_pk.clone(),
                 magnitude: v.magnitude,
+                rationale: v.rationale.clone(),
             }
         }).collect();
 
@@ -114,7 +116,7 @@ pub async fn calculate_run_history(
             right_entity_pk: vote.right_entity_pk.clone(),
             user_id: Uuid::nil(), // We don't have this in RelevantVote, set to nil
             magnitude: vote.magnitude,
-            rationale: None, // Not available in RelevantVote
+            rationale: vote.rationale.clone(), // Use the actual rationale from the vote
             attribute_id: 1, // Default attribute
             created_at: vote.created_at,
             deleted_at: None,
