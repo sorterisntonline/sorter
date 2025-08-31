@@ -1,8 +1,0 @@
-import { trpcServer } from '$lib/server/server';
-import type { PageServerLoad } from './$types';
-
-export const load: PageServerLoad = async (event) => {
-	const { runId } = event.params;
-	// Pre-fetch the details for this specific run
-	await trpcServer.gitsorter.getRunDetails.ssr({ runId });
-};
