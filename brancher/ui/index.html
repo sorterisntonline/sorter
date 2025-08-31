@@ -274,90 +274,124 @@
                     <div className="content">
                         <div className="rankings">
                             <h3>Comparison Matrix</h3>
-                            {data && Array.isArray(data.items) && Array.isArray(finalMatrix) && (
-                                <table style={{ borderCollapse: 'collapse', fontSize: '0.8em' }}>
-                                    <thead>
-                                        <tr>
-                                            <th></th>
-                                            {data.items.map(item => (
-                                                <th key={item} style={{ padding: '4px' }} title={item}>{formatId(item)}</th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {data.items.map((row_item, i) => (
-                                            <tr key={row_item}>
-                                                <td style={{ padding: '4px' }} title={row_item}>{formatId(row_item)}</td>
-                                                {(finalMatrix[i] || []).map((cell, j) => {
-                                                    const safeCell = cell || { weight: 0 };
-                                                    const mirrorCell = (finalMatrix[j] && finalMatrix[j][i]) ? finalMatrix[j][i] : null;
-                                                    const details = (safeCell.details) || (mirrorCell && mirrorCell.details);
-                                                    
-                                                    // Calculate color based on weight
-                                                    let backgroundColor = 'white';
-                                                    if (safeCell.weight > 0) {
-                                                        if (safeCell.weight < 50) {
-                                                            const intensity = Math.floor((safeCell.weight / 50) * 255);
-                                                            backgroundColor = `rgb(255, ${intensity}, ${intensity})`;
-                                                        } else {
-                                                            const intensity = Math.floor(((100 - safeCell.weight) / 50) * 255);
-                                                            backgroundColor = `rgb(${intensity}, 255, ${intensity})`;
-                                                        }
-                                                    }
-                                                    
+                            {data && Array.isArray(data.items) && Array.isArray(finalMatrix) && (() => {
+                                // Get final rankings to sort by score (highest to lowest)
+                                const finalRankings = currentHistory && currentHistory.current_rankings 
+                                    ? currentHistory.current_rankings.sort((a, b) => b.score - a.score)
+                                    : [];
+                                
+                                // Create sorted item indices based on final rankings
+                                const sortedIndices = [];
+                                const usedIndices = new Set();
+                                
+                                // First, add items that appear in current rankings (sorted by score)
+                                finalRankings.forEach(ranking => {
+                                    const originalIndex = data.items.findIndex(item => item === (ranking.identifier ? ranking.identifier.pk : ranking));
+                                    if (originalIndex !== -1 && !usedIndices.has(originalIndex)) {
+                                        sortedIndices.push(originalIndex);
+                                        usedIndices.add(originalIndex);
+                                    }
+                                });
+                                
+                                // Then add any remaining items that weren't in rankings
+                                data.items.forEach((item, index) => {
+                                    if (!usedIndices.has(index)) {
+                                        sortedIndices.push(index);
+                                    }
+                                });
+                                
+                                return (
+                                    <table style={{ borderCollapse: 'collapse', fontSize: '0.8em' }}>
+                                        <thead>
+                                            <tr>
+                                                <th></th>
+                                                {sortedIndices.map(j => {
+                                                    const item = data.items[j];
                                                     return (
-                                                        <td key={j} style={{ 
-                                                            padding: '4px', 
-                                                            border: '1px solid #ccc',
-                                                            cursor: details ? 'pointer' : 'default',
-                                                            backgroundColor,
-                                                            color: 'inherit'
-                                                        }}
-                                                        onClick={() => {
-                                                            if (details) {
-                                                                // Format vote data for dialog
-                                                                const leftEntity = formatId(details.left_entity_pk);
-                                                                const rightEntity = formatId(details.right_entity_pk);
-                                                                const magnitude = details.magnitude;
-                                                                const rationale = details.rationale;
-                                                                
-                                                                // Determine winner based on magnitude
-                                                                let winner, loser, confidence;
-                                                                if (magnitude < 0) {
-                                                                    winner = leftEntity;
-                                                                    loser = rightEntity;
-                                                                    confidence = Math.abs(magnitude);
-                                                                } else if (magnitude > 0) {
-                                                                    winner = rightEntity;
-                                                                    loser = leftEntity;
-                                                                    confidence = magnitude;
-                                                                } else {
-                                                                    winner = null;
-                                                                    loser = null;
-                                                                    confidence = 0;
-                                                                }
-                                                                
-                                                                setDialogData({
-                                                                    leftEntity,
-                                                                    rightEntity,
-                                                                    magnitude,
-                                                                    winner,
-                                                                    loser,
-                                                                    confidence,
-                                                                    rationale,
-                                                                    weight: safeCell.weight
-                                                                });
-                                                            }
-                                                        }}>
-                                                            {i === j ? '×' : safeCell.weight > 0 ? safeCell.weight.toFixed(1) : ''}
-                                                        </td>
+                                                        <th key={item} style={{ padding: '4px' }} title={item}>{formatId(item)}</th>
                                                     );
                                                 })}
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            )}
+                                        </thead>
+                                        <tbody>
+                                            {sortedIndices.map(i => {
+                                                const row_item = data.items[i];
+                                                return (
+                                                    <tr key={row_item}>
+                                                        <td style={{ padding: '4px' }} title={row_item}>{formatId(row_item)}</td>
+                                                        {sortedIndices.map(j => {
+                                                            const cell = (finalMatrix[i] && finalMatrix[i][j]) || { weight: 0 };
+                                                            const safeCell = cell || { weight: 0 };
+                                                            const mirrorCell = (finalMatrix[j] && finalMatrix[j][i]) ? finalMatrix[j][i] : null;
+                                                            const details = (safeCell.details) || (mirrorCell && mirrorCell.details);
+                                                            
+                                                            // Calculate color based on weight
+                                                            let backgroundColor = 'white';
+                                                            if (safeCell.weight > 0) {
+                                                                if (safeCell.weight < 50) {
+                                                                    const intensity = Math.floor((safeCell.weight / 50) * 255);
+                                                                    backgroundColor = `rgb(255, ${intensity}, ${intensity})`;
+                                                                } else {
+                                                                    const intensity = Math.floor(((100 - safeCell.weight) / 50) * 255);
+                                                                    backgroundColor = `rgb(${intensity}, 255, ${intensity})`;
+                                                                }
+                                                            }
+                                                            
+                                                            return (
+                                                                <td key={j} style={{ 
+                                                                    padding: '4px', 
+                                                                    border: '1px solid #ccc',
+                                                                    cursor: details ? 'pointer' : 'default',
+                                                                    backgroundColor,
+                                                                    color: 'inherit'
+                                                                }}
+                                                                onClick={() => {
+                                                                    if (details) {
+                                                                        // Format vote data for dialog
+                                                                        const leftEntity = formatId(details.left_entity_pk);
+                                                                        const rightEntity = formatId(details.right_entity_pk);
+                                                                        const magnitude = details.magnitude;
+                                                                        const rationale = details.rationale;
+                                                                        
+                                                                        // Determine winner based on magnitude
+                                                                        let winner, loser, confidence;
+                                                                        if (magnitude < 0) {
+                                                                            winner = leftEntity;
+                                                                            loser = rightEntity;
+                                                                            confidence = Math.abs(magnitude);
+                                                                        } else if (magnitude > 0) {
+                                                                            winner = rightEntity;
+                                                                            loser = leftEntity;
+                                                                            confidence = magnitude;
+                                                                        } else {
+                                                                            winner = null;
+                                                                            loser = null;
+                                                                            confidence = 0;
+                                                                        }
+                                                                        
+                                                                        setDialogData({
+                                                                            leftEntity,
+                                                                            rightEntity,
+                                                                            magnitude,
+                                                                            winner,
+                                                                            loser,
+                                                                            confidence,
+                                                                            rationale,
+                                                                            weight: safeCell.weight
+                                                                        });
+                                                                    }
+                                                                }}>
+                                                                    {i === j ? '×' : safeCell.weight > 0 ? safeCell.weight.toFixed(1) : ''}
+                                                                </td>
+                                                            );
+                                                        })}
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                );
+                            })()}
                         </div>
                     </div>
 
