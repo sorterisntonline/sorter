@@ -7,12 +7,12 @@ import subprocess
 import tempfile
 import uuid
 import random
-import http.server
-import socketserver
 from datetime import datetime
 from pathlib import Path
 from urllib import request, error
 from typing import Optional, List, Dict
+
+from flask import Flask, jsonify, send_from_directory
 
 
 DEFAULT_API_BASE = os.environ.get("SORTER_API_URL", "http://127.0.0.1:8081/api")
@@ -826,86 +826,68 @@ def cmd_rank(args: argparse.Namespace) -> None:
     print(json.dumps(resp, indent=2))
 
 
-def cmd_rank_history(args: argparse.Namespace) -> None:
-    out_dir = Path(args.dir)
-    cfg_path = out_dir / "run_config.json"
-    if not cfg_path.exists():
-        raise SystemExit(f"Run directory not found or is missing run_config.json: {out_dir}")
 
-    cfg = json.loads(cfg_path.read_text())
-    run_id = cfg["run_id"]
-    api = args.api.rstrip('/')
-    api_key = args.api_key or os.environ.get("SORTER_API_KEY")
-    hdrs = auth_headers(api_key)
-
-    print(f"Fetching ranking history for run ID: {run_id}...")
-    history_data = http_get_json(f"{api}/run/{run_id}/history", headers=hdrs)
-
-    # The UI expects a slightly different format (from the prototype). Let's adapt it.
-    # The Rust endpoint gives `items` and `history`. The prototype also expected `final_matrix` and `criteria`.
-    # We can omit the matrix for now or compute a simple version if needed.
-    ui_data = {
-        "criteria": cfg.get("lens_pk", "N/A"),
-        "items": [item['pk'] for item in history_data.get("items", [])],
-        "history": history_data.get("history", []),
-        "final_matrix": [] # Placeholder, the UI can handle this being empty.
-    }
-
-    history_file = out_dir / "rank_history.json"
-    history_file.write_text(json.dumps(ui_data, indent=2))
-    print(f"Successfully saved ranking history to {history_file}")
 
 
 def cmd_serve(args: argparse.Namespace) -> None:
     run_dir = Path(args.dir).resolve()
-    history_file = run_dir / "rank_history.json"
-    if not history_file.exists():
-        raise SystemExit(f"History file not found: {history_file}\nRun 'gitsorter rank-history' first.")
+    cfg_path = run_dir / "run_config.json"
+    if not cfg_path.exists():
+        raise SystemExit(f"Run directory not found or is missing run_config.json: {run_dir}")
 
     # Path to the UI directory relative to this script
     script_dir = Path(__file__).parent.resolve()
     ui_dir = script_dir / "ui"
-    index_html_file = ui_dir / "index.html"
-    if not index_html_file.exists():
-        raise SystemExit(f"UI file not found: {index_html_file}")
+    if not (ui_dir / "index.html").exists():
+        raise SystemExit(f"UI file not found in: {ui_dir}")
 
-    class GitsorterHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
-        def do_GET(self):
-            if self.path == '/':
-                self.path = str(index_html_file)
-            elif self.path == '/data.json':
-                self.path = str(history_file)
+    # The Flask app is defined inside the command function
+    # to capture the 'args' from the command line.
+    app = Flask(__name__)
 
-            # For GET requests to '/' or '/data.json', serve the respective files
-            if self.path == str(index_html_file) or self.path == str(history_file):
-                try:
-                    with open(self.path, 'rb') as f:
-                        self.send_response(200)
-                        # Determine content type
-                        if self.path.endswith('.json'):
-                            self.send_header('Content-type', 'application/json')
-                        else:
-                            self.send_header('Content-type', 'text/html')
-                        self.end_headers()
-                        self.wfile.write(f.read())
-                except FileNotFoundError:
-                    self.send_error(404, "File not found")
-            else:
-                # For any other request, send a 404
-                self.send_error(404, "File not found")
+    @app.route('/')
+    def index():
+        """Serves the main UI file."""
+        return send_from_directory(ui_dir, 'index.html')
 
-    Handler = GitsorterHTTPRequestHandler
+    @app.route('/data.json')
+    def get_run_data():
+        """Acts as a live proxy to the Rust API's history endpoint."""
+        try:
+            # Load config to get run_id and api info on each request
+            cfg = json.loads(cfg_path.read_text())
+            run_id = cfg["run_id"]
+
+            # Use API URL from command line or config, with CLI args taking precedence
+            api = (args.api or cfg.get("api_base", DEFAULT_API_BASE)).rstrip('/')
+
+            # Use API key from command line or environment
+            api_key = args.api_key or os.environ.get("SORTER_API_KEY")
+            hdrs = auth_headers(api_key)
+
+            print(f"Proxying request for run '{run_id}' to {api}")
+            history_data = http_get_json(f"{api}/run/{run_id}/history", headers=hdrs)
+
+            # Adapt the data from the Rust API to the format the UI expects
+            ui_data = {
+                "criteria": cfg.get("lens_pk", "N/A"),
+                "items": [item['pk'] for item in history_data.get("items", [])],
+                "history": history_data.get("history", []),
+                "final_matrix": [] # Placeholder, UI can handle this
+            }
+            return jsonify(ui_data)
+        except Exception as e:
+            print(f"Error proxying data: {e}", file=sys.stderr)
+            return jsonify({"error": str(e)}), 500
+
     host = "127.0.0.1"
     port = args.port
+    print(f"Serving gitsorter UI for run in '{run_dir.name}'")
+    print(f"Backend API Target: {args.api or 'from config'}")
+    print(f"Navigate to http://{host}:{port}/")
 
-    with socketserver.TCPServer((host, port), Handler) as httpd:
-        print(f"Serving gitsorter UI for run '{run_dir.name}'")
-        print(f"Navigate to http://{host}:{port}/")
-        try:
-            httpd.serve_forever()
-        except KeyboardInterrupt:
-            print("\nServer stopped.")
-            httpd.server_close()
+    # Use Flask's development server (perfect for this local tool)
+    app.run(host=host, port=port, debug=False)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -955,17 +937,13 @@ def build_parser() -> argparse.ArgumentParser:
     rk.add_argument("--api-key", help="API key, or set SORTER_API_KEY env var")
     rk.set_defaults(func=cmd_rank)
 
-    # rank-history (new)
-    rh = sub.add_parser("rank-history", help="Fetch the full ranking history and save it for visualization")
-    rh.add_argument("--dir", required=True, help="Path to the run output directory")
-    rh.add_argument("--api", default=DEFAULT_API_BASE, help="API base URL")
-    rh.add_argument("--api-key", help="API key, or set SORTER_API_KEY env var")
-    rh.set_defaults(func=cmd_rank_history)
-
-    # serve (new)
+    # serve
     ps = sub.add_parser("serve", help="Serve the interactive ranking history UI for a run")
     ps.add_argument("--dir", required=True, help="Path to the run output directory")
     ps.add_argument("--port", type=int, default=8000, help="Port to serve on (default: 8000)")
+    # Add these arguments to allow overriding what's in the config file
+    ps.add_argument("--api", default=DEFAULT_API_BASE, help="API base URL to proxy to")
+    ps.add_argument("--api-key", help="API key, or set SORTER_API_KEY env var")
     ps.set_defaults(func=cmd_serve)
 
     # vote-llm

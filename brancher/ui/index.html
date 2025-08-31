@@ -124,7 +124,7 @@
 
             // Chart effect
             useEffect(() => {
-                if (data && data.items && chartRef.current) {
+                if (data && data.items && Array.isArray(data.items) && chartRef.current) {
                     if (chartInstance.current) {
                         chartInstance.current.destroy();
                     }
@@ -188,7 +188,7 @@
             }, [isPlaying, currentStep, data, playbackSpeed]);
 
             const updateChart = () => {
-                if (!data || !chartInstance.current) return;
+                if (!data || !data.items || !Array.isArray(data.items) || !chartInstance.current) return;
                 
                 const chart = chartInstance.current;
                 
@@ -200,7 +200,7 @@
                     chart.data.datasets[i].data = data.history
                         .slice(0, currentStep + 1)
                         .map(step => {
-                            const ranking = step.current_rankings.find(r => r.item === item);
+                            const ranking = step.current_rankings.find(r => r.identifier && r.identifier.pk === item);
                             return ranking ? ranking.score : null;
                         });
                 });
@@ -221,11 +221,17 @@
             }
 
             const currentHistory = data && data.history ? data.history[currentStep] : null;
+            // Build a safe finalMatrix fallback if data.final_matrix is missing or mismatched
+            const finalMatrix = (data && Array.isArray(data.items))
+                ? (
+                    Array.isArray(data.final_matrix) && data.final_matrix.length === data.items.length
+                        ? data.final_matrix
+                        : data.items.map(() => data.items.map(() => ({ weight: 0 })))
+                  )
+                : [];
 
             return (
                 <div className="container">
-                    <!-- No file selector needed - we always use the same data source -->
-
                     <div className="controls">
                         <button onClick={() => setIsPlaying(!isPlaying)}>
                             {isPlaying ? '⏸' : '⏵'}
@@ -264,15 +270,15 @@
                             {currentHistory && currentHistory.current_rankings
                                 .sort((a, b) => b.score - a.score)
                                 .map((r, i) => (
-                                    <div key={r.item}>
-                                        {i+1}. {r.item} ({r.score.toFixed(4)})
+                                    <div key={r.identifier ? r.identifier.pk : i}>
+                                        {i+1}. {r.identifier ? r.identifier.pk : 'Unknown'} ({r.score.toFixed(4)})
                                     </div>
                                 ))
                             }
                             <h3>Unsorted Items</h3>
-                            {currentHistory && currentHistory.unsorted_items && 
+                            {currentHistory && currentHistory.unsorted_items &&
                                 currentHistory.unsorted_items.map(item => (
-                                    <div key={item}>• {item}</div>
+                                    <div key={item.pk || item}>• {item.pk || item}</div>
                                 ))
                             }
                         </div>
@@ -281,7 +287,7 @@
                     <div className="content">
                         <div className="rankings">
                             <h3>Comparison Matrix</h3>
-                            {data && data.final_matrix && (
+                            {data && Array.isArray(data.items) && Array.isArray(finalMatrix) && (
                                 <table style={{ borderCollapse: 'collapse', fontSize: '0.8em' }}>
                                     <thead>
                                         <tr>
@@ -295,18 +301,19 @@
                                         {data.items.map((row_item, i) => (
                                             <tr key={row_item}>
                                                 <td style={{ padding: '4px' }}>{row_item}</td>
-                                                {data.final_matrix[i].map((cell, j) => {
-                                                    const mirrorCell = data.final_matrix[j][i];
-                                                    const details = cell.details || (mirrorCell && mirrorCell.details);
+                                                {(finalMatrix[i] || []).map((cell, j) => {
+                                                    const safeCell = cell || { weight: 0 };
+                                                    const mirrorCell = (finalMatrix[j] && finalMatrix[j][i]) ? finalMatrix[j][i] : null;
+                                                    const details = (safeCell.details) || (mirrorCell && mirrorCell.details);
                                                     
                                                     // Calculate color based on weight
                                                     let backgroundColor = 'white';
-                                                    if (cell.weight > 0) {
-                                                        if (cell.weight < 50) {
-                                                            const intensity = Math.floor((cell.weight / 50) * 255);
+                                                    if (safeCell.weight > 0) {
+                                                        if (safeCell.weight < 50) {
+                                                            const intensity = Math.floor((safeCell.weight / 50) * 255);
                                                             backgroundColor = `rgb(255, ${intensity}, ${intensity})`;
                                                         } else {
-                                                            const intensity = Math.floor(((100 - cell.weight) / 50) * 255);
+                                                            const intensity = Math.floor(((100 - safeCell.weight) / 50) * 255);
                                                             backgroundColor = `rgb(${intensity}, 255, ${intensity})`;
                                                         }
                                                     }
@@ -324,7 +331,7 @@
                                                                 setDialogData(details);
                                                             }
                                                         }}>
-                                                            {i === j ? '×' : cell.weight > 0 ? cell.weight.toFixed(1) : ''}
+                                                            {i === j ? '×' : safeCell.weight > 0 ? safeCell.weight.toFixed(1) : ''}
                                                         </td>
                                                     );
                                                 })}
