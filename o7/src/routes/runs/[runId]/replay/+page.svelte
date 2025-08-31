@@ -116,8 +116,8 @@
 			duration: 0 // Disable initial animation
 		},
 		interaction: {
-			mode: 'index' as const,
-			intersect: false,
+			mode: 'point' as const,
+			intersect: true,
 		},
 		scales: {
 			x: {
