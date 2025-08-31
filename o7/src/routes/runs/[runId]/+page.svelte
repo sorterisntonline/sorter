@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { trpc } from '$lib/trpc';
+	import VoteSlider from '$lib/components/VoteSlider.svelte'; // Import the new component
 
 	// Get runId from the URL
 	const runId = $page.params.runId;
@@ -59,6 +60,8 @@
 
 	// Helper to format scores
 	const formatScore = (score: number) => (score * 100).toFixed(2);
+
+	// Removed frontend flip logic: always show original left/right order
 </script>
 
 <main class="container mx-auto p-8">
@@ -125,14 +128,14 @@
 			</div>
 		</section>
 
-		<!-- Vote Inspector Section -->
+		<!-- Vote Inspector Section (IMPROVED) -->
 		{#if selectedIdentifiers.length > 0}
 			<section class="mb-12 rounded-lg bg-zinc-800 p-4">
 				<h2 class="mb-4 text-xl font-semibold">
 					{#if selectedIdentifiers.length === 1}
 						Votes involving "{selectedIdentifiers[0]?.pk?.split(':')[0] || 'Unknown'}"
 					{:else}
-						Vote between "{selectedIdentifiers[0]?.pk?.split(':')[0] || 'Unknown'}" and "{selectedIdentifiers[1]?.pk?.split(':')[0] || 'Unknown'}"
+						Votes between "{selectedIdentifiers[0]?.pk?.split(':')[0] || 'Unknown'}" and "{selectedIdentifiers[1]?.pk?.split(':')[0] || 'Unknown'}"
 					{/if}
 				</h2>
 				{#if !votesQuery || !$votesQuery}
@@ -142,22 +145,40 @@
 				{:else if $votesQuery.error}
 					<p class="text-red-400">Error loading votes: {$votesQuery.error.message}</p>
 				{:else if $votesQuery.data && $votesQuery.data.length > 0}
-					<div class="space-y-2">
+					<div class="space-y-3">
 						{#each $votesQuery.data as vote}
-							<div class="border-b border-zinc-700 p-2">
-								<div class="flex items-center justify-between">
-									<div class="flex-1">
-										<span class="font-mono text-sm text-zinc-300">
-											{vote.left_entity_pk_namespace}:{vote.left_entity_pk.split(':')[0]}
+							<div class="rounded-md bg-zinc-900/50 p-3">
+								<div class="flex items-center justify-between gap-4">
+									<!-- NEW: Improved flex layout for the vote row -->
+									<div class="flex flex-1 items-center gap-4">
+										<!-- Left Entity Title (doesn't grow) -->
+										<span
+											class="w-1/4 flex-shrink-0 truncate text-right font-mono text-sm text-teal-400"
+											title={vote.left_entity_pk}
+										>
+											{vote.left_entity_pk.split(':')[0]}
 										</span>
-										<span class="mx-2 text-zinc-500">vs</span>
-										<span class="font-mono text-sm text-zinc-300">
-											{vote.right_entity_pk_namespace}:{vote.right_entity_pk.split(':')[0]}
+
+										<!-- Vote Slider (grows to fill space) -->
+										<div class="flex-grow">
+											<VoteSlider magnitude={vote.magnitude} />
+										</div>
+
+										<!-- Right Entity Title (doesn't grow) -->
+										<span
+											class="w-1/4 flex-shrink-0 truncate font-mono text-sm text-blue-400"
+											title={vote.right_entity_pk}
+										>
+											{vote.right_entity_pk.split(':')[0]}
 										</span>
 									</div>
-									<div class="flex items-center gap-2">
-										<span class="text-sm text-zinc-400">
-											Magnitude: {vote.magnitude > 0 ? '+' : ''}{vote.magnitude}
+
+									<!-- Right side: Magnitude and Date -->
+									<div class="flex w-32 flex-shrink-0 items-center justify-end gap-2">
+										<span
+											class="w-16 rounded-md bg-zinc-700 p-1 text-center text-sm font-semibold {vote.magnitude < 0 ? 'text-teal-400' : vote.magnitude > 0 ? 'text-blue-400' : 'text-zinc-300'}"
+										>
+											{vote.magnitude > 0 ? '+' : ''}{vote.magnitude}
 										</span>
 										<span class="text-xs text-zinc-500">
 											{new Date(vote.created_at).toLocaleDateString()}
@@ -165,9 +186,8 @@
 									</div>
 								</div>
 
-								<!-- ADD THIS BLOCK to display the rationale -->
 								{#if vote.rationale}
-									<div class="mt-2 rounded bg-zinc-900/50 p-2">
+									<div class="mt-3 border-t border-zinc-700 pt-3">
 										<p class="text-sm italic text-zinc-400">
 											&ldquo;{vote.rationale}&rdquo;
 										</p>
