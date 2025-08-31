@@ -6,6 +6,7 @@ import sys
 import subprocess
 import tempfile
 import uuid
+import random
 from datetime import datetime
 from pathlib import Path
 from urllib import request, error
@@ -300,6 +301,7 @@ def default_lens_prompts() -> Dict[str, str]:
             "- A positive score (1 to 50) means Codebase B is better. +50 is a decisive win for B.\n"
             "- A score of 0 means it is a perfect tie.\n\n"
             "The 'rationale' MUST be a long, clear explanation for your score.\n\n"
+            "In your rationale, you MUST refer to the codebases by their branch names, '{{A_BRANCH}}' and '{{B_BRANCH}}'.\n\n"
             "JSON Response Format:\n"
             "{\n  \"score\": -50..50,\n  \"rationale\": \"short reason\"\n}\n\n"
             "Codebase A (metadata):\nBranch: {{A_BRANCH}}\nCommit: {{A_SHA}}\nBytes: {{A_BYTES}}\n\n"
@@ -556,8 +558,7 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
 
     # Insert remaining unsorted items with single comparison to an anchor
     while unsorted and votes_done < max_votes:
-        anchor_idx = len(sorted_list) // 2 if sorted_list else 0
-        anchor_ident = (sorted_list[anchor_idx]["identifier"] if sorted_list else unsorted[0])
+        anchor_ident = (random.choice(sorted_list)["identifier"] if sorted_list else unsorted[0])
         item_ident = unsorted[0]
         a = get_entity_by_ident(item_ident)
         b = get_entity_by_ident(anchor_ident)
