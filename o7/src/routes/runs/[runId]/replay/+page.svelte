@@ -13,8 +13,9 @@
 	let currentStep = $state(0);
 	let isPlaying = $state(false);
 	let playbackSpeed = $state(1);
-	let chartInstance: Chart | null = $state(null);
-	let canvasElement = $state<HTMLCanvasElement | null>(null);
+	// Keep these non-reactive to avoid UpdatedAtError feedback loops
+	let chartInstance: Chart | null = null;
+	let canvasElement: HTMLCanvasElement | null = null;
 
 	// --- Derived state is clean in Svelte ---
 	const history = $derived($replayQuery.data?.history ?? []);
@@ -23,64 +24,79 @@
 	const currentHistoryStep = $derived(history[currentStep]);
 
 	// --- Chart Logic ---
-	onMount(() => {
-		if (canvasElement && items.length > 0) {
-			chartInstance = new Chart(canvasElement, {
-				type: 'line',
-				data: {
-					labels: [],
-					datasets: items.map((item: { pk: string }, i: number) => ({
-						label: item.pk.split(':')[0], // Extract branch name
-						data: [],
-						borderColor: `hsl(${(i * 360) / items.length}, 70%, 50%)`,
-						backgroundColor: `hsl(${(i * 360) / items.length}, 70%, 50%, 0.1)`,
-						tension: 0.4,
-						fill: false
-					}))
+	function createChart() {
+		if (!canvasElement || chartInstance || items.length === 0) return;
+
+		chartInstance = new Chart(canvasElement, {
+			type: 'line',
+			data: {
+				labels: [],
+				datasets: items.map((item: { pk: string }, i: number) => ({
+					label: item.pk.split(':')[0], // Extract branch name
+					data: [],
+					borderColor: `hsl(${(i * 360) / items.length}, 70%, 50%)`,
+					backgroundColor: `hsl(${(i * 360) / items.length}, 70%, 50%, 0.1)`,
+					tension: 0.4,
+					fill: false
+				}))
+			},
+			options: {
+				responsive: true,
+				maintainAspectRatio: false,
+				interaction: {
+					mode: 'index',
+					intersect: false,
 				},
-				options: {
-					responsive: true,
-					maintainAspectRatio: false,
-					interaction: {
-						mode: 'index',
-						intersect: false,
-					},
-					scales: {
-						x: {
+				scales: {
+					x: {
+						display: true,
+						title: {
 							display: true,
-							title: {
-								display: true,
-								text: 'Vote Number'
-							}
-						},
-						y: {
-							display: true,
-							title: {
-								display: true,
-								text: 'Ranking Score'
-							},
-							min: 0,
-							max: 1
+							text: 'Vote Number'
 						}
 					},
-					plugins: {
-						legend: {
+					y: {
+						display: true,
+						title: {
 							display: true,
-							position: 'top'
+							text: 'Ranking Score'
 						},
-						tooltip: {
-							callbacks: {
-								label: function(context) {
-									return `${context.dataset.label}: ${context.parsed.y.toFixed(4)}`;
-								}
+						min: 0,
+						max: 1
+					}
+				},
+				plugins: {
+					legend: {
+						display: true,
+						position: 'top'
+					},
+					tooltip: {
+						callbacks: {
+							label: function(context) {
+								return `${context.dataset.label}: ${context.parsed.y.toFixed(4)}`;
 							}
 						}
 					}
 				}
-			});
+			}
+		});
+	}
+
+	// Create chart when canvas and items are ready (once)
+	$effect.pre(() => {
+		if (canvasElement && items.length > 0 && !chartInstance) {
+			createChart();
 		}
+	});
+
+	onMount(() => {
 		// Destroy chart when component is removed
-		return () => chartInstance?.destroy();
+		return () => {
+			if (chartInstance) {
+				chartInstance.destroy();
+				chartInstance = null;
+			}
+		};
 	});
 
 	function updateChart() {
@@ -192,7 +208,17 @@
 			<h3 class="text-red-800 font-semibold">Error loading replay data</h3>
 			<p class="text-red-600 mt-2">{$replayQuery.error.message}</p>
 		</div>
-	{:else if $replayQuery.data && $replayQuery.data.history && $replayQuery.data.items}
+	{:else if $replayQuery.data}
+		<!-- Debug info -->
+		<div class="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded text-sm">
+			<strong>Debug:</strong> Items: {items.length}, History: {history.length}, Current Step: {currentStep}
+			{#if items.length > 0}
+				<br>Sample item: {JSON.stringify(items[0])}
+			{/if}
+			{#if currentHistoryStep}
+				<br>Current rankings: {currentHistoryStep.current_rankings.length}
+			{/if}
+		</div>
 		<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 			<!-- Chart Section -->
 			<div class="lg:col-span-2">
