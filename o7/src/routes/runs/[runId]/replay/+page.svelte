@@ -25,12 +25,48 @@
 	let currentStep = $state(0);
 	let isPlaying = $state(false);
 	let playbackSpeed = $state(1);
+	let transformType = $state('log'); // 'linear', 'log', 'sqrt', 'rank'
+	let logAlpha = $state(9); // Controls log compression strength
 
 	// --- Derived state is clean in Svelte ---
 	const history = $derived($replayQuery.data?.history ?? []);
 	const items = $derived($replayQuery.data?.items ?? []);
 	const maxSteps = $derived(history.length > 0 ? history.length - 1 : 0);
 	const currentHistoryStep = $derived(history[currentStep]);
+
+	// --- Transform Functions ---
+	const transformScore = (score: number | null, allScores: (number | null)[]): number | null => {
+		if (score === null) return null;
+		if (score === 0) return 0;
+		
+		switch (transformType) {
+			case 'linear':
+				return score;
+			
+			case 'log':
+				// Normalized log transform: compresses high end
+				return Math.log1p(logAlpha * score) / Math.log1p(logAlpha);
+			
+			case 'sqrt':
+				// Square root: gentler compression than log
+				return Math.sqrt(score);
+			
+			case 'rank':
+				// Convert to rank-based: equal spacing regardless of score gaps
+				const validScores = allScores.filter(s => s !== null && s > 0) as number[];
+				if (validScores.length === 0) return 0;
+				
+				const sortedUnique = [...new Set(validScores)].sort((a, b) => b - a);
+				const rank = sortedUnique.indexOf(score);
+				if (rank === -1) return 0;
+				
+				// Convert rank to 0..1 scale (highest rank = 1, lowest = small positive)
+				return rank === sortedUnique.length - 1 ? 0.05 : (sortedUnique.length - rank) / sortedUnique.length;
+			
+			default:
+				return score;
+		}
+	};
 
 
 	// --- Chart Data (reactive with svelte-chartjs) ---
@@ -58,7 +94,12 @@
 			label: item.pk.split(':')[0] || 'Unknown', // Extract branch name
 			data: history
 				.slice(0, currentStep + 1)
-				.map((step: any) => step.current_rankings.find((r: any) => r.identifier.pk === item.pk)?.score ?? null),
+				.map((step: any) => {
+					const score = step.current_rankings.find((r: any) => r.identifier.pk === item.pk)?.score ?? null;
+					// Get all scores from this step for rank-based transforms
+					const allScores = step.current_rankings.map((r: any) => r.score);
+					return transformScore(score, allScores);
+				}),
 			borderColor: `hsl(${(i * 360) / items.length}, 70%, 50%)`,
 			backgroundColor: `hsl(${(i * 360) / items.length}, 70%, 50%, 0.1)`,
 			tension: 0.4,
@@ -68,9 +109,12 @@
 		chartData = { labels, datasets };
 	});
 
-	const chartOptions = {
+	const chartOptions = $derived({
 		responsive: true,
 		maintainAspectRatio: false,
+		animation: {
+			duration: 0 // Disable initial animation
+		},
 		interaction: {
 			mode: 'index' as const,
 			intersect: false,
@@ -94,7 +138,10 @@
 				display: true,
 				title: {
 					display: true,
-					text: 'Ranking Score',
+					text: transformType === 'linear' ? 'Ranking Score' : 
+						  transformType === 'log' ? 'Ranking Score (Log Scale)' :
+						  transformType === 'sqrt' ? 'Ranking Score (√ Scale)' :
+						  'Ranking Position',
 					color: '#d1d5db'
 				},
 				min: 0,
@@ -118,12 +165,31 @@
 			tooltip: {
 				callbacks: {
 					label: function(context: any) {
+						// Find the original score from the history data
+						const stepIndex = context.dataIndex;
+						const item = items.find(item => item.pk.split(':')[0] === context.dataset.label);
+						if (item && stepIndex >= 0 && stepIndex < history.length) {
+							const step = history[stepIndex];
+							if (step && step.current_rankings) {
+								const originalScore = step.current_rankings.find((r: any) => r.identifier.pk === item.pk)?.score ?? 0;
+								const allScores = step.current_rankings.map((r: any) => r.score);
+								
+								if (transformType === 'linear') {
+									return `${context.dataset.label}: ${originalScore.toFixed(4)}`;
+								} else {
+									const transformedScore = transformScore(originalScore, allScores);
+									const transformLabel = transformType === 'log' ? 'log' : 
+														  transformType === 'sqrt' ? '√' : 'rank';
+									return `${context.dataset.label}: ${originalScore.toFixed(4)} (${transformLabel}: ${transformedScore?.toFixed(4)})`;
+								}
+							}
+						}
 						return `${context.dataset.label}: ${context.parsed.y.toFixed(4)}`;
 					}
 				}
 			}
 		}
-	};
+	});
 
 
 
@@ -234,7 +300,44 @@
 						/>
 					</div>
 
-					<!-- CONTROLS -->
+					<!-- CHART CONTROLS -->
+					<div class="mb-4 p-3 bg-gray-700 rounded-lg border border-gray-600">
+						<div class="flex flex-wrap items-center gap-4">
+							<!-- Transform Type Selection -->
+							<div class="flex items-center gap-2">
+								<label for="transform" class="text-sm text-gray-300">Scale:</label>
+								<select
+									id="transform"
+									bind:value={transformType}
+									class="text-sm border border-gray-600 bg-gray-800 text-gray-200 rounded px-2 py-1"
+								>
+									<option value="linear">Linear</option>
+									<option value="log">Logarithmic</option>
+									<option value="sqrt">Square Root</option>
+									<option value="rank">Rank-Based</option>
+								</select>
+							</div>
+
+							<!-- Alpha Control (only show when log scale is enabled) -->
+							{#if transformType === 'log'}
+								<div class="flex items-center gap-2">
+									<label for="alpha" class="text-sm text-gray-300">Compression:</label>
+									<input
+										id="alpha"
+										type="range"
+										bind:value={logAlpha}
+										min="1"
+										max="1000"
+										step="1"
+										class="w-20 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer"
+									/>
+									<span class="text-xs text-gray-400 w-10">{logAlpha}</span>
+								</div>
+							{/if}
+						</div>
+					</div>
+
+					<!-- PLAYBACK CONTROLS -->
 					<div class="flex flex-wrap items-center justify-center gap-4 p-4 bg-gray-700 rounded-lg border border-gray-600">
 						<!-- Navigation Buttons -->
 						<div class="flex items-center gap-2">
