@@ -153,7 +153,7 @@
             const chartRef = useRef(null);
             const chartInstance = useRef(null);
             const [dialogData, setDialogData] = useState(null);
-            const [votingCell, setVotingCell] = useState(null); // e.g., {row: 2, col: 5}
+            const [votingCells, setVotingCells] = useState(new Set()); // Track multiple voting cells
             const [selectedVoteTab, setSelectedVoteTab] = useState(0); // Track which vote tab is selected
 
             // No longer need to fetch a list of files.
@@ -178,26 +178,35 @@
 
             // --- NEW: Mutation for triggering a vote ---
             const voteMutation = useMutation({
-                mutationFn: (pair) => {
-                    return fetch('/vote-pair', {
+                mutationFn: async ({ pair, cellKey }) => {
+                    const response = await fetch('/vote-pair', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(pair)
-                    }).then(res => {
-                        if (!res.ok) throw new Error('Vote request failed');
-                        return res.json();
                     });
+                    if (!response.ok) throw new Error('Vote request failed');
+                    const result = await response.json();
+                    return { result, cellKey };
                 },
-                onSuccess: () => {
+                onSuccess: ({ cellKey }) => {
                     console.log("Vote successful, refetching data...");
                     queryClient.invalidateQueries({ queryKey: ['runData'] });
+                    // Remove this specific cell from loading state
+                    setVotingCells(prev => {
+                        const newSet = new Set(prev);
+                        newSet.delete(cellKey);
+                        return newSet;
+                    });
                 },
-                onError: (error) => {
+                onError: (error, { cellKey }) => {
                     console.error("Vote mutation failed:", error);
                     alert("Failed to cast vote. See console for details.");
-                },
-                onSettled: () => {
-                    setVotingCell(null); // Clear loading state regardless of outcome
+                    // Remove this specific cell from loading state
+                    setVotingCells(prev => {
+                        const newSet = new Set(prev);
+                        newSet.delete(cellKey);
+                        return newSet;
+                    });
                 }
             });
 
@@ -291,7 +300,10 @@
             };
 
             const handleCellClick = (rowItem, colItem, rowIdx, colIdx) => {
-                if (voteMutation.isLoading) return;
+                const cellKey = `${rowIdx}-${colIdx}`;
+                
+                // Allow dialog viewing even during votes, but prevent new votes on cells already voting
+                if (votingCells.has(cellKey)) return;
 
                 const cell = (finalMatrix[rowItem.originalIndex] && finalMatrix[rowItem.originalIndex][colItem.originalIndex]) || {};
                 const voteCount = cell.vote_count || 0;
@@ -315,39 +327,42 @@
                         rowItem,
                         colItem,
                         displayRowIdx: rowIdx,
-                        displayColIdx: colIdx
+                        displayColIdx: colIdx,
+                        cellKey
                     });
                     // Reset to the most recent vote (tab 0) when opening dialog
                     setSelectedVoteTab(0);
                 } else if (rowItem.originalIndex !== colItem.originalIndex) {
                     // No vote exists, trigger one
                     console.log(`Voting on ${rowItem.item} vs ${colItem.item}`);
-                    setVotingCell({ row: rowIdx, col: colIdx });
+                    setVotingCells(prev => new Set([...prev, cellKey]));
                     const pair = {
                         entity_a: { pk_namespace: "gitsort.branch_snapshot", pk: rowItem.item },
                         entity_b: { pk_namespace: "gitsort.branch_snapshot", pk: colItem.item }
                     };
-                    voteMutation.mutate(pair);
+                    voteMutation.mutate({ pair, cellKey });
                 }
             };
 
             // NEW: Handler for the "Add Another Vote" button in the dialog
             const handleAddVoteFromDialog = () => {
-                if (!dialogData || voteMutation.isLoading) return;
+                if (!dialogData) return;
 
-                const { rowItem, colItem, displayRowIdx, displayColIdx } = dialogData;
+                const { rowItem, colItem, cellKey } = dialogData;
 
-                // 1. Close the dialog
-                setDialogData(null);
+                // Check if this cell is already voting
+                if (votingCells.has(cellKey)) return;
+
+                // 1. Don't close the dialog - let user continue viewing it
                 // 2. Set the loading state on the correct cell
-                setVotingCell({ row: displayRowIdx, col: displayColIdx });
+                setVotingCells(prev => new Set([...prev, cellKey]));
                 // 3. Construct the pair and trigger the mutation
                 const pair = {
                     entity_a: { pk_namespace: "gitsort.branch_snapshot", pk: rowItem.item },
                     entity_b: { pk_namespace: "gitsort.branch_snapshot", pk: colItem.item }
                 };
                 console.log(`Adding another vote for ${rowItem.item} vs ${colItem.item}`);
-                voteMutation.mutate(pair);
+                voteMutation.mutate({ pair, cellKey });
             };
 
             // Loading state
@@ -460,7 +475,8 @@
                                                         const mirrorCell = (finalMatrix[colIdx] && finalMatrix[colIdx][rowIdx]) ? finalMatrix[colIdx][rowIdx] : null;
                                                         const details = (safeCell.details) || (mirrorCell && mirrorCell.details);
 
-                                                        const isVoting = votingCell && votingCell.row === displayRowIdx && votingCell.col === displayColIdx;
+                                                        const cellKey = `${displayRowIdx}-${displayColIdx}`;
+                                                        const isVoting = votingCells.has(cellKey);
                                                         const voteCount = safeCell.vote_count || 0;
 
                                                         // Calculate color based on weight
@@ -597,9 +613,9 @@
                                     <button
                                         className="add-vote-btn"
                                         onClick={handleAddVoteFromDialog}
-                                        disabled={voteMutation.isLoading}
+                                        disabled={dialogData && votingCells.has(dialogData.cellKey)}
                                     >
-                                        {voteMutation.isLoading ? 'Voting...' : 'Add Another Vote'}
+                                        {dialogData && votingCells.has(dialogData.cellKey) ? 'Voting...' : 'Add Another Vote'}
                                     </button>
                                 </div>
                             </div>
