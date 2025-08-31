@@ -1,4 +1,4 @@
-INSERT INTO votes(left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, magnitude, attribute_id, user_id, deleted_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)
+INSERT INTO votes(left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, magnitude, rationale, attribute_id, user_id, deleted_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL)
 RETURNING
-    left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, magnitude, attribute_id, user_id, created_at, deleted_at
+    left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, magnitude, rationale, attribute_id, user_id, created_at, deleted_at

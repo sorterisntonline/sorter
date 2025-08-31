@@ -68,6 +68,7 @@ CREATE TABLE votes(
   right_entity_pk text NOT NULL,
   user_id uuid REFERENCES users(id) NOT NULL,
   magnitude int NOT NULL,
+  rationale TEXT,
   attribute_id int NOT NULL REFERENCES attributes(id),
   created_at timestamp DEFAULT now() NOT NULL,
   deleted_at timestamp,

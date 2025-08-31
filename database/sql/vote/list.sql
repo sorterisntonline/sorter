@@ -1,5 +1,14 @@
 SELECT
-    *
+    left_entity_pk_namespace,
+    left_entity_pk,
+    right_entity_pk_namespace,
+    right_entity_pk,
+    user_id,
+    magnitude,
+    rationale,
+    attribute_id,
+    created_at,
+    deleted_at
 FROM
     votes
 WHERE
