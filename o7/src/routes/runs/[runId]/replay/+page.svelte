@@ -15,7 +15,7 @@
 	let playbackSpeed = $state(1);
 	// Keep these non-reactive to avoid UpdatedAtError feedback loops
 	let chartInstance: Chart | null = null;
-	let canvasElement: HTMLCanvasElement | null = null;
+	let canvasElement = $state<HTMLCanvasElement | null>(null);
 
 	// --- Derived state is clean in Svelte ---
 	const history = $derived($replayQuery.data?.history ?? []);
@@ -52,23 +52,40 @@
 						display: true,
 						title: {
 							display: true,
-							text: 'Vote Number'
+							text: 'Vote Number',
+							color: '#d1d5db'
+						},
+						ticks: {
+							color: '#9ca3af'
+						},
+						grid: {
+							color: '#374151'
 						}
 					},
 					y: {
 						display: true,
 						title: {
 							display: true,
-							text: 'Ranking Score'
+							text: 'Ranking Score',
+							color: '#d1d5db'
 						},
 						min: 0,
-						max: 1
+						max: 1,
+						ticks: {
+							color: '#9ca3af'
+						},
+						grid: {
+							color: '#374151'
+						}
 					}
 				},
 				plugins: {
 					legend: {
 						display: true,
-						position: 'top'
+						position: 'top',
+						labels: {
+							color: '#d1d5db'
+						}
 					},
 					tooltip: {
 						callbacks: {
@@ -182,35 +199,35 @@
 	<!-- Header -->
 	<div class="mb-6">
 		<div class="flex items-center justify-between">
-			<a href="/runs/{runId}" class="text-blue-600 hover:text-blue-800 inline-flex items-center gap-2">
+			<a href="/runs/{runId}" class="text-blue-400 hover:text-blue-300 inline-flex items-center gap-2">
 				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
 				</svg>
 				Back to Run Details
 			</a>
-			<div class="text-sm text-gray-500">
+			<div class="text-sm text-gray-400">
 				Interactive ranking evolution visualization
 			</div>
 		</div>
-		<h1 class="text-3xl font-bold mt-4">Ranking History Replay</h1>
-		<p class="text-gray-600 mt-2">Watch how the rankings evolved vote by vote in real-time</p>
+		<h1 class="text-3xl font-bold mt-4 text-white">Ranking History Replay</h1>
+		<p class="text-gray-400 mt-2">Watch how the rankings evolved vote by vote in real-time</p>
 	</div>
 
 	{#if $replayQuery.isLoading}
 		<div class="flex items-center justify-center h-64">
 			<div class="text-center">
-				<div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-				<p>Loading replay data...</p>
+				<div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400 mx-auto mb-4"></div>
+				<p class="text-gray-300">Loading replay data...</p>
 			</div>
 		</div>
 	{:else if $replayQuery.error}
-		<div class="bg-red-50 border border-red-200 rounded-lg p-4">
-			<h3 class="text-red-800 font-semibold">Error loading replay data</h3>
-			<p class="text-red-600 mt-2">{$replayQuery.error.message}</p>
+		<div class="bg-red-900/20 border border-red-800 rounded-lg p-4">
+			<h3 class="text-red-400 font-semibold">Error loading replay data</h3>
+			<p class="text-red-300 mt-2">{$replayQuery.error.message}</p>
 		</div>
 	{:else if $replayQuery.data}
 		<!-- Debug info -->
-		<div class="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded text-sm">
+		<div class="mb-4 p-4 bg-yellow-900/20 border border-yellow-800 rounded text-sm text-gray-300">
 			<strong>Debug:</strong> Items: {items.length}, History: {history.length}, Current Step: {currentStep}
 			{#if items.length > 0}
 				<br>Sample item: {JSON.stringify(items[0])}
@@ -222,18 +239,18 @@
 		<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 			<!-- Chart Section -->
 			<div class="lg:col-span-2">
-				<div class="bg-white rounded-lg shadow-lg p-6">
+				<div class="bg-gray-800 rounded-lg shadow-lg p-6 border border-gray-700">
 					<div class="h-[500px] mb-4">
 						<canvas bind:this={canvasElement}></canvas>
 					</div>
 
 					<!-- CONTROLS -->
-					<div class="flex flex-wrap items-center justify-center gap-4 p-4 bg-gray-50 rounded-lg">
+					<div class="flex flex-wrap items-center justify-center gap-4 p-4 bg-gray-700 rounded-lg border border-gray-600">
 						<!-- Navigation Buttons -->
 						<div class="flex items-center gap-2">
 							<button
 								onclick={goToStart}
-								class="p-2 text-gray-600 hover:text-gray-800 disabled:opacity-50"
+								class="p-2 text-gray-400 hover:text-gray-200 disabled:opacity-50"
 								disabled={currentStep === 0}
 								title="Go to start"
 								aria-label="Go to start"
@@ -245,7 +262,7 @@
 
 							<button
 								onclick={stepBackward}
-								class="p-2 text-gray-600 hover:text-gray-800 disabled:opacity-50"
+								class="p-2 text-gray-400 hover:text-gray-200 disabled:opacity-50"
 								disabled={currentStep === 0}
 								title="Step backward"
 								aria-label="Step backward"
@@ -257,7 +274,7 @@
 
 							<button
 								onclick={togglePlayback}
-								class="p-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50"
+								class="p-3 bg-blue-500 text-white rounded-full hover:bg-blue-400 disabled:opacity-50"
 								title={isPlaying ? 'Pause' : 'Play'}
 								aria-label={isPlaying ? 'Pause' : 'Play'}
 							>
@@ -274,7 +291,7 @@
 
 							<button
 								onclick={stepForward}
-								class="p-2 text-gray-600 hover:text-gray-800 disabled:opacity-50"
+								class="p-2 text-gray-400 hover:text-gray-200 disabled:opacity-50"
 								disabled={currentStep >= maxSteps}
 								title="Step forward"
 								aria-label="Step forward"
@@ -286,7 +303,7 @@
 
 							<button
 								onclick={goToEnd}
-								class="p-2 text-gray-600 hover:text-gray-800 disabled:opacity-50"
+								class="p-2 text-gray-400 hover:text-gray-200 disabled:opacity-50"
 								disabled={currentStep >= maxSteps}
 								title="Go to end"
 								aria-label="Go to end"
@@ -304,22 +321,22 @@
 								bind:value={currentStep}
 								min="0"
 								max={maxSteps}
-								class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+								class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer"
 							/>
 						</div>
 
 						<!-- Step Counter -->
-						<div class="text-sm text-gray-600 font-medium min-w-[80px] text-center">
+						<div class="text-sm text-gray-300 font-medium min-w-[80px] text-center">
 							{currentStep} / {maxSteps}
 						</div>
 
 						<!-- Speed Control -->
 						<div class="flex items-center gap-2">
-							<label for="speed" class="text-sm text-gray-600">Speed:</label>
+							<label for="speed" class="text-sm text-gray-300">Speed:</label>
 							<select
 								id="speed"
 								bind:value={playbackSpeed}
-								class="text-sm border border-gray-300 rounded px-2 py-1"
+								class="text-sm border border-gray-600 bg-gray-800 text-gray-200 rounded px-2 py-1"
 							>
 								<option value={0.25}>0.25x</option>
 								<option value={0.5}>0.5x</option>
@@ -332,7 +349,7 @@
 						<!-- Reset Button -->
 						<button
 							onclick={resetPlayback}
-							class="px-3 py-1 text-sm bg-gray-600 text-white rounded hover:bg-gray-700"
+							class="px-3 py-1 text-sm bg-gray-600 text-white rounded hover:bg-gray-500"
 							title="Reset to beginning"
 						>
 							Reset
@@ -343,23 +360,23 @@
 
 			<!-- Rankings Sidebar -->
 			<div class="lg:col-span-1">
-				<div class="bg-white rounded-lg shadow-lg p-6 sticky top-6">
+				<div class="bg-gray-800 rounded-lg shadow-lg p-6 sticky top-6 border border-gray-700">
 					{#if currentHistoryStep}
 						<!-- Current Vote Info -->
 						{#if currentHistoryStep.vote_added}
-							<div class="mb-6 p-4 bg-blue-50 rounded-lg">
-								<h3 class="font-semibold text-blue-800 mb-2">Latest Vote</h3>
-								<div class="text-sm text-blue-700">
+							<div class="mb-6 p-4 bg-blue-900/20 rounded-lg border border-blue-800">
+								<h3 class="font-semibold text-blue-400 mb-2">Latest Vote</h3>
+								<div class="text-sm text-blue-300">
 									<p><strong>{currentHistoryStep.vote_added.left_entity_pk.split(':')[0]}</strong></p>
 									<p class="text-center my-1">
 										{#if currentHistoryStep.vote_added.magnitude > 0}
-											<span class="text-green-600">↑</span>
-											<strong class="mx-2">beats</strong>
-											<span class="text-red-600">↓</span>
+											<span class="text-green-400">↑</span>
+											<strong class="mx-2 text-gray-200">beats</strong>
+											<span class="text-red-400">↓</span>
 										{:else}
-											<span class="text-red-600">↓</span>
-											<strong class="mx-2">loses to</strong>
-											<span class="text-green-600">↑</span>
+											<span class="text-red-400">↓</span>
+											<strong class="mx-2 text-gray-200">loses to</strong>
+											<span class="text-green-400">↑</span>
 										{/if}
 									</p>
 									<p><strong>{currentHistoryStep.vote_added.right_entity_pk.split(':')[0]}</strong></p>
@@ -375,15 +392,15 @@
 
 						<!-- Current Rankings -->
 						<div class="mb-6">
-							<h3 class="font-semibold text-gray-800 mb-3">Current Rankings</h3>
+							<h3 class="font-semibold text-gray-200 mb-3">Current Rankings</h3>
 							<div class="space-y-2 max-h-80 overflow-y-auto">
 								{#each currentHistoryStep.current_rankings.sort((a: any, b: any) => b.score - a.score) as ranking, i}
-									<div class="flex items-center justify-between p-2 bg-gray-50 rounded">
+									<div class="flex items-center justify-between p-2 bg-gray-700 rounded border border-gray-600">
 										<div class="flex items-center gap-2">
-											<span class="font-mono text-sm text-gray-500 w-6">{i + 1}.</span>
-											<span class="font-medium">{ranking.identifier.pk.split(':')[0]}</span>
+											<span class="font-mono text-sm text-gray-400 w-6">{i + 1}.</span>
+											<span class="font-medium text-gray-200">{ranking.identifier.pk.split(':')[0]}</span>
 										</div>
-										<span class="text-sm font-mono text-gray-600">
+										<span class="text-sm font-mono text-gray-300">
 											{ranking.score.toFixed(4)}
 										</span>
 									</div>
@@ -394,21 +411,21 @@
 						<!-- Unsorted Items -->
 						{#if currentHistoryStep.unsorted_items.length > 0}
 							<div>
-								<h3 class="font-semibold text-gray-800 mb-3">Unsorted Items</h3>
+								<h3 class="font-semibold text-gray-200 mb-3">Unsorted Items</h3>
 								<div class="space-y-1">
 									{#each currentHistoryStep.unsorted_items as item}
-										<div class="flex items-center gap-2 p-2 bg-gray-100 rounded">
-											<span class="w-2 h-2 bg-gray-400 rounded-full"></span>
-											<span class="text-sm">{item.pk.split(':')[0]}</span>
+										<div class="flex items-center gap-2 p-2 bg-gray-700 rounded border border-gray-600">
+											<span class="w-2 h-2 bg-gray-500 rounded-full"></span>
+											<span class="text-sm text-gray-300">{item.pk.split(':')[0]}</span>
 										</div>
 									{/each}
 								</div>
 							</div>
 						{/if}
 					{:else}
-						<div class="text-center text-gray-500 py-8">
-							<p>No voting data available yet.</p>
-							<p class="text-sm mt-2">Start voting to see the ranking evolution!</p>
+						<div class="text-center text-gray-400 py-8">
+							<p class="text-gray-300">No voting data available yet.</p>
+							<p class="text-sm mt-2 text-gray-400">Start voting to see the ranking evolution!</p>
 						</div>
 					{/if}
 				</div>
@@ -427,7 +444,7 @@
 	}
 
 	input[type="range"]::-webkit-slider-track {
-		background: #e2e8f0;
+		background: #4b5563;
 		height: 8px;
 		border-radius: 4px;
 	}
@@ -438,14 +455,14 @@
 		height: 20px;
 		width: 20px;
 		border-radius: 50%;
-		background: #2563eb;
+		background: #3b82f6;
 		cursor: pointer;
-		border: 2px solid #ffffff;
-		box-shadow: 0 0 2px rgba(0,0,0,0.3);
+		border: 2px solid #1f2937;
+		box-shadow: 0 0 2px rgba(255,255,255,0.3);
 	}
 
 	input[type="range"]::-moz-range-track {
-		background: #e2e8f0;
+		background: #4b5563;
 		height: 8px;
 		border-radius: 4px;
 		border: none;
@@ -455,9 +472,9 @@
 		height: 20px;
 		width: 20px;
 		border-radius: 50%;
-		background: #2563eb;
+		background: #3b82f6;
 		cursor: pointer;
-		border: 2px solid #ffffff;
-		box-shadow: 0 0 2px rgba(0,0,0,0.3);
+		border: 2px solid #1f2937;
+		box-shadow: 0 0 2px rgba(255,255,255,0.3);
 	}
 </style>
