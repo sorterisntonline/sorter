@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Ranking Replay 2</title>
+    
+    <!-- External Dependencies -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/@tanstack/react-query@4/build/umd/index.production.js"></script>
+    
+    <!-- Styles -->
+    <style>
+        .container {
+            display: flex;
+            flex-direction: column;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .chart-container {
+            width: 100%;
+            height: 400px;
+            margin: 20px 0;
+            display: flex;
+            gap: 20px;
+        }
+        .chart-wrapper {
+            flex: 3;
+            position: relative;
+        }
+        .rankings-legend {
+            flex: 1;
+            padding: 20px;
+            border-left: 1px solid #ccc;
+            overflow-y: auto;
+            max-height: 400px;
+        }
+        .content {
+            display: flex;
+        }
+        .rankings, .history {
+            flex: 1;
+            padding: 20px;
+            margin: 10px;
+            border: 1px solid #ccc;
+        }
+        .comparison {
+            margin-bottom: 20px;
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+        }
+        .controls input[type="range"] {
+            flex: 1;
+        }
+        #playPauseBtn {
+            width: 40px;
+            height: 40px;
+            font-size: 20px;
+            cursor: pointer;
+        }
+        .loading { text-align: center; padding: 2rem; }
+        .dialog-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .dialog-content {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 500px;
+            width: 90%;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+        const { QueryClient, QueryClientProvider, useQuery } = ReactQuery;
+
+        const queryClient = new QueryClient();
+
+        function RankingApp() {
+            const [selectedFile, setSelectedFile] = useState('');
+            const [currentStep, setCurrentStep] = useState(0);
+            const [isPlaying, setIsPlaying] = useState(false);
+            const [playbackSpeed, setPlaybackSpeed] = useState(1);
+            const chartRef = useRef(null);
+            const chartInstance = useRef(null);
+            const [dialogData, setDialogData] = useState(null);
+
+            // Query for file list
+            const { data: files = [] } = useQuery({
+                queryKey: ['files'],
+                queryFn: () => 
+                    fetch('/list-files')
+                        .then(res => res.json())
+                        .then(files => files.filter(f => f.endsWith('.json')))
+            });
+
+            // Update URL when file changes
+            useEffect(() => {
+                if (selectedFile) {
+                    const newUrl = `${window.location.pathname}?file=${selectedFile}`;
+                    window.history.pushState({}, '', newUrl);
+                }
+            }, [selectedFile]);
+
+            // Read URL parameter on mount
+            useEffect(() => {
+                const params = new URLSearchParams(window.location.search);
+                const fileParam = params.get('file');
+                if (fileParam && files.includes(fileParam)) {
+                    setSelectedFile(fileParam);
+                }
+            }, [files]);
+
+            // Handle browser back/forward buttons
+            useEffect(() => {
+                const handlePopState = () => {
+                    const params = new URLSearchParams(window.location.search);
+                    const fileParam = params.get('file');
+                    if (fileParam && files.includes(fileParam)) {
+                        setSelectedFile(fileParam);
+                    } else {
+                        setSelectedFile('');
+                    }
+                };
+
+                window.addEventListener('popstate', handlePopState);
+                return () => window.removeEventListener('popstate', handlePopState);
+            }, [files]);
+
+            // Query for selected file data
+            const { data, isLoading, isError } = useQuery({
+                queryKey: ['fileData', selectedFile],
+                queryFn: () => 
+                    fetch(`/static/${selectedFile}`).then(res => res.json()),
+                enabled: !!selectedFile,
+                onSuccess: (newData) => {
+                    // Only reset to beginning if this is a new file
+                    if (!data) {
+                        setCurrentStep(0);  // Start at beginning instead of end
+                        setIsPlaying(true);
+                    } else if (currentStep >= data.history.length - 1) {
+                        // If we're at the end, move to the new end
+                        setCurrentStep(newData.history.length - 1);
+                    }
+                },
+                refetchInterval: 5000,
+                refetchIntervalInBackground: true
+            });
+
+            // Chart effect
+            useEffect(() => {
+                if (data && data.items && chartRef.current) {
+                    if (chartInstance.current) {
+                        chartInstance.current.destroy();
+                    }
+
+                    const ctx = chartRef.current.getContext('2d');
+                    chartInstance.current = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: [],
+                            datasets: data.items.map((item, i) => ({
+                                label: item,
+                                data: [],
+                                borderColor: `hsl(${(i * 360) / data.items.length}, 70%, 50%)`,
+                                tension: 0.4
+                            }))
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            animation: false,
+                            scales: {
+                                y: { beginAtZero: true }
+                            },
+                            plugins: {
+                                legend: {
+                                    display: false
+                                }
+                            },
+                            hover: {
+                                mode: 'dataset',
+                                intersect: false
+                            }
+                        }
+                    });
+
+                    // Call updateChart after initialization
+                    updateChart();
+                }
+
+                return () => {
+                    if (chartInstance.current) {
+                        chartInstance.current.destroy();
+                    }
+                };
+            }, [data]);
+
+            // Also add an effect to update chart when currentStep changes
+            useEffect(() => {
+                updateChart();
+            }, [currentStep]);
+
+            // Playback effect
+            useEffect(() => {
+                if (isPlaying && data && currentStep < data.history.length - 1) {
+                    const timer = setTimeout(() => {
+                        setCurrentStep(step => step + 1);
+                        updateChart();
+                    }, 1000 / playbackSpeed);
+                    return () => clearTimeout(timer);
+                }
+            }, [isPlaying, currentStep, data, playbackSpeed]);
+
+            const updateChart = () => {
+                if (!data || !chartInstance.current) return;
+                
+                const chart = chartInstance.current;
+                
+                // Generate labels from 1 to currentStep + 1
+                chart.data.labels = Array.from({length: currentStep + 1}, (_, i) => i + 1);
+                
+                // Update each dataset with all points up to currentStep
+                data.items.forEach((item, i) => {
+                    chart.data.datasets[i].data = data.history
+                        .slice(0, currentStep + 1)
+                        .map(step => {
+                            const ranking = step.current_rankings.find(r => r.item === item);
+                            return ranking ? ranking.score : null;
+                        });
+                });
+                
+                chart.update();
+            };
+
+            // File selector only if no file selected
+            if (!selectedFile) {
+                return (
+                    <div className="container">
+                        <div className="controls">
+                            <select 
+                                value={selectedFile} 
+                                onChange={(e) => setSelectedFile(e.target.value)}
+                            >
+                                <option value="">Select a file...</option>
+                                {files.map((file) => (
+                                    <option key={file} value={file}>{file}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                );
+            }
+
+            // Loading state
+            if (isLoading) {
+                return <div className="loading">Loading...</div>;
+            }
+
+            // Error state
+            if (isError) {
+                return <div className="loading">Error loading data</div>;
+            }
+
+            const currentHistory = data && data.history ? data.history[currentStep] : null;
+
+            return (
+                <div className="container">
+                    <div className="controls">
+                        <select 
+                            value={selectedFile} 
+                            onChange={(e) => setSelectedFile(e.target.value)}
+                        >
+                            <option value="">Select a file...</option>
+                            {files.map((file) => (
+                                <option key={file} value={file}>{file}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="controls">
+                        <button onClick={() => setIsPlaying(!isPlaying)}>
+                            {isPlaying ? '⏸' : '⏵'}
+                        </button>
+                        {data && data.history && (
+                            <div>
+                                <input 
+                                    type="range" 
+                                    min="0" 
+                                    max={data.history.length - 1}
+                                    value={currentStep}
+                                    onChange={(e) => setCurrentStep(Number(e.target.value))}
+                                />
+                                <span>{currentStep} / {data.history.length - 1}</span>
+                            </div>
+                        )}
+                        <div>
+                        <input 
+                            type="range" 
+                                min="0.25" 
+                                max="4" 
+                                step="0.25" 
+                                value={playbackSpeed}
+                                onChange={(e) => setPlaybackSpeed(Number(e.target.value))}
+                            />
+                            <span>{playbackSpeed}x</span>
+                        </div>
+                    </div>
+
+                    <div className="chart-container">
+                        <div className="chart-wrapper">
+                            <canvas ref={chartRef}></canvas>
+                        </div>
+                        <div className="rankings-legend">
+                            <h3>Current Rankings</h3>
+                            {currentHistory && currentHistory.current_rankings
+                                .sort((a, b) => b.score - a.score)
+                                .map((r, i) => (
+                                    <div key={r.item}>
+                                        {i+1}. {r.item} ({r.score.toFixed(4)})
+                                    </div>
+                                ))
+                            }
+                            <h3>Unsorted Items</h3>
+                            {currentHistory && currentHistory.unsorted_items && 
+                                currentHistory.unsorted_items.map(item => (
+                                    <div key={item}>• {item}</div>
+                                ))
+                            }
+                        </div>
+                    </div>
+
+                    <div className="content">
+                        <div className="rankings">
+                            <h3>Comparison Matrix</h3>
+                            {data && data.final_matrix && (
+                                <table style={{ borderCollapse: 'collapse', fontSize: '0.8em' }}>
+                                    <thead>
+                                        <tr>
+                                            <th></th>
+                                            {data.items.map(item => (
+                                                <th key={item} style={{ padding: '4px' }}>{item}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {data.items.map((row_item, i) => (
+                                            <tr key={row_item}>
+                                                <td style={{ padding: '4px' }}>{row_item}</td>
+                                                {data.final_matrix[i].map((cell, j) => {
+                                                    const mirrorCell = data.final_matrix[j][i];
+                                                    const details = cell.details || (mirrorCell && mirrorCell.details);
+                                                    
+                                                    // Calculate color based on weight
+                                                    let backgroundColor = 'white';
+                                                    if (cell.weight > 0) {
+                                                        if (cell.weight < 50) {
+                                                            const intensity = Math.floor((cell.weight / 50) * 255);
+                                                            backgroundColor = `rgb(255, ${intensity}, ${intensity})`;
+                                                        } else {
+                                                            const intensity = Math.floor(((100 - cell.weight) / 50) * 255);
+                                                            backgroundColor = `rgb(${intensity}, 255, ${intensity})`;
+                                                        }
+                                                    }
+                                                    
+                                                    return (
+                                                        <td key={j} style={{ 
+                                                            padding: '4px', 
+                                                            border: '1px solid #ccc',
+                                                            cursor: details ? 'pointer' : 'default',
+                                                            backgroundColor,
+                                                            color: 'inherit'
+                                                        }}
+                                                        onClick={() => {
+                                                            if (details) {
+                                                                setDialogData(details);
+                                                            }
+                                                        }}>
+                                                            {i === j ? '×' : cell.weight > 0 ? cell.weight.toFixed(1) : ''}
+                                                        </td>
+                                                    );
+                                                })}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                    </div>
+
+                    {dialogData && (
+                        <div className="dialog-overlay" onClick={() => setDialogData(null)}>
+                            <div className="dialog-content" onClick={e => e.stopPropagation()}>
+                                <h3>Comparison Details</h3>
+                                <p><strong>Score: </strong>{dialogData.score}</p>
+                                <p>{dialogData.explanation}</p>
+                                <button onClick={() => setDialogData(null)}>Close</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function App() {
+            return (
+                <QueryClientProvider client={queryClient}>
+                    <RankingApp />
+                </QueryClientProvider>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
