@@ -626,7 +626,7 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
                     "left_entity_pk": left_ident["pk"],
                     "right_entity_pk_namespace": right_ident["pk_namespace"],
                     "right_entity_pk": right_ident["pk"],
-                    "magnitude": magnitude if winner == "a" else (-magnitude if winner == "b" else 0),
+                    "magnitude": magnitude,
                     "attribute_id": 1,
                 }
                 print(f"[vote-llm][adjacent] Decision winner={winner} score={score} magnitude={payload['magnitude']} -> POST /vote")

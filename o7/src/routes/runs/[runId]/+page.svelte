@@ -71,11 +71,61 @@
 	{:else if $detailsQuery.error}
 		<p class="text-red-400">Error: {$detailsQuery.error.message}</p>
 	{:else if $detailsQuery.data}
-		{@const { run, ranking } = $detailsQuery.data}
+		{@const { run, ranking, lens } = $detailsQuery.data}
 		<h1 class="mb-2 text-4xl font-bold text-zinc-100">{run.title}</h1>
 		<p class="mb-8 font-mono text-sm text-zinc-500">{run.pk}</p>
 
-		<!-- NEW: Vote Inspector Section -->
+		<!-- Run Information Section -->
+		<section class="mb-12 rounded-lg bg-zinc-800 p-6 shadow-lg">
+			<h2 class="mb-4 border-b border-zinc-700 pb-2 text-xl font-semibold">
+				Run Information
+			</h2>
+			<div class="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-3">
+				<!-- Column 1 -->
+				<div>
+					<div class="text-sm text-zinc-400">Created At</div>
+					<div class="font-mono text-zinc-100">
+						{run.created_at ? new Date(run.created_at).toLocaleString() : 'N/A'}
+					</div>
+				</div>
+
+				<!-- Column 2 -->
+				<div>
+					<div class="text-sm text-zinc-400">Lens Used</div>
+					<div class="font-mono text-zinc-100">
+						{#if lens}
+							{lens.title || lens.pk}
+						{:else}
+							<span class="italic text-zinc-500">Default Lens</span>
+						{/if}
+					</div>
+				</div>
+
+				<!-- Column 3 -->
+				<div>
+					<div class="text-sm text-zinc-400">AI Model</div>
+					<div class="font-mono text-zinc-100">
+						{#if run.metadata?.model}
+							{run.metadata.model}
+						{:else}
+							<span class="italic text-zinc-500">Not Specified</span>
+						{/if}
+					</div>
+				</div>
+
+				<!-- Optional: Show original branches from config -->
+				{#if run.metadata?.branches && Array.isArray(run.metadata.branches)}
+				<div class="sm:col-span-3">
+					<div class="text-sm text-zinc-400">Branches in Run</div>
+					<div class="font-mono text-zinc-100">
+						{run.metadata.branches.join(', ')}
+					</div>
+				</div>
+				{/if}
+			</div>
+		</section>
+
+		<!-- Vote Inspector Section -->
 		{#if selectedIdentifiers.length > 0}
 			<section class="mb-12 rounded-lg bg-zinc-800 p-4">
 				<h2 class="mb-4 text-xl font-semibold">

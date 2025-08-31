@@ -89,13 +89,17 @@ export const gitsorterRouter = router({
 			const runEntity = runData.entity;
 			const children = runData.children || [];
 
-			// 2. Separate snapshots from other children (like the lens)
+			// 2. Separate snapshots and the lens from other children
 			const snapshots = children.filter(
 				(c: Entity) => c.pk_namespace === 'gitsort.branch_snapshot',
 			);
+			const lens = children.find(
+				(c: Entity) => c.pk_namespace === 'gitsort.lens',
+			);
 
 			if (snapshots.length === 0) {
-				return { run: runEntity, ranking: { sorted: [], unsorted: [] } };
+				// We still want to show run info even if there are no snapshots yet
+				return { run: runEntity, lens, ranking: { sorted: [], unsorted: [] } };
 			}
 
 			// 3. Prepare the payload for the /rank endpoint
@@ -127,21 +131,21 @@ export const gitsorterRouter = router({
 			// 6. Return everything the UI will need
 			return {
 				run: runEntity,
+				lens,
 				ranking: enrichedRanking,
 			};
 		}),
 
-	getVotes: publicProcedure
-		.input(
-			z.array(
-				z.object({
-					pk_namespace: z.string(),
-					pk: z.string(),
-				}),
-			)
-				.min(1)
-				.max(2),
+	getVotes: publicProcedure.input(
+		z.array(
+			z.object({
+				pk_namespace: z.string(),
+				pk: z.string(),
+			}),
 		)
+		.min(1)
+		.max(2),
+	)
 		.query(async ({ input }) => {
 			// Build tagged union payload
 			const payload =
