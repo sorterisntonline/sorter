@@ -202,8 +202,8 @@ def build_matrix_from_votes(items: List[Dict], votes: List[Dict]) -> List[List[D
     # Create a mapping from entity PK to its index in the matrix
     item_map = {item['pk']: i for i, item in enumerate(items)}
 
-    # Initialize an empty matrix
-    matrix = [[{"weight": 0, "details": None} for _ in range(num_items)] for _ in range(num_items)]
+    # Initialize an empty matrix with vote lists
+    matrix = [[{"votes": []} for _ in range(num_items)] for _ in range(num_items)]
 
     for vote in votes:
         left_pk = vote['left_entity_pk']
@@ -232,12 +232,32 @@ def build_matrix_from_votes(items: List[Dict], votes: List[Dict]) -> List[List[D
             "right_entity_pk": vote['right_entity_pk'],
             "right_entity_pk_namespace": vote['right_entity_pk_namespace'],
             "magnitude": vote['magnitude'],
-            "rationale": vote.get('rationale')
+            "rationale": vote.get('rationale'),
+            "weight": weight_left_vs_right
         }
 
-        # Populate the matrix for both directions
-        matrix[i][j] = {"weight": weight_left_vs_right, "details": vote_details}
-        matrix[j][i] = {"weight": 100 - weight_left_vs_right, "details": vote_details}
+        # Add vote to the matrix for both directions
+        matrix[i][j]["votes"].append(vote_details)
+        matrix[j][i]["votes"].append({
+            **vote_details,
+            "weight": 100 - weight_left_vs_right  # Reverse the weight for the opposite direction
+        })
+
+    # Calculate averages and add computed properties
+    for i in range(num_items):
+        for j in range(num_items):
+            cell = matrix[i][j]
+            if cell["votes"]:
+                # Calculate average weight
+                avg_weight = sum(v["weight"] for v in cell["votes"]) / len(cell["votes"])
+                cell["weight"] = avg_weight
+                cell["vote_count"] = len(cell["votes"])
+                # Keep the most recent vote's details for backward compatibility
+                cell["details"] = cell["votes"][-1]
+            else:
+                cell["weight"] = 0
+                cell["vote_count"] = 0
+                cell["details"] = None
 
     return matrix
 
@@ -559,6 +579,70 @@ def check_existing_vote_for_pair(api: str, left_entity: Dict[str, str], right_en
         return False
 
 
+def _perform_llm_vote_for_pair(
+    api_base: str,
+    api_key: str,
+    llm_key: str,
+    model: str,
+    temperature: float,
+    lens_text: str,
+    entity_a_ident: Dict,
+    entity_b_ident: Dict,
+) -> Dict:
+    """
+    Performs a single LLM vote for a given pair and posts it to the Sorter API.
+    This function is the new, reusable core of the voting logic.
+    """
+    # 1. Fetch full entity metadata required for the prompt
+    hdrs = auth_headers(api_key)
+    entity_a = http_get_json(f"{api_base}/entity/{entity_a_ident['pk_namespace']}/{entity_a_ident['pk']}", headers=hdrs).get("entity", {})
+    entity_b = http_get_json(f"{api_base}/entity/{entity_b_ident['pk_namespace']}/{entity_b_ident['pk']}", headers=hdrs).get("entity", {})
+
+    a_meta = entity_a.get("metadata", {})
+    b_meta = entity_b.get("metadata", {})
+
+    # 2. Build the prompt
+    messages_payload = build_prompt_for_pair(lens_text, a_meta, b_meta)
+
+    # 3. Call the LLM (with robust parsing and reprompting)
+    print(f"[on-demand-vote] Calling LLM model={model} for pair {entity_a_ident['pk']} vs {entity_b_ident['pk']}")
+    resp = call_openrouter_chat(model, llm_key, messages_payload["messages"], temperature=temperature)
+    content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
+    try:
+        decision = parse_llm_decision_signed(content)
+    except Exception:
+        # Single strict reprompt, then skip on failure
+        reprompt = messages_payload["messages"] + [{
+            "role": "user",
+            "content": (
+                "Your previous response was invalid. Reply ONLY with a single JSON object: "
+                + "{\"score\":-50..50,\"rationale\":\"short reason\"}"
+            )
+        }]
+        print("[on-demand-vote] Reprompting due to invalid JSON...")
+        resp = call_openrouter_chat(model, llm_key, reprompt, temperature=temperature)
+        content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
+        try:
+            decision = parse_llm_decision_signed(content)
+        except Exception:
+            print("[on-demand-vote] Strict JSON parse failed twice; aborting vote.")
+            raise ValueError("Failed to get a valid JSON response from LLM.")
+
+    # 4. Post the vote to the Sorter API
+    payload = {
+        "left_entity_pk_namespace": entity_a_ident["pk_namespace"],
+        "left_entity_pk": entity_a_ident["pk"],
+        "right_entity_pk_namespace": entity_b_ident["pk_namespace"],
+        "right_entity_pk": entity_b_ident["pk"],
+        "magnitude": int(decision.get("magnitude", 0)),
+        "rationale": decision.get("rationale"),
+        "attribute_id": 1,  # Assuming 'like' attribute
+    }
+    print(f"[on-demand-vote] Posting vote with magnitude={payload['magnitude']}")
+    new_vote = http_post_json(f"{api_base}/vote", payload, headers=hdrs)
+    return new_vote
+
+
 def cmd_vote_llm(args: argparse.Namespace) -> None:
     api = args.api.rstrip('/')
     api_key = args.api_key or os.environ.get("SORTER_API_KEY")
@@ -624,36 +708,24 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
             sorted_list = rank.get("sorted", [])
             continue
 
-        messages_payload = build_prompt_for_pair(lens_text, a_meta, b_meta)
         if args.dry_run:
-            print(json.dumps({"pair": [a_ident, b_ident], "prompt": messages_payload}, indent=2))
+            print(json.dumps({"pair": [a_ident, b_ident], "prompt": build_prompt_for_pair(lens_text, a_meta, b_meta)}, indent=2))
             return
-        print(f"[vote-llm][seed] Calling LLM model={args.model} temp={args.temperature}")
-        resp = call_openrouter_chat(args.model, llm_key, messages_payload["messages"], temperature=args.temperature)
-        print("[vote-llm][seed] LLM response received")
-        content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
+
         try:
-            decision = parse_llm_decision_signed(content)
-        except Exception:
-            # Single strict reprompt, then skip on failure
-            reprompt = messages_payload["messages"] + [{
-                "role": "user",
-                "content": (
-                    "Your previous response was invalid. Reply ONLY with a single JSON object: "
-                    + "{\"score\":-50..50,\"rationale\":\"short reason\"}"
-                )
-            }]
-            print("[vote-llm][seed] Reprompting due to invalid JSON...")
-            resp = call_openrouter_chat(args.model, llm_key, reprompt, temperature=args.temperature)
-            print("[vote-llm][seed] LLM response received (reprompt)")
-            content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
-            try:
-                decision = parse_llm_decision_signed(content)
-            except Exception:
-                print("[vote-llm][seed] Strict JSON parse failed twice; skipping this pair.")
-                decision = None
-        if not decision:
-            # Skip posting a vote
+            _perform_llm_vote_for_pair(
+                api_base=api,
+                api_key=api_key,
+                llm_key=llm_key,
+                model=args.model,
+                temperature=args.temperature,
+                lens_text=lens_text,
+                entity_a_ident=a_ident,
+                entity_b_ident=b_ident,
+            )
+            votes_done += 1
+        except ValueError:
+            print("[vote-llm][seed] Skipping this pair due to LLM error.")
             # Re-rank to see if other changes happened; then continue
             print("[vote-llm][seed] Re-ranking after skip...")
             rank = rank_entities(api, idents, api_key)
@@ -661,21 +733,6 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
             sorted_list = rank.get("sorted", [])
             # Continue with next step
             pass
-        else:
-            magnitude = int(decision.get("magnitude", 0))
-            # Post vote using A vs B; server canonicalizes
-            payload = {
-                "left_entity_pk_namespace": a_ident["pk_namespace"],
-                "left_entity_pk": a_ident["pk"],
-                "right_entity_pk_namespace": b_ident["pk_namespace"],
-                "right_entity_pk": b_ident["pk"],
-                "magnitude": magnitude,
-                "rationale": decision.get("rationale"),
-                "attribute_id": 1,
-            }
-            print(f"[vote-llm][seed] Decision magnitude={payload['magnitude']} -> POST /vote")
-            http_post_json(f"{api}/vote", payload, headers=auth_headers(api_key))
-            votes_done += 1
 
         # Re-rank after seeding
         print("[vote-llm][seed] Re-ranking after vote...")
@@ -700,53 +757,30 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
             votes_done += 1  # Still count as "done" since we're not processing it
             continue
 
-        messages_payload = build_prompt_for_pair(lens_text, a_meta, b_meta)
         if args.dry_run:
-            print(json.dumps({"pair": [item_ident, anchor_ident], "prompt": messages_payload}, indent=2))
+            print(json.dumps({"pair": [item_ident, anchor_ident], "prompt": build_prompt_for_pair(lens_text, a_meta, b_meta)}, indent=2))
             return
-        print(f"[vote-llm][insert] Calling LLM model={args.model} temp={args.temperature}")
-        resp = call_openrouter_chat(args.model, llm_key, messages_payload["messages"], temperature=args.temperature)
-        print("[vote-llm][insert] LLM response received")
-        content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
+
         try:
-            decision = parse_llm_decision_signed(content)
-        except Exception:
-            reprompt = messages_payload["messages"] + [{
-                "role": "user",
-                "content": (
-                    "Your previous response was invalid. Reply ONLY with a single JSON object: "
-                    + "{\"score\":-50..50,\"rationale\":\"short reason\"}"
-                )
-            }]
-            print("[vote-llm][insert] Reprompting due to invalid JSON...")
-            resp = call_openrouter_chat(args.model, llm_key, reprompt, temperature=args.temperature)
-            print("[vote-llm][insert] LLM response received (reprompt)")
-            content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
-            try:
-                decision = parse_llm_decision_signed(content)
-            except Exception:
-                print("Strict JSON parse failed twice; skipping this insertion.")
-                decision = None
-        if not decision:
+            _perform_llm_vote_for_pair(
+                api_base=api,
+                api_key=api_key,
+                llm_key=llm_key,
+                model=args.model,
+                temperature=args.temperature,
+                lens_text=lens_text,
+                entity_a_ident=item_ident,
+                entity_b_ident=anchor_ident,
+            )
+            votes_done += 1
+        except ValueError:
+            print("[vote-llm][insert] Skipping this insertion due to LLM error.")
             print("[vote-llm][insert] Re-ranking after skip...")
             rank = rank_entities(api, idents, api_key)
             unsorted = rank.get("unsorted", [])
             sorted_list = rank.get("sorted", [])
             print(f"[vote-llm][insert] Rank: unsorted={len(unsorted)} sorted={len(sorted_list)}")
             continue
-        magnitude = int(decision.get("magnitude", 0))
-        payload = {
-            "left_entity_pk_namespace": item_ident["pk_namespace"],
-            "left_entity_pk": item_ident["pk"],
-            "right_entity_pk_namespace": anchor_ident["pk_namespace"],
-            "right_entity_pk": anchor_ident["pk"],
-            "magnitude": magnitude,
-            "rationale": decision.get("rationale"),
-            "attribute_id": 1,
-        }
-        print(f"[vote-llm][insert] Decision magnitude={payload['magnitude']} -> POST /vote")
-        http_post_json(f"{api}/vote", payload, headers=auth_headers(api_key))
-        votes_done += 1
 
         # Optionally re-rank in batches; keep simple: re-rank every insertion or when unsorted shrinks
         print("[vote-llm][insert] Re-ranking after vote...")
@@ -778,48 +812,28 @@ def cmd_vote_llm(args: argparse.Namespace) -> None:
                     votes_done += 1  # Still count as "done" since we're not processing it
                     continue
 
-                messages_payload = build_prompt_for_pair(lens_text, a_meta, b_meta)
                 if args.dry_run:
-                    print(json.dumps({"pair": [left_ident, right_ident], "prompt": messages_payload}, indent=2))
+                    print(json.dumps({"pair": [left_ident, right_ident], "prompt": build_prompt_for_pair(lens_text, a_meta, b_meta)}, indent=2))
                     return
-                print(f"[vote-llm][adjacent] Calling LLM model={args.model} temp={args.temperature}")
-                resp = call_openrouter_chat(args.model, llm_key, messages_payload["messages"], temperature=args.temperature)
-                print("[vote-llm][adjacent] LLM response received")
-                content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
+
                 try:
-                    decision = parse_llm_decision_signed(content)
-                except Exception:
-                    reprompt = messages_payload["messages"] + [{
-                        "role": "user",
-                        "content": (
-                            "Your previous response was invalid. Reply ONLY with a single JSON object: "
-                            + "{\"score\":-50..50,\"rationale\":\"short reason\"}"
-                        )
-                    }]
-                    print("[vote-llm][adjacent] Reprompting due to invalid JSON...")
-                    resp = call_openrouter_chat(args.model, llm_key, reprompt, temperature=args.temperature)
-                    print("[vote-llm][adjacent] LLM response received (reprompt)")
-                    content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
-                    try:
-                        decision = parse_llm_decision_signed(content)
-                    except Exception:
-                        print("Strict JSON parse failed twice; skipping this adjacent pair.")
-                        continue
-                magnitude = int(decision.get("magnitude", 0))
-                if magnitude > 0:
-                    swaps += 1
-                payload = {
-                    "left_entity_pk_namespace": left_ident["pk_namespace"],
-                    "left_entity_pk": left_ident["pk"],
-                    "right_entity_pk_namespace": right_ident["pk_namespace"],
-                    "right_entity_pk": right_ident["pk"],
-                    "magnitude": magnitude,
-                    "rationale": decision.get("rationale"),
-                    "attribute_id": 1,
-                }
-                print(f"[vote-llm][adjacent] Decision magnitude={payload['magnitude']} -> POST /vote")
-                http_post_json(f"{api}/vote", payload, headers=auth_headers(api_key))
-                votes_done += 1
+                    new_vote = _perform_llm_vote_for_pair(
+                        api_base=api,
+                        api_key=api_key,
+                        llm_key=llm_key,
+                        model=args.model,
+                        temperature=args.temperature,
+                        lens_text=lens_text,
+                        entity_a_ident=left_ident,
+                        entity_b_ident=right_ident,
+                    )
+                    votes_done += 1
+                    # Check if this vote would cause a swap (magnitude > 0 means right entity won)
+                    if new_vote.get("magnitude", 0) > 0:
+                        swaps += 1
+                except ValueError:
+                    print("[vote-llm][adjacent] Skipping this adjacent pair due to LLM error.")
+                    continue
 
             # Re-rank after sweep and decide whether to continue
             print("[vote-llm][adjacent] Re-ranking after sweep...")
@@ -942,6 +956,52 @@ def cmd_serve(args: argparse.Namespace) -> None:
         except Exception as e:
             print(f"Error proxying data: {e}", file=sys.stderr)
             return jsonify({"error": str(e)}), 500
+
+    # --- NEW ENDPOINT ---
+    @app.route('/vote-pair', methods=['POST'])
+    def vote_pair():
+        from flask import request as flask_request  # Avoid name clash with urllib
+        try:
+            # 1. Get config and keys
+            cfg = json.loads(cfg_path.read_text())
+            api_base = (args.api or cfg.get("api_base", DEFAULT_API_BASE)).rstrip('/')
+            api_key = args.api_key or os.environ.get("SORTER_API_KEY")
+            llm_key = os.environ.get(cfg.get("llm_key_env", "OPENROUTER_API_KEY"))
+
+            # 2. Get pair from request body
+            data = flask_request.get_json()
+            entity_a_ident = data['entity_a']
+            entity_b_ident = data['entity_b']
+
+            # 3. Get lens_text
+            # Load run children to get lens entities
+            child_map = get_run_children(api_base, cfg["run_id"], api_key)
+            lens_entities = [e for e in child_map.values() if e.get("pk_namespace") == "gitsort.lens"]
+            lens_text = ""
+            if lens_entities:
+                lens_meta = lens_entities[0].get("metadata") or {}
+                lens_text = lens_meta.get("prompt_template") or lens_meta.get("text") or lens_meta.get("prompt") or ""
+            if not lens_text:
+                lens_text = (
+                    "Evaluate architectural clarity, modularity, cohesion/coupling, naming, testability, documentation, "
+                    "and execution quality. Prefer clean, maintainable, well-structured designs aligned with the stated goals."
+                )
+
+            # 4. Call the refactored logic
+            new_vote = _perform_llm_vote_for_pair(
+                api_base=api_base,
+                api_key=api_key,
+                llm_key=llm_key,
+                model=cfg.get("model", "openai/gpt-4o"),
+                temperature=0.1,
+                lens_text=lens_text,
+                entity_a_ident=entity_a_ident,
+                entity_b_ident=entity_b_ident,
+            )
+            return jsonify({"status": "success", "vote": new_vote})
+        except Exception as e:
+            print(f"Error in /vote-pair: {e}", file=sys.stderr)
+            return jsonify({"status": "error", "message": str(e)}), 500
 
     host = "127.0.0.1"
     port = args.port

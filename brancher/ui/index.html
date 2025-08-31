@@ -94,7 +94,7 @@
 
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
-        const { QueryClient, QueryClientProvider, useQuery } = ReactQuery;
+        const { QueryClient, QueryClientProvider, useQuery, useMutation, useQueryClient } = ReactQuery;
 
         const queryClient = new QueryClient();
 
@@ -103,6 +103,7 @@
             const chartRef = useRef(null);
             const chartInstance = useRef(null);
             const [dialogData, setDialogData] = useState(null);
+            const [votingCell, setVotingCell] = useState(null); // e.g., {row: 2, col: 5}
 
             // No longer need to fetch a list of files.
             // We will directly fetch the data served by our CLI.
@@ -120,6 +121,31 @@
                 },
                 refetchInterval: 5000,
                 refetchIntervalInBackground: true
+            });
+
+            // --- NEW: Mutation for triggering a vote ---
+            const voteMutation = useMutation({
+                mutationFn: (pair) => {
+                    return fetch('/vote-pair', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(pair)
+                    }).then(res => {
+                        if (!res.ok) throw new Error('Vote request failed');
+                        return res.json();
+                    });
+                },
+                onSuccess: () => {
+                    console.log("Vote successful, refetching data...");
+                    queryClient.invalidateQueries({ queryKey: ['runData'] });
+                },
+                onError: (error) => {
+                    console.error("Vote mutation failed:", error);
+                    alert("Failed to cast vote. See console for details.");
+                },
+                onSettled: () => {
+                    setVotingCell(null); // Clear loading state regardless of outcome
+                }
             });
 
             // Chart effect
@@ -209,6 +235,26 @@
                 if (!str) return '';
                 const parts = str.split(':');
                 return parts[0] || str; // Return first part before ':', or whole string if no ':'
+            };
+
+            // --- NEW: Handler for cell clicks ---
+            const handleCellClick = (rowItem, colItem, rowIdx, colIdx) => {
+                // Prevent clicking during another vote
+                if (voteMutation.isLoading) return;
+
+                // Don't vote an item against itself
+                if (rowItem.originalIndex === colItem.originalIndex) return;
+
+                console.log(`Voting on ${rowItem.item} vs ${colItem.item}`);
+                setVotingCell({ row: rowIdx, col: colIdx });
+
+                // The entity identifiers for the API call
+                const pair = {
+                    entity_a: { pk_namespace: "gitsort.branch_snapshot", pk: rowItem.item },
+                    entity_b: { pk_namespace: "gitsort.branch_snapshot", pk: colItem.item }
+                };
+
+                voteMutation.mutate(pair);
             };
 
             // Loading state
@@ -312,15 +358,18 @@
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {sortedItems.map(({ item: rowItem, originalIndex: rowIdx }) => (
+                                            {sortedItems.map(({ item: rowItem, originalIndex: rowIdx }, displayRowIdx) => (
                                                 <tr key={rowItem}>
                                                     <td style={{ padding: '4px' }} title={rowItem}>{formatId(rowItem)}</td>
                                                     {sortedItems.map(({ item: colItem, originalIndex: colIdx }, displayColIdx) => {
-                                                        const cell = (finalMatrix[rowIdx] && finalMatrix[rowIdx][colIdx]) || { weight: 0 };
-                                                        const safeCell = cell || { weight: 0 };
+                                                        const cell = (finalMatrix[rowIdx] && finalMatrix[rowIdx][colIdx]) || { weight: 0, vote_count: 0 };
+                                                        const safeCell = cell || { weight: 0, vote_count: 0 };
                                                         const mirrorCell = (finalMatrix[colIdx] && finalMatrix[colIdx][rowIdx]) ? finalMatrix[colIdx][rowIdx] : null;
                                                         const details = (safeCell.details) || (mirrorCell && mirrorCell.details);
-                                                        
+
+                                                        const isVoting = votingCell && votingCell.row === displayRowIdx && votingCell.col === displayColIdx;
+                                                        const voteCount = safeCell.vote_count || 0;
+
                                                         // Calculate color based on weight
                                                         let backgroundColor = 'white';
                                                         if (safeCell.weight > 0) {
@@ -332,23 +381,26 @@
                                                                 backgroundColor = `rgb(${intensity}, 255, ${intensity})`;
                                                             }
                                                         }
-                                                        
+
                                                         return (
-                                                            <td key={displayColIdx} style={{ 
-                                                                padding: '4px', 
+                                                            <td key={displayColIdx} style={{
+                                                                padding: '4px',
                                                                 border: '1px solid #ccc',
-                                                                cursor: details ? 'pointer' : 'default',
+                                                                cursor: rowIdx !== colIdx && !isVoting ? 'pointer' : 'default',
                                                                 backgroundColor,
-                                                                color: 'inherit'
+                                                                color: 'inherit',
+                                                                opacity: isVoting ? 0.5 : 1,
                                                             }}
                                                             onClick={() => {
+                                                                if (rowIdx === colIdx) return; // Don't allow self-voting
+
                                                                 if (details) {
-                                                                    // Format vote data for dialog
+                                                                    // Existing behavior: show vote details dialog
                                                                     const leftEntity = formatId(details.left_entity_pk);
                                                                     const rightEntity = formatId(details.right_entity_pk);
                                                                     const magnitude = details.magnitude;
                                                                     const rationale = details.rationale;
-                                                                    
+
                                                                     // Determine winner based on magnitude
                                                                     let winner, loser, confidence;
                                                                     if (magnitude < 0) {
@@ -364,7 +416,7 @@
                                                                         loser = null;
                                                                         confidence = 0;
                                                                     }
-                                                                    
+
                                                                     setDialogData({
                                                                         leftEntity,
                                                                         rightEntity,
@@ -373,11 +425,23 @@
                                                                         loser,
                                                                         confidence,
                                                                         rationale,
-                                                                        weight: safeCell.weight
+                                                                        weight: safeCell.weight,
+                                                                        voteCount: voteCount
                                                                     });
+                                                                } else {
+                                                                    // New behavior: trigger LLM vote
+                                                                    handleCellClick(
+                                                                        { item: rowItem, originalIndex: rowIdx },
+                                                                        { item: colItem, originalIndex: colIdx },
+                                                                        displayRowIdx,
+                                                                        displayColIdx
+                                                                    );
                                                                 }
                                                             }}>
-                                                                {rowIdx === colIdx ? '×' : safeCell.weight > 0 ? safeCell.weight.toFixed(1) : ''}
+                                                                {rowIdx === colIdx ? '×' :
+                                                                 isVoting ? '...' :
+                                                                 voteCount > 0 ? `${safeCell.weight.toFixed(1)} (${voteCount})` :
+                                                                 ''}
                                                             </td>
                                                         );
                                                     })}
@@ -398,6 +462,9 @@
                                     <p><strong>Comparison:</strong> {dialogData.leftEntity} vs {dialogData.rightEntity}</p>
                                     <p><strong>Raw Magnitude:</strong> {dialogData.magnitude} (range: -50 to +50)</p>
                                     <p><strong>Matrix Weight:</strong> {dialogData.weight ? dialogData.weight.toFixed(1) : 'N/A'}</p>
+                                    {dialogData.voteCount && dialogData.voteCount > 1 && (
+                                        <p><strong>Vote Count:</strong> {dialogData.voteCount} (averaged)</p>
+                                    )}
                                     {dialogData.winner ? (
                                         <p><strong>Winner:</strong> {dialogData.winner} (confidence: {dialogData.confidence}/50)</p>
                                     ) : (
