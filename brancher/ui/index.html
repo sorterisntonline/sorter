@@ -449,7 +449,7 @@
                             </select>
                             {data && data.current_run && (
                                 <span style={{marginLeft: '20px', color: '#666', fontSize: '0.9em'}}>
-                                    Current: {data.current_run.run_name} | ID: {data.current_run.run_id?.slice(0, 8)}...
+                                    Current: {data.current_run.run_name} | ID: {data.current_run.run_id && data.current_run.run_id.slice(0, 8)}...
                                 </span>
                             )}
                         </div>
