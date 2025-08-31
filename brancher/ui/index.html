@@ -319,7 +319,8 @@
                                                 return (
                                                     <tr key={row_item}>
                                                         <td style={{ padding: '4px' }} title={row_item}>{formatId(row_item)}</td>
-                                                        {sortedIndices.map(j => {
+                                                        {sortedIndices.map(sortedJ => {
+                                                            const j = sortedIndices[sortedJ];
                                                             const cell = (finalMatrix[i] && finalMatrix[i][j]) || { weight: 0 };
                                                             const safeCell = cell || { weight: 0 };
                                                             const mirrorCell = (finalMatrix[j] && finalMatrix[j][i]) ? finalMatrix[j][i] : null;
