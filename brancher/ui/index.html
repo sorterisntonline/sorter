@@ -550,15 +550,19 @@
                                                         const voteCount = safeCell.vote_count || 0;
 
                                                         // Calculate color based on weight
+                                                        // Weight 0 = fully red (left wins), 50 = white (tie), 100 = fully green (right wins)
                                                         let backgroundColor = 'white';
-                                                        if (safeCell.weight > 0) {
+                                                        if (voteCount > 0) {
                                                             if (safeCell.weight < 50) {
+                                                                // Red side (left entity wins): weight 0-49
                                                                 const intensity = Math.floor((safeCell.weight / 50) * 255);
                                                                 backgroundColor = `rgb(255, ${intensity}, ${intensity})`;
-                                                            } else {
+                                                            } else if (safeCell.weight > 50) {
+                                                                // Green side (right entity wins): weight 51-100
                                                                 const intensity = Math.floor(((100 - safeCell.weight) / 50) * 255);
                                                                 backgroundColor = `rgb(${intensity}, 255, ${intensity})`;
                                                             }
+                                                            // weight exactly 50 stays white (tie)
                                                         }
 
                                                         return (
