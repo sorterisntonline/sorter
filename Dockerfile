@@ -14,7 +14,7 @@ RUN cd frontsorter && npm run build
 
 # --- Stage 2: Build the Rust Backend ---
 # We use cargo-chef for efficient dependency caching, which significantly speeds up builds
-FROM rust:1.78 as rust-builder
+FROM rust:1.85 as rust-builder
 WORKDIR /app
 RUN cargo install cargo-chef
 COPY rustsorter/ ./rustsorter/
