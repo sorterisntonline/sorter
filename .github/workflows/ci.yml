@@ -80,7 +80,7 @@ jobs:
 
       - name: Run tests (nextest) and generate JUnit
         run: |
-          cargo nextest run --locked --workspace --profile ci
+          cargo nextest run --locked --workspace --all-targets --profile ci
 
       - name: Debug JUnit presence
         if: always()
@@ -127,12 +127,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Start Rust server
+      - name: Start Rust server (no rebuild)
         working-directory: rustsorter
         env:
           RUST_LOG: info
         run: |
-          nohup cargo run --locked > ../server.log 2>&1 & echo $! > ../server.pid
+          nohup ./target/debug/rustsorter > server.log 2>&1 & echo $! > server.pid
           echo "Waiting for server..." && for i in {1..60}; do curl -fsS http://127.0.0.1:8081/api/health && break || sleep 1; done
 
       - name: Run Python tests (pytest)
@@ -157,5 +157,6 @@ jobs:
 
       - name: Stop Rust server
         if: always()
+        working-directory: rustsorter
         run: |
           if [ -f server.pid ]; then kill $(cat server.pid) || true; fi
