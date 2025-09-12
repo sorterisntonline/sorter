@@ -134,8 +134,8 @@ jobs:
         run: |
           set -euo pipefail
           if [ ! -x ./target/debug/rustsorter ]; then
-            echo "Binary not found, building bins (should be cached)..."
-            cargo build --locked --bins
+            echo "Binary not found, exiting..."
+            exit 1
           fi
           nohup ./target/debug/rustsorter > server.log 2>&1 & echo $! > server.pid
           echo "Waiting for server..."
