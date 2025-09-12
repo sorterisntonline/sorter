@@ -15,9 +15,28 @@ jobs:
   test:
     name: Build and Test (Rust)
     runs-on: ubuntu-latest
+    
+    # PostgreSQL service for sqlx compile-time checks and integration tests
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
     defaults:
       run:
         working-directory: rustsorter
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
 
     steps:
       - name: Checkout
@@ -42,6 +61,14 @@ jobs:
         with:
           tool: cargo-nextest
 
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --no-default-features --features native-tls,postgres
+
+      - name: Run database migrations
+        run: |
+          sqlx database create
+          sqlx migrate run --source ../database/migrations
+
       - name: Build
         run: |
           cargo build --locked --workspace --all-targets
@@ -50,9 +77,9 @@ jobs:
         run: |
           cargo nextest run --workspace --junit-report target/nextest/junit.xml
 
-      - name: Publish test report to Checks
-        if: always()
+      - name: Test Report
         uses: dorny/test-reporter@v1
+        if: success() || failure()
         with:
           name: Rust Tests
           path: rustsorter/target/nextest/junit.xml
