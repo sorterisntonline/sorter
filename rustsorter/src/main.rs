@@ -81,6 +81,7 @@ async fn protected_route(MaybeUser(maybe_user): MaybeUser) -> Response {
 async fn main() -> Result<(), anyhow::Error> {
     dotenv().ok();
     env_logger::init();
+    eprintln!("[rustsorter] starting up...");
 
     let database_string = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
