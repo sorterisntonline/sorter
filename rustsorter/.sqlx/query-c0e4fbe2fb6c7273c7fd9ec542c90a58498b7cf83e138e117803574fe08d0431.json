@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO votes(left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, magnitude, attribute_id, user_id, deleted_at)\n    VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)\nRETURNING\n    left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, magnitude, attribute_id, user_id, created_at, deleted_at\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "left_entity_pk_namespace",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "left_entity_pk",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "right_entity_pk_namespace",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "right_entity_pk",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "magnitude",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "attribute_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 8,
+        "name": "deleted_at",
+        "type_info": "Timestamp"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int4",
+        "Int4",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "c0e4fbe2fb6c7273c7fd9ec542c90a58498b7cf83e138e117803574fe08d0431"
+}

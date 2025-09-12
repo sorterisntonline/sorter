@@ -12,9 +12,6 @@ aide = { version = "0.15.0", features = [
     "macros",
     "swagger",
 ] }
-actix-files = "0.6.5"
-actix-session = { version = "0.9.0", features = ["cookie-session"] }
-actix-web = { version = "4", features = ["rustls-0_21"] }
 anyhow = "1.0"
 axum = { version = "0.8", features = ["macros", "ws"] }
 bcrypt = "0.15.0"

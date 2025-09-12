@@ -21,15 +21,18 @@ rust and react based pair-wise staunchly democratic social media application
 # installation instructions
 
 ```bash
-cargo install sqlx-cli
-
+# Start local Postgres (in one terminal)
 cd database && ./run-postgres.sh
+# Note: this writes a local DATABASE_URL to repo-root .env (if missing)
 
-# new terminal
-cd rustsorter 
-cp .env.example .env
-sqlx migrate run --source ../database/migrations
+# In a new terminal at repo root, install dbmate (macOS example)
+brew install dbmate
 
+# Run migrations from repo root
+./migrate.sh
+
+# Start the server (from rustsorter/)
+cd rustsorter
 RUST_LOG=debug cargo run
 ```
 

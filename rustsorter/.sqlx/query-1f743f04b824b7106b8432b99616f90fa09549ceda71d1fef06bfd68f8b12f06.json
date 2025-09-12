@@ -1,0 +1,56 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO entity_relationships(parent_pk_namespace, parent_pk, child_pk_namespace, child_pk, user_id)\n    VALUES ($1, $2, $3, $4, $5)\nRETURNING\n    parent_pk_namespace, parent_pk, child_pk_namespace, child_pk, user_id, created_at\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "parent_pk_namespace",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "parent_pk",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "child_pk_namespace",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "child_pk",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "1f743f04b824b7106b8432b99616f90fa09549ceda71d1fef06bfd68f8b12f06"
+}

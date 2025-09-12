@@ -1,0 +1,17 @@
+# .dockerignore
+.git
+.gitignore
+.vscode
+.idea
+README.md
+todo.tdsl
+
+# Rust specific
+rustsorter/target/
+rustsorter/.cargo/
+rustsorter/.env
+
+# Node specific
+frontsorter/node_modules/
+frontsorter/dist/
+npm-debug.log*

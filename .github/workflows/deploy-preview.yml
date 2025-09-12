@@ -1,0 +1,85 @@
+# .github/workflows/deploy-preview.yml
+name: Deploy Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+# Ensures only one deployment runs per PR at a time
+concurrency:
+  group: deploy-preview-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy_preview_app:
+    name: Deploy Preview App
+    runs-on: ubuntu-latest
+
+    environment:
+        name: pr-${{ github.event.number }}
+        url: ${{ steps.deploy.outputs.url }}
+
+    permissions:
+      contents: read
+      pull-requests: write # Allows the action to comment on the PR
+
+    steps:
+      - name: Install dependencies
+        run: sudo apt-get update
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Compute a sanitized Neon branch name (lowercase, non-alnum -> '-')
+      - name: Compute Neon branch name
+        if: github.event.action != 'closed'
+        id: compute_branch
+        run: |
+          BRANCH_NAME=$(echo "${{ github.head_ref }}" | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]' | cut -c1-50)
+          echo "branch_name=$BRANCH_NAME" >> "$GITHUB_OUTPUT"
+
+      # Create or reuse Neon branch via official action
+      - name: Create Neon Branch
+        if: github.event.action != 'closed'
+        id: neon_create
+        uses: neondatabase/create-branch-action@v6
+        with:
+          project_id: ${{ secrets.NEON_PROJECT_ID }}
+          branch_name: ${{ steps.compute_branch.outputs.branch_name }}
+          parent_branch: ${{ secrets.NEON_MAIN_BRANCH_NAME }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+
+      # Run DB migrations against the branch
+      - name: Run DB migrations
+        if: github.event.action != 'closed'
+        run: |
+          sudo curl -fsSL -o /usr/local/bin/dbmate https://github.com/amacneil/dbmate/releases/latest/download/dbmate-linux-amd64
+          sudo chmod +x /usr/local/bin/dbmate
+          DATABASE_URL="${{ steps.neon_create.outputs.db_url }}" dbmate --migrations-dir ./db/migrations up
+
+      - name: Deploy or Cleanup Preview App on Fly.io
+        id: deploy
+        uses: superfly/fly-pr-review-apps@1.5.0
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        with:
+          # This action automatically detects if the PR is open or closed.
+          # If open, it deploys. If closed, it destroys the app.
+          # Provide DATABASE_URL to the runtime as a Fly secret
+          secrets: |
+            DATABASE_URL=${{ steps.neon_create.outputs.db_url }}
+
+      - name: Cleanup Neon Database Branch
+        if: github.event.action == 'closed'
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}
+        run: |
+          # We need to re-install the CLI for the cleanup job
+          sudo curl -L https://github.com/neondatabase/neonctl/releases/latest/download/neonctl-linux-amd64.tar.gz -o neonctl.tar.gz
+          sudo tar -xvzf neonctl.tar.gz -C /usr/local/bin/
+
+          # Re-sanitize the branch name to find and delete the correct branch
+          BRANCH_NAME=$(echo ${{ github.head_ref }} | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]' | cut -c1-50)
+          echo "Deleting Neon branch: $BRANCH_NAME"
+          neonctl branches delete --project-id "$NEON_PROJECT_ID" "$BRANCH_NAME"
