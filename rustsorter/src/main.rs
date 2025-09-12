@@ -85,13 +85,23 @@ async fn main() -> Result<(), anyhow::Error> {
     let args: Vec<String> = env::args().collect();
     eprintln!("[rustsorter] args: {:?}", args);
 
-    let database_string = match env::var("DATABASE_URL") {
-        Ok(value) => value,
+    let mut database_string = match env::var("DATABASE_URL") {
+        Ok(value) => value.trim().to_string(),
         Err(_) => {
             eprintln!("[rustsorter] ERROR: DATABASE_URL is not set");
             std::process::exit(1);
         }
     };
+    // Strip simple wrapping quotes if present
+    if (database_string.starts_with('"') && database_string.ends_with('"'))
+        || (database_string.starts_with('\'') && database_string.ends_with('\''))
+    {
+        database_string = database_string[1..database_string.len() - 1].to_string();
+    }
+    if !database_string.contains("://") {
+        eprintln!("[rustsorter] WARNING: DATABASE_URL missing scheme; prefixing with postgresql://");
+        database_string = format!("postgresql://{}", database_string);
+    }
     eprintln!("[rustsorter] DATABASE_URL detected (redacted)");
 
     let pool = sqlx::postgres::PgPoolOptions::new()

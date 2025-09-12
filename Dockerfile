@@ -23,8 +23,9 @@ RUN cd rustsorter && cargo build --release --bin rustsorter
 # --- Stage 3: Create the final, small runtime image ---
 FROM debian:bookworm-slim as runtime
 WORKDIR /app
-# Install OpenSSL, a common runtime dependency for Rust web apps using TLS
-RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+# Install OpenSSL and CA certificates for TLS
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy the compiled Rust binary from the builder stage
 COPY --from=rust-builder /app/rustsorter/target/release/rustsorter .
@@ -32,10 +33,6 @@ COPY --from=rust-builder /app/rustsorter/target/release/rustsorter .
 # Copy the built React assets from the frontend stage into a `public` directory
 # Your Rust app will need to be configured to serve these files.
 COPY --from=frontend-builder /app/frontsorter/dist ./frontsorter/public
-
-# This build argument will be used to pass the database URL during deployment.
-ARG DATABASE_URL_ARG
-ENV DATABASE_URL=$DATABASE_URL_ARG
 
 # Expose the port your Rust application listens on
 EXPOSE 8081

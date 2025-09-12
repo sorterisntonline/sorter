@@ -59,9 +59,9 @@ jobs:
         with:
           # This action automatically detects if the PR is open or closed.
           # If open, it deploys. If closed, it destroys the app.
-          # We pass the migrated connection string as a build-time argument.
-          build_secrets: |
-            DATABASE_URL_ARG=${{ steps.neon_create.outputs.db_url }}
+          # Provide DATABASE_URL to the runtime as a Fly secret
+          secrets: |
+            DATABASE_URL=${{ steps.neon_create.outputs.db_url }}
 
       - name: Cleanup Neon Database Branch
         if: github.event.action == 'closed'
