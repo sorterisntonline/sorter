@@ -54,9 +54,9 @@ echo "PostgreSQL logs will be shown below. Press Ctrl-C to stop."
 # Create the data directory if it doesn't exist
 mkdir -p "$PG_DATA_DIR"
 
-# Construct local DB URL and write config.edn
-DB_URL="postgres://postgres:password@localhost:${HOST_PORT}/postgres"
-echo "{:jdbc-url \"${DB_URL}\"}" > config.edn
+# Construct local DB URL (used for .env.local convenience)
+# Include sslmode=disable for local Docker Postgres (no SSL configured)
+DB_URL="postgres://postgres:password@localhost:${HOST_PORT}/postgres?sslmode=disable"
 
 # Also write DATABASE_URL to rustsorter/.env.local for migrate.sh convenience
 ENV_FILE="../rustsorter/.env.local"
