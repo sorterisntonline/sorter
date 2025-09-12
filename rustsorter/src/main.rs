@@ -12,8 +12,7 @@ use std::{env, sync::Arc};
 
 use aide::{
     axum::{
-        ApiRouter,
-        IntoApiResponse,
+        ApiRouter, IntoApiResponse,
         routing::{get, get_with},
     },
     openapi::{self, OpenApi, SecurityScheme},
@@ -23,8 +22,7 @@ use aide::{
 use anyhow::Result;
 use app_state::AppState;
 use axum::{
-    Extension,
-    Router,
+    Extension, Router,
     http::StatusCode,
     middleware,
     response::{IntoResponse, Response},
@@ -134,6 +132,7 @@ fn router(app_state: AppState) -> Router {
         .nest("/keys", api_key::routes())
         .nest("/entity", entity::routes())
         .nest("/entity_relationships", entity_relationships::routes())
+        .nest("/pair", pair::routes())
         .nest("/vote", vote::routes())
         .nest("/rank", pagerank::routes())
         .layer(middleware::from_fn_with_state(

@@ -1,0 +1,6 @@
+[profile.ci]
+
+# Write JUnit report for GitHub test reporting
+[profile.ci.junit]
+path = "target/nextest/junit.xml"
+
