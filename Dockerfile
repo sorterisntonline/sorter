@@ -13,15 +13,11 @@ COPY frontsorter/ ./frontsorter/
 RUN cd frontsorter && npm run build
 
 # --- Stage 2: Build the Rust Backend ---
-# We use cargo-chef for efficient dependency caching, which significantly speeds up builds
 FROM rust:1.85 as rust-builder
 WORKDIR /app
-RUN cargo install cargo-chef
+# Optionally prime cache using Cargo.toml/Cargo.lock first (simple path here)
+COPY database/sql ./database/sql
 COPY rustsorter/ ./rustsorter/
-# Prepare and then cook the dependency recipe to cache dependencies separately
-RUN cd rustsorter && cargo chef prepare --recipe-path ../recipe.json
-RUN cd rustsorter && cargo chef cook --release --recipe-path ../recipe.json
-# Now, build the actual application, which will be much faster
 RUN cd rustsorter && cargo build --release --bin rustsorter
 
 # --- Stage 3: Create the final, small runtime image ---
@@ -37,6 +33,10 @@ COPY --from=rust-builder /app/rustsorter/target/release/rustsorter .
 # Your Rust app will need to be configured to serve these files.
 COPY --from=frontend-builder /app/frontsorter/dist ./frontsorter/public
 
+# Add a small entrypoint for diagnostics before starting the server
+COPY entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
+
 # This build argument will be used to pass the database URL during deployment.
 ARG DATABASE_URL_ARG
 ENV DATABASE_URL=$DATABASE_URL_ARG
@@ -45,4 +45,4 @@ ENV DATABASE_URL=$DATABASE_URL_ARG
 EXPOSE 8081
 
 # The command to run when the container starts
-CMD ["./rustsorter"]
+CMD ["./entrypoint.sh"]
