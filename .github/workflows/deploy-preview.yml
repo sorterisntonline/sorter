@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y jq
+        run: sudo apt-get update
 
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -47,10 +47,16 @@ jobs:
 
           # Create a new branch from your main project branch on Neon
           echo "Creating Neon branch '$BRANCH_NAME' from '$NEON_MAIN_BRANCH'..."
-          DB_OUTPUT=$(neonctl branches create --project-id "$NEON_PROJECT_ID" --name "$BRANCH_NAME" --parent "$NEON_MAIN_BRANCH")
+          DB_OUTPUT=$(neonctl branches create --project-id "$NEON_PROJECT_ID" --name "$BRANCH_NAME" --parent "$NEON_MAIN_BRANCH" 2>&1)
+          echo "neonctl raw output:" 
+          echo "$DB_OUTPUT"
 
-          # Parse the JSON output with jq to get the full connection string
-          DB_URI=$(echo "$DB_OUTPUT" | jq -r '.connection_uris[0].connection_uri')
+          # Extract a postgres connection URL from the raw output (no JSON parsing)
+          DB_URI=$(echo "$DB_OUTPUT" | grep -Eo 'postgres(ql)?://[^[:space:]"\]_]+' | head -n1)
+          if [ -z "$DB_URI" ] || [ "$DB_URI" = "null" ]; then
+            echo "Failed to extract DB connection string from neonctl output"
+            exit 1
+          fi
           echo "::add-mask::$DB_URI" # Mask the connection string in logs
           echo "DB_CONNECTION_STRING=$DB_URI" >> $GITHUB_ENV
           echo "Successfully created database branch."
