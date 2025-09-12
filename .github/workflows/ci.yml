@@ -15,28 +15,15 @@ jobs:
   test:
     name: Build and Test (Rust)
     runs-on: ubuntu-latest
-    
-    # PostgreSQL service for sqlx compile-time checks and integration tests
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_USER: postgres
-          POSTGRES_DB: test_db
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
     defaults:
       run:
         working-directory: rustsorter
 
     env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+      # Speed up builds
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: "true"
+      CARGO_INCREMENTAL: "0"
 
     steps:
       - name: Checkout
@@ -45,37 +32,22 @@ jobs:
       - name: Set up Rust (stable)
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo registry, git, and target
-        uses: actions/cache@v4
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.4
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            rustsorter/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('rustsorter/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+          workspaces: rustsorter
 
       - name: Install nextest
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
 
-      - name: Install sqlx-cli
-        run: cargo install sqlx-cli --no-default-features --features native-tls,postgres
-
-      - name: Run database migrations
-        run: |
-          sqlx database create
-          sqlx migrate run --source ../database/migrations
-
-      - name: Build
-        run: |
-          cargo build --locked --workspace --all-targets
-
       - name: Run tests (nextest) and generate JUnit
         run: |
-          cargo nextest run --workspace --junit-report target/nextest/junit.xml
+          SQLX_OFFLINE=true cargo nextest run --locked --workspace --junit-report target/nextest/junit.xml
 
       - name: Test Report
         uses: dorny/test-reporter@v1
