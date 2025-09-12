@@ -132,8 +132,23 @@ jobs:
         env:
           RUST_LOG: info
         run: |
+          set -euo pipefail
+          if [ ! -x ./target/debug/rustsorter ]; then
+            echo "Binary not found, building bins (should be cached)..."
+            cargo build --locked --bins
+          fi
           nohup ./target/debug/rustsorter > server.log 2>&1 & echo $! > server.pid
-          echo "Waiting for server..." && for i in {1..60}; do curl -fsS http://127.0.0.1:8081/api/health && break || sleep 1; done
+          echo "Waiting for server..."
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:8081/api/health > /dev/null; then
+              echo "Server is up"; break;
+            fi
+            sleep 1
+          done
+          if ! curl -fsS http://127.0.0.1:8081/api/health > /dev/null; then
+            echo "Server failed to start. Showing server.log:" && echo "-----" && tail -n +1 server.log || true
+            exit 1
+          fi
 
       - name: Run Python tests (pytest)
         working-directory: test
