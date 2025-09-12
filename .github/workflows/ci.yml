@@ -78,13 +78,13 @@ jobs:
         run: |
           dbmate --wait up
 
-      - name: Build app and tests (single build)
+      - name: Build main binary
         run: |
-          cargo build --locked --workspace --all-targets
+          cargo build --locked --bin rustsorter
 
-      - name: Run tests (nextest) using prebuilt artifacts
+      - name: Run tests (nextest)
         run: |
-          cargo nextest run --locked --workspace --no-build --profile ci
+          cargo nextest run --locked --workspace --profile ci
 
       - name: Debug JUnit presence
         if: always()
