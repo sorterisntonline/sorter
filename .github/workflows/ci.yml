@@ -50,11 +50,14 @@ jobs:
         run: |
           cargo nextest run --workspace --junit-report target/nextest/junit.xml
 
-      - name: Upload test report to GitHub UI
+      - name: Publish test report to Checks
         if: always()
-        uses: actions/upload-test-report@v1
+        uses: dorny/test-reporter@v1
         with:
-          report_paths: rustsorter/target/nextest/junit.xml
+          name: Rust Tests
+          path: rustsorter/target/nextest/junit.xml
+          reporter: java-junit
+          fail-on-empty: false
 
       - name: Upload JUnit as artifact (optional)
         if: always()
