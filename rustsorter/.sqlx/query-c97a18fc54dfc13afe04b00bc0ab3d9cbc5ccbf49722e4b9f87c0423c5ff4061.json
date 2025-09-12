@@ -1,0 +1,56 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n    parent_pk_namespace,\n    parent_pk,\n    child_pk_namespace,\n    child_pk,\n    user_id,\n    created_at\nFROM\n    entity_relationships\nWHERE ($1::text IS NULL\n    OR parent_pk_namespace = $1::text)\nAND ($2::text IS NULL\n    OR parent_pk = $2::text)\nAND ($3::text IS NULL\n    OR child_pk_namespace = $3::text)\nAND ($4::text IS NULL\n    OR child_pk = $4::text)\nAND ($5::uuid IS NULL\n    OR user_id = $5::uuid)\nORDER BY\n    created_at DESC\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "parent_pk_namespace",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "parent_pk",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "child_pk_namespace",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "child_pk",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "c97a18fc54dfc13afe04b00bc0ab3d9cbc5ccbf49722e4b9f87c0423c5ff4061"
+}

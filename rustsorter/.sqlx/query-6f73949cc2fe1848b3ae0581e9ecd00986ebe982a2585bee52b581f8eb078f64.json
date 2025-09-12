@@ -1,32 +1,32 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT * FROM votes WHERE owner = $1 AND (left_item_id = $2 AND right_item_id = $3) OR (left_item_id = $3 AND right_item_id = $2)",
+  "query": "SELECT\n    *\nFROM\n    votes\nWHERE\n    TRUE\n",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "id",
-        "type_info": "Int4"
+        "name": "left_entity_pk_namespace",
+        "type_info": "Text"
       },
       {
         "ordinal": 1,
-        "name": "owner",
+        "name": "left_entity_pk",
         "type_info": "Text"
       },
       {
         "ordinal": 2,
-        "name": "domain_pk_namespace",
+        "name": "right_entity_pk_namespace",
         "type_info": "Text"
       },
       {
         "ordinal": 3,
-        "name": "left_item_id",
-        "type_info": "Int4"
+        "name": "right_entity_pk",
+        "type_info": "Text"
       },
       {
         "ordinal": 4,
-        "name": "right_item_id",
-        "type_info": "Int4"
+        "name": "user_id",
+        "type_info": "Uuid"
       },
       {
         "ordinal": 5,
@@ -35,7 +35,7 @@
       },
       {
         "ordinal": 6,
-        "name": "attribute",
+        "name": "attribute_id",
         "type_info": "Int4"
       },
       {
@@ -45,28 +45,24 @@
       },
       {
         "ordinal": 8,
-        "name": "edited_at",
+        "name": "deleted_at",
         "type_info": "Timestamp"
       }
     ],
     "parameters": {
-      "Left": [
-        "Text",
-        "Int4",
-        "Int4"
-      ]
+      "Left": []
     },
     "nullable": [
       false,
       false,
-      true,
       false,
       false,
       false,
       false,
       false,
-      false
+      false,
+      true
     ]
   },
-  "hash": "f67773b1893c001168ec37b2a385af6437da65ff0836654bffcd96168db75ce5"
+  "hash": "6f73949cc2fe1848b3ae0581e9ecd00986ebe982a2585bee52b581f8eb078f64"
 }
