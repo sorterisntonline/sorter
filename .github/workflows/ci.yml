@@ -20,9 +20,7 @@ jobs:
         working-directory: rustsorter
 
     env:
-      # Speed up builds
-      RUSTC_WRAPPER: sccache
-      SCCACHE_GHA_ENABLED: "true"
+      # Speed up builds (incremental off is usually faster/cleaner in CI)
       CARGO_INCREMENTAL: "0"
 
     steps:
@@ -32,13 +30,11 @@ jobs:
       - name: Set up Rust (stable)
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.4
-
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: rustsorter
+          cache-on-failure: true
 
       - name: Install nextest
         uses: taiki-e/install-action@v2
