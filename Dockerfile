@@ -33,10 +33,6 @@ COPY --from=rust-builder /app/rustsorter/target/release/rustsorter .
 # Your Rust app will need to be configured to serve these files.
 COPY --from=frontend-builder /app/frontsorter/dist ./frontsorter/public
 
-# Add a small entrypoint for diagnostics before starting the server
-COPY entrypoint.sh ./entrypoint.sh
-RUN chmod +x ./entrypoint.sh
-
 # This build argument will be used to pass the database URL during deployment.
 ARG DATABASE_URL_ARG
 ENV DATABASE_URL=$DATABASE_URL_ARG
@@ -45,4 +41,4 @@ ENV DATABASE_URL=$DATABASE_URL_ARG
 EXPOSE 8081
 
 # The command to run when the container starts
-CMD ["./entrypoint.sh"]
+CMD ["./rustsorter"]
