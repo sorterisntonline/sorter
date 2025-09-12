@@ -31,8 +31,7 @@ You are correct, you will need a Neon account for the database branching.
     ```bash
     # In your local terminal
     export DATABASE_URL="<your-neon-main-branch-connection-string>"
-    export DBMATE_MIGRATIONS_DIR=../db/migrations
-    dbmate --wait up
+    ./migrate.sh
     ```
 *   Go to your Account Settings in Neon and generate an API key. **Copy this key and save it; you will need it for GitHub Actions.**
 

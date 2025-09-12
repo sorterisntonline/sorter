@@ -39,7 +39,6 @@ jobs:
       # Speed up builds (incremental off is usually faster/cleaner in CI)
       CARGO_INCREMENTAL: "0"
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db?sslmode=disable
-      DBMATE_MIGRATIONS_DIR: ../db/migrations
       DBMATE_NO_DUMP_SCHEMA: "1"
 
     steps:
@@ -76,7 +75,7 @@ jobs:
 
       - name: Prepare database (create + migrate)
         run: |
-          dbmate --wait up
+          dbmate --migrations-dir ../db/migrations --wait up
 
       - name: Build main binary
         run: |

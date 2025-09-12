@@ -54,20 +54,15 @@ echo "PostgreSQL logs will be shown below. Press Ctrl-C to stop."
 # Create the data directory if it doesn't exist
 mkdir -p "$PG_DATA_DIR"
 
-# Construct local DB URL (used for .env.local convenience)
+# Construct local DB URL (for writing repo-root .env)
 # Include sslmode=disable for local Docker Postgres (no SSL configured)
 DB_URL="postgres://postgres:password@localhost:${HOST_PORT}/postgres?sslmode=disable"
 
-# Also write DATABASE_URL to rustsorter/.env.local for migrate.sh convenience
-ENV_FILE="../rustsorter/.env.local"
+# Also write DATABASE_URL to repo-root .env for migrate.sh convenience
+ENV_FILE="../.env"
 mkdir -p "$(dirname "$ENV_FILE")"
 if ! ( [ -f "$ENV_FILE" ] && grep -q '^DATABASE_URL=' "$ENV_FILE" 2>/dev/null ); then
   echo "DATABASE_URL=${DB_URL}" >> "$ENV_FILE"
-fi
-
-# Provide DBMATE_MIGRATIONS_DIR if missing (relative to rustsorter/)
-if ! grep -q '^DBMATE_MIGRATIONS_DIR=' "$ENV_FILE" 2>/dev/null; then
-  echo 'DBMATE_MIGRATIONS_DIR=../db/migrations' >> "$ENV_FILE"
 fi
 
 if grep -q '^DATABASE_URL=' "$ENV_FILE" 2>/dev/null; then

@@ -23,21 +23,16 @@ rust and react based pair-wise staunchly democratic social media application
 ```bash
 # Start local Postgres (in one terminal)
 cd database && ./run-postgres.sh
-# Note: this writes a local DATABASE_URL to rustsorter/.env.local
+# Note: this writes a local DATABASE_URL to repo-root .env (if missing)
 
-# In a new terminal, set up the backend
-cd rustsorter
-cp .env.example .env
-
-# Install dbmate (macOS example)
+# In a new terminal at repo root, install dbmate (macOS example)
 brew install dbmate
 
-# Run migrations with dbmate
-# migrate.sh will auto-load .env/.env.local (DATABASE_URL)
-export DBMATE_MIGRATIONS_DIR=../db/migrations
-dbmate --wait up
+# Run migrations from repo root
+./migrate.sh
 
-# Start the server
+# Start the server (from rustsorter/)
+cd rustsorter
 RUST_LOG=debug cargo run
 ```
 
