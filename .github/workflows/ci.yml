@@ -47,7 +47,7 @@ jobs:
 
       - name: Run tests (nextest) and generate JUnit
         run: |
-          SQLX_OFFLINE=true cargo nextest run --locked --workspace --junit-report target/nextest/junit.xml
+          SQLX_OFFLINE=true cargo nextest run --locked --workspace --junit target/nextest/junit.xml
 
       - name: Test Report
         uses: dorny/test-reporter@v1
