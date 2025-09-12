@@ -35,8 +35,9 @@ jobs:
           NEON_MAIN_BRANCH: ${{ secrets.NEON_MAIN_BRANCH_NAME }}
         run: |
           # Install Neon CLI
-          sudo curl -L https://github.com/neondatabase/neonctl/releases/latest/download/neonctl-linux-amd64.tar.gz -o neonctl.tar.gz
-          sudo tar -xvzf neonctl.tar.gz -C /usr/local/bin/
+          curl -sL https://github.com/neondatabase/neonctl/releases/latest/download/neonctl-linux-x64 -o neonctl
+          sudo chmod +x neonctl
+          sudo mv neonctl /usr/local/bin/
 
           # Sanitize the git branch name to be a valid DNS/Neon branch name
           # (lowercase, alphanumeric, max length)
