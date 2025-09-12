@@ -73,8 +73,33 @@ jobs:
           echo "neonctl create branch output (status $NEON_STATUS):"
           echo "$SAFE_DB_OUTPUT"
           if [ $NEON_STATUS -ne 0 ]; then
-            echo "neonctl failed with status $NEON_STATUS"
-            exit $NEON_STATUS
+            if echo "$DB_OUTPUT" | grep -qi "branch already exists"; then
+              echo "Branch '$BRANCH_NAME' already exists; deleting and recreating it"
+              set +e
+              DEL_OUTPUT=$(neonctl branches delete --project-id "$NEON_PROJECT_ID" --api-key "$NEON_API_KEY" "$BRANCH_NAME" 2>&1)
+              DEL_STATUS=$?
+              set -e
+              echo "neonctl delete branch output (status $DEL_STATUS):"
+              echo "$DEL_OUTPUT"
+              if [ $DEL_STATUS -ne 0 ]; then
+                echo "Failed to delete existing branch '$BRANCH_NAME'"
+                exit $DEL_STATUS
+              fi
+              set +e
+              DB_OUTPUT=$(neonctl branches create --project-id "$NEON_PROJECT_ID" --name "$BRANCH_NAME" --parent "$NEON_MAIN_BRANCH" --api-key "$NEON_API_KEY" 2>&1)
+              NEON_STATUS=$?
+              set -e
+              SAFE_DB_OUTPUT=$(echo "$DB_OUTPUT" | sed -E 's#postgres(ql)?://[^[:space:]]+#postgres://***#g')
+              echo "neonctl recreate branch output (status $NEON_STATUS):"
+              echo "$SAFE_DB_OUTPUT"
+              if [ $NEON_STATUS -ne 0 ]; then
+                echo "Recreate failed with status $NEON_STATUS"
+                exit $NEON_STATUS
+              fi
+            else
+              echo "neonctl failed with status $NEON_STATUS"
+              exit $NEON_STATUS
+            fi
           fi
 
           # Extract a postgres connection URL from the raw output (no JSON parsing)
