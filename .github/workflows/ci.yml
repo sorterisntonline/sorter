@@ -19,9 +19,26 @@ jobs:
       run:
         working-directory: rustsorter
 
+    # PostgreSQL service for sqlx compile-time checks and tests
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
     env:
       # Speed up builds (incremental off is usually faster/cleaner in CI)
       CARGO_INCREMENTAL: "0"
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
 
     steps:
       - name: Checkout
@@ -47,9 +64,19 @@ jobs:
           cargo -V
           cargo nextest -V
 
+      - name: Install sqlx-cli
+        uses: taiki-e/install-action@v2
+        with:
+          tool: sqlx-cli
+
+      - name: Prepare database (create + migrate)
+        run: |
+          sqlx database create
+          sqlx migrate run --source ../database/migrations
+
       - name: Run tests (nextest) and generate JUnit
         run: |
-          SQLX_OFFLINE=true cargo nextest run --locked --workspace --profile ci
+          cargo nextest run --locked --workspace --profile ci
 
       - name: Test Report
         uses: dorny/test-reporter@v1
