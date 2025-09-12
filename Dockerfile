@@ -25,7 +25,7 @@ RUN cd rustsorter && cargo chef cook --release --recipe-path ../recipe.json
 RUN cd rustsorter && cargo build --release --bin rustsorter
 
 # --- Stage 3: Create the final, small runtime image ---
-FROM debian:bullseye-slim as runtime
+FROM debian:bookworm-slim as runtime
 WORKDIR /app
 # Install OpenSSL, a common runtime dependency for Rust web apps using TLS
 RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*

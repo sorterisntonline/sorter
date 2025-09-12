@@ -94,11 +94,15 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let router = router(app_state);
 
-    let addr = "127.0.0.1:8081";
+    let port: u16 = env::var("PORT")
+        .ok()
+        .and_then(|value| value.parse::<u16>().ok())
+        .unwrap_or(8081);
+    let addr = format!("0.0.0.0:{}", port);
     log::info!("Starting server on {}", addr);
 
     axum::serve(
-        tokio::net::TcpListener::bind(addr).await.unwrap(),
+        tokio::net::TcpListener::bind(&addr).await.unwrap(),
         router.into_make_service(),
     )
     .await
