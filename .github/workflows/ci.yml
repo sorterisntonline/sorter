@@ -19,7 +19,7 @@ jobs:
       run:
         working-directory: rustsorter
 
-    # PostgreSQL service for sqlx compile-time checks and tests
+    # PostgreSQL service for dbmate migrations and tests
     services:
       postgres:
         image: postgres:15

@@ -30,7 +30,9 @@ You are correct, you will need a Neon account for the database branching.
 *   **Crucially:** Connect to this primary database and run your migrations so the schema is up to date. You can get the connection string from the Neon dashboard.
     ```bash
     # In your local terminal
-    DATABASE_URL="<your-neon-main-branch-connection-string>" sqlx migrate run --source ../database/migrations
+    export DATABASE_URL="<your-neon-main-branch-connection-string>"
+    export DBMATE_MIGRATIONS_DIR=../db/migrations
+    dbmate --wait up
     ```
 *   Go to your Account Settings in Neon and generate an API key. **Copy this key and save it; you will need it for GitHub Actions.**
 
