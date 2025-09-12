@@ -54,8 +54,27 @@ echo "PostgreSQL logs will be shown below. Press Ctrl-C to stop."
 # Create the data directory if it doesn't exist
 mkdir -p "$PG_DATA_DIR"
 
-# Your JDBC config writer
-echo "{:jdbc-url \"postgres://postgres:password@localhost:${HOST_PORT}/postgres\"}" > config.edn
+# Construct local DB URL and write config.edn
+DB_URL="postgres://postgres:password@localhost:${HOST_PORT}/postgres"
+echo "{:jdbc-url \"${DB_URL}\"}" > config.edn
+
+# Also write DATABASE_URL to rustsorter/.env.local for migrate.sh convenience
+ENV_FILE="../rustsorter/.env.local"
+mkdir -p "$(dirname "$ENV_FILE")"
+if ! ( [ -f "$ENV_FILE" ] && grep -q '^DATABASE_URL=' "$ENV_FILE" 2>/dev/null ); then
+  echo "DATABASE_URL=${DB_URL}" >> "$ENV_FILE"
+fi
+
+# Provide DBMATE_MIGRATIONS_DIR if missing (relative to rustsorter/)
+if ! grep -q '^DBMATE_MIGRATIONS_DIR=' "$ENV_FILE" 2>/dev/null; then
+  echo 'DBMATE_MIGRATIONS_DIR=../db/migrations' >> "$ENV_FILE"
+fi
+
+if grep -q '^DATABASE_URL=' "$ENV_FILE" 2>/dev/null; then
+  echo "Local DATABASE_URL present in $ENV_FILE"
+else
+  echo "Set local DATABASE_URL in $ENV_FILE"
+fi
 
 # --- MODIFIED DOCKER COMMAND ---
 # The '-d' (detached) flag has been REMOVED.
