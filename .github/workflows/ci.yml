@@ -43,7 +43,13 @@ jobs:
       - name: Install nextest
         uses: taiki-e/install-action@v2
         with:
-          tool: cargo-nextest
+          tool: cargo-nextest@0.9.67
+
+      - name: Show tool versions
+        run: |
+          rustc -V
+          cargo -V
+          cargo nextest -V
 
       - name: Run tests (nextest) and generate JUnit
         run: |
