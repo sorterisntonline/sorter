@@ -38,6 +38,7 @@ jobs:
           curl -sL https://github.com/neondatabase/neonctl/releases/latest/download/neonctl-linux-x64 -o neonctl
           sudo chmod +x neonctl
           sudo mv neonctl /usr/local/bin/
+          neonctl --version || true
 
           # Sanitize the git branch name to be a valid DNS/Neon branch name
           # (lowercase, alphanumeric, max length)
@@ -47,9 +48,34 @@ jobs:
 
           # Create a new branch from your main project branch on Neon
           echo "Creating Neon branch '$BRANCH_NAME' from '$NEON_MAIN_BRANCH'..."
-          DB_OUTPUT=$(neonctl branches create --project-id "$NEON_PROJECT_ID" --name "$BRANCH_NAME" --parent "$NEON_MAIN_BRANCH" 2>&1)
-          echo "neonctl raw output:" 
-          echo "$DB_OUTPUT"
+          echo "Project ID: $NEON_PROJECT_ID"
+          # Ensure required env vars exist
+          if [ -z "$NEON_API_KEY" ] || [ -z "$NEON_PROJECT_ID" ] || [ -z "$NEON_MAIN_BRANCH" ]; then
+            echo "Missing one of NEON_API_KEY, NEON_PROJECT_ID, NEON_MAIN_BRANCH"
+            exit 1
+          fi
+
+          # Optional: list existing branches for context
+          set +e
+          LIST_OUTPUT=$(neonctl branches list --project-id "$NEON_PROJECT_ID" --api-key "$NEON_API_KEY" 2>&1)
+          LIST_STATUS=$?
+          set -e
+          SAFE_LIST_OUTPUT=$(echo "$LIST_OUTPUT" | sed -E 's#postgres(ql)?://[^[:space:]]+#postgres://***#g')
+          echo "neonctl list branches (status $LIST_STATUS):"
+          echo "$SAFE_LIST_OUTPUT"
+
+          # Run neonctl and capture output and status without aborting prematurely
+          set +e
+          DB_OUTPUT=$(neonctl branches create --project-id "$NEON_PROJECT_ID" --name "$BRANCH_NAME" --parent "$NEON_MAIN_BRANCH" --api-key "$NEON_API_KEY" 2>&1)
+          NEON_STATUS=$?
+          set -e
+          SAFE_DB_OUTPUT=$(echo "$DB_OUTPUT" | sed -E 's#postgres(ql)?://[^[:space:]]+#postgres://***#g')
+          echo "neonctl create branch output (status $NEON_STATUS):"
+          echo "$SAFE_DB_OUTPUT"
+          if [ $NEON_STATUS -ne 0 ]; then
+            echo "neonctl failed with status $NEON_STATUS"
+            exit $NEON_STATUS
+          fi
 
           # Extract a postgres connection URL from the raw output (no JSON parsing)
           DB_URI=$(echo "$DB_OUTPUT" | grep -Eo 'postgres(ql)?://[^[:space:]"\]_]+' | head -n1)
