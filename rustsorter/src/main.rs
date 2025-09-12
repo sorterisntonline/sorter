@@ -82,8 +82,17 @@ async fn main() -> Result<(), anyhow::Error> {
     dotenv().ok();
     env_logger::init();
     eprintln!("[rustsorter] starting up...");
+    let args: Vec<String> = env::args().collect();
+    eprintln!("[rustsorter] args: {:?}", args);
 
-    let database_string = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let database_string = match env::var("DATABASE_URL") {
+        Ok(value) => value,
+        Err(_) => {
+            eprintln!("[rustsorter] ERROR: DATABASE_URL is not set");
+            std::process::exit(1);
+        }
+    };
+    eprintln!("[rustsorter] DATABASE_URL detected (redacted)");
 
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(5)
@@ -101,9 +110,15 @@ async fn main() -> Result<(), anyhow::Error> {
         .unwrap_or(8081);
     let addr = format!("0.0.0.0:{}", port);
     log::info!("Starting server on {}", addr);
+    eprintln!("[rustsorter] binding to {}", addr);
 
     axum::serve(
-        tokio::net::TcpListener::bind(&addr).await.unwrap(),
+        tokio::net::TcpListener::bind(&addr)
+            .await
+            .unwrap_or_else(|e| {
+                eprintln!("[rustsorter] ERROR: failed to bind {}: {}", addr, e);
+                std::process::exit(1);
+            }),
         router.into_make_service(),
     )
     .await
