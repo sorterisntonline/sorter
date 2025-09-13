@@ -32,7 +32,6 @@ jobs:
 
       # Compute a sanitized Neon branch name (lowercase, non-alnum -> '-')
       - name: Compute Neon branch name
-        if: github.event.action != 'closed'
         id: compute_branch
         run: |
           BRANCH_NAME=$(echo "${{ github.head_ref }}" | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]' | cut -c1-50)
@@ -71,15 +70,8 @@ jobs:
 
       - name: Cleanup Neon Database Branch
         if: github.event.action == 'closed'
-        env:
-          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
-          NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}
-        run: |
-          # We need to re-install the CLI for the cleanup job
-          sudo curl -L https://github.com/neondatabase/neonctl/releases/latest/download/neonctl-linux-amd64.tar.gz -o neonctl.tar.gz
-          sudo tar -xvzf neonctl.tar.gz -C /usr/local/bin/
-
-          # Re-sanitize the branch name to find and delete the correct branch
-          BRANCH_NAME=$(echo ${{ github.head_ref }} | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]' | cut -c1-50)
-          echo "Deleting Neon branch: $BRANCH_NAME"
-          neonctl branches delete --project-id "$NEON_PROJECT_ID" "$BRANCH_NAME"
+        uses: neondatabase/delete-branch-action@v3
+        with:
+          project_id: ${{ secrets.NEON_PROJECT_ID }}
+          branch: ${{ steps.compute_branch.outputs.branch_name }}
+          api_key: ${{ secrets.NEON_API_KEY }}
