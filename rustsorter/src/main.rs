@@ -30,7 +30,11 @@ use axum::{
 use dotenv::dotenv;
 use schemars::JsonSchema;
 use serde::Serialize;
-use tower_http::trace::TraceLayer;
+use std::path::Path;
+use tower_http::{
+    services::{ServeDir, ServeFile},
+    trace::TraceLayer,
+};
 
 use crate::{
     extractors::maybe_user::MaybeUser,
@@ -171,13 +175,52 @@ fn router(app_state: AppState) -> Router {
         ));
 
     let mut api = OpenApi::default();
-    ApiRouter::new()
+    let router = ApiRouter::new()
         .nest("/api", routes)
         .route("/api.json", get(api_json))
         .finish_api_with(&mut api, api_transform)
         .with_state(app_state)
         .layer(TraceLayer::new_for_http())
-        .layer(Extension(Arc::new(api)))
+        .layer(Extension(Arc::new(api)));
+
+    // Static file serving for the built React app.
+    // Priority: env STATIC_DIR, then Docker default, then common local build paths.
+    let static_dir_env = env::var("STATIC_DIR").ok();
+    let candidate_dirs = [
+        static_dir_env.as_deref().unwrap_or(""),
+        // Docker runtime path (see Dockerfile): /app/frontsorter/public
+        "frontsorter/public",
+        // Local dev build from repo root
+        "frontsorter/dist",
+        // If running from rustsorter dir
+        "../frontsorter/dist",
+        "../frontsorter/public",
+    ];
+
+    let chosen_dir = candidate_dirs
+        .iter()
+        .find(|p| !p.is_empty() && Path::new(p).exists())
+        .map(|s| s.to_string());
+
+    if let Some(dir) = chosen_dir {
+        let index_path = format!("{}/index.html", dir);
+        let assets_path = format!("{}/assets", dir);
+
+        let router = router
+            // Serve built asset files under /assets
+            .nest_service("/assets", ServeDir::new(assets_path))
+            // Serve common top-level static files
+            .route_service("/vite.svg", ServeFile::new(format!("{}/vite.svg", dir)))
+            // Serve index.html at the root
+            .route_service("/", ServeFile::new(index_path.clone()))
+            // SPA fallback: serve index.html for all other routes
+            .fallback_service(ServeFile::new(index_path));
+
+        router
+    } else {
+        // If no static directory is present, just return the API router.
+        router
+    }
 }
 
 fn api_transform(api: TransformOpenApi) -> TransformOpenApi {
