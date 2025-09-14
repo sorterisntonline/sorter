@@ -1,39 +1,13 @@
 import { execSync } from 'child_process';
 import { existsSync } from 'fs';
 import { paths } from '../utils/paths.js';
+import { loadEnv, ensureDatabaseUrl } from '../utils/env.js';
 
 export async function resetMigrations() {
   console.log('🔄 Resetting migration state...');
 
   // Load env from .env if present (repo root)
-  const envFile = paths.envFile;
-  let databaseUrl = process.env.DATABASE_URL;
-
-  if (existsSync(envFile)) {
-    console.log('Loading environment from .env file...');
-    const { readFileSync } = await import('fs');
-    const envContent = readFileSync(envFile, 'utf-8');
-    const envLines = envContent.split('\n');
-    
-    for (const line of envLines) {
-      const trimmedLine = line.trim();
-      if (trimmedLine && !trimmedLine.startsWith('#')) {
-        const [key, ...valueParts] = trimmedLine.split('=');
-        const value = valueParts.join('=');
-        if (key && value) {
-          process.env[key] = value;
-        }
-      }
-    }
-    databaseUrl = process.env.DATABASE_URL;
-  }
-
-  // Ensure DATABASE_URL is set for dbmate
-  if (!databaseUrl) {
-    console.error('Error: DATABASE_URL must be set');
-    console.error('Please set DATABASE_URL in your environment or .env file');
-    process.exit(1);
-  }
+  const databaseUrl = ensureDatabaseUrl(loadEnv());
 
   // Repo-standard migrations directory
   const migrationsDir = paths.migrationsDir;
