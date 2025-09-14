@@ -1,12 +1,13 @@
 import { execSync } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
+import { paths } from '../utils/paths.js';
 
 export async function migrate() {
   console.log('Running database migrations...');
 
   // Load env from .env if present (repo root)
-  const envFile = join(process.cwd(), '..', '..', '.env');
+  const envFile = paths.envFile;
   let databaseUrl = process.env.DATABASE_URL;
 
   if (existsSync(envFile)) {
@@ -35,7 +36,7 @@ export async function migrate() {
   }
 
   // Repo-standard migrations directory
-  const migrationsDir = join(process.cwd(), '..', '..', 'db', 'migrations');
+  const migrationsDir = paths.migrationsDir;
 
   if (!existsSync(migrationsDir)) {
     console.error(`Error: Migrations directory not found: ${migrationsDir}`);

@@ -1,14 +1,14 @@
 import { execSync } from 'child_process';
 import { existsSync } from 'fs';
 import { join } from 'path';
+import { paths } from '../utils/paths.js';
 
 export async function setup() {
   console.log('🚀 Setting up sorter-db-cli environment...\n');
 
   // Check if we're in a sorter project
-  const projectRoot = join(process.cwd(), '..', '..');
-  const hasDatabaseDir = existsSync(join(projectRoot, 'database'));
-  const hasDbMigrations = existsSync(join(projectRoot, 'db', 'migrations'));
+  const hasDatabaseDir = existsSync(paths.database);
+  const hasDbMigrations = existsSync(paths.migrationsDir);
 
   if (!hasDatabaseDir || !hasDbMigrations) {
     console.log('⚠️  This doesn\'t appear to be a sorter project directory.');
@@ -19,14 +19,14 @@ export async function setup() {
   // Check dependencies
   console.log('🔍 Checking dependencies...');
   try {
-    execSync('node scripts/check-deps.js', { stdio: 'inherit' });
+    execSync(`bun run ${join(paths.cli, 'scripts', 'check-deps.ts')}`, { stdio: 'inherit' });
   } catch (error) {
     console.log('\n❌ Dependency check failed. Please install missing dependencies.');
     return;
   }
 
   // Create .env file if it doesn't exist
-  const envFile = join(projectRoot, '.env');
+  const envFile = paths.envFile;
   if (!existsSync(envFile)) {
     console.log('\n📝 Creating .env file...');
     const envContent = `# Database configuration

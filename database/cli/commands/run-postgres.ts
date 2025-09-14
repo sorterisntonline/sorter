@@ -2,6 +2,7 @@ import { execSync, spawn } from 'child_process';
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
 import { join } from 'path';
 import * as readline from 'readline';
+import { paths } from '../utils/paths.js';
 
 const HOST_PORT = 5432;
 const CONTAINER_NAME = 'postgres-dev';
@@ -9,7 +10,16 @@ const DOCKER_REPO = 'postgres';
 const TAG = '14.1';
 
 export async function runPostgres(options: { reset?: boolean }) {
-  const PG_DATA_DIR = join(process.cwd(), 'pgdata');
+  const PG_DATA_DIR = paths.pgDataDir;
+
+  // Validate configuration before starting
+  console.log('🔍 Validating PostgreSQL configuration...');
+  try {
+    const { validateConfig } = await import('./validate-config.js');
+    await validateConfig();
+  } catch (error) {
+    console.log('⚠️  Configuration validation failed, but continuing...');
+  }
 
   // Handle reset flag
   if (options.reset) {
@@ -71,8 +81,8 @@ export async function runPostgres(options: { reset?: boolean }) {
   const DB_URL = `postgres://postgres:password@localhost:${HOST_PORT}/postgres?sslmode=disable`;
 
   // Also write DATABASE_URL to repo-root .env for migrate.sh convenience
-  const ENV_FILE = join(process.cwd(), '..', '.env');
-  mkdirSync(join(process.cwd(), '..'), { recursive: true });
+  const ENV_FILE = paths.envFile;
+  mkdirSync(paths.projectRoot, { recursive: true });
   
   let envContent = '';
   if (existsSync(ENV_FILE)) {
@@ -94,11 +104,11 @@ export async function runPostgres(options: { reset?: boolean }) {
   const dockerArgs = [
     'run', '--rm', '--name', CONTAINER_NAME,
     '--volume', `${PG_DATA_DIR}:/var/lib/postgresql/data`,
-    '--volume', `${join(process.cwd(), 'pg_hba.conf')}:/etc/postgresql/pg_hba.conf`,
-    '--volume', `${join(process.cwd(), 'postgresql.conf')}:/etc/postgresql/postgresql.conf`,
+    '--volume', `${paths.pgHbaConf}:/etc/postgresql/pg_hba.conf`,
+    '--volume', `${paths.postgresqlConf}:/etc/postgresql/postgresql.conf`,
     '-e', 'POSTGRES_PASSWORD=password',
     '-e', 'POSTGRES_USER=postgres',
-    '-e', 'PGDATA=/var/lib/postgresql/data/pgdata14',
+    '-e', 'PGDATA=/var/lib/postgresql/data',
     '-p', `${HOST_PORT}:5432`,
     `${DOCKER_REPO}:${TAG}`,
     'postgres',
@@ -108,7 +118,7 @@ export async function runPostgres(options: { reset?: boolean }) {
 
   const dockerProcess = spawn('docker', dockerArgs, {
     stdio: 'inherit',
-    cwd: process.cwd()
+    cwd: paths.projectRoot
   });
 
   // Handle process termination

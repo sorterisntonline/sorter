@@ -6,6 +6,7 @@ import { runPostgres } from './commands/run-postgres.js';
 import { setupDocker } from './commands/setup-docker.js';
 import { migrate } from './commands/migrate.js';
 import { setup } from './commands/setup.js';
+import { validateConfig } from './commands/validate-config.js';
 
 const program = new Command();
 
@@ -40,5 +41,10 @@ program
   .command('setup')
   .description('Setup sorter-db-cli environment and check dependencies')
   .action(setup);
+
+program
+  .command('validate-config')
+  .description('Validate PostgreSQL configuration files')
+  .action(validateConfig);
 
 program.parse();

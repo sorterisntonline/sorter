@@ -56,7 +56,7 @@ sorter-db setup
 
 ## Usage
 
-The CLI provides five main commands:
+The CLI provides six main commands:
 
 ### Import Dump
 
@@ -105,6 +105,14 @@ Setup sorter-db-cli environment and check dependencies:
 bun run index.ts setup
 ```
 
+### Validate Config
+
+Validate PostgreSQL configuration files:
+
+```bash
+bun run index.ts validate-config
+```
+
 ## Features
 
 - **Import Dump**: Supports both SQL text dumps and binary dumps with automatic detection
@@ -112,6 +120,7 @@ bun run index.ts setup
 - **Setup Docker**: Installs Docker and configures user permissions
 - **Migrate**: Run database migrations using dbmate with proper environment handling
 - **Setup**: Automated environment setup and dependency checking
+- **Validate Config**: Pre-flight validation of PostgreSQL configuration files
 - **Error Handling**: Comprehensive error handling and validation
 - **Cross-platform**: Works on macOS, Linux, and Windows
 
