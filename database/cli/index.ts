@@ -1,13 +1,10 @@
 #!/usr/bin/env bun
 
 import { Command } from 'commander';
-import { importDump } from './commands/import-dump.js';
-import { runPostgres } from './commands/run-postgres.js';
-import { setupDocker } from './commands/setup-docker.js';
-import { migrate } from './commands/migrate.js';
-import { setup } from './commands/setup.js';
-import { validateConfig } from './commands/validate-config.js';
-import { installAll } from './commands/install-all.js';
+import { runPostgres } from './commands/run-postgres';
+import { migrate } from './commands/migrate';
+import { setup } from './commands/setup';
+import { resetMigrations } from './commands/reset-migrations';
 
 const program = new Command();
 
@@ -17,21 +14,10 @@ program
   .version('1.0.0');
 
 program
-  .command('import-dump')
-  .description('Import data from a PostgreSQL dump file into the running postgres-dev container')
-  .argument('<dump-file>', 'Path to the PostgreSQL dump file (.sql or .dump)')
-  .action(importDump);
-
-program
   .command('run-postgres')
   .description('Start the PostgreSQL container in foreground')
   .option('--reset', 'Reset the database by deleting all data')
   .action(runPostgres);
-
-program
-  .command('setup-docker')
-  .description('Setup Docker for the current user (Ubuntu/Debian)')
-  .action(setupDocker);
 
 program
   .command('migrate')
@@ -39,18 +25,13 @@ program
   .action(migrate);
 
 program
+  .command('reset-migrations')
+  .description('Reset migration state and drop schema_migrations table')
+  .action(resetMigrations);
+
+program
   .command('setup')
   .description('Setup sorter-db-cli environment and check dependencies')
   .action(setup);
-
-program
-  .command('validate-config')
-  .description('Validate PostgreSQL configuration files')
-  .action(validateConfig);
-
-program
-  .command('install-all')
-  .description('Install all project dependencies (Rust, Node.js, Bun, etc.)')
-  .action(installAll);
 
 program.parse();
