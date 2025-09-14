@@ -26,7 +26,7 @@ async function installDependency(name, installCommand, checkCommand) {
 }
 
 async function main() {
-  const results = [];
+  const results: boolean[] = [];
 
   // Install Bun
   if (currentPlatform === 'darwin') {

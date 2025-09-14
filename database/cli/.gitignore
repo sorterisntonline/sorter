@@ -9,6 +9,10 @@ dist/
 build/
 *.tsbuildinfo
 
+# Prevent accidental JavaScript files (we only use TypeScript)
+scripts/*.js
+commands/*.js
+
 # Environment variables
 .env
 .env.local

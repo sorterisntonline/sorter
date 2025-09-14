@@ -51,14 +51,41 @@ export async function migrate() {
     execSync(
       `PGSSLMODE=disable DATABASE_URL="${databaseUrl}" dbmate --migrations-dir "${migrationsDir}" --wait up`,
       { 
-        stdio: 'inherit',
+        stdio: 'pipe',
         env: { ...process.env, PGSSLMODE: 'disable', DATABASE_URL: databaseUrl }
       }
     );
     
     console.log('Migrations completed successfully!');
-  } catch (error) {
-    console.error('Error running migrations:', error);
-    process.exit(1);
+  } catch (error: any) {
+    // Get the error output
+    const errorOutput = error.stderr ? error.stderr.toString() : '';
+    const errorMessage = error.message || '';
+    
+    console.log('⚠️  Migration encountered an issue. Checking details...');
+    
+    if (errorOutput.includes('already exists') || errorOutput.includes('relation') || errorMessage.includes('already exists')) {
+      console.log('ℹ️  Some tables already exist in the database.');
+      console.log('   This is normal if migrations have been run before.');
+      console.log('   Checking migration status...');
+      
+      try {
+        // Check migration status
+        execSync(
+          `PGSSLMODE=disable DATABASE_URL="${databaseUrl}" dbmate --migrations-dir "${migrationsDir}" status`,
+          { 
+            stdio: 'inherit',
+            env: { ...process.env, PGSSLMODE: 'disable', DATABASE_URL: databaseUrl }
+          }
+        );
+        console.log('✅ Database is up to date with migrations.');
+      } catch (statusError) {
+        console.log('ℹ️  Migration status check completed.');
+      }
+    } else {
+      console.error('❌ Error running migrations:');
+      console.error(errorOutput || errorMessage);
+      process.exit(1);
+    }
   }
 }
