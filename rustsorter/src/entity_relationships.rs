@@ -42,6 +42,11 @@ pub struct ListRelationshipsQuery {
 }
 
 #[derive(Deserialize, Debug, JsonSchema)]
+pub struct EntityRelationshipCreateQueryParams {
+    upsert: Option<bool>,
+}
+
+#[derive(Deserialize, Debug, JsonSchema)]
 pub struct DeleteRelationshipQuery {
     parent_pk_namespace: String,
     parent_pk: String,
@@ -55,6 +60,7 @@ pub fn routes() -> ApiRouter<AppState> {
         post_with(post_route, |op| {
             op.description("Create a new relationship.")
                 .response::<201, Json<EntityRelationship>>()
+                .response::<200, Json<EntityRelationship>>()
         })
         .get_with(list_relationships, |op| {
             op.description("List all relationships.")
@@ -105,17 +111,40 @@ pub async fn create_relationship_ignore_conflict<'e, E: PgExecutor<'e>>(
     .map_error("relationship")
 }
 
+pub async fn upsert_relationship<'e, E: PgExecutor<'e>>(
+    executor: E,
+    payload: CreateRelationshipPayload,
+    user_id: Uuid,
+) -> Result<EntityRelationship, Error> {
+    sqlx::query_file_as!(
+        EntityRelationship,
+        "../database/sql/entity_relationship/upsert.sql",
+        payload.parent_pk_namespace,
+        payload.parent_pk,
+        payload.child_pk_namespace,
+        payload.child_pk,
+        user_id
+    )
+    .fetch_one(executor)
+    .await
+    .map_error("relationship")
+}
+
 async fn post_route(
     State(state): State<AppState>,
     Extension(user): Extension<User>,
+    Query(params): Query<EntityRelationshipCreateQueryParams>,
     Json(payload): Json<CreateRelationshipPayload>,
 ) -> Result<(StatusCode, Json<EntityRelationship>), Error> {
     // TODO: Add validation: Check if parent and child entities actually exist?
 
-    Ok((
-        StatusCode::CREATED,
-        Json(create_relationship(&state.db, payload, user.id).await?),
-    ))
+    if params.upsert.unwrap_or(false) {
+        let relationship = upsert_relationship(&state.db, payload, user.id).await?;
+        Ok((StatusCode::OK, Json(relationship)))
+    } else {
+        let relationship = create_relationship(&state.db, payload, user.id).await?;
+        Ok((StatusCode::CREATED, Json(relationship)))
+    }
 }
 
 async fn list_relationships(
