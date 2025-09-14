@@ -99,9 +99,6 @@ jobs:
           mkdir -p seed
           rm -rf seed/sorter-tf2 || true
           git clone https://github.com/sorterisntonline/sorter-tf2 seed/sorter-tf2
-          # Point seeder at the deployed app URL
-          APP_URL='${{ steps.deploy.outputs.url }}'
-          sed -i "s#http://localhost:8081/api#${APP_URL}/api#g" seed/sorter-tf2/compiler.clj
 
       - name: Seed database with TF2 dataset (bb)
         if: github.event.action != 'closed'
