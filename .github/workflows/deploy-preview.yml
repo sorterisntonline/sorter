@@ -68,6 +68,47 @@ jobs:
           secrets: |
             DATABASE_URL=${{ steps.neon_create.outputs.db_url }}
 
+      # Wait until the deployed app responds healthy
+      - name: Wait for app health
+        if: github.event.action != 'closed'
+        run: |
+          set -euo pipefail
+          APP_URL='${{ steps.deploy.outputs.url }}'
+          echo "Waiting for ${APP_URL}/api/health ..."
+          for i in {1..60}; do
+            if curl -fsS "${APP_URL}/api/health" > /dev/null; then
+              echo "App is healthy"; exit 0;
+            fi
+            sleep 2
+          done
+          echo "App did not become healthy in time" >&2
+          exit 1
+
+      - name: Install babashka (curl installer)
+        if: github.event.action != 'closed'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash < <(curl -s https://raw.githubusercontent.com/babashka/babashka/master/install)
+          bb --version
+
+      - name: Clone TF2 seed repo
+        if: github.event.action != 'closed'
+        run: |
+          set -euo pipefail
+          mkdir -p seed
+          rm -rf seed/sorter-tf2 || true
+          git clone https://github.com/sorterisntonline/sorter-tf2 seed/sorter-tf2
+          # Point seeder at the deployed app URL
+          APP_URL='${{ steps.deploy.outputs.url }}'
+          sed -i "s#http://localhost:8081/api#${APP_URL}/api#g" seed/sorter-tf2/compiler.clj
+
+      - name: Seed database with TF2 dataset (bb)
+        if: github.event.action != 'closed'
+        run: |
+          set -euo pipefail
+          bb seed/sorter-tf2/compiler.clj
+
       - name: Cleanup Neon Database Branch
         if: github.event.action == 'closed'
         uses: neondatabase/delete-branch-action@v3

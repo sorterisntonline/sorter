@@ -153,28 +153,7 @@ jobs:
             exit 1
           fi
 
-      - name: Install babashka (curl installer)
-        shell: bash
-        working-directory: .
-        run: |
-          set -euo pipefail
-          bash < <(curl -s https://raw.githubusercontent.com/babashka/babashka/master/install)
-          bb --version
-
-      - name: Clone TF2 seed repo
-        working-directory: .
-        run: |
-          set -euo pipefail
-          mkdir -p seed
-          rm -rf seed/sorter-tf2 || true
-          git clone https://github.com/sorterisntonline/sorter-tf2 seed/sorter-tf2
-          # Babashka runs in its own container sometimes; ensure it can reach the host API
-          sed -i 's#http://localhost:8081/api#http://host.docker.internal:8081/api#g' seed/sorter-tf2/compiler.clj
-
-      - name: Seed database with TF2 dataset (bb)
-        working-directory: .
-        run: bb seed/sorter-tf2/compiler.clj
-
+      
       - name: Run Python tests (pytest)
         working-directory: test
         run: |
