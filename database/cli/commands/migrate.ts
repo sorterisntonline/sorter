@@ -1,39 +1,13 @@
 import { execSync } from 'child_process';
-import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { existsSync } from 'fs';
 import { paths } from '../utils/paths.js';
+import { loadEnv, ensureDatabaseUrl } from '../utils/env.js';
 
 export async function migrate() {
   console.log('Running database migrations...');
 
   // Load env from .env if present (repo root)
-  const envFile = paths.envFile;
-  let databaseUrl = process.env.DATABASE_URL;
-
-  if (existsSync(envFile)) {
-    console.log('Loading environment from .env file...');
-    const envContent = readFileSync(envFile, 'utf-8');
-    const envLines = envContent.split('\n');
-    
-    for (const line of envLines) {
-      const trimmedLine = line.trim();
-      if (trimmedLine && !trimmedLine.startsWith('#')) {
-        const [key, ...valueParts] = trimmedLine.split('=');
-        const value = valueParts.join('=');
-        if (key && value) {
-          process.env[key] = value;
-        }
-      }
-    }
-    databaseUrl = process.env.DATABASE_URL;
-  }
-
-  // Ensure DATABASE_URL is set for dbmate
-  if (!databaseUrl) {
-    console.error('Error: DATABASE_URL must be set');
-    console.error('Please set DATABASE_URL in your environment or .env file');
-    process.exit(1);
-  }
+  const databaseUrl = ensureDatabaseUrl(loadEnv());
 
   // Repo-standard migrations directory
   const migrationsDir = paths.migrationsDir;
@@ -43,49 +17,17 @@ export async function migrate() {
     process.exit(1);
   }
 
-  try {
-    console.log(`Running migrations from: ${migrationsDir}`);
-    console.log('Waiting for database to be ready...');
+  console.log(`Running migrations from: ${migrationsDir}`);
+  console.log('Waiting for database to be ready...');
     
-    // Run pending migrations and wait for DB to be ready (disable SSL for dbmate only)
-    execSync(
-      `PGSSLMODE=disable DATABASE_URL="${databaseUrl}" dbmate --migrations-dir "${migrationsDir}" --wait up`,
-      { 
-        stdio: 'pipe',
-        env: { ...process.env, PGSSLMODE: 'disable', DATABASE_URL: databaseUrl }
-      }
-    );
+  // Run pending migrations and wait for DB to be ready (disable SSL for dbmate only)
+  execSync(
+    `PGSSLMODE=disable DATABASE_URL="${databaseUrl}" dbmate --migrations-dir "${migrationsDir}" --wait up`,
+    { 
+      stdio: 'pipe',
+      env: { ...process.env, PGSSLMODE: 'disable', DATABASE_URL: databaseUrl }
+    }
+  );
     
     console.log('Migrations completed successfully!');
-  } catch (error: any) {
-    // Get the error output
-    const errorOutput = error.stderr ? error.stderr.toString() : '';
-    const errorMessage = error.message || '';
-    
-    console.log('⚠️  Migration encountered an issue. Checking details...');
-    
-    if (errorOutput.includes('already exists') || errorOutput.includes('relation') || errorMessage.includes('already exists')) {
-      console.log('ℹ️  Some tables already exist in the database.');
-      console.log('   This is normal if migrations have been run before.');
-      console.log('   Checking migration status...');
-      
-      try {
-        // Check migration status
-        execSync(
-          `PGSSLMODE=disable DATABASE_URL="${databaseUrl}" dbmate --migrations-dir "${migrationsDir}" status`,
-          { 
-            stdio: 'inherit',
-            env: { ...process.env, PGSSLMODE: 'disable', DATABASE_URL: databaseUrl }
-          }
-        );
-        console.log('✅ Database is up to date with migrations.');
-      } catch (statusError) {
-        console.log('ℹ️  Migration status check completed.');
-      }
-    } else {
-      console.error('❌ Error running migrations:');
-      console.error(errorOutput || errorMessage);
-      process.exit(1);
-    }
-  }
 }

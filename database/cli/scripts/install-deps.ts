@@ -42,11 +42,7 @@ async function main() {
       'bun --version'
     ));
   } else if (currentPlatform === 'win32') {
-    results.push(await installDependency(
-      'Bun',
-      'powershell -c "irm bun.sh/install.ps1 | iex"',
-      'bun --version'
-    ));
+    throw new Error('sorter is not supported on Windows');
   }
 
   // Install Docker
@@ -60,8 +56,7 @@ async function main() {
       'docker --version'
     ));
   } else if (currentPlatform === 'win32') {
-    console.log('🐳 For Docker on Windows, please install Docker Desktop:');
-    console.log('   https://docs.docker.com/desktop/windows/install/');
+    throw new Error('sorter is not supported on Windows');
   }
 
   // Install dbmate
@@ -78,8 +73,7 @@ async function main() {
       'dbmate --version'
     ));
   } else if (currentPlatform === 'win32') {
-    console.log('📦 For dbmate on Windows, please download from:');
-    console.log('   https://github.com/amacneil/dbmate/releases');
+    throw new Error('sorter is not supported on Windows');
   }
 
   const successCount = results.filter(Boolean).length;
