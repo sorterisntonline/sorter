@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     app_state::AppState,
     models::{Error, Json, MapErrorSqlx},
+    pagerank::RankingResponse,
 };
 
 #[derive(Debug, Clone)]
@@ -64,6 +65,7 @@ pub struct PairQueryParams {
 pub struct PairResponse {
     left_entity: crate::entity::Entity,
     right_entity: crate::entity::Entity,
+    ranking: crate::pagerank::RankingResponse,
 }
 
 #[derive(Debug, PartialEq)]
@@ -348,9 +350,14 @@ async fn get_pair_handler(
     }
     .map_err(|e| Error::Internal(anyhow::anyhow!("Pair selection failed despite validation checks: {:?}", e)))?;
 
+    let ranking = RankingResponse {
+            sorted,
+            unsorted,
+        };
     Ok(Json(PairResponse {
         left_entity,
         right_entity,
+        ranking
     }))
 }
 

@@ -26,8 +26,8 @@ pub struct RankedEntity {
 
 #[derive(Serialize, Debug, JsonSchema)]
 pub struct RankingResponse {
-    unsorted: Vec<EntityIdentifier>,
-    sorted: Vec<RankedEntity>,
+    pub unsorted: Vec<EntityIdentifier>,
+    pub sorted: Vec<RankedEntity>,
 }
 
 #[derive(sqlx::FromRow, Debug)]
