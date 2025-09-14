@@ -32,7 +32,6 @@ jobs:
 
       # Compute a sanitized Neon branch name (lowercase, non-alnum -> '-')
       - name: Compute Neon branch name
-        if: github.event.action != 'closed'
         id: compute_branch
         run: |
           BRANCH_NAME=$(echo "${{ github.head_ref }}" | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]' | cut -c1-50)
@@ -69,17 +68,48 @@ jobs:
           secrets: |
             DATABASE_URL=${{ steps.neon_create.outputs.db_url }}
 
+      # Wait until the deployed app responds healthy
+      - name: Wait for app health
+        if: github.event.action != 'closed'
+        run: |
+          set -euo pipefail
+          APP_URL='${{ steps.deploy.outputs.url }}'
+          echo "Waiting for ${APP_URL}/api/health ..."
+          for i in {1..60}; do
+            if curl -fsS "${APP_URL}/api/health" > /dev/null; then
+              echo "App is healthy"; exit 0;
+            fi
+            sleep 2
+          done
+          echo "App did not become healthy in time" >&2
+          exit 1
+
+      - name: Install babashka (curl installer)
+        if: github.event.action != 'closed'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash < <(curl -s https://raw.githubusercontent.com/babashka/babashka/master/install)
+          bb --version
+
+      - name: Clone TF2 seed repo
+        if: github.event.action != 'closed'
+        run: |
+          set -euo pipefail
+          mkdir -p seed
+          rm -rf seed/sorter-tf2 || true
+          git clone https://github.com/sorterisntonline/sorter-tf2 seed/sorter-tf2
+
+      - name: Seed database with TF2 dataset (bb)
+        if: github.event.action != 'closed'
+        run: |
+          set -euo pipefail
+          SORTER_API_KEY=STATIC_TEST_KEY_FOR_ADMIN_USER_123 SORTER_API_BASE_URL='${{ steps.deploy.outputs.url }}/api' bb seed/sorter-tf2/compiler.clj
+
       - name: Cleanup Neon Database Branch
         if: github.event.action == 'closed'
-        env:
-          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
-          NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}
-        run: |
-          # We need to re-install the CLI for the cleanup job
-          sudo curl -L https://github.com/neondatabase/neonctl/releases/latest/download/neonctl-linux-amd64.tar.gz -o neonctl.tar.gz
-          sudo tar -xvzf neonctl.tar.gz -C /usr/local/bin/
-
-          # Re-sanitize the branch name to find and delete the correct branch
-          BRANCH_NAME=$(echo ${{ github.head_ref }} | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]' | cut -c1-50)
-          echo "Deleting Neon branch: $BRANCH_NAME"
-          neonctl branches delete --project-id "$NEON_PROJECT_ID" "$BRANCH_NAME"
+        uses: neondatabase/delete-branch-action@v3
+        with:
+          project_id: ${{ secrets.NEON_PROJECT_ID }}
+          branch: ${{ steps.compute_branch.outputs.branch_name }}
+          api_key: ${{ secrets.NEON_API_KEY }}

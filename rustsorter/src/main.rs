@@ -30,7 +30,11 @@ use axum::{
 use dotenv::dotenv;
 use schemars::JsonSchema;
 use serde::Serialize;
-use tower_http::trace::TraceLayer;
+use std::path::Path;
+use tower_http::{
+    services::{ServeDir, ServeFile},
+    trace::TraceLayer,
+};
 
 use crate::{
     extractors::maybe_user::MaybeUser,
@@ -92,17 +96,6 @@ async fn main() -> Result<(), anyhow::Error> {
             std::process::exit(1);
         }
     };
-    // Strip simple wrapping quotes if present
-    if (database_string.starts_with('"') && database_string.ends_with('"'))
-        || (database_string.starts_with('\'') && database_string.ends_with('\''))
-    {
-        database_string = database_string[1..database_string.len() - 1].to_string();
-    }
-    if !database_string.contains("://") {
-        eprintln!("[rustsorter] WARNING: DATABASE_URL missing scheme; prefixing with postgresql://");
-        database_string = format!("postgresql://{}", database_string);
-    }
-    eprintln!("[rustsorter] DATABASE_URL detected (redacted)");
 
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(5)
@@ -171,13 +164,38 @@ fn router(app_state: AppState) -> Router {
         ));
 
     let mut api = OpenApi::default();
-    ApiRouter::new()
+    let router = ApiRouter::new()
         .nest("/api", routes)
         .route("/api.json", get(api_json))
         .finish_api_with(&mut api, api_transform)
         .with_state(app_state)
         .layer(TraceLayer::new_for_http())
-        .layer(Extension(Arc::new(api)))
+        .layer(Extension(Arc::new(api)));
+
+    // Static file serving for the built React app.
+    let static_dir_env = env::var("STATIC_DIR").ok();
+
+    // for dev, use vite's dev server. these routes are only for production
+
+    if let Some(dir) = static_dir_env {
+        let index_path = format!("{}/index.html", dir);
+        let assets_path = format!("{}/assets", dir);
+
+        let router = router
+            // Serve built asset files under /assets
+            .nest_service("/assets", ServeDir::new(assets_path))
+            // Serve common top-level static files
+            .route_service("/vite.svg", ServeFile::new(format!("{}/vite.svg", dir)))
+            // Serve index.html at the root
+            .route_service("/", ServeFile::new(index_path.clone()))
+            // SPA fallback: serve index.html for all other routes
+            .fallback_service(ServeFile::new(index_path));
+
+        router
+    } else {
+        // If no static directory is present, just return the API router.
+        router
+    }
 }
 
 fn api_transform(api: TransformOpenApi) -> TransformOpenApi {
