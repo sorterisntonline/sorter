@@ -34,11 +34,6 @@ if command -v sorter-db &> /dev/null; then
     echo ""
     echo "🔍 Running setup..."
     sorter-db setup || true
-    echo ""
-    echo "📖 Quick start:"
-    echo "   sorter-db --help"
-    echo "   sorter-db run-postgres"
-    echo "   sorter-db migrate"
 else
     echo "❌ Installation failed. Please try again."
     exit 1

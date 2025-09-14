@@ -64,9 +64,4 @@ export async function checkDeps() {
     console.log('❌ Some required dependencies are missing.');
     console.log('📦 Run "sorter-db install-deps" to install them automatically');
   }
-
-  console.log('\n📖 Quick start:');
-  console.log('   sorter-db --help');
-  console.log('   sorter-db run-postgres');
-  console.log('   sorter-db migrate');
 }
