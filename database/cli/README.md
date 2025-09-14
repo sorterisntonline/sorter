@@ -4,55 +4,21 @@ A TypeScript CLI for managing Sorter database operations, built with Bun and Com
 
 ## Installation
 
-### One-Line Installation (Recommended)
-
 ```bash
-# From anywhere in the sorter project
-./install-sorter-db.sh
-
-# Or directly from the CLI directory
-./database/cli/install.sh
-
-# Or using the TypeScript installer
-bun run database/cli/scripts/install.ts
-
-# Or from a remote URL (when published)
-curl -fsSL https://raw.githubusercontent.com/your-org/sorter/main/database/cli/install.sh | bash
-```
-
-### Manual Installation
-
-#### Local Development
-
-```bash
+# Install globally from the CLI directory
 cd database/cli
-bun install
-```
-
-#### Global Installation
-
-```bash
-# Install globally with npm
 npm install -g .
 
-# After installation, run setup
+# Run setup to configure environment
 sorter-db setup
 ```
 
-### Post-Installation
-
-After installation, the CLI will automatically:
+The setup command will automatically:
 
 - ✅ Check for required dependencies (Bun, Docker, dbmate)
 - ✅ Create `.env` file with default configuration
 - ✅ Validate your environment
 - ✅ Provide next steps
-
-If something goes wrong, run:
-
-```bash
-sorter-db setup
-```
 
 ## Usage
 
@@ -63,8 +29,8 @@ The CLI provides six main commands:
 Import data from a PostgreSQL dump file into the running postgres-dev container:
 
 ```bash
-bun run index.ts import-dump /path/to/your/dumpfile.sql
-bun run index.ts import-dump /path/to/your/dumpfile.dump
+sorter-db import-dump /path/to/your/dumpfile.sql
+sorter-db import-dump /path/to/your/dumpfile.dump
 ```
 
 ### Run PostgreSQL
@@ -72,13 +38,13 @@ bun run index.ts import-dump /path/to/your/dumpfile.dump
 Start the PostgreSQL container in foreground:
 
 ```bash
-bun run index.ts run-postgres
+sorter-db run-postgres
 ```
 
 With reset option (deletes all data):
 
 ```bash
-bun run index.ts run-postgres --reset
+sorter-db run-postgres --reset
 ```
 
 ### Setup Docker
@@ -86,7 +52,7 @@ bun run index.ts run-postgres --reset
 Setup Docker for the current user (Ubuntu/Debian):
 
 ```bash
-bun run index.ts setup-docker
+sorter-db setup-docker
 ```
 
 ### Migrate
@@ -94,7 +60,7 @@ bun run index.ts setup-docker
 Run database migrations using dbmate:
 
 ```bash
-bun run index.ts migrate
+sorter-db migrate
 ```
 
 ### Setup
@@ -102,7 +68,7 @@ bun run index.ts migrate
 Setup sorter-db-cli environment and check dependencies:
 
 ```bash
-bun run index.ts setup
+sorter-db setup
 ```
 
 ### Validate Config
@@ -110,7 +76,7 @@ bun run index.ts setup
 Validate PostgreSQL configuration files:
 
 ```bash
-bun run index.ts validate-config
+sorter-db validate-config
 ```
 
 ## Features
@@ -155,4 +121,16 @@ To run linting:
 
 ```bash
 bun run lint
+```
+
+To install dependencies:
+
+```bash
+bun run install-deps
+```
+
+To check dependencies:
+
+```bash
+bun run check
 ```
