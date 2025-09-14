@@ -104,7 +104,7 @@ jobs:
         if: github.event.action != 'closed'
         run: |
           set -euo pipefail
-          SORTER_API_KEY=STATIC_TEST_KEY_FOR_ADMIN_USER_123 SORTER_API_BASE_URL='${{ steps.deploy.outputs.url }}' bb seed/sorter-tf2/compiler.clj
+          SORTER_API_KEY=STATIC_TEST_KEY_FOR_ADMIN_USER_123 SORTER_API_BASE_URL='${{ steps.deploy.outputs.url }}/api' bb seed/sorter-tf2/compiler.clj
 
       - name: Cleanup Neon Database Branch
         if: github.event.action == 'closed'
