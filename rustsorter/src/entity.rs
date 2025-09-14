@@ -44,6 +44,11 @@ pub struct EntityQueryParams {
     children: Option<bool>,
 }
 
+#[derive(Deserialize, Debug, JsonSchema)]
+pub struct EntityCreateQueryParams {
+    upsert: Option<bool>,
+}
+
 #[derive(Serialize, JsonSchema)]
 pub struct EntityWithParentsAndChildren {
     pub entity: Entity,
@@ -68,6 +73,7 @@ pub fn routes() -> ApiRouter<AppState> {
             .post_with(post_route, |op| {
                 op.description("Create a new entity.")
                     .response::<201, Json<Entity>>()
+                    .response::<200, Json<Entity>>()
             }),
         )
         .api_route(
@@ -210,6 +216,38 @@ pub async fn create_entity_ignore_conflict<'e, E: PgExecutor<'e>>(
     .map_error("entity")
 }
 
+pub async fn upsert_entity<'e, E: PgExecutor<'e>>(
+    executor: E,
+    pk_namespace: &str,
+    pk: &str,
+    title: Option<&str>,
+    profile_picture_url: Option<&str>,
+    metadata: Option<&JsonValue>,
+    user_id: Uuid,
+ ) -> Result<Entity, Error> {
+    debug!(
+        pk_namespace,
+        pk,
+        title,
+        profile_picture_url;
+        "upserting entity",
+    );
+
+    query_file_as!(
+        Entity,
+        "../database/sql/entity/upsert.sql",
+        pk_namespace,
+        pk,
+        title,
+        metadata,
+        profile_picture_url,
+        user_id
+    )
+    .fetch_one(executor)
+    .await
+    .map_error("entity")
+}
+
 pub async fn update_entity<'e, E: PgExecutor<'e>>(
     executor: E,
     payload: &EntityPayload,
@@ -236,20 +274,35 @@ pub async fn update_entity<'e, E: PgExecutor<'e>>(
 async fn post_route(
     State(state): State<AppState>,
     AuthenticatedUser(user): AuthenticatedUser,
+    Query(params): Query<EntityCreateQueryParams>,
     Json(payload): Json<EntityPayload>,
 ) -> Result<(StatusCode, Json<Entity>), Error> {
-    let entity = create_entity(
-        &state.db,
-        &payload.pk_namespace,
-        &payload.pk,
-        payload.title.as_deref(),
-        payload.profile_picture_url.as_deref(),
-        payload.metadata.as_ref(),
-        user.id,
-    )
-    .await?;
+    if params.upsert.unwrap_or(false) {
+        let entity = upsert_entity(
+            &state.db,
+            &payload.pk_namespace,
+            &payload.pk,
+            payload.title.as_deref(),
+            payload.profile_picture_url.as_deref(),
+            payload.metadata.as_ref(),
+            user.id,
+        )
+        .await?;
+        Ok((StatusCode::OK, Json(entity)))
+    } else {
+        let entity = create_entity(
+            &state.db,
+            &payload.pk_namespace,
+            &payload.pk,
+            payload.title.as_deref(),
+            payload.profile_picture_url.as_deref(),
+            payload.metadata.as_ref(),
+            user.id,
+        )
+        .await?;
 
-    Ok((StatusCode::CREATED, Json(entity)))
+        Ok((StatusCode::CREATED, Json(entity)))
+    }
 }
 
 async fn get_route(
