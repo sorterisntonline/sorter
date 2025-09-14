@@ -53,7 +53,7 @@ export async function installDeps() {
       'curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh',
       'docker --version'
     ));
-  } else if (currentPlatform === 'win32') {
+  } else {
     throw new Error('sorter is not supported on Windows');
   }
 
@@ -61,16 +61,16 @@ export async function installDeps() {
   if (currentPlatform === 'darwin') {
     results.push(await installDependency(
       'Rust (nightly)',
-      'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && source ~/.cargo/env && rustup toolchain install nightly && rustup default nightly',
-      'rustc --version | grep -q nightly'
+      'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && export PATH="$HOME/.cargo/bin:$PATH" && rustup toolchain install nightly && rustup default nightly',
+      'export PATH="$HOME/.cargo/bin:$PATH" && rustc --version | grep -q nightly'
     ));
   } else if (currentPlatform === 'linux') {
     results.push(await installDependency(
       'Rust (nightly)',
-      'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && source ~/.cargo/env && rustup toolchain install nightly && rustup default nightly',
-      'rustc --version | grep -q nightly'
+      'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && export PATH="$HOME/.cargo/bin:$PATH" && rustup toolchain install nightly && rustup default nightly',
+      'export PATH="$HOME/.cargo/bin:$PATH" && rustc --version | grep -q nightly'
     ));
-  } else if (currentPlatform === 'win32') {
+  } else {
     throw new Error('sorter is not supported on Windows');
   }
 
@@ -87,7 +87,7 @@ export async function installDeps() {
       'curl -fsSL https://github.com/amacneil/dbmate/releases/latest/download/dbmate-linux-amd64 -o /usr/local/bin/dbmate && chmod +x /usr/local/bin/dbmate',
       'dbmate --version'
     ));
-  } else if (currentPlatform === 'win32') {
+  } else {
     throw new Error('sorter is not supported on Windows');
   }
 
