@@ -7,6 +7,8 @@ import { setup } from './commands/setup';
 import { resetMigrations } from './commands/reset-migrations';
 import { checkDeps } from './commands/check-deps';
 import { installDeps } from './commands/install-deps';
+import { runServer } from './commands/run-server';
+import { runClient } from './commands/run-client';
 
 const program = new Command();
 
@@ -45,5 +47,15 @@ program
   .command('install-deps')
   .description('Install missing dependencies automatically')
   .action(installDeps);
+
+program
+  .command('run-server')
+  .description('Start the Rust server in dev mode')
+  .action(runServer);
+
+program
+  .command('run-client')
+  .description('Start the React client in dev mode')
+  .action(runClient);
 
 program.parse();
