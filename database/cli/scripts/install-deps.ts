@@ -65,19 +65,19 @@ async function main() {
   }
 
   // Install dbmate
-  if (platform === 'darwin') {
+  if (currentPlatform === 'darwin') {
     results.push(await installDependency(
       'dbmate',
       'brew install dbmate',
       'dbmate --version'
     ));
-  } else if (platform === 'linux') {
+  } else if (currentPlatform === 'linux') {
     results.push(await installDependency(
       'dbmate',
       'curl -fsSL https://github.com/amacneil/dbmate/releases/latest/download/dbmate-linux-amd64 -o /usr/local/bin/dbmate && chmod +x /usr/local/bin/dbmate',
       'dbmate --version'
     ));
-  } else if (platform === 'win32') {
+  } else if (currentPlatform === 'win32') {
     console.log('📦 For dbmate on Windows, please download from:');
     console.log('   https://github.com/amacneil/dbmate/releases');
   }

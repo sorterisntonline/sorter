@@ -17,9 +17,9 @@
     "dev": "bun run index.ts",
     "build": "bun build index.ts --outdir ./dist --target bun",
     "prepublishOnly": "bun run build",
-    "postinstall": "node scripts/postinstall.js",
-    "install-deps": "node scripts/install-deps.js",
-    "check": "node scripts/check-deps.js"
+    "postinstall": "bun run scripts/postinstall.ts",
+    "install-deps": "bun run scripts/install-deps.ts",
+    "check": "bun run scripts/check-deps.ts"
   },
   "keywords": [
     "database",

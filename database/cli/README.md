@@ -4,29 +4,59 @@ A TypeScript CLI for managing Sorter database operations, built with Bun and Com
 
 ## Installation
 
-### Local Development
+### One-Line Installation (Recommended)
+
+```bash
+# From anywhere in the sorter project
+./install-sorter-db.sh
+
+# Or directly from the CLI directory
+./database/cli/install.sh
+
+# Or using the TypeScript installer
+bun run database/cli/scripts/install.ts
+
+# Or from a remote URL (when published)
+curl -fsSL https://raw.githubusercontent.com/your-org/sorter/main/database/cli/install.sh | bash
+```
+
+### Manual Installation
+
+#### Local Development
 
 ```bash
 cd database/cli
 bun install
 ```
 
-### Global Installation
+#### Global Installation
 
 ```bash
-# Install globally with npm (recommended)
+# Install globally with npm
 npm install -g .
 
-# Or install from a directory
-npm install -g /path/to/database/cli
+# After installation, run setup
+sorter-db setup
+```
 
-# After installation, use from anywhere:
-sorter-db --help
+### Post-Installation
+
+After installation, the CLI will automatically:
+
+- ✅ Check for required dependencies (Bun, Docker, dbmate)
+- ✅ Create `.env` file with default configuration
+- ✅ Validate your environment
+- ✅ Provide next steps
+
+If something goes wrong, run:
+
+```bash
+sorter-db setup
 ```
 
 ## Usage
 
-The CLI provides four main commands:
+The CLI provides five main commands:
 
 ### Import Dump
 
@@ -67,12 +97,21 @@ Run database migrations using dbmate:
 bun run index.ts migrate
 ```
 
+### Setup
+
+Setup sorter-db-cli environment and check dependencies:
+
+```bash
+bun run index.ts setup
+```
+
 ## Features
 
 - **Import Dump**: Supports both SQL text dumps and binary dumps with automatic detection
 - **Run PostgreSQL**: Starts PostgreSQL container with proper volume mounts and configuration
 - **Setup Docker**: Installs Docker and configures user permissions
 - **Migrate**: Run database migrations using dbmate with proper environment handling
+- **Setup**: Automated environment setup and dependency checking
 - **Error Handling**: Comprehensive error handling and validation
 - **Cross-platform**: Works on macOS, Linux, and Windows
 

@@ -1,6 +1,6 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
-const { execSync } = require('child_process');
+import { execSync } from 'child_process';
 
 console.log('🔍 Checking sorter-db-cli dependencies...\n');
 

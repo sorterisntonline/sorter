@@ -5,6 +5,7 @@ import { importDump } from './commands/import-dump.js';
 import { runPostgres } from './commands/run-postgres.js';
 import { setupDocker } from './commands/setup-docker.js';
 import { migrate } from './commands/migrate.js';
+import { setup } from './commands/setup.js';
 
 const program = new Command();
 
@@ -34,5 +35,10 @@ program
   .command('migrate')
   .description('Run database migrations using dbmate')
   .action(migrate);
+
+program
+  .command('setup')
+  .description('Setup sorter-db-cli environment and check dependencies')
+  .action(setup);
 
 program.parse();
