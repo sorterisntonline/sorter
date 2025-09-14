@@ -3,17 +3,41 @@
   "version": "1.0.0",
   "description": "CLI for managing Sorter database operations",
   "type": "module",
+  "main": "index.ts",
   "bin": {
     "sorter-db": "./index.ts"
   },
+  "files": [
+    "index.ts",
+    "commands/",
+    "scripts/",
+    "README.md"
+  ],
   "scripts": {
     "dev": "bun run index.ts",
-    "build": "bun build index.ts --outdir ./dist --target bun"
+    "build": "bun build index.ts --outdir ./dist --target bun",
+    "prepublishOnly": "bun run build",
+    "postinstall": "node scripts/postinstall.js",
+    "install-deps": "node scripts/install-deps.js",
+    "check": "node scripts/check-deps.js"
+  },
+  "keywords": [
+    "database",
+    "postgresql",
+    "migration",
+    "docker",
+    "cli"
+  ],
+  "author": "Sorter Team",
+  "license": "MIT",
+  "engines": {
+    "bun": ">=1.0.0"
   },
   "dependencies": {
     "commander": "^12.0.0"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0"
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.0"
   }
 }

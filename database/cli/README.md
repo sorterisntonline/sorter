@@ -4,14 +4,29 @@ A TypeScript CLI for managing Sorter database operations, built with Bun and Com
 
 ## Installation
 
+### Local Development
+
 ```bash
 cd database/cli
 bun install
 ```
 
+### Global Installation
+
+```bash
+# Install globally with npm (recommended)
+npm install -g .
+
+# Or install from a directory
+npm install -g /path/to/database/cli
+
+# After installation, use from anywhere:
+sorter-db --help
+```
+
 ## Usage
 
-The CLI provides three main commands:
+The CLI provides four main commands:
 
 ### Import Dump
 
@@ -44,11 +59,20 @@ Setup Docker for the current user (Ubuntu/Debian):
 bun run index.ts setup-docker
 ```
 
+### Migrate
+
+Run database migrations using dbmate:
+
+```bash
+bun run index.ts migrate
+```
+
 ## Features
 
 - **Import Dump**: Supports both SQL text dumps and binary dumps with automatic detection
 - **Run PostgreSQL**: Starts PostgreSQL container with proper volume mounts and configuration
 - **Setup Docker**: Installs Docker and configures user permissions
+- **Migrate**: Run database migrations using dbmate with proper environment handling
 - **Error Handling**: Comprehensive error handling and validation
 - **Cross-platform**: Works on macOS, Linux, and Windows
 
@@ -56,6 +80,7 @@ bun run index.ts setup-docker
 
 - Bun runtime
 - Docker (for database operations)
+- dbmate (for migrations)
 - Node.js 18+ (for TypeScript compilation)
 
 ## Development

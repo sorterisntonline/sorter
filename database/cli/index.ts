@@ -4,6 +4,7 @@ import { Command } from 'commander';
 import { importDump } from './commands/import-dump.js';
 import { runPostgres } from './commands/run-postgres.js';
 import { setupDocker } from './commands/setup-docker.js';
+import { migrate } from './commands/migrate.js';
 
 const program = new Command();
 
@@ -28,5 +29,10 @@ program
   .command('setup-docker')
   .description('Setup Docker for the current user (Ubuntu/Debian)')
   .action(setupDocker);
+
+program
+  .command('migrate')
+  .description('Run database migrations using dbmate')
+  .action(migrate);
 
 program.parse();
