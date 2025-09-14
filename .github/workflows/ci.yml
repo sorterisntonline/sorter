@@ -153,27 +153,20 @@ jobs:
             exit 1
           fi
 
-      - name: Install Babashka (bb)
-        uses: borkdude/setup-babashka@v2
-        with:
-          babashka-version: latest
-
-      - name: Seed database with TF2 dataset (bb)
-        working-directory: rustsorter
-        env:
-          # Exposed for future compatibility if the script reads env
-          SORTER_API_BASE_URL: http://127.0.0.1:8081/api
-          SORTER_API_KEY: STATIC_TEST_KEY_FOR_ADMIN_USER_123
+      - name: Clone TF2 seed repo
+        working-directory: .
         run: |
           set -euo pipefail
-          echo "Cloning seeding repo..."
-          mkdir -p ../seed
-          if [ -d ../seed/sorter-tf2 ]; then
-            rm -rf ../seed/sorter-tf2
-          fi
-          git clone https://github.com/sorterisntonline/sorter-tf2 ../seed/sorter-tf2
-          echo "Running bb compiler.clj to seed data..."
-          (cd ../seed/sorter-tf2 && bb --version && bb compiler.clj)
+          mkdir -p seed
+          rm -rf seed/sorter-tf2 || true
+          git clone https://github.com/sorterisntonline/sorter-tf2 seed/sorter-tf2
+          # Adjust base URL to reach host from Docker action
+          sed -i 's#http://localhost:8081/api#http://host.docker.internal:8081/api#g' seed/sorter-tf2/compiler.clj
+
+      - name: Seed database with TF2 dataset (bb)
+        uses: tzafrirben/babashka-docker-action@v1
+        with:
+          bb_src: 'seed/sorter-tf2/compiler.clj'
 
       - name: Run Python tests (pytest)
         working-directory: test
