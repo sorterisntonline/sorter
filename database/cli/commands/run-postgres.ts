@@ -13,15 +13,6 @@ export async function runPostgres(options: { reset?: boolean }) {
   const PG_DATA_DIR = paths.pgDataDir;
 
   // Validate configuration before starting
-  console.log('🔍 Validating PostgreSQL configuration...');
-  try {
-    const { validateConfig } = await import('./validate-config.js');
-    await validateConfig();
-  } catch (error) {
-    console.log('⚠️  Configuration validation failed, but continuing...');
-  }
-
-  // Handle reset flag
   if (options.reset) {
     const rl = readline.createInterface({
       input: process.stdin,
@@ -68,7 +59,7 @@ export async function runPostgres(options: { reset?: boolean }) {
       execSync(`docker rm ${CONTAINER_NAME}`, { stdio: 'pipe' });
     } catch {}
   } catch {
-    // Container doesn't exist, which is fine
+    console.log('Container does not exist, which is fine');
   }
 
   console.log('Starting PostgreSQL container in foreground...');
