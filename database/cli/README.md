@@ -144,3 +144,15 @@ To build for production:
 ```bash
 bun run build
 ```
+
+To check TypeScript types:
+
+```bash
+bun run type-check
+```
+
+To run linting:
+
+```bash
+bun run lint
+```

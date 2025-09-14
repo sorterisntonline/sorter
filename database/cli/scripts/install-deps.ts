@@ -7,7 +7,7 @@ console.log('🚀 Installing sorter-db-cli dependencies...');
 
 const currentPlatform = platform();
 
-async function installDependency(name, installCommand, checkCommand) {
+async function installDependency(name: string, installCommand: string, checkCommand: string): Promise<boolean> {
   try {
     execSync(checkCommand, { stdio: 'pipe' });
     console.log(`✅ ${name} is already installed`);
@@ -18,7 +18,7 @@ async function installDependency(name, installCommand, checkCommand) {
       execSync(installCommand, { stdio: 'inherit' });
       console.log(`✅ ${name} installed successfully`);
       return true;
-    } catch (installError) {
+    } catch (installError: any) {
       console.log(`❌ Failed to install ${name}: ${installError.message}`);
       return false;
     }

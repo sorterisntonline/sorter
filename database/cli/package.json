@@ -19,7 +19,9 @@
     "prepublishOnly": "bun run build",
     "postinstall": "bun run scripts/postinstall.ts",
     "install-deps": "bun run scripts/install-deps.ts",
-    "check": "bun run scripts/check-deps.ts"
+    "check": "bun run scripts/check-deps.ts",
+    "type-check": "tsc --noEmit",
+    "lint": "tsc --noEmit"
   },
   "keywords": [
     "database",
