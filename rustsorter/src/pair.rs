@@ -89,209 +89,6 @@ fn entity_matches_identifier(entity: &crate::entity::Entity, identifier: &crate:
     entity.pk_namespace == identifier.pk_namespace && entity.pk == identifier.pk
 }
 
-/// Select a pair using ranking-based algorithm
-fn select_ranked_entity_pair(
-    left_entities: &[crate::entity::Entity],
-    right_entities: &[crate::entity::Entity],
-    unsorted: &[crate::pagerank::EntityIdentifier],
-    sorted: &[crate::pagerank::RankedEntity],
-) -> Result<(crate::entity::Entity, crate::entity::Entity), PairSelectionError> {
-    // Check if we have entities in both pools
-    if left_entities.is_empty() || right_entities.is_empty() {
-        return Err(PairSelectionError::PinNotFound);
-    }
-
-    let mut rng = rand::thread_rng();
-
-    // Build sets of unsorted entities in each pool
-    let left_unsorted: Vec<&crate::entity::Entity> = left_entities
-        .iter()
-        .filter(|e| unsorted.iter().any(|u| entity_matches_identifier(e, u)))
-        .collect();
-    
-    let right_unsorted: Vec<&crate::entity::Entity> = right_entities
-        .iter()
-        .filter(|e| unsorted.iter().any(|u| entity_matches_identifier(e, u)))
-        .collect();
-
-    // Strategy 1: If there are unsorted entities, pair one with a sorted entity
-    if !left_unsorted.is_empty() || !right_unsorted.is_empty() {
-        // Prefer to have unsorted on the left
-        let (unsorted_pool, sorted_pool, prefer_left) = if !left_unsorted.is_empty() {
-            // Find sorted entities in right pool
-            let right_sorted: Vec<&crate::entity::Entity> = right_entities
-                .iter()
-                .filter(|e| sorted.iter().any(|s| entity_matches_identifier(e, &s.identifier)))
-                .collect();
-            
-            if right_sorted.is_empty() {
-                // No sorted in right pool, try opposite configuration
-                if !right_unsorted.is_empty() {
-                    let left_sorted: Vec<&crate::entity::Entity> = left_entities
-                        .iter()
-                        .filter(|e| sorted.iter().any(|s| entity_matches_identifier(e, &s.identifier)))
-                        .collect();
-                    
-                    if left_sorted.is_empty() {
-                        // Both pools only have unsorted, pick randomly from each
-                        let left_entity = left_unsorted.choose(&mut rng).unwrap().clone().clone();
-                        let mut right_pool = right_unsorted.clone();
-                        right_pool.retain(|e| !entities_are_same(e, &left_entity));
-                        
-                        if right_pool.is_empty() {
-                            return Err(PairSelectionError::InsufficientEntities);
-                        }
-                        
-                        let right_entity = right_pool.choose(&mut rng).unwrap().clone().clone();
-                        return Ok((left_entity, right_entity));
-                    }
-                    
-                    (right_unsorted, left_sorted, false)
-                } else {
-                    // Only left has unsorted, must pick from left
-                    let left_entity = left_unsorted.choose(&mut rng).unwrap().clone().clone();
-                    let mut right_pool = right_entities.to_vec();
-                    right_pool.retain(|e| !entities_are_same(e, &left_entity));
-                    
-                    if right_pool.is_empty() {
-                        return Err(PairSelectionError::InsufficientEntities);
-                    }
-                    
-                    let right_entity = right_pool.choose(&mut rng).unwrap().clone();
-                    return Ok((left_entity, right_entity));
-                }
-            } else {
-                (left_unsorted, right_sorted, true)
-            }
-        } else {
-            // Only right has unsorted
-            let left_sorted: Vec<&crate::entity::Entity> = left_entities
-                .iter()
-                .filter(|e| sorted.iter().any(|s| entity_matches_identifier(e, &s.identifier)))
-                .collect();
-            
-            if left_sorted.is_empty() {
-                // No sorted entities available, pick two unsorted
-                let right_entity = right_unsorted.choose(&mut rng).unwrap().clone().clone();
-                let mut left_pool = left_entities.to_vec();
-                left_pool.retain(|e| !entities_are_same(e, &right_entity));
-                
-                if left_pool.is_empty() {
-                    return Err(PairSelectionError::InsufficientEntities);
-                }
-                
-                let left_entity = left_pool.choose(&mut rng).unwrap().clone();
-                return Ok((left_entity, right_entity));
-            }
-            
-            (right_unsorted, left_sorted, false)
-        };
-
-        // Pick random unsorted and random sorted
-        let unsorted_entity = (*unsorted_pool.choose(&mut rng).unwrap()).clone();
-        let mut sorted_pool_filtered: Vec<crate::entity::Entity> = sorted_pool.into_iter().cloned().collect();
-        use log::info;
-        info!("picking unsorted entity");
-        sorted_pool_filtered.retain(|e| !entities_are_same(e, &unsorted_entity));
-
-        if sorted_pool_filtered.is_empty() {
-            return Err(PairSelectionError::InsufficientEntities);
-        }
-
-        let sorted_entity = sorted_pool_filtered.choose(&mut rng).unwrap().clone();
-                
-        if prefer_left {
-            Ok((unsorted_entity, sorted_entity))
-        } else {
-            Ok((sorted_entity, unsorted_entity))
-        }
-    } else {
-        // Strategy 2: All entities are sorted, find the best matchup
-        
-        // Create position map for sorted entities
-        let mut position_map = std::collections::HashMap::new();
-        for (pos, ranked_entity) in sorted.iter().enumerate() {
-            position_map.insert(
-                (ranked_entity.identifier.pk_namespace.clone(), ranked_entity.identifier.pk.clone()),
-                pos + 1  // 1-indexed positions
-            );
-        }
-
-        // Find best pair (lowest combined rank)
-        let mut best_pair: Option<(crate::entity::Entity, crate::entity::Entity, usize)> = None;
-
-        for left_entity in left_entities {
-            let left_key = (left_entity.pk_namespace.clone(), left_entity.pk.clone());
-            let Some(&left_pos) = position_map.get(&left_key) else {
-                continue; // Skip if not in sorted list
-            };
-
-            for right_entity in right_entities {
-                // Skip if same entity
-                if entities_are_same(left_entity, right_entity) {
-                    continue;
-                }
-
-                let right_key = (right_entity.pk_namespace.clone(), right_entity.pk.clone());
-                let Some(&right_pos) = position_map.get(&right_key) else {
-                    continue; // Skip if not in sorted list
-                };
-
-                let combined_rank = left_pos + right_pos;
-
-                if best_pair.is_none() || combined_rank < best_pair.as_ref().unwrap().2 {
-                    best_pair = Some((left_entity.clone(), right_entity.clone(), combined_rank));
-                }
-            }
-        }
-
-        best_pair
-            .map(|(left, right, _)| (left, right))
-            .ok_or(PairSelectionError::InsufficientEntities)
-    }
-}
-
-/// Pure function to select a pair of entities from a list of child entities
-pub fn select_entity_pair(
-    left_entities: &[crate::entity::Entity],
-    right_entities: &[crate::entity::Entity],
-) -> Result<(crate::entity::Entity, crate::entity::Entity), PairSelectionError> {
-    // For backwards compatibility, when no ranking info is available, use random selection
-    
-    // Check if we have entities in both pools
-    if left_entities.is_empty() || right_entities.is_empty() {
-        return Err(PairSelectionError::PinNotFound);
-    }
-
-    let mut left_pool = left_entities.to_vec();
-    let mut right_pool = right_entities.to_vec();
-
-    // If right_pool is a singleton, remove it from left_pool to avoid accidental selection
-    if right_pool.len() == 1 {
-        left_pool.retain(|e| !entities_are_same(e, &right_pool[0]));
-        // If this leaves left_pool empty, we can't form a pair
-        if left_pool.is_empty() {
-            return Err(PairSelectionError::InsufficientEntities);
-        }
-    }
-
-    let mut rng = rand::thread_rng();
-
-    // Choose left entity
-    let left_entity = left_pool.choose(&mut rng).unwrap().clone();
-
-    // Remove the chosen left entity from right pool to ensure distinct selection
-    right_pool.retain(|e| !entities_are_same(e, &left_entity));
-    
-    if right_pool.is_empty() {
-        return Err(PairSelectionError::InsufficientEntities);
-    }
-    
-    let right_entity = right_pool.choose(&mut rng).unwrap().clone();
-
-    Ok((left_entity, right_entity))
-}
-
 async fn get_filtered_children(
     state: &AppState,
     parent_ns: String,
@@ -314,10 +111,168 @@ async fn get_filtered_children(
     Ok(children)
 }
 
+/// Select a pair when all entities are sorted (no unsorted entities exist)
+fn select_ranked_entity_pair(
+   left_entities: &[crate::entity::Entity],
+   right_entities: &[crate::entity::Entity],
+   sorted: &[crate::pagerank::RankedEntity],
+) -> Result<(crate::entity::Entity, crate::entity::Entity), PairSelectionError> {
+   if left_entities.is_empty() || right_entities.is_empty() {
+       return Err(PairSelectionError::PinNotFound);
+   }
+
+   // Create position map for sorted entities
+   let mut position_map = std::collections::HashMap::new();
+   for (pos, ranked_entity) in sorted.iter().enumerate() {
+       position_map.insert(
+           (ranked_entity.identifier.pk_namespace.clone(), ranked_entity.identifier.pk.clone()),
+           pos + 1  // 1-indexed positions
+       );
+   }
+
+   // Find best pair (lowest combined rank)
+   let mut best_pair: Option<(crate::entity::Entity, crate::entity::Entity, usize)> = None;
+
+   for left_entity in left_entities {
+       let left_key = (left_entity.pk_namespace.clone(), left_entity.pk.clone());
+       let Some(&left_pos) = position_map.get(&left_key) else {
+           continue;
+       };
+
+       for right_entity in right_entities {
+           if entities_are_same(left_entity, right_entity) {
+               continue;
+           }
+
+           let right_key = (right_entity.pk_namespace.clone(), right_entity.pk.clone());
+           let Some(&right_pos) = position_map.get(&right_key) else {
+               continue;
+           };
+
+           let combined_rank = left_pos + right_pos;
+
+           if best_pair.is_none() || combined_rank < best_pair.as_ref().unwrap().2 {
+               best_pair = Some((left_entity.clone(), right_entity.clone(), combined_rank));
+           }
+       }
+   }
+
+   best_pair
+       .map(|(left, right, _)| (left, right))
+       .ok_or(PairSelectionError::InsufficientEntities)
+}
+
+/// Select a pair when there are unsorted entities present
+pub fn select_entity_pair(
+   left_entities: &[crate::entity::Entity],
+   right_entities: &[crate::entity::Entity],
+   unsorted: &[crate::pagerank::EntityIdentifier],
+   sorted: &[crate::pagerank::RankedEntity],
+) -> Result<(crate::entity::Entity, crate::entity::Entity), PairSelectionError> {
+   let mut rng = rand::thread_rng();
+
+   // Find unsorted entities in each pool
+   let left_unsorted: Vec<&crate::entity::Entity> = left_entities
+       .iter()
+       .filter(|e| unsorted.iter().any(|u| entity_matches_identifier(e, u)))
+       .collect();
+
+   let right_unsorted: Vec<&crate::entity::Entity> = right_entities
+       .iter()
+       .filter(|e| unsorted.iter().any(|u| entity_matches_identifier(e, u)))
+       .collect();
+
+   // Find sorted entities in each pool
+   let left_sorted: Vec<&crate::entity::Entity> = left_entities
+       .iter()
+       .filter(|e| sorted.iter().any(|s| entity_matches_identifier(e, &s.identifier)))
+       .collect();
+
+   let right_sorted: Vec<&crate::entity::Entity> = right_entities
+       .iter()
+       .filter(|e| sorted.iter().any(|s| entity_matches_identifier(e, &s.identifier)))
+       .collect();
+
+   // Case 1: Neither pool has sorted items - return random from each pool
+   if left_sorted.is_empty() && right_sorted.is_empty() {
+       let left_entity = left_entities.choose(&mut rng).unwrap().clone();
+       
+       let right_pool: Vec<&crate::entity::Entity> = right_entities
+           .iter()
+           .filter(|e| !entities_are_same(e, &left_entity))
+           .collect();
+           
+       let right_entity = (*right_pool.choose(&mut rng).unwrap()).clone();
+       return Ok((left_entity, right_entity));
+   }
+
+   // Case 2: Unsorted entities exist but not in either pool - use ranking strategy
+   if left_unsorted.is_empty() && right_unsorted.is_empty() {
+       return select_ranked_entity_pair(left_entities, right_entities, sorted);
+   }
+
+   // Case 3: Only one pool has unsorted - pair unsorted with sorted from other pool
+   if !left_unsorted.is_empty() && right_unsorted.is_empty() {
+       let left_entity = (*left_unsorted.choose(&mut rng).unwrap()).clone();
+       let right_entity = (*right_sorted.choose(&mut rng).unwrap()).clone();
+       return Ok((left_entity, right_entity));
+   }
+
+   if left_unsorted.is_empty() && !right_unsorted.is_empty() {
+       let left_entity = (*left_sorted.choose(&mut rng).unwrap()).clone();
+       let right_entity = (*right_unsorted.choose(&mut rng).unwrap()).clone();
+       return Ok((left_entity, right_entity));
+   }
+
+   // Case 4: Both pools have unsorted and sorted entities - choose complementary pairs
+   let left_entity = left_entities.choose(&mut rng).unwrap().clone();
+   
+   // Choose complementary from right: if left is unsorted, prefer sorted; if left is sorted, prefer unsorted
+   let is_left_unsorted = unsorted.iter().any(|u| entity_matches_identifier(&left_entity, u));
+   
+   let preferred_right = if is_left_unsorted { &right_sorted } else { &right_unsorted };
+   
+   let right_entity = (*preferred_right.choose(&mut rng).unwrap()).clone();
+   Ok((left_entity, right_entity))
+}
+
 async fn get_pair_handler(
     State(state): State<AppState>,
     Query(params): Query<PairQueryParams>,
 ) -> Result<Json<PairResponse>, Error> {
+    // Check if parent entity exists
+    let parent_exists = sqlx::query_scalar!(
+        "SELECT EXISTS(SELECT 1 FROM entities WHERE pk_namespace = $1 AND pk = $2)",
+        params.pk_namespace,
+        params.pk
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_error("entity")?
+    .unwrap_or(false);
+    
+    if !parent_exists {
+        return Err(Error::NotFound {
+            object: "Parent Entity".into()
+        });
+    }
+
+    // Get all children first to check minimum count
+    let all_children = get_filtered_children(
+        &state,
+        params.pk_namespace.clone(),
+        params.pk.clone(),
+        None,
+        None
+    ).await?;
+
+    // Check if we have at least 2 children
+    if all_children.len() < 2 {
+        return Err(Error::BadRequest {
+            message: "Parent must have at least 2 children".into()
+        });
+    }
+
     // Get left pool
     let left_entities = get_filtered_children(
         &state, 
@@ -336,14 +291,27 @@ async fn get_pair_handler(
         params.right_pin_pk.clone()
     ).await?;
     
-    // Get all children for ranking
-    let all_children = get_filtered_children(
-        &state,
-        params.pk_namespace.clone(),
-        params.pk.clone(),
-        None,
-        None
-    ).await?;
+    // Check if either pool is empty
+    if left_entities.is_empty() {
+        return Err(Error::BadRequest {
+            message: "Left pin filter resulted in empty set".into()
+        });
+    }
+    
+    if right_entities.is_empty() {
+        return Err(Error::BadRequest {
+            message: "Right pin filter resulted in empty set".into()
+        });
+    }
+    
+    // Check if both pins give the same singleton
+    if left_entities.len() == 1 && right_entities.len() == 1 {
+        if entities_are_same(&left_entities[0], &right_entities[0]) {
+            return Err(Error::BadRequest {
+                message: "Both pins point to the same single entity".into()
+            });
+        }
+    }
 
     // Convert to identifiers for ranking
     let entity_identifiers: Vec<crate::pagerank::EntityIdentifier> = all_children
@@ -370,17 +338,15 @@ async fn get_pair_handler(
     // Get ranking
     let (unsorted, sorted) = crate::pagerank::rank_entities(&entity_identifiers, &votes)?;
 
-    // Select pair using ranking if available, otherwise fall back to random
-    let (left_entity, right_entity) = if sorted.is_empty() && unsorted.is_empty() {
-        // No ranking info available, use random selection
-        select_entity_pair(&left_entities, &right_entities)
+    // Select pair based on whether we have unsorted entities
+    let (left_entity, right_entity) = if unsorted.is_empty() {
+        // All entities have been voted on - use ranking strategy
+        select_ranked_entity_pair(&left_entities, &right_entities, &sorted)
     } else {
-        // Use ranking-based selection
-        select_ranked_entity_pair(&left_entities, &right_entities, &unsorted, &sorted)
+        // There are unvoted entities - prioritize getting them voted on
+        select_entity_pair(&left_entities, &right_entities, &unsorted, &sorted)
     }
-    .map_err(|e| Error::BadRequest { 
-        message: format!("Unable to select valid entity pair: {:?}", e).into()
-    })?;
+    .map_err(|e| Error::Internal(anyhow::anyhow!("Pair selection failed despite validation checks: {:?}", e)))?;
 
     Ok(Json(PairResponse {
         left_entity,
@@ -389,9 +355,10 @@ async fn get_pair_handler(
 }
 
 pub fn routes() -> ApiRouter<AppState> {
-    ApiRouter::new().api_route("/", get(get_pair_handler))
+   ApiRouter::new().api_route("/", get(get_pair_handler))
 }
 
+// TODO: add new arguments to select_entity_pair
 #[cfg(test)]
 mod tests {
     use super::*;
