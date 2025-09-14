@@ -3,14 +3,56 @@ import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
 import { join } from 'path';
 import * as readline from 'readline';
 import { paths } from '../utils/paths.js';
+import { createServer } from 'net';
 
-const HOST_PORT = 5432;
+// Get port from environment or use default
+const HOST_PORT = parseInt(process.env.DATABASE_PORT || '5438');
 const CONTAINER_NAME = 'postgres-dev';
 const DOCKER_REPO = 'postgres';
 const TAG = '14.1';
 
+/**
+ * Check if a port is available
+ */
+function isPortAvailable(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = createServer();
+    
+    server.listen(port, () => {
+      server.close(() => resolve(true));
+    });
+    
+    server.on('error', () => resolve(false));
+  });
+}
+
+/**
+ * Find an available port starting from the preferred port
+ */
+async function findAvailablePort(preferredPort: number): Promise<number> {
+  // Check if the preferred port is available
+  if (await isPortAvailable(preferredPort)) {
+    return preferredPort;
+  }
+  
+  // Try ports from preferredPort + 1 to preferredPort + 100
+  for (let port = preferredPort + 1; port <= preferredPort + 100; port++) {
+    if (await isPortAvailable(port)) {
+      console.log(`Port ${preferredPort} is occupied, using port ${port} instead`);
+      return port;
+    }
+  }
+  
+  throw new Error(`No available ports found starting from ${preferredPort}`);
+}
+
 export async function runPostgres(options: { reset?: boolean }) {
   const PG_DATA_DIR = paths.pgDataDir;
+  
+  console.log(`🔍 Checking for available port starting from ${HOST_PORT}...`);
+  // Find an available port
+  const actualPort = await findAvailablePort(HOST_PORT);
+  console.log(`🚀 Starting PostgreSQL on port ${actualPort}`);
 
   // Validate configuration before starting
   if (options.reset) {
@@ -69,7 +111,7 @@ export async function runPostgres(options: { reset?: boolean }) {
   mkdirSync(PG_DATA_DIR, { recursive: true });
 
   // Construct local DB URL (for writing repo-root .env)
-  const DB_URL = `postgres://postgres:password@localhost:${HOST_PORT}/postgres?sslmode=disable`;
+  const DB_URL = `postgres://postgres:password@localhost:${actualPort}/postgres?sslmode=disable`;
 
   // Also write DATABASE_URL to repo-root .env for migrate.sh convenience
   const ENV_FILE = paths.envFile;
@@ -90,6 +132,8 @@ export async function runPostgres(options: { reset?: boolean }) {
   } else {
     console.log(`Set local DATABASE_URL in ${ENV_FILE}`);
   }
+  
+  console.log(`📊 Database URL: ${DB_URL}`);
 
   // Start the Docker container
   const dockerArgs = [
@@ -100,7 +144,7 @@ export async function runPostgres(options: { reset?: boolean }) {
     '-e', 'POSTGRES_PASSWORD=password',
     '-e', 'POSTGRES_USER=postgres',
     '-e', 'PGDATA=/var/lib/postgresql/data',
-    '-p', `${HOST_PORT}:5432`,
+    '-p', `${actualPort}:5432`,
     `${DOCKER_REPO}:${TAG}`,
     'postgres',
     '-c', 'config_file=/etc/postgresql/postgresql.conf',
