@@ -23,10 +23,12 @@ rust and react based pair-wise staunchly democratic social media application
 ## Quick Start with sorter-db CLI
 
 ```bash
+# install bun
+curl -fsSL https://bun.sh/install | bash
+
 # Install the sorter-db CLI
 cd database/cli
 npm install -g .
-
 cd -
 
 # Setup environment and check dependencies
@@ -44,6 +46,13 @@ sorter-db migrate
 # Start the server (from rustsorter/)
 cd rustsorter
 RUST_LOG=debug cargo run
+
+# In a new terminal, run frontend
+cd frontsorter
+npm i
+npm run dev
+
+# go to port that vite says (http://localhost:5173/)
 ```
 # database management
 
