@@ -7,6 +7,7 @@ import { setupDocker } from './commands/setup-docker.js';
 import { migrate } from './commands/migrate.js';
 import { setup } from './commands/setup.js';
 import { validateConfig } from './commands/validate-config.js';
+import { installAll } from './commands/install-all.js';
 
 const program = new Command();
 
@@ -46,5 +47,10 @@ program
   .command('validate-config')
   .description('Validate PostgreSQL configuration files')
   .action(validateConfig);
+
+program
+  .command('install-all')
+  .description('Install all project dependencies (Rust, Node.js, Bun, etc.)')
+  .action(installAll);
 
 program.parse();

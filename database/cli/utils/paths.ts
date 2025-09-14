@@ -54,4 +54,8 @@ export const paths = {
   
   // Migrations directory
   migrationsDir: join(PROJECT_ROOT, 'db', 'migrations'),
+  
+  // Project components
+  rustSorter: join(PROJECT_ROOT, 'rustsorter'),
+  frontSorter: join(PROJECT_ROOT, 'frontsorter'),
 } as const;
