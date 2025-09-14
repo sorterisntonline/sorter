@@ -4,12 +4,17 @@ import "./App.css";
 import Layout from "./Layout";
 import VotePage from "./pages/VotePage";
 import ProfilePage from "./pages/ProfilePage";
+import EntitiesIndex from "./pages/EntitiesIndex";
+import EntityDetail from "./pages/EntityDetail";
 
 function App() {
   return (
     <Routes>
       {/* Wrap all main pages within the Layout */}
       <Route path="/" element={<Layout />}>
+        {/* Entities index and drilldown */}
+        <Route index element={<EntitiesIndex />} />
+        <Route path="entity/:pk_namespace/:pk" element={<EntityDetail />} />
         <Route path="vote" element={<VotePage />} />{" "}
         {/* Keep existing vote page */}
         <Route path="profile" element={<ProfilePage />} />

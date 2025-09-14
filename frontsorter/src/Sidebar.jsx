@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, useSearchParams } from 'react-router-dom'; // Use NavLink for active styling
 // Import icons from react-icons
-import { FaHome, FaSearch, FaChartBar, FaVoteYea, FaHistory, FaUser } from 'react-icons/fa';
+import { FaHome, FaVoteYea, FaUser } from 'react-icons/fa';
 
 function Sidebar() {
   const commonLinkClass = "block px-4 py-2 rounded-md text-gray-700 hover:bg-gray-100";
@@ -22,6 +22,16 @@ function Sidebar() {
       <div className="mb-6 text-xl font-bold text-brand-600">sorter</div>
       <nav className="flex-grow space-y-1">
         {/* Updated NavLink structure with icons */}
+        <NavLink
+          to={'/'}
+          end
+          className={({ isActive }) => `${commonLinkClass} ${isActive ? activeLinkClass : ''}`}
+        >
+          <div className="flex items-center space-x-2">
+            <FaHome />
+            <span>Entities</span>
+          </div>
+        </NavLink>
         <NavLink
           to={generateTo('/vote')}
           className={({ isActive }) => `${commonLinkClass} ${isActive ? activeLinkClass : ''}`}

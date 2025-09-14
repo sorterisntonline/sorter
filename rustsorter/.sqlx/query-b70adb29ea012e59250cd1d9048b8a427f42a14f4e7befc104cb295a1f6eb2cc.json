@@ -1,0 +1,63 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO entities(pk_namespace, pk, title, metadata, profile_picture_url, user_id)\n    VALUES ($1, $2, $3, $4, $5, $6)\nON CONFLICT (pk_namespace, pk)\nDO UPDATE SET\n    title = EXCLUDED.title,\n    metadata = EXCLUDED.metadata,\n    profile_picture_url = EXCLUDED.profile_picture_url,\n    user_id = EXCLUDED.user_id\nRETURNING\n    pk_namespace,\n    pk,\n    title,\n    metadata,\n    created_at,\n    profile_picture_url,\n    user_id\n\n\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pk_namespace",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "pk",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "metadata",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 5,
+        "name": "profile_picture_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "user_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "b70adb29ea012e59250cd1d9048b8a427f42a14f4e7befc104cb295a1f6eb2cc"
+}
