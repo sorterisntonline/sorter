@@ -1,16 +1,17 @@
 import { execSync } from 'child_process';
 import { join } from 'path';
 import { existsSync } from 'fs';
+import { paths } from '../utils/paths.js';
 
 export async function runClient() {
   console.log('🚀 Starting React client in dev mode...');
 
   // Path to the frontsorter directory (client)
-  const clientPath = join(process.cwd(), '..', '..', 'frontsorter');
+  const clientPath = paths.frontSorter;
 
   if (!existsSync(clientPath)) {
     console.error('❌ Client directory not found at:', clientPath);
-    console.error('Make sure you are running this command from the database/cli directory');
+    console.error('Make sure the frontsorter directory exists in your project root');
     process.exit(1);
   }
 

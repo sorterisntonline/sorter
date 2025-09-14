@@ -1,16 +1,17 @@
 import { execSync } from 'child_process';
 import { join } from 'path';
 import { existsSync } from 'fs';
+import { paths } from '../utils/paths.js';
 
 export async function runServer() {
   console.log('🚀 Starting Rust server in dev mode...');
 
   // Path to the rustsorter directory (server)
-  const serverPath = join(process.cwd(), '..', '..', 'rustsorter');
+  const serverPath = paths.rustSorter;
 
   if (!existsSync(serverPath)) {
     console.error('❌ Server directory not found at:', serverPath);
-    console.error('Make sure you are running this command from the database/cli directory');
+    console.error('Make sure the rustsorter directory exists in your project root');
     process.exit(1);
   }
 
