@@ -34,6 +34,9 @@ COPY --from=rust-builder /app/rustsorter/target/release/rustsorter .
 # Your Rust app will need to be configured to serve these files.
 COPY --from=frontend-builder /app/frontsorter/dist ./frontsorter/public
 
+# Set environment variable so Rust app knows where to serve static files
+ENV STATIC_DIR=/app/frontsorter/public
+
 # Expose the port your Rust application listens on
 EXPOSE 8081
 
