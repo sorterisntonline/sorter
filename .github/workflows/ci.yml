@@ -153,6 +153,14 @@ jobs:
             exit 1
           fi
 
+      - name: Install babashka
+        uses: just-sultanov/setup-babashka@v2
+        with:
+          version: 'latest'
+
+      - name: Run babashka
+        run: bb --version
+
       - name: Clone TF2 seed repo
         working-directory: .
         run: |
@@ -160,13 +168,10 @@ jobs:
           mkdir -p seed
           rm -rf seed/sorter-tf2 || true
           git clone https://github.com/sorterisntonline/sorter-tf2 seed/sorter-tf2
-          # Adjust base URL to reach host from Docker action
-          sed -i 's#http://localhost:8081/api#http://host.docker.internal:8081/api#g' seed/sorter-tf2/compiler.clj
 
       - name: Seed database with TF2 dataset (bb)
-        uses: tzafrirben/babashka-docker-action@v1
-        with:
-          bb_src: 'seed/sorter-tf2/compiler.clj'
+        working-directory: .
+        run: bb seed/sorter-tf2/compiler.clj
 
       - name: Run Python tests (pytest)
         working-directory: test
