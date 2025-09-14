@@ -153,6 +153,28 @@ jobs:
             exit 1
           fi
 
+      - name: Install Babashka (bb)
+        uses: borkdude/setup-babashka@v2
+        with:
+          babashka-version: latest
+
+      - name: Seed database with TF2 dataset (bb)
+        working-directory: rustsorter
+        env:
+          # Exposed for future compatibility if the script reads env
+          SORTER_API_BASE_URL: http://127.0.0.1:8081/api
+          SORTER_API_KEY: STATIC_TEST_KEY_FOR_ADMIN_USER_123
+        run: |
+          set -euo pipefail
+          echo "Cloning seeding repo..."
+          mkdir -p ../seed
+          if [ -d ../seed/sorter-tf2 ]; then
+            rm -rf ../seed/sorter-tf2
+          fi
+          git clone https://github.com/sorterisntonline/sorter-tf2 ../seed/sorter-tf2
+          echo "Running bb compiler.clj to seed data..."
+          (cd ../seed/sorter-tf2 && bb --version && bb compiler.clj)
+
       - name: Run Python tests (pytest)
         working-directory: test
         run: |
