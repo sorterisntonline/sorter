@@ -19,9 +19,10 @@ export async function setup() {
   // Check dependencies
   console.log('🔍 Checking dependencies...');
   try {
-    execSync(`bun run ${join(paths.cli, 'scripts', 'check-deps.ts')}`, { stdio: 'inherit' });
+    execSync('sorter-db check-deps', { stdio: 'inherit' });
   } catch (error) {
     console.log('\n❌ Dependency check failed. Please install missing dependencies.');
+    console.log('   Run: sorter-db install-deps');
     return;
   }
 
@@ -52,7 +53,8 @@ DATABASE_URL=postgres://postgres:password@localhost:5432/postgres?sslmode=disabl
 
   console.log('\n🎉 Setup complete!');
   console.log('\n📖 Next steps:');
-  console.log('   1. Start PostgreSQL: sorter-db run-postgres');
-  console.log('   2. Run migrations: sorter-db migrate');
-  console.log('   3. Import data: sorter-db import-dump <file>');
+  console.log('   1. Check dependencies: sorter-db check-deps');
+  console.log('   2. Install dependencies: sorter-db install-deps (if needed)');
+  console.log('   3. Start PostgreSQL: sorter-db run-postgres');
+  console.log('   4. Run migrations: sorter-db migrate');
 }

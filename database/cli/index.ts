@@ -5,6 +5,8 @@ import { runPostgres } from './commands/run-postgres';
 import { migrate } from './commands/migrate';
 import { setup } from './commands/setup';
 import { resetMigrations } from './commands/reset-migrations';
+import { checkDeps } from './commands/check-deps';
+import { installDeps } from './commands/install-deps';
 
 const program = new Command();
 
@@ -33,5 +35,15 @@ program
   .command('setup')
   .description('Setup sorter-db-cli environment and check dependencies')
   .action(setup);
+
+program
+  .command('check-deps')
+  .description('Check if all required dependencies are installed')
+  .action(checkDeps);
+
+program
+  .command('install-deps')
+  .description('Install missing dependencies automatically')
+  .action(installDeps);
 
 program.parse();

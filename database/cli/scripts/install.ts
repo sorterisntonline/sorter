@@ -44,20 +44,6 @@ try {
 try {
   execSync('sorter-db --version', { stdio: 'pipe' });
   console.log('✅ sorter-db-cli installed successfully!');
-  console.log('');
-  console.log('🔍 Running setup...');
-  
-  try {
-    execSync('sorter-db setup', { stdio: 'inherit' });
-  } catch (setupError) {
-    console.log('⚠️  Setup had some issues, but installation succeeded');
-  }
-  
-  console.log('');
-  console.log('📖 Quick start:');
-  console.log('   sorter-db --help');
-  console.log('   sorter-db run-postgres');
-  console.log('   sorter-db migrate');
 } catch (error) {
   console.log('❌ Installation verification failed. Please try again.');
   process.exit(1);

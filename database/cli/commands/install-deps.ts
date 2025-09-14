@@ -1,31 +1,29 @@
-#!/usr/bin/env bun
-
 import { execSync } from 'child_process';
 import { platform } from 'os';
 
-console.log('🚀 Installing sorter-db-cli dependencies...');
+export async function installDeps() {
+  console.log('🚀 Installing sorter-db-cli dependencies...');
 
-const currentPlatform = platform();
+  const currentPlatform = platform();
 
-async function installDependency(name: string, installCommand: string, checkCommand: string): Promise<boolean> {
-  try {
-    execSync(checkCommand, { stdio: 'pipe' });
-    console.log(`✅ ${name} is already installed`);
-    return true;
-  } catch (error) {
-    console.log(`📦 Installing ${name}...`);
+  async function installDependency(name: string, installCommand: string, checkCommand: string): Promise<boolean> {
     try {
-      execSync(installCommand, { stdio: 'inherit' });
-      console.log(`✅ ${name} installed successfully`);
+      execSync(checkCommand, { stdio: 'pipe' });
+      console.log(`✅ ${name} is already installed`);
       return true;
-    } catch (installError: any) {
-      console.log(`❌ Failed to install ${name}: ${installError.message}`);
-      return false;
+    } catch (error) {
+      console.log(`📦 Installing ${name}...`);
+      try {
+        execSync(installCommand, { stdio: 'inherit' });
+        console.log(`✅ ${name} installed successfully`);
+        return true;
+      } catch (installError: any) {
+        console.log(`❌ Failed to install ${name}: ${installError.message}`);
+        return false;
+      }
     }
   }
-}
 
-async function main() {
   const results: boolean[] = [];
 
   // Install Bun
@@ -59,6 +57,23 @@ async function main() {
     throw new Error('sorter is not supported on Windows');
   }
 
+  // Install Rust (nightly toolchain)
+  if (currentPlatform === 'darwin') {
+    results.push(await installDependency(
+      'Rust (nightly)',
+      'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && source ~/.cargo/env && rustup toolchain install nightly && rustup default nightly',
+      'rustc --version | grep -q nightly'
+    ));
+  } else if (currentPlatform === 'linux') {
+    results.push(await installDependency(
+      'Rust (nightly)',
+      'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && source ~/.cargo/env && rustup toolchain install nightly && rustup default nightly',
+      'rustc --version | grep -q nightly'
+    ));
+  } else if (currentPlatform === 'win32') {
+    throw new Error('sorter is not supported on Windows');
+  }
+
   // Install dbmate
   if (currentPlatform === 'darwin') {
     results.push(await installDependency(
@@ -87,5 +102,3 @@ async function main() {
     console.log('⚠️  Some dependencies need manual installation. See above for details.');
   }
 }
-
-main().catch(console.error);

@@ -36,4 +36,3 @@ try {
 
 console.log('\n🎉 sorter-db-cli installed successfully!');
 console.log('📖 Run "sorter-db --help" to get started');
-console.log('📚 Documentation: https://github.com/your-org/sorter-db-cli');
