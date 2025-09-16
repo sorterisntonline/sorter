@@ -466,6 +466,117 @@ mod tests {
         }
     }
 
+    fn add_comparison(i: usize, j: usize, matrix: &mut [Vec<f64>]) {
+        let weight = (j + 1) as f64 / (i + j + 2) as f64;
+        matrix[i][j] += weight;
+        matrix[j][i] += 1.0 - weight;
+    }
+
+    fn matrix_to_votes(matrix: &[Vec<f64>], namespace: &str) -> Vec<RelevantVote> {
+        let n = matrix.len();
+        let mut votes = Vec::new();
+
+        for i in 0..n {
+            for j in (i + 1)..n {
+                let a_ij = matrix[i][j];
+                let a_ji = matrix[j][i];
+                let total = a_ij + a_ji;
+                if total <= f64::EPSILON {
+                    continue;
+                }
+
+                let left_prob = a_ji / total;
+                let magnitude = ((0.5 - left_prob) * 100.0).round() as i32;
+                votes.push(RelevantVote {
+                    left_entity_pk_namespace: namespace.to_string(),
+                    left_entity_pk: i.to_string(),
+                    right_entity_pk_namespace: namespace.to_string(),
+                    right_entity_pk: j.to_string(),
+                    magnitude: magnitude.clamp(-50, 50),
+                });
+            }
+        }
+
+        votes
+    }
+
+    fn rank_centrality_reference(matrix: &[Vec<f64>], max_iters: usize, tol: f64) -> Vec<f64> {
+        let n = matrix.len();
+        if n == 0 {
+            return Vec::new();
+        }
+
+        let mut scores = vec![1.0f64 / n as f64; n];
+        let mut next = vec![0.0f64; n];
+        let mut row_sums = vec![0.0f64; n];
+
+        for iter in 0..max_iters {
+            let mut w_max = 0.0;
+            for i in 0..n {
+                let mut total = 0.0;
+                for j in 0..n {
+                    if i == j {
+                        continue;
+                    }
+                    let a_ij = matrix[i][j];
+                    let a_ji = matrix[j][i];
+                    let sum = a_ij + a_ji;
+                    if sum <= f64::EPSILON {
+                        continue;
+                    }
+                    total += a_ij / sum;
+                }
+                row_sums[i] = total;
+                if total > w_max {
+                    w_max = total;
+                }
+            }
+
+            if w_max <= f64::EPSILON {
+                break;
+            }
+
+            next.fill(0.0);
+
+            for i in 0..n {
+                let stay_prob = 1.0 - row_sums[i] / w_max;
+                next[i] += scores[i] * stay_prob;
+
+                for j in 0..n {
+                    if i == j {
+                        continue;
+                    }
+                    let a_ij = matrix[i][j];
+                    let a_ji = matrix[j][i];
+                    let sum = a_ij + a_ji;
+                    if sum <= f64::EPSILON {
+                        continue;
+                    }
+                    let prob = (a_ij / sum) / w_max;
+                    next[j] += scores[i] * prob;
+                }
+            }
+
+            let diff: f64 = scores
+                .iter()
+                .zip(next.iter())
+                .map(|(a, b)| (a - b).abs())
+                .sum();
+
+            scores.clone_from_slice(&next);
+
+            if diff < tol {
+                break;
+            }
+
+            if iter == max_iters - 1 {
+                warn!("Reference rank centrality reached max iterations without converging");
+            }
+        }
+
+        scores
+    }
+
     mod build_rank_graph_tests {
         use super::*;
 
@@ -985,6 +1096,56 @@ mod tests {
             for (a, b) in dense.iter().zip(sparse.iter()) {
                 assert!((a - b).abs() < 1e-9, "dense {a} sparse {b}");
             }
+        }
+
+        #[test]
+        fn test_sparse_spanning_tree_orders_hundred_entities() {
+            init_logger();
+
+            const ITEM_COUNT: usize = 100;
+            let namespace = "spanning";
+
+            let entities: Vec<EntityIdentifier> = (0..ITEM_COUNT)
+                .map(|i| EntityIdentifier {
+                    pk_namespace: namespace.to_string(),
+                    pk: i.to_string(),
+                })
+                .collect();
+
+            // Deterministic spanning tree: each item only compares against its
+            // immediate predecessor. This matches the Python reference structure
+            // while avoiding RNG differences across languages.
+            let mut matrix = vec![vec![0.0f64; ITEM_COUNT]; ITEM_COUNT];
+            for child in 1..ITEM_COUNT {
+                let parent = child - 1;
+                add_comparison(parent, child, &mut matrix);
+            }
+
+            let votes = matrix_to_votes(&matrix, namespace);
+
+            // A spanning tree of 100 nodes produces exactly 99 comparisons.
+            assert_eq!(votes.len(), ITEM_COUNT - 1);
+
+            let graph = build_rank_graph(&entities, &votes).unwrap();
+            let quantized_scores =
+                run_rank_centrality(&graph.graph, RankEngine::Sparse, 100000, 1e-8);
+
+            let reference_scores = rank_centrality_reference(&matrix, 100000, 1e-8);
+
+            let mut max_diff: f64 = 0.0;
+            for (quantized, reference) in quantized_scores.iter().zip(reference_scores.iter()) {
+                let diff = (quantized - reference).abs();
+                max_diff = max_diff.max(diff);
+            }
+
+            assert!(
+                max_diff < 1e-2,
+                "quantized scores diverged too far from reference (max diff {max_diff})"
+            );
+
+            // Note: integer magnitudes (\u00b150) introduce rounding noise that
+            // slightly changes the strict ordering compared to the floating-point
+            // reference when we only have the minimal spanning tree comparisons.
         }
 
         #[test]

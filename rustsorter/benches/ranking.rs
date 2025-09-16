@@ -52,7 +52,7 @@ fn matrix_to_votes(matrix: &[Vec<f64>], namespace: &str) -> Vec<RelevantVote> {
             }
 
             let left_prob = a_ji / total;
-            let magnitude = ((left_prob - 0.5) * 100.0).round() as i32;
+            let magnitude = ((0.5 - left_prob) * 100.0).round() as i32;
             votes.push(RelevantVote {
                 left_entity_pk_namespace: namespace.to_string(),
                 left_entity_pk: i.to_string(),
