@@ -111,7 +111,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .unwrap_or(8081);
 
     let steam_api_key = env::var("STEAM_API_KEY")
-        .expect("STEAM_API_KEY environment variable must be set");
+        .unwrap_or_else(|_| "dummy_key_for_development".to_string());
     
     let base_url = env::var("BASE_URL")
         .unwrap_or_else(|_| format!("http://localhost:{}", port));

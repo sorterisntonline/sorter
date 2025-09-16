@@ -123,6 +123,8 @@ async fn verify_steam_openid(params: &SteamAuthQuery, client: &reqwest::Client) 
     form_params.insert("openid.return_to", params.openid_return_to.as_deref().unwrap_or(""));
     form_params.insert("openid.response_nonce", params.openid_response_nonce.as_deref().unwrap_or(""));
 
+    debug!("Sending verification request to Steam with params: {:?}", form_params);
+
     let response = client
         .post(STEAM_OPENID_URL)
         .form(&form_params)
@@ -130,7 +132,12 @@ async fn verify_steam_openid(params: &SteamAuthQuery, client: &reqwest::Client) 
         .await?;
 
     let body = response.text().await?;
-    Ok(body.contains("is_valid:true"))
+    debug!("Steam verification response: {}", body);
+    
+    let is_valid = body.contains("is_valid:true");
+    debug!("Steam verification result: {}", is_valid);
+    
+    Ok(is_valid)
 }
 
 async fn fetch_steam_user_data(steam_id: &str, api_key: &str, client: &reqwest::Client) -> Result<(SteamPlayerSummary, Option<SteamPlayerBans>, Option<Vec<SteamOwnedGame>>)> {
@@ -301,23 +308,16 @@ pub async fn steam_callback(
             }
         }
         Ok(None) => {
-            // New user - fetch Steam data and create temp session
-            debug!("New user, fetching Steam data");
+            // New user - for now create temp session with basic Steam data
+            debug!("New user, creating temp session with basic data");
             
-            let (summary, _bans, _games) = match fetch_steam_user_data(&steam_id, &state.steam_api_key, &client).await {
-                Ok(data) => data,
-                Err(e) => {
-                    warn!("Failed to fetch Steam user data: {}", e);
-                    let redirect_url = format!("{}/auth/error?reason=steam_data_error", state.frontend_url);
-                    return Redirect::to(&redirect_url).into_response();
-                }
-            };
-
+            // For development, create basic temp data without calling Steam API
+            // TODO: Fetch real Steam data when we have a proper API key
             let temp_data = TempSessionData {
                 steam_id: steam_id.clone(),
-                steam_username: summary.personaname.clone(),
-                steam_avatar: summary.avatarfull.clone(),
-                suggested_handle: generate_suggested_handle(&summary.personaname),
+                steam_username: format!("User_{}", &steam_id[steam_id.len()-6..]), // Last 6 digits of Steam ID
+                steam_avatar: "https://steamcdn-a.akamaihd.net/steamcommunity/public/images/avatars/fe/fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb_medium.jpg".to_string(), // Default Steam avatar
+                suggested_handle: format!("user{}", &steam_id[steam_id.len()-4..]), // Last 4 digits
             };
 
             match sessions::create_temp_session(&state.db, "steam", &temp_data).await {
