@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRequireUsernameSelection } from '../contexts/AuthContext';
 import { AuthAPI } from '../api/auth';
@@ -15,30 +15,59 @@ function debounce(func, wait) {
   };
 }
 
+// Sanitize handle for validation (but don't modify user input aggressively)
+function sanitizeHandle(value) {
+  return value.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+}
+
+// Validate handle format client-side
+function validateHandle(handle) {
+  if (!handle) return { valid: false, message: 'Handle is required' };
+  if (handle.length < 3) return { valid: false, message: 'Handle must be at least 3 characters' };
+  if (handle.length > 50) return { valid: false, message: 'Handle must be 50 characters or less' };
+  if (!/^[a-z0-9_-]+$/.test(handle)) return { valid: false, message: 'Handle can only contain letters, numbers, underscores, and hyphens' };
+  if (handle.startsWith('-') || handle.endsWith('-')) return { valid: false, message: 'Handle cannot start or end with a hyphen' };
+  return { valid: true };
+}
+
 export default function ChooseUsernamePage() {
   const auth = useRequireUsernameSelection();
   const [handle, setHandle] = useState('');
   const [debouncedHandle, setDebouncedHandle] = useState('');
+  const [hasUserTyped, setHasUserTyped] = useState(false);
+  const initializedRef = useRef(false);
 
-  // Initialize with suggested handle from Steam data
+  // Initialize with suggested handle from Steam data (only once)
   useEffect(() => {
-    if (auth.tempData?.suggested_handle && !handle) {
-      setHandle(auth.tempData.suggested_handle);
-      setDebouncedHandle(auth.tempData.suggested_handle);
+    if (auth.tempData?.suggested_handle && !initializedRef.current && !hasUserTyped) {
+      const suggested = auth.tempData.suggested_handle;
+      setHandle(suggested);
+      setDebouncedHandle(suggested);
+      initializedRef.current = true;
     }
-  }, [auth.tempData, handle]);
+  }, [auth.tempData, hasUserTyped]);
 
   // Debounced handle for availability checking
   const debouncedSetHandle = useCallback(
-    debounce((value) => setDebouncedHandle(value), 500),
+    debounce((value) => {
+      const sanitized = sanitizeHandle(value);
+      setDebouncedHandle(sanitized);
+    }, 300),
     []
   );
 
   useEffect(() => {
-    debouncedSetHandle(handle);
+    if (handle.trim()) {
+      debouncedSetHandle(handle);
+    } else {
+      setDebouncedHandle('');
+    }
   }, [handle, debouncedSetHandle]);
 
-  // Check handle availability
+  // Client-side validation
+  const clientValidation = validateHandle(debouncedHandle);
+
+  // Check handle availability (only if client validation passes)
   const {
     data: availability,
     isLoading: isCheckingAvailability,
@@ -46,19 +75,22 @@ export default function ChooseUsernamePage() {
   } = useQuery({
     queryKey: ['auth', 'check-handle', debouncedHandle],
     queryFn: () => AuthAPI.checkHandleAvailability(debouncedHandle),
-    enabled: debouncedHandle.length > 0,
+    enabled: debouncedHandle.length >= 3 && clientValidation.valid,
     retry: false,
   });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!availability?.available || !availability?.valid) {
+    const finalHandle = sanitizeHandle(handle);
+    const finalValidation = validateHandle(finalHandle);
+    
+    if (!finalValidation.valid || !availability?.available) {
       return;
     }
 
     try {
-      await auth.completeSignup(handle);
+      await auth.completeSignup(finalHandle);
       // Redirect will happen automatically via auth context
       window.location.href = '/';
     } catch (error) {
@@ -68,8 +100,9 @@ export default function ChooseUsernamePage() {
   };
 
   const handleChange = (e) => {
-    const value = e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    const value = e.target.value;
     setHandle(value);
+    setHasUserTyped(true);
   };
 
   if (auth.isLoading) {
@@ -83,8 +116,9 @@ export default function ChooseUsernamePage() {
     );
   }
 
-  const canSubmit = handle.length > 0 && availability?.available && availability?.valid && !auth.isCompletingSignup;
-  const showValidation = debouncedHandle.length > 0;
+  const sanitizedHandle = sanitizeHandle(handle);
+  const canSubmit = sanitizedHandle.length >= 3 && clientValidation.valid && availability?.available && !auth.isCompletingSignup;
+  const showValidation = hasUserTyped && debouncedHandle.length > 0;
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
@@ -129,19 +163,29 @@ export default function ChooseUsernamePage() {
                   placeholder="your-handle"
                   maxLength={50}
                   required
+                  autoComplete="username"
                 />
+                {hasUserTyped && handle !== sanitizedHandle && sanitizedHandle && (
+                  <div className="mt-1 text-xs text-gray-500">
+                    Will be saved as: <span className="font-mono text-gray-700">@{sanitizedHandle}</span>
+                  </div>
+                )}
               </div>
               
               {showValidation && (
                 <div className="mt-2">
-                  {isCheckingAvailability ? (
+                  {!clientValidation.valid ? (
+                    <p className="text-sm text-red-600">
+                      {clientValidation.message}
+                    </p>
+                  ) : isCheckingAvailability ? (
                     <p className="text-sm text-gray-500 flex items-center">
                       <div className="animate-spin rounded-full h-3 w-3 border-b border-gray-400 mr-2"></div>
                       Checking availability...
                     </p>
                   ) : availabilityError ? (
                     <p className="text-sm text-red-600">
-                      Error checking availability
+                      Error checking availability. Please try again.
                     </p>
                   ) : availability ? (
                     <>
@@ -155,7 +199,7 @@ export default function ChooseUsernamePage() {
                           <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                           </svg>
-                          @{handle} is available
+                          @{sanitizedHandle} is available
                         </p>
                       )}
                       {availability.valid && !availability.available && (
@@ -163,10 +207,14 @@ export default function ChooseUsernamePage() {
                           <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                           </svg>
-                          @{handle} is already taken
+                          @{sanitizedHandle} is already taken
                         </p>
                       )}
                     </>
+                  ) : clientValidation.valid && debouncedHandle.length >= 3 ? (
+                    <p className="text-sm text-gray-500">
+                      Ready to check availability...
+                    </p>
                   ) : null}
                 </div>
               )}
