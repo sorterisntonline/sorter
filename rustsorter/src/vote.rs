@@ -133,14 +133,6 @@ async fn get_vote(
     Ok((StatusCode::OK, Json(vote)))
 }
 
-#[derive(Deserialize, Debug)]
-struct VoteFilterParams {
-    _user_id: Option<Uuid>,
-    _attribute_id: Option<i32>,
-    _parent_entity_ns: Option<String>,
-    _parent_entity_pk: Option<String>,
-}
-
 async fn list_votes(State(state): State<AppState>) -> Result<(StatusCode, Json<Vec<Vote>>), Error> {
     let votes = sqlx::query_file_as!(Vote, "../database/sql/vote/list.sql",)
         .fetch_all(&state.db)

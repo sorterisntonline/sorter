@@ -10,35 +10,6 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-struct Item {
-    _id: i32,
-    _title: String,
-    _body: Option<String>,
-    _url: Option<String>,
-    _slug: String,
-}
-
-#[derive(Debug, Clone)]
-struct SortedItem {
-    id: i32,
-    title: String,
-    slug: String,
-    _elo: f32,
-}
-
-impl From<SortedItem> for Item {
-    fn from(val: SortedItem) -> Self {
-        Item {
-            _id: val.id,
-            _title: val.title,
-            _body: None,
-            _url: None,
-            _slug: val.slug,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
 struct _Skip {
     item_id: i32,
 }
@@ -134,7 +105,7 @@ fn select_ranked_entity_pair(
                     
                     if left_sorted.is_empty() {
                         // Both pools only have unsorted, pick randomly from each
-                        let left_entity = left_unsorted.choose(&mut rng).unwrap().clone().clone();
+                        let left_entity = (*left_unsorted.choose(&mut rng).unwrap()).clone();
                         let mut right_pool = right_unsorted.clone();
                         right_pool.retain(|e| !entities_are_same(e, &left_entity));
                         
@@ -142,14 +113,14 @@ fn select_ranked_entity_pair(
                             return Err(PairSelectionError::InsufficientEntities);
                         }
                         
-                        let right_entity = right_pool.choose(&mut rng).unwrap().clone().clone();
+                        let right_entity = (*right_pool.choose(&mut rng).unwrap()).clone();
                         return Ok((left_entity, right_entity));
                     }
                     
                     (right_unsorted, left_sorted, false)
                 } else {
                     // Only left has unsorted, must pick from left
-                    let left_entity = left_unsorted.choose(&mut rng).unwrap().clone().clone();
+                    let left_entity = (*left_unsorted.choose(&mut rng).unwrap()).clone();
                     let mut right_pool = right_entities.to_vec();
                     right_pool.retain(|e| !entities_are_same(e, &left_entity));
                     
@@ -172,7 +143,7 @@ fn select_ranked_entity_pair(
             
             if left_sorted.is_empty() {
                 // No sorted entities available, pick two unsorted
-                let right_entity = right_unsorted.choose(&mut rng).unwrap().clone().clone();
+                let right_entity = (*right_unsorted.choose(&mut rng).unwrap()).clone();
                 let mut left_pool = left_entities.to_vec();
                 left_pool.retain(|e| !entities_are_same(e, &right_entity));
                 

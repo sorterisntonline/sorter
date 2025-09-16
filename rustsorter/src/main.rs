@@ -30,7 +30,6 @@ use axum::{
 use dotenv::dotenv;
 use schemars::JsonSchema;
 use serde::Serialize;
-use std::path::Path;
 use tower_http::{
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
@@ -89,7 +88,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let args: Vec<String> = env::args().collect();
     eprintln!("[rustsorter] args: {:?}", args);
 
-    let mut database_string = match env::var("DATABASE_URL") {
+    let database_string = match env::var("DATABASE_URL") {
         Ok(value) => value.trim().to_string(),
         Err(_) => {
             eprintln!("[rustsorter] ERROR: DATABASE_URL is not set");
