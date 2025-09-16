@@ -1,5 +1,6 @@
 pub mod api_key;
 pub mod app_state;
+pub mod auth;
 pub mod auth_middleware;
 pub mod entity;
 pub mod entity_relationships;
@@ -73,8 +74,8 @@ async fn protected_route(MaybeUser(maybe_user): MaybeUser) -> Response {
         Some(user) => (
             StatusCode::OK,
             Json(ProtectedResponse {
-                message: format!("Hello, {}! This is a protected route.", user.auth0_sub),
-                authenticated_user: user.auth0_sub,
+                message: format!("Hello, {}! This is a protected route.", user.handle),
+                authenticated_user: user.handle.clone(),
             }),
         )
             .into_response(),
@@ -103,7 +104,21 @@ async fn main() -> Result<(), anyhow::Error> {
         .await
         .expect("Unable to connect to database");
 
-    let app_state = AppState { db: pool.clone() };
+    let steam_api_key = env::var("STEAM_API_KEY")
+        .expect("STEAM_API_KEY environment variable must be set");
+    
+    let base_url = env::var("BASE_URL")
+        .unwrap_or_else(|_| format!("http://localhost:{}", port));
+    
+    let frontend_url = env::var("FRONTEND_URL")
+        .unwrap_or_else(|_| "http://localhost:5173".to_string());
+
+    let app_state = AppState { 
+        db: pool.clone(),
+        steam_api_key,
+        base_url,
+        frontend_url,
+    };
 
     let router = router(app_state);
 
@@ -153,6 +168,7 @@ fn router(app_state: AppState) -> Router {
             }),
         )
         .nest("/keys", api_key::routes())
+        .nest("/auth", auth::routes())
         .nest("/entity", entity::routes())
         .nest("/entity_relationships", entity_relationships::routes())
         .nest("/pair", pair::routes())

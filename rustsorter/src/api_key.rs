@@ -142,19 +142,24 @@ fn parse_key_identifier(full_key: &str) -> Result<String, Error> {
     Ok(parts[1].to_string())
 }
 
-pub async fn get_user_by_auth0_sub(pool: &PgPool, auth0_sub: &str) -> Result<User, Error> {
-    sqlx::query_file_as!(User, "../database/sql/user/select.sql", auth0_sub)
-        .fetch_one(pool)
-        .await
-        .map_error(&format!("user '{auth0_sub}'"))
+pub async fn get_user_by_handle(pool: &PgPool, handle: &str) -> Result<User, Error> {
+    sqlx::query_as!(
+        User,
+        "SELECT id, handle, display_name, username, primary_provider, avatar_url, bio, created_at 
+         FROM users WHERE handle = $1",
+        handle
+    )
+    .fetch_one(pool)
+    .await
+    .map_error(&format!("user '{handle}'"))
 }
 
 async fn create_key<'e, E: PgExecutor<'e>>(
     executor: E,
     name: String,
-    auth0_sub: &str,
+    user_id: &uuid::Uuid,
 ) -> Result<NewApiKeyResponse, Error> {
-    debug!(name, auth0_sub; "create_key called");
+    debug!(name, user_id:?; "create_key called");
 
     validate_key_name(&name)?;
 
@@ -164,9 +169,10 @@ async fn create_key<'e, E: PgExecutor<'e>>(
 
     debug!(identifier, preview; "generated identifier and preview");
 
-    sqlx::query_file!(
-        "../database/sql/key/insert.sql",
-        auth0_sub,
+    sqlx::query!(
+        "INSERT INTO api_keys (user_id, name, key_identifier, hashed_key, created_at)
+         VALUES ($1, $2, $3, $4, $5)",
+        user_id,
         name,
         &identifier,
         &hashed_key,
@@ -176,7 +182,7 @@ async fn create_key<'e, E: PgExecutor<'e>>(
     .await
     .map_error("key")?;
 
-    info!(name, auth0_sub; "created API key");
+    info!(name, user_id:?; "created API key");
 
     Ok(NewApiKeyResponse {
         name,
@@ -194,14 +200,19 @@ pub async fn verify_api_key(
     let identifier = parse_key_identifier(provided_full_key)?;
     debug!(identifier; "parsed identifier");
 
-    let key = sqlx::query_file_as!(ApiKeyDb, "../database/sql/key/select.sql", &identifier)
-        .fetch_optional(pool)
-        .await
-        .map_error("key")?
-        .ok_or_else(|| {
-            warn!(identifier = *identifier; "no active API key found");
-            Error::Unauthorized
-        })?;
+    let key = sqlx::query_as!(
+        ApiKeyDb,
+        "SELECT id, user_id::text as auth0_sub, name, key_identifier, hashed_key, created_at, last_used_at, active
+         FROM api_keys WHERE key_identifier = $1 AND active = true",
+        &identifier
+    )
+    .fetch_optional(pool)
+    .await
+    .map_error("key")?
+    .ok_or_else(|| {
+        warn!(identifier = *identifier; "no active API key found");
+        Error::Unauthorized
+    })?;
 
     let key_id = key.id;
 
@@ -214,9 +225,19 @@ pub async fn verify_api_key(
     if is_valid {
         debug!(key_id; "API key verification successful");
 
-        let user = get_user_by_auth0_sub(pool, &key.auth0_sub).await?;
+        let user_id = uuid::Uuid::parse_str(&key.auth0_sub).map_internal()?;
+        let user = sqlx::query_as!(
+            User,
+            "SELECT id, handle, display_name, username, primary_provider, avatar_url, bio, created_at 
+             FROM users WHERE id = $1",
+            user_id
+        )
+        .fetch_one(pool)
+        .await
+        .map_error("user")?;
+        
         debug!(
-            user_id:% = user.id, user = user.auth0_sub; "found user"
+            user_id:% = user.id, handle = user.handle; "found user"
         );
 
         Ok((key, user))
@@ -247,16 +268,17 @@ pub async fn update_last_used(pool: &PgPool, key_id: i32) -> Result<(), Error> {
 async fn revoke_key<'e, E: PgExecutor<'e>>(
     executor: E,
     name: &str,
-    auth0_sub: &str,
+    user_id: &uuid::Uuid,
 ) -> Result<(), Error> {
     debug!(name; "revoke_key called");
 
     let object = format!("active API key named '{}'", name);
 
-    sqlx::query_file!(
-        "../database/sql/key/revoke.sql",
+    sqlx::query!(
+        "UPDATE api_keys SET active = false, last_used_at = $1 
+         WHERE user_id = $2 AND name = $3 AND active = true",
         Utc::now().naive_utc(),
-        auth0_sub,
+        user_id,
         name
     )
     .execute(executor)
@@ -265,7 +287,7 @@ async fn revoke_key<'e, E: PgExecutor<'e>>(
     .catch_not_found(&object)?;
 
     info!(
-        name, auth0_sub; "revoked API key"
+        name, user_id:?; "revoked API key"
     );
 
     Ok(())
@@ -277,16 +299,21 @@ async fn list_keys(
 ) -> Result<(StatusCode, Json<ListKeysResponse>), Error> {
     debug!("list_keys called");
 
-    debug!(user = user.auth0_sub; "authenticated user for list_keys");
+    debug!(handle = user.handle; "authenticated user for list_keys");
 
-    let keys = sqlx::query_file_as!(ApiKeyDb, "../database/sql/key/list.sql", user.auth0_sub)
-        .fetch_all(&state.db)
-        .await
-        .map_error("key")?;
+    let keys = sqlx::query_as!(
+        ApiKeyDb,
+        "SELECT id, user_id::text as auth0_sub, name, key_identifier, hashed_key, created_at, last_used_at, active
+         FROM api_keys WHERE user_id = $1",
+        user.id
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_error("key")?;
 
     let response_keys: Vec<ApiKeyResponse> = keys.into_iter().map(ApiKeyResponse::from).collect();
     debug!(
-        user = user.auth0_sub, key_count = response_keys.len(); "found keys for user"
+        handle = user.handle, key_count = response_keys.len(); "found keys for user"
     );
 
     Ok((
@@ -302,7 +329,7 @@ async fn post_route(
     Extension(user): Extension<User>,
     Json(payload): Json<CreateKeyRequest>,
 ) -> Result<(StatusCode, Json<NewApiKeyResponse>), Error> {
-    let key = create_key(&state.db, payload.name, &user.auth0_sub).await?;
+    let key = create_key(&state.db, payload.name, &user.id).await?;
 
     Ok((StatusCode::CREATED, Json(key)))
 }
@@ -312,7 +339,7 @@ async fn revoke_route(
     Extension(user): Extension<User>,
     Json(payload): Json<KeyNameRequest>,
 ) -> Result<(StatusCode, Json<RevokeKeyResponse>), Error> {
-    revoke_key(&state.db, &payload.name, &user.auth0_sub).await?;
+    revoke_key(&state.db, &payload.name, &user.id).await?;
 
     Ok((
         StatusCode::OK,
@@ -329,8 +356,8 @@ async fn regenerate_key(
 ) -> Result<(StatusCode, Json<NewApiKeyResponse>), Error> {
     validate_key_name(&payload.name)?;
 
-    let _ = revoke_key(&state.db, &payload.name, &user.auth0_sub).await;
-    let key = create_key(&state.db, payload.name, &user.auth0_sub).await?;
+    let _ = revoke_key(&state.db, &payload.name, &user.id).await;
+    let key = create_key(&state.db, payload.name, &user.id).await?;
 
     Ok((StatusCode::OK, Json(key)))
 }

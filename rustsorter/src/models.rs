@@ -197,9 +197,48 @@ impl IntoResponse for Error {
 #[derive(sqlx::FromRow, serde::Serialize, Debug, Clone)]
 pub struct User {
     pub id: Uuid,
-    pub auth0_sub: String,
-    pub username: String,
+    pub handle: String,
+    pub display_name: Option<String>,
+    pub username: String, // Keep for backward compatibility, will eventually remove
+    pub primary_provider: Option<String>,
     pub avatar_url: Option<String>,
     pub bio: Option<String>,
     pub created_at: Option<NaiveDateTime>,
+}
+
+#[derive(sqlx::FromRow, serde::Serialize, Debug, Clone)]
+pub struct UserProvider {
+    pub user_id: Uuid,
+    pub provider_id: String,
+    pub external_id: String,
+    pub external_username: Option<String>,
+    pub profile_data: Option<serde_json::Value>,
+    pub linked_at: Option<NaiveDateTime>,
+    pub last_sync_at: Option<NaiveDateTime>,
+}
+
+#[derive(sqlx::FromRow, serde::Serialize, Debug, Clone)]
+pub struct SteamUserData {
+    pub user_id: Uuid,
+    pub steam_id: String,
+    pub account_created: Option<NaiveDateTime>,
+    pub playtime_tf2: Option<i32>,
+    pub total_games: Option<i32>,
+    pub profile_state: Option<i32>,
+    pub vac_banned: Option<bool>,
+    pub game_bans: Option<i32>,
+    pub days_since_last_ban: Option<i32>,
+    pub last_api_sync: Option<NaiveDateTime>,
+    pub created_at: Option<NaiveDateTime>,
+}
+
+#[derive(sqlx::FromRow, serde::Serialize, Debug, Clone)]
+pub struct SteamMedal {
+    pub user_id: Uuid,
+    pub item_def_id: i32,
+    pub tournament_name: Option<String>,
+    pub medal_type: Option<String>,
+    pub season: Option<String>,
+    pub division: Option<String>,
+    pub discovered_at: Option<NaiveDateTime>,
 }

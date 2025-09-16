@@ -43,7 +43,7 @@ pub async fn try_auth(
 
     if token == STATIC_ADMIN_KEY {
         log::warn!("Using static debug API key for user: {}", ADMIN_USERNAME);
-        match api_key::get_user_by_auth0_sub(&db_pool, ADMIN_USERNAME).await {
+        match api_key::get_user_by_handle(&db_pool, ADMIN_USERNAME).await {
             Ok(user) => {
                 request.extensions_mut().insert(user);
                 // Proceed with the user inserted
@@ -66,7 +66,7 @@ pub async fn try_auth(
     // Attempt to verify the regular API key
     match api_key::verify_api_key(&db_pool, token).await {
         Ok((api_key_record, user)) => {
-            log::debug!("Authentication successful for user: {}", user.auth0_sub);
+            log::debug!("Authentication successful for user: {}", user.handle);
             let key_id = api_key_record.id;
 
             request.extensions_mut().insert(user);
