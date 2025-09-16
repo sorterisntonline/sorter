@@ -1,10 +1,9 @@
 use axum::{
     extract::{Query, State},
-    http::{header, HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
+    http::HeaderMap,
+    response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
-use schemars::JsonSchema;
 use uuid::Uuid;
 
 use crate::{
@@ -14,7 +13,7 @@ use crate::{
     sessions,
 };
 
-#[derive(Serialize, JsonSchema)]
+#[derive(Serialize)]
 pub struct SessionStatusResponse {
     pub authenticated: bool,
     pub session_type: Option<String>, // "temp" | "full"
@@ -22,18 +21,18 @@ pub struct SessionStatusResponse {
     pub temp_data: Option<TempSessionData>,
 }
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Deserialize)]
 pub struct CompleteSignupRequest {
     pub handle: String,
 }
 
-#[derive(Serialize, JsonSchema)]
+#[derive(Serialize)]
 pub struct CompleteSignupResponse {
     pub user: User,
     pub message: String,
 }
 
-#[derive(Serialize, JsonSchema)]
+#[derive(Serialize)]
 pub struct LogoutResponse {
     pub message: String,
 }
@@ -135,9 +134,9 @@ pub async fn complete_signup(
 
     // Extract temp data
     let temp_data: TempSessionData = session.data
-        .ok_or(Error::BadRequest { message: "session has no temp data".into() })?
-        .try_into()
-        .map_err(|_| Error::BadRequest { message: "invalid temp data".into() })?;
+        .ok_or(Error::BadRequest { message: "session has no temp data".into() })
+        .and_then(|data| serde_json::from_value(data)
+            .map_err(|_| Error::BadRequest { message: "invalid temp data".into() }))?;
 
     // Create user
     let user_id = Uuid::new_v4();
@@ -241,7 +240,7 @@ pub struct HandleAvailabilityQuery {
     pub handle: String,
 }
 
-#[derive(Serialize, JsonSchema)]
+#[derive(Serialize)]
 pub struct HandleAvailabilityResponse {
     pub available: bool,
     pub valid: bool,

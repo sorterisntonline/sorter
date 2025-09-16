@@ -180,11 +180,14 @@ fn router(app_state: AppState) -> Router {
         ));
 
     let mut api = OpenApi::default();
-    let router = ApiRouter::new()
+    let api_router = ApiRouter::new()
         .nest("/api", api_routes)
-        .nest("/api/auth", auth::routes()) // Auth routes without middleware
         .route("/api.json", get(api_json))
-        .finish_api_with(&mut api, api_transform)
+        .finish_api_with(&mut api, api_transform);
+
+    let router = Router::new()
+        .merge(api_router)
+        .nest("/api/auth", auth::routes()) // Plain axum auth routes
         .with_state(app_state)
         .layer(TraceLayer::new_for_http())
         .layer(Extension(Arc::new(api)));

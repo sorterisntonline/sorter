@@ -56,6 +56,10 @@ pub async fn try_auth(
                 // Temp sessions don't authenticate a user, but we don't fail the request
                 return Ok(next.run(request).await);
             }
+            Ok(Some((_, _))) => {
+                log::debug!("Session found but doesn't match expected patterns");
+                // Continue to try API key auth
+            }
             Ok(None) => {
                 log::debug!("Session not found or expired");
                 // Continue to try API key auth

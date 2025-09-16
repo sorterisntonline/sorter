@@ -11,7 +11,7 @@ use serde_json::Value;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use url::Url;
-use uuid::Uuid;
+
 
 use crate::{
     app_state::AppState,
@@ -219,7 +219,7 @@ async fn check_existing_steam_user(
 }
 
 pub async fn steam_login(State(state): State<AppState>) -> impl IntoResponse {
-    let return_url = format!("{}/auth/steam/callback", state.base_url);
+    let return_url = format!("{}/api/auth/steam/callback", state.base_url);
     
     match get_steam_login_url(&return_url) {
         Ok(login_url) => {

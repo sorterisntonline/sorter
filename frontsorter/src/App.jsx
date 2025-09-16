@@ -8,22 +8,30 @@ import EntitiesIndex from "./pages/EntitiesIndex";
 import EntityDetail from "./pages/EntityDetail";
 import CreateEntityPage from "./pages/CreateEntityPage";
 
+// Auth pages (outside main layout)
+import LoginPage from "./pages/LoginPage";
+import ChooseUsernamePage from "./pages/ChooseUsernamePage";
+import AuthSuccessPage from "./pages/AuthSuccessPage";
+import AuthErrorPage from "./pages/AuthErrorPage";
+
 function App() {
   return (
     <Routes>
-      {/* Wrap all main pages within the Layout */}
+      {/* Auth routes (no layout) */}
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/auth/choose-username" element={<ChooseUsernamePage />} />
+      <Route path="/auth/success" element={<AuthSuccessPage />} />
+      <Route path="/auth/error" element={<AuthErrorPage />} />
+
+      {/* Main app routes (with layout) */}
       <Route path="/" element={<Layout />}>
-        {/* Entities index and drilldown */}
         <Route index element={<EntitiesIndex />} />
         <Route path="entity/new" element={<CreateEntityPage />} />
         <Route path="entity/:pk_namespace/:pk" element={<EntityDetail />} />
-        <Route path="vote" element={<VotePage />} />{" "}
-        {/* Keep existing vote page */}
+        <Route path="vote" element={<VotePage />} />
         <Route path="profile" element={<ProfilePage />} />
-        {/* Add a catch-all or Not Found route if desired */}
         <Route path="*" element={<div className="p-4">Page Not Found</div>} />
       </Route>
-      {/* Routes outside the main layout (e.g., login) could go here */}
     </Routes>
   );
 }

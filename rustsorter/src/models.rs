@@ -194,7 +194,7 @@ impl IntoResponse for Error {
     }
 }
 
-#[derive(sqlx::FromRow, serde::Serialize, Debug, Clone)]
+#[derive(sqlx::FromRow, serde::Serialize, Debug, Clone, schemars::JsonSchema)]
 pub struct User {
     pub id: Uuid,
     pub handle: String,
@@ -282,7 +282,7 @@ impl SessionType {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, schemars::JsonSchema)]
 pub struct TempSessionData {
     pub steam_id: String,
     pub steam_username: String,
