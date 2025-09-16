@@ -17,7 +17,7 @@ use crate::{
 const STATIC_ADMIN_KEY: &str = "STATIC_TEST_KEY_FOR_ADMIN_USER_123";
 const ADMIN_USERNAME: &str = "admin";
 
-fn extract_session_id_from_cookie(headers: &HeaderMap) -> Option<Uuid> {
+pub fn extract_session_id_from_cookie(headers: &HeaderMap) -> Option<Uuid> {
     let cookie_header = headers.get(header::COOKIE)?.to_str().ok()?;
     
     for cookie in cookie_header.split(';') {

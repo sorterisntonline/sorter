@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE user_sessions \n         SET user_id = $1, session_type = $2, data = NULL, provider_id = NULL, expires_at = $3\n         WHERE id = $4 AND session_type = 'temp'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Timestamp",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5e04cb2aae7bbdc2ffabb418f96048412740920037d8ef491ac26335cbccd5e1"
+}
