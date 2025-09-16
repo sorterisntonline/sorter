@@ -45,6 +45,13 @@ uuid = { version = "1", features = ["v4", "serde"] }
 async-trait = "0.1.88"
 sea-query = "0.32.4"
 
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "ranking"
+harness = false
+
 [profile.staging]
 inherits = "dev"
 

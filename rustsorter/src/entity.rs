@@ -224,7 +224,7 @@ pub async fn upsert_entity<'e, E: PgExecutor<'e>>(
     profile_picture_url: Option<&str>,
     metadata: Option<&JsonValue>,
     user_id: Uuid,
- ) -> Result<Entity, Error> {
+) -> Result<Entity, Error> {
     debug!(
         pk_namespace,
         pk,
