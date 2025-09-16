@@ -96,17 +96,6 @@ async fn main() -> Result<(), anyhow::Error> {
             std::process::exit(1);
         }
     };
-    // Strip simple wrapping quotes if present
-    if (database_string.starts_with('"') && database_string.ends_with('"'))
-        || (database_string.starts_with('\'') && database_string.ends_with('\''))
-    {
-        database_string = database_string[1..database_string.len() - 1].to_string();
-    }
-    if !database_string.contains("://") {
-        eprintln!("[rustsorter] WARNING: DATABASE_URL missing scheme; prefixing with postgresql://");
-        database_string = format!("postgresql://{}", database_string);
-    }
-    eprintln!("[rustsorter] DATABASE_URL detected (redacted)");
 
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(5)
@@ -184,25 +173,11 @@ fn router(app_state: AppState) -> Router {
         .layer(Extension(Arc::new(api)));
 
     // Static file serving for the built React app.
-    // Priority: env STATIC_DIR, then Docker default, then common local build paths.
     let static_dir_env = env::var("STATIC_DIR").ok();
-    let candidate_dirs = [
-        static_dir_env.as_deref().unwrap_or(""),
-        // Docker runtime path (see Dockerfile): /app/frontsorter/public
-        "frontsorter/public",
-        // Local dev build from repo root
-        "frontsorter/dist",
-        // If running from rustsorter dir
-        "../frontsorter/dist",
-        "../frontsorter/public",
-    ];
 
-    let chosen_dir = candidate_dirs
-        .iter()
-        .find(|p| !p.is_empty() && Path::new(p).exists())
-        .map(|s| s.to_string());
+    // for dev, use vite's dev server. these routes are only for production
 
-    if let Some(dir) = chosen_dir {
+    if let Some(dir) = static_dir_env {
         let index_path = format!("{}/index.html", dir);
         let assets_path = format!("{}/assets", dir);
 

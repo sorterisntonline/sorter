@@ -99,15 +99,12 @@ jobs:
           mkdir -p seed
           rm -rf seed/sorter-tf2 || true
           git clone https://github.com/sorterisntonline/sorter-tf2 seed/sorter-tf2
-          # Point seeder at the deployed app URL
-          APP_URL='${{ steps.deploy.outputs.url }}'
-          sed -i "s#http://localhost:8081/api#${APP_URL}/api#g" seed/sorter-tf2/compiler.clj
 
       - name: Seed database with TF2 dataset (bb)
         if: github.event.action != 'closed'
         run: |
           set -euo pipefail
-          bb seed/sorter-tf2/compiler.clj
+          SORTER_API_KEY=STATIC_TEST_KEY_FOR_ADMIN_USER_123 SORTER_API_BASE_URL='${{ steps.deploy.outputs.url }}/api' bb seed/sorter-tf2/compiler.clj
 
       - name: Cleanup Neon Database Branch
         if: github.event.action == 'closed'
