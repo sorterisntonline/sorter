@@ -50,7 +50,7 @@ export async function installDeps() {
   } else if (currentPlatform === 'linux') {
     results.push(await installDependency(
       'Docker',
-      'curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh',
+      'curl -fsSL https://get.docker.com -o get-docker.sh && chmod +x get-docker.sh && sh get-docker.sh && rm get-docker.sh',
       'docker --version'
     ));
   } else {
