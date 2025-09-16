@@ -2,8 +2,8 @@ import { execSync, spawn } from 'child_process';
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
 import { join } from 'path';
 import * as readline from 'readline';
+import { parse, stringify } from 'envfile';
 import { paths } from '../utils/paths.js';
-import { upsertEnvVariable } from '../utils/env.js';
 import { createServer } from 'net';
 
 // Get port from environment or use default
@@ -116,7 +116,12 @@ export async function runPostgres(options: { reset?: boolean }) {
 
   // Persist DATABASE_URL to .env deterministically so other commands read the same value
   mkdirSync(paths.projectRoot, { recursive: true });
-  upsertEnvVariable('DATABASE_URL', DB_URL);
+  
+  const envFile = paths.envFile;
+  const env = existsSync(envFile) ? parse(readFileSync(envFile, 'utf8')) : {};
+  env.DATABASE_URL = DB_URL;
+  writeFileSync(envFile, stringify(env));
+  
   console.log(`📊 Database URL written to ${paths.envFile}`);
 
   // Start the Docker container
