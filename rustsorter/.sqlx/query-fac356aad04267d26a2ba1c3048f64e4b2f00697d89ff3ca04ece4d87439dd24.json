@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n    id,\n    auth0_sub,\n    name,\n    key_identifier,\n    hashed_key,\n    created_at,\n    last_used_at,\n    active\nFROM\n    api_keys\nWHERE\n    key_identifier = $1\n    AND active = TRUE\n",
+  "query": "SELECT id, user_id, name, key_identifier, hashed_key, created_at, last_used_at, active\n         FROM api_keys WHERE user_id = $1",
   "describe": {
     "columns": [
       {
@@ -10,8 +10,8 @@
       },
       {
         "ordinal": 1,
-        "name": "auth0_sub",
-        "type_info": "Text"
+        "name": "user_id",
+        "type_info": "Uuid"
       },
       {
         "ordinal": 2,
@@ -46,7 +46,7 @@
     ],
     "parameters": {
       "Left": [
-        "Text"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -60,5 +60,5 @@
       false
     ]
   },
-  "hash": "f6113283d0f47b3d7921d82f643faa7f50ff972ad6bd9ebdee032877c0f706a8"
+  "hash": "fac356aad04267d26a2ba1c3048f64e4b2f00697d89ff3ca04ece4d87439dd24"
 }

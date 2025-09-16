@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO user_providers (user_id, provider_id, external_id, external_username, profile_data)\n             VALUES ($1, 'steam', $2, $3, $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5fefdef3c5cf2dd7de42419036abf024ec275c3bfcaf696a0cb32b01e2465398"
+}
