@@ -64,9 +64,10 @@ jobs:
         with:
           # This action automatically detects if the PR is open or closed.
           # If open, it deploys. If closed, it destroys the app.
-          # Provide DATABASE_URL to the runtime as a Fly secret
+          # Provide DATABASE_URL and STEAM_API_KEY to the runtime as Fly secrets
           secrets: |
             DATABASE_URL=${{ steps.neon_create.outputs.db_url }}
+            STEAM_API_KEY=${{ secrets.STEAM_API_KEY }}
 
       # Wait until the deployed app responds healthy
       - name: Wait for app health
