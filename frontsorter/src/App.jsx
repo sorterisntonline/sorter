@@ -6,6 +6,7 @@ import VotePage from "./pages/VotePage";
 import ProfilePage from "./pages/ProfilePage";
 import EntitiesIndex from "./pages/EntitiesIndex";
 import EntityDetail from "./pages/EntityDetail";
+import CreateEntityPage from "./pages/CreateEntityPage";
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
       <Route path="/" element={<Layout />}>
         {/* Entities index and drilldown */}
         <Route index element={<EntitiesIndex />} />
+        <Route path="entity/new" element={<CreateEntityPage />} />
         <Route path="entity/:pk_namespace/:pk" element={<EntityDetail />} />
         <Route path="vote" element={<VotePage />} />{" "}
         {/* Keep existing vote page */}
