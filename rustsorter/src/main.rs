@@ -2,6 +2,7 @@ pub mod api_key;
 pub mod app_state;
 pub mod auth;
 pub mod auth_middleware;
+mod config;
 pub mod entity;
 pub mod entity_relationships;
 pub mod extractors;
@@ -9,11 +10,12 @@ pub mod models;
 pub mod pagerank;
 pub mod pair;
 pub mod vote;
-use std::{env, sync::Arc};
+use std::sync::Arc;
 
 use aide::{
     axum::{
-        ApiRouter, IntoApiResponse,
+        ApiRouter,
+        IntoApiResponse,
         routing::{get, get_with},
     },
     openapi::{self, OpenApi, SecurityScheme},
@@ -23,7 +25,8 @@ use aide::{
 use anyhow::Result;
 use app_state::AppState;
 use axum::{
-    Extension, Router,
+    Extension,
+    Router,
     http::StatusCode,
     middleware,
     response::{IntoResponse, Response},
@@ -31,13 +34,13 @@ use axum::{
 use dotenv::dotenv;
 use schemars::JsonSchema;
 use serde::Serialize;
-
 use tower_http::{
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
 };
 
 use crate::{
+    config::AppConfig,
     extractors::maybe_user::MaybeUser,
     models::{Error, Json},
 };
@@ -87,46 +90,32 @@ async fn main() -> Result<(), anyhow::Error> {
     dotenv().ok();
     env_logger::init();
     eprintln!("[rustsorter] starting up...");
-    let args: Vec<String> = env::args().collect();
+    let args: Vec<String> = std::env::args().collect();
     eprintln!("[rustsorter] args: {:?}", args);
 
-    let database_string = match env::var("DATABASE_URL") {
-        Ok(value) => value.trim().to_string(),
-        Err(_) => {
-            eprintln!("[rustsorter] ERROR: DATABASE_URL is not set");
+    let config = match AppConfig::from_env() {
+        Ok(config) => config,
+        Err(err) => {
+            eprintln!("[rustsorter] ERROR: {}", err);
             std::process::exit(1);
         }
     };
 
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(5)
-        .connect(&database_string)
+        .connect(&config.database_url)
         .await
         .expect("Unable to connect to database");
 
-    let port: u16 = env::var("PORT")
-        .ok()
-        .and_then(|value| value.parse::<u16>().ok())
-        .unwrap_or(8081);
-
-    let steam_api_key = env::var("STEAM_API_KEY")
-        .expect("STEAM_API_KEY environment variable must be set");
-    
-    let base_url = env::var("BASE_URL")
-        .unwrap_or_else(|_| format!("http://localhost:{}", port));
-    
-    let frontend_url = env::var("FRONTEND_URL")
-        .unwrap_or_else(|_| "http://localhost:5173".to_string());
-
-    let app_state = AppState { 
+    let app_state = AppState {
         db: pool.clone(),
-        steam_api_key,
-        base_url,
-        frontend_url,
+        steam_api_key: config.steam_api_key.clone(),
+        base_url: config.base_url.clone(),
+        frontend_url: config.frontend_url.clone(),
     };
 
-    let router = router(app_state);
-    let addr = format!("0.0.0.0:{}", port);
+    let router = router(app_state, config.static_dir.clone());
+    let addr = format!("0.0.0.0:{}", config.port);
     log::info!("Starting server on {}", addr);
     eprintln!("[rustsorter] binding to {}", addr);
 
@@ -145,7 +134,7 @@ async fn main() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-fn router(app_state: AppState) -> Router {
+fn router(app_state: AppState, static_dir: Option<String>) -> Router {
     let api_routes = ApiRouter::new()
         .api_route(
             "/docs",
@@ -189,11 +178,9 @@ fn router(app_state: AppState) -> Router {
         .layer(Extension(Arc::new(api)));
 
     // Static file serving for the built React app.
-    let static_dir_env = env::var("STATIC_DIR").ok();
-
     // for dev, use vite's dev server. these routes are only for production
 
-    if let Some(dir) = static_dir_env {
+    if let Some(dir) = static_dir {
         let index_path = format!("{}/index.html", dir);
         let assets_path = format!("{}/assets", dir);
 

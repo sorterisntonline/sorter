@@ -2,6 +2,7 @@ import { execSync } from 'child_process';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { paths } from '../utils/paths.js';
+import { loadAppEnv } from '../utils/env.js';
 
 export async function runServer() {
   console.log('🚀 Starting Rust server in dev mode...');
@@ -23,6 +24,18 @@ export async function runServer() {
   try {
     console.log('📂 Changing to server directory:', serverPath);
     process.chdir(serverPath);
+
+    const env = loadAppEnv();
+
+    // Ensure the Rust process receives validated environment values
+    process.env.DATABASE_URL = env.DATABASE_URL;
+    process.env.STEAM_API_KEY = env.STEAM_API_KEY;
+    process.env.PORT = String(env.PORT);
+    process.env.BASE_URL = env.BASE_URL;
+    process.env.FRONTEND_URL = env.FRONTEND_URL;
+    if (env.STATIC_DIR) {
+      process.env.STATIC_DIR = env.STATIC_DIR;
+    }
 
     // Kill any existing rustsorter process
     try {

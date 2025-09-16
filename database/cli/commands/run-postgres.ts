@@ -4,10 +4,8 @@ import { join } from 'path';
 import * as readline from 'readline';
 import { parse, stringify } from 'envfile';
 import { paths } from '../utils/paths.js';
+import { loadCliRuntimeEnv } from '../utils/env.js';
 import { createServer } from 'net';
-
-// Get port from environment or use default
-const HOST_PORT = parseInt(process.env.DATABASE_PORT || '5438');
 const CONTAINER_NAME = 'postgres-dev';
 const DOCKER_REPO = 'postgres';
 const TAG = '14.1';
@@ -49,10 +47,11 @@ async function findAvailablePort(preferredPort: number): Promise<number> {
 
 export async function runPostgres(options: { reset?: boolean }) {
   const PG_DATA_DIR = paths.pgDataDir;
+  const { DATABASE_PORT } = loadCliRuntimeEnv();
   
-  console.log(`🔍 Checking for available port starting from ${HOST_PORT}...`);
+  console.log(`🔍 Checking for available port starting from ${DATABASE_PORT}...`);
   // Find an available port
-  const actualPort = await findAvailablePort(HOST_PORT);
+  const actualPort = await findAvailablePort(DATABASE_PORT);
   console.log(`🚀 Starting PostgreSQL on port ${actualPort}`);
 
   // Validate configuration before starting

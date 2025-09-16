@@ -1,21 +1,13 @@
 import { execSync } from 'child_process';
 import { existsSync } from 'fs';
-import { config } from 'dotenv';
 import { paths } from '../utils/paths.js';
+import { loadDatabaseEnv } from '../utils/env.js';
 
 export async function resetMigrations() {
   console.log('🔄 Resetting migration state...');
 
-  // Load env from .env if present (repo root)
-  config({ path: paths.envFile });
-  
-  if (!process.env.DATABASE_URL) {
-    console.error('Error: DATABASE_URL must be set');
-    console.error('Please set DATABASE_URL in your environment or .env file');
-    process.exit(1);
-  }
-  
-  const databaseUrl = process.env.DATABASE_URL;
+  // Load and validate the database configuration first
+  const { DATABASE_URL: databaseUrl } = loadDatabaseEnv();
 
   // Repo-standard migrations directory
   const migrationsDir = paths.migrationsDir;
