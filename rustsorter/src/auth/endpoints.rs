@@ -88,7 +88,7 @@ pub async fn session_status(
             };
 
             Ok(Json(SessionStatusResponse {
-                authenticated: user.is_some(),
+                authenticated: user.is_some() || session.session_type == "temp",
                 session_type: Some(session.session_type),
                 user,
                 temp_data,

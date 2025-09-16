@@ -42,6 +42,8 @@ pub struct SteamAuthQuery {
     openid_sig: Option<String>,
     #[serde(rename = "openid.ns")]
     openid_ns: Option<String>,
+    #[serde(rename = "openid.op_endpoint")]
+    openid_op_endpoint: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -122,6 +124,7 @@ async fn verify_steam_openid(params: &SteamAuthQuery, client: &reqwest::Client) 
     form_params.insert("openid.identity", params.openid_identity.as_deref().unwrap_or(""));
     form_params.insert("openid.return_to", params.openid_return_to.as_deref().unwrap_or(""));
     form_params.insert("openid.response_nonce", params.openid_response_nonce.as_deref().unwrap_or(""));
+    form_params.insert("openid.op_endpoint", params.openid_op_endpoint.as_deref().unwrap_or(""));
 
     debug!("Sending verification request to Steam with params: {:?}", form_params);
 
