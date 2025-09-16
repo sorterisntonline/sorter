@@ -13,6 +13,7 @@ use rand::{Rng, distributions::Alphanumeric};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgExecutor, PgPool};
+use uuid::Uuid;
 
 use crate::{
     app_state::AppState,
@@ -27,7 +28,7 @@ const KEY_SEPARATOR: char = '_';
 #[derive(FromRow, Debug, Clone)]
 pub struct ApiKeyDb {
     pub id: i32,
-    pub auth0_sub: String,
+    pub user_id: Uuid,
     pub name: String,
     pub key_identifier: String,
     pub hashed_key: String,
@@ -39,7 +40,6 @@ pub struct ApiKeyDb {
 #[derive(Serialize, Debug, JsonSchema)]
 pub struct ApiKeyResponse {
     pub id: i32,
-    pub auth0_sub: String,
     pub name: String,
     pub created_at: NaiveDateTime,
     pub last_used_at: Option<NaiveDateTime>,
@@ -50,7 +50,6 @@ impl From<ApiKeyDb> for ApiKeyResponse {
     fn from(db_key: ApiKeyDb) -> Self {
         ApiKeyResponse {
             id: db_key.id,
-            auth0_sub: db_key.auth0_sub,
             name: db_key.name,
             created_at: db_key.created_at,
             last_used_at: db_key.last_used_at,
@@ -142,19 +141,30 @@ fn parse_key_identifier(full_key: &str) -> Result<String, Error> {
     Ok(parts[1].to_string())
 }
 
-pub async fn get_user_by_auth0_sub(pool: &PgPool, auth0_sub: &str) -> Result<User, Error> {
-    sqlx::query_file_as!(User, "../database/sql/user/select.sql", auth0_sub)
+pub async fn get_user_by_id(pool: &PgPool, user_id: Uuid) -> Result<User, Error> {
+    sqlx::query_file_as!(User, "../database/sql/user/select.sql", user_id)
         .fetch_one(pool)
         .await
-        .map_error(&format!("user '{auth0_sub}'"))
+        .map_error(&format!("user '{user_id}'"))
+}
+
+pub async fn get_user_by_username(pool: &PgPool, username: &str) -> Result<User, Error> {
+    sqlx::query_file_as!(
+        User,
+        "../database/sql/user/select_by_username.sql",
+        username
+    )
+    .fetch_one(pool)
+    .await
+    .map_error(&format!("user '{username}'"))
 }
 
 async fn create_key<'e, E: PgExecutor<'e>>(
     executor: E,
     name: String,
-    auth0_sub: &str,
+    user_id: Uuid,
 ) -> Result<NewApiKeyResponse, Error> {
-    debug!(name, auth0_sub; "create_key called");
+    debug!(name, user_id = %user_id; "create_key called");
 
     validate_key_name(&name)?;
 
@@ -166,7 +176,7 @@ async fn create_key<'e, E: PgExecutor<'e>>(
 
     sqlx::query_file!(
         "../database/sql/key/insert.sql",
-        auth0_sub,
+        user_id,
         name,
         &identifier,
         &hashed_key,
@@ -176,7 +186,7 @@ async fn create_key<'e, E: PgExecutor<'e>>(
     .await
     .map_error("key")?;
 
-    info!(name, auth0_sub; "created API key");
+    info!(name, user_id = %user_id; "created API key");
 
     Ok(NewApiKeyResponse {
         name,
@@ -214,10 +224,8 @@ pub async fn verify_api_key(
     if is_valid {
         debug!(key_id; "API key verification successful");
 
-        let user = get_user_by_auth0_sub(pool, &key.auth0_sub).await?;
-        debug!(
-            user_id:% = user.id, user = user.auth0_sub; "found user"
-        );
+        let user = get_user_by_id(pool, key.user_id).await?;
+        debug!(user_id = %user.id, username = user.username; "found user");
 
         Ok((key, user))
     } else {
@@ -247,7 +255,7 @@ pub async fn update_last_used(pool: &PgPool, key_id: i32) -> Result<(), Error> {
 async fn revoke_key<'e, E: PgExecutor<'e>>(
     executor: E,
     name: &str,
-    auth0_sub: &str,
+    user_id: Uuid,
 ) -> Result<(), Error> {
     debug!(name; "revoke_key called");
 
@@ -256,7 +264,7 @@ async fn revoke_key<'e, E: PgExecutor<'e>>(
     sqlx::query_file!(
         "../database/sql/key/revoke.sql",
         Utc::now().naive_utc(),
-        auth0_sub,
+        user_id,
         name
     )
     .execute(executor)
@@ -264,9 +272,7 @@ async fn revoke_key<'e, E: PgExecutor<'e>>(
     .map_error(&object)?
     .catch_not_found(&object)?;
 
-    info!(
-        name, auth0_sub; "revoked API key"
-    );
+    info!(name, user_id = %user_id; "revoked API key");
 
     Ok(())
 }
@@ -277,17 +283,15 @@ async fn list_keys(
 ) -> Result<(StatusCode, Json<ListKeysResponse>), Error> {
     debug!("list_keys called");
 
-    debug!(user = user.auth0_sub; "authenticated user for list_keys");
+    debug!(user = user.username; "authenticated user for list_keys");
 
-    let keys = sqlx::query_file_as!(ApiKeyDb, "../database/sql/key/list.sql", user.auth0_sub)
+    let keys = sqlx::query_file_as!(ApiKeyDb, "../database/sql/key/list.sql", user.id)
         .fetch_all(&state.db)
         .await
         .map_error("key")?;
 
     let response_keys: Vec<ApiKeyResponse> = keys.into_iter().map(ApiKeyResponse::from).collect();
-    debug!(
-        user = user.auth0_sub, key_count = response_keys.len(); "found keys for user"
-    );
+    debug!(user = user.username, key_count = response_keys.len(); "found keys for user");
 
     Ok((
         StatusCode::OK,
@@ -302,7 +306,7 @@ async fn post_route(
     Extension(user): Extension<User>,
     Json(payload): Json<CreateKeyRequest>,
 ) -> Result<(StatusCode, Json<NewApiKeyResponse>), Error> {
-    let key = create_key(&state.db, payload.name, &user.auth0_sub).await?;
+    let key = create_key(&state.db, payload.name, user.id).await?;
 
     Ok((StatusCode::CREATED, Json(key)))
 }
@@ -312,7 +316,7 @@ async fn revoke_route(
     Extension(user): Extension<User>,
     Json(payload): Json<KeyNameRequest>,
 ) -> Result<(StatusCode, Json<RevokeKeyResponse>), Error> {
-    revoke_key(&state.db, &payload.name, &user.auth0_sub).await?;
+    revoke_key(&state.db, &payload.name, user.id).await?;
 
     Ok((
         StatusCode::OK,
@@ -329,8 +333,8 @@ async fn regenerate_key(
 ) -> Result<(StatusCode, Json<NewApiKeyResponse>), Error> {
     validate_key_name(&payload.name)?;
 
-    let _ = revoke_key(&state.db, &payload.name, &user.auth0_sub).await;
-    let key = create_key(&state.db, payload.name, &user.auth0_sub).await?;
+    let _ = revoke_key(&state.db, &payload.name, user.id).await;
+    let key = create_key(&state.db, payload.name, user.id).await?;
 
     Ok((StatusCode::OK, Json(key)))
 }

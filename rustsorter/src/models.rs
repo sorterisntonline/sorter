@@ -197,7 +197,6 @@ impl IntoResponse for Error {
 #[derive(sqlx::FromRow, serde::Serialize, Debug, Clone)]
 pub struct User {
     pub id: Uuid,
-    pub auth0_sub: String,
     pub username: String,
     pub avatar_url: Option<String>,
     pub bio: Option<String>,

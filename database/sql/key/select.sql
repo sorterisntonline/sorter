@@ -1,6 +1,6 @@
 SELECT
     id,
-    auth0_sub,
+    user_id,
     name,
     key_identifier,
     hashed_key,

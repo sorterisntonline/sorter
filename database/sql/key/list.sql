@@ -1,6 +1,6 @@
 SELECT
     id,
-    auth0_sub,
+    user_id,
     name,
     key_identifier,
     hashed_key,
@@ -10,6 +10,6 @@ SELECT
 FROM
     api_keys
 WHERE
-    auth0_sub = $1
+    user_id = $1
 ORDER BY
     created_at DESC

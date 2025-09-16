@@ -8,11 +8,12 @@ pub mod models;
 pub mod pagerank;
 pub mod pair;
 pub mod vote;
-use std::{env, sync::Arc};
+use std::{env, path::Path, sync::Arc};
 
 use aide::{
     axum::{
-        ApiRouter, IntoApiResponse,
+        ApiRouter,
+        IntoApiResponse,
         routing::{get, get_with},
     },
     openapi::{self, OpenApi, SecurityScheme},
@@ -22,7 +23,8 @@ use aide::{
 use anyhow::Result;
 use app_state::AppState;
 use axum::{
-    Extension, Router,
+    Extension,
+    Router,
     http::StatusCode,
     middleware,
     response::{IntoResponse, Response},
@@ -30,7 +32,6 @@ use axum::{
 use dotenv::dotenv;
 use schemars::JsonSchema;
 use serde::Serialize;
-use std::path::Path;
 use tower_http::{
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
@@ -73,8 +74,8 @@ async fn protected_route(MaybeUser(maybe_user): MaybeUser) -> Response {
         Some(user) => (
             StatusCode::OK,
             Json(ProtectedResponse {
-                message: format!("Hello, {}! This is a protected route.", user.auth0_sub),
-                authenticated_user: user.auth0_sub,
+                message: format!("Hello, {}! This is a protected route.", user.username),
+                authenticated_user: user.username,
             }),
         )
             .into_response(),

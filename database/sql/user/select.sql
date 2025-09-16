@@ -1,11 +1,10 @@
 SELECT
-    auth0_sub,
+    id,
     username,
     avatar_url,
     bio,
-    created_at,
-    id
+    created_at
 FROM
     users
 WHERE
-    auth0_sub = $1
+    id = $1
