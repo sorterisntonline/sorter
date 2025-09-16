@@ -31,8 +31,18 @@ function EntitiesIndex() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Entities</h1>
-      <p className="text-sm text-gray-600">Entities with no parents</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Entities</h1>
+          <p className="text-sm text-gray-600">Entities with no parents</p>
+        </div>
+        <Link
+          to="/entity/new"
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+        >
+          Create Entity
+        </Link>
+      </div>
 
       {roots.length === 0 ? (
         <div className="text-gray-500">No root entities found.</div>

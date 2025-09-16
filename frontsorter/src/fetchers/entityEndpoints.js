@@ -19,3 +19,15 @@ export const fetchEntityWithChildren = async ({ pk_namespace, pk }) => {
   return res.json();
 };
 
+export const createEntity = async (entityData) => {
+  const res = await fetch('/api/entity', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(entityData),
+  });
+  if (!res.ok) throw new Error(`Failed to create entity: ${res.status}`);
+  return res.json();
+};
+
