@@ -1,14 +1,11 @@
 pub mod steam;
 
-use aide::axum::{ApiRouter, routing::get_with};
+use aide::axum::ApiRouter;
+use axum::{routing::get, Router};
 use crate::app_state::AppState;
 
 pub fn routes() -> ApiRouter<AppState> {
-    ApiRouter::new()
-        .api_route("/steam", get_with(steam::steam_login, |op| {
-            op.description("Initiate Steam OAuth login")
-        }))
-        .api_route("/steam/callback", get_with(steam::steam_callback, |op| {
-            op.description("Handle Steam OAuth callback")
-        }))
+    ApiRouter::from(Router::new()
+        .route("/steam", get(steam::steam_login))
+        .route("/steam/callback", get(steam::steam_callback)))
 }

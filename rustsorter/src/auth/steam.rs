@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use crate::{
     app_state::AppState,
-    models::{Error, Json, MapErrorAnyhow, MapErrorSqlx, SteamUserData, User, UserProvider},
+    models::{Error, MapErrorSqlx, User, UserProvider},
 };
 
 const STEAM_OPENID_URL: &str = "https://steamcommunity.com/openid/login";
@@ -215,7 +215,7 @@ async fn create_or_update_user_from_steam(
         let mut counter = 1;
         
         // Ensure handle uniqueness
-        while sqlx::query!("SELECT 1 FROM users WHERE handle = $1", handle)
+        while sqlx::query!("SELECT handle FROM users WHERE handle = $1", handle)
             .fetch_optional(pool)
             .await
             .map_error("user")?
@@ -287,7 +287,8 @@ async fn create_or_update_user_from_steam(
            last_api_sync = NOW()",
         user.id,
         steam_id,
-        summary.timecreated.map(|ts| chrono::NaiveDateTime::from_timestamp(ts, 0).unwrap()),
+        summary.timecreated.and_then(|ts| chrono::DateTime::from_timestamp(ts, 0))
+            .map(|dt| dt.naive_utc()),
         tf2_playtime,
         total_games,
         summary.profilestate,

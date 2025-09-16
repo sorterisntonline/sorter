@@ -31,7 +31,7 @@ use axum::{
 use dotenv::dotenv;
 use schemars::JsonSchema;
 use serde::Serialize;
-use std::path::Path;
+
 use tower_http::{
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
@@ -90,7 +90,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let args: Vec<String> = env::args().collect();
     eprintln!("[rustsorter] args: {:?}", args);
 
-    let mut database_string = match env::var("DATABASE_URL") {
+    let database_string = match env::var("DATABASE_URL") {
         Ok(value) => value.trim().to_string(),
         Err(_) => {
             eprintln!("[rustsorter] ERROR: DATABASE_URL is not set");
@@ -103,6 +103,11 @@ async fn main() -> Result<(), anyhow::Error> {
         .connect(&database_string)
         .await
         .expect("Unable to connect to database");
+
+    let port: u16 = env::var("PORT")
+        .ok()
+        .and_then(|value| value.parse::<u16>().ok())
+        .unwrap_or(8081);
 
     let steam_api_key = env::var("STEAM_API_KEY")
         .expect("STEAM_API_KEY environment variable must be set");
@@ -121,11 +126,6 @@ async fn main() -> Result<(), anyhow::Error> {
     };
 
     let router = router(app_state);
-
-    let port: u16 = env::var("PORT")
-        .ok()
-        .and_then(|value| value.parse::<u16>().ok())
-        .unwrap_or(8081);
     let addr = format!("0.0.0.0:{}", port);
     log::info!("Starting server on {}", addr);
     eprintln!("[rustsorter] binding to {}", addr);
@@ -146,7 +146,7 @@ async fn main() -> Result<(), anyhow::Error> {
 }
 
 fn router(app_state: AppState) -> Router {
-    let routes = ApiRouter::new()
+    let api_routes = ApiRouter::new()
         .api_route(
             "/docs",
             get_with(Swagger::new("/api.json").axum_handler(), |op| {
@@ -168,7 +168,6 @@ fn router(app_state: AppState) -> Router {
             }),
         )
         .nest("/keys", api_key::routes())
-        .nest("/auth", auth::routes())
         .nest("/entity", entity::routes())
         .nest("/entity_relationships", entity_relationships::routes())
         .nest("/pair", pair::routes())
@@ -181,7 +180,8 @@ fn router(app_state: AppState) -> Router {
 
     let mut api = OpenApi::default();
     let router = ApiRouter::new()
-        .nest("/api", routes)
+        .nest("/api", api_routes)
+        .nest("/api/auth", auth::routes()) // Auth routes without middleware
         .route("/api.json", get(api_json))
         .finish_api_with(&mut api, api_transform)
         .with_state(app_state)

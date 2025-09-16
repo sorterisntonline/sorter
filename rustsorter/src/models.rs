@@ -206,6 +206,19 @@ pub struct User {
     pub created_at: Option<NaiveDateTime>,
 }
 
+// Temporary struct to bridge the old ApiKeyDb structure
+#[derive(sqlx::FromRow, Debug, Clone)]
+pub struct ApiKeyDbInternal {
+    pub id: i32,
+    pub user_id: Option<Uuid>,
+    pub name: String,
+    pub key_identifier: String,
+    pub hashed_key: String,
+    pub created_at: NaiveDateTime,
+    pub last_used_at: Option<NaiveDateTime>,
+    pub active: bool,
+}
+
 #[derive(sqlx::FromRow, serde::Serialize, Debug, Clone)]
 pub struct UserProvider {
     pub user_id: Uuid,

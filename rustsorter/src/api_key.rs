@@ -16,7 +16,7 @@ use sqlx::{FromRow, PgExecutor, PgPool};
 
 use crate::{
     app_state::AppState,
-    models::{Error, IntoNotFound, Json, MapErrorAnyhow, MapErrorSqlx, User},
+    models::{Error, IntoNotFound, Json, MapErrorAnyhow, MapErrorSqlx, User, ApiKeyDbInternal},
 };
 
 const API_KEY_PREFIX: &str = "sort";
@@ -200,9 +200,9 @@ pub async fn verify_api_key(
     let identifier = parse_key_identifier(provided_full_key)?;
     debug!(identifier; "parsed identifier");
 
-    let key = sqlx::query_as!(
-        ApiKeyDb,
-        "SELECT id, user_id::text as auth0_sub, name, key_identifier, hashed_key, created_at, last_used_at, active
+    let key_internal = sqlx::query_as!(
+        ApiKeyDbInternal,
+        "SELECT id, user_id, name, key_identifier, hashed_key, created_at, last_used_at, active
          FROM api_keys WHERE key_identifier = $1 AND active = true",
         &identifier
     )
@@ -214,18 +214,19 @@ pub async fn verify_api_key(
         Error::Unauthorized
     })?;
 
-    let key_id = key.id;
+    let key_id = key_internal.id;
 
     debug!(
         key_id, identifier; "found active key record"
     );
 
-    let is_valid = verify(provided_full_key, &key.hashed_key).map_internal()?;
+    let is_valid = verify(provided_full_key, &key_internal.hashed_key).map_internal()?;
 
     if is_valid {
         debug!(key_id; "API key verification successful");
 
-        let user_id = uuid::Uuid::parse_str(&key.auth0_sub).map_internal()?;
+        let user_id = key_internal.user_id.ok_or_else(|| Error::Internal(anyhow::anyhow!("API key has no associated user")))?;
+        
         let user = sqlx::query_as!(
             User,
             "SELECT id, handle, display_name, username, primary_provider, avatar_url, bio, created_at 
@@ -240,10 +241,22 @@ pub async fn verify_api_key(
             user_id:% = user.id, handle = user.handle; "found user"
         );
 
-        Ok((key, user))
+        // Convert to legacy ApiKeyDb structure
+        let key_db = ApiKeyDb {
+            id: key_internal.id,
+            auth0_sub: user_id.to_string(),
+            name: key_internal.name,
+            key_identifier: key_internal.key_identifier,
+            hashed_key: key_internal.hashed_key,
+            created_at: key_internal.created_at,
+            last_used_at: key_internal.last_used_at,
+            active: key_internal.active,
+        };
+
+        Ok((key_db, user))
     } else {
         warn!(
-            key_id = key.id; "API key verification failed due to hash mismatch",
+            key_id = key_internal.id; "API key verification failed due to hash mismatch",
         );
 
         Err(Error::Unauthorized)
@@ -301,9 +314,9 @@ async fn list_keys(
 
     debug!(handle = user.handle; "authenticated user for list_keys");
 
-    let keys = sqlx::query_as!(
-        ApiKeyDb,
-        "SELECT id, user_id::text as auth0_sub, name, key_identifier, hashed_key, created_at, last_used_at, active
+    let keys_internal = sqlx::query_as!(
+        ApiKeyDbInternal,
+        "SELECT id, user_id, name, key_identifier, hashed_key, created_at, last_used_at, active
          FROM api_keys WHERE user_id = $1",
         user.id
     )
@@ -311,7 +324,16 @@ async fn list_keys(
     .await
     .map_error("key")?;
 
-    let response_keys: Vec<ApiKeyResponse> = keys.into_iter().map(ApiKeyResponse::from).collect();
+    let response_keys: Vec<ApiKeyResponse> = keys_internal.into_iter().map(|k| {
+        ApiKeyResponse {
+            id: k.id,
+            auth0_sub: k.user_id.map(|id| id.to_string()).unwrap_or_default(),
+            name: k.name,
+            created_at: k.created_at,
+            last_used_at: k.last_used_at,
+            active: k.active,
+        }
+    }).collect();
     debug!(
         handle = user.handle, key_count = response_keys.len(); "found keys for user"
     );
