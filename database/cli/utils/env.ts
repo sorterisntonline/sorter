@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { paths } from './paths.js';
 
 /**
@@ -40,4 +40,49 @@ export function ensureDatabaseUrl(databaseUrl: string | undefined): string {
     process.exit(1);
   }
   return databaseUrl;
+}
+
+/**
+ * Upserts an environment variable in the project's .env file.
+ * Preserves all other lines and comments.
+ */
+export function upsertEnvVariable(key: string, value: string): void {
+  const envFile = paths.envFile;
+  let lines: string[] = [];
+
+  if (existsSync(envFile)) {
+    const content = readFileSync(envFile, 'utf-8');
+    lines = content.split('\n');
+  } else {
+    lines = [];
+  }
+
+  let updated = false;
+  const newLine = `${key}=${value}`;
+  const result: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) {
+      result.push(line);
+      continue;
+    }
+
+    const [existingKey] = trimmed.split('=');
+    if (existingKey === key) {
+      result.push(newLine);
+      updated = true;
+    } else {
+      result.push(line);
+    }
+  }
+
+  if (!updated) {
+    if (result.length > 0 && result[result.length - 1].trim() !== '') {
+      result.push('');
+    }
+    result.push(newLine);
+  }
+
+  writeFileSync(envFile, result.join('\n'));
 }

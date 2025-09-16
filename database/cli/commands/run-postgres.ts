@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
 import { join } from 'path';
 import * as readline from 'readline';
 import { paths } from '../utils/paths.js';
+import { upsertEnvVariable } from '../utils/env.js';
 import { createServer } from 'net';
 
 // Get port from environment or use default
@@ -113,27 +114,10 @@ export async function runPostgres(options: { reset?: boolean }) {
   // Construct local DB URL (for writing repo-root .env)
   const DB_URL = `postgres://postgres:password@localhost:${actualPort}/postgres?sslmode=disable`;
 
-  // Also write DATABASE_URL to repo-root .env for migrate.sh convenience
-  const ENV_FILE = paths.envFile;
+  // Persist DATABASE_URL to .env deterministically so other commands read the same value
   mkdirSync(paths.projectRoot, { recursive: true });
-  
-  let envContent = '';
-  if (existsSync(ENV_FILE)) {
-    envContent = readFileSync(ENV_FILE, 'utf-8');
-  }
-
-  if (!envContent.includes('DATABASE_URL=')) {
-    envContent += `DATABASE_URL=${DB_URL}\n`;
-    writeFileSync(ENV_FILE, envContent);
-  }
-
-  if (envContent.includes('DATABASE_URL=')) {
-    console.log(`Local DATABASE_URL present in ${ENV_FILE}`);
-  } else {
-    console.log(`Set local DATABASE_URL in ${ENV_FILE}`);
-  }
-  
-  console.log(`📊 Database URL: ${DB_URL}`);
+  upsertEnvVariable('DATABASE_URL', DB_URL);
+  console.log(`📊 Database URL written to ${paths.envFile}`);
 
   // Start the Docker container
   const dockerArgs = [

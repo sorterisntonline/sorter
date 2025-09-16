@@ -6,20 +6,8 @@ import { loadEnv, ensureDatabaseUrl } from '../utils/env.js';
 export async function migrate() {
   console.log('Running database migrations...');
 
-  // Load env from .env if present (repo root)
-  const databaseUrl = ensureDatabaseUrl(loadEnv());
-  
-  // Override port if DATABASE_PORT environment variable is set
-  let finalDatabaseUrl = databaseUrl;
-  if (process.env.DATABASE_PORT) {
-    const port = process.env.DATABASE_PORT;
-    // Replace port in DATABASE_URL if it exists, or add it if it doesn't
-    if (databaseUrl.includes('@localhost:')) {
-      finalDatabaseUrl = databaseUrl.replace(/@localhost:\d+/, `@localhost:${port}`);
-    } else if (databaseUrl.includes('@localhost/')) {
-      finalDatabaseUrl = databaseUrl.replace('@localhost/', `@localhost:${port}/`);
-    }
-  }
+  // Load env from .env and rely on the DATABASE_URL written by run-postgres
+  const finalDatabaseUrl = ensureDatabaseUrl(loadEnv());
 
   // Repo-standard migrations directory
   const migrationsDir = paths.migrationsDir;
