@@ -1,35 +1,78 @@
 use axum::{
     extract::{Request, State},
-    http::header,
+    http::{header, HeaderMap},
     middleware::Next,
     response::Response,
 };
 use tokio;
+use uuid::Uuid;
 
 use crate::{
     api_key::{self},
     app_state::AppState,
     models::Error,
+    sessions,
 };
 
 const STATIC_ADMIN_KEY: &str = "STATIC_TEST_KEY_FOR_ADMIN_USER_123";
 const ADMIN_USERNAME: &str = "admin";
 
+fn extract_session_id_from_cookie(headers: &HeaderMap) -> Option<Uuid> {
+    let cookie_header = headers.get(header::COOKIE)?.to_str().ok()?;
+    
+    for cookie in cookie_header.split(';') {
+        let cookie = cookie.trim();
+        if let Some(session_value) = cookie.strip_prefix("session_id=") {
+            if let Ok(session_id) = Uuid::parse_str(session_value) {
+                return Some(session_id);
+            }
+        }
+    }
+    None
+}
+
 // Middleware that attempts authentication but allows requests without a token.
-// Rejects requests ONLY if a token is provided but is invalid.
+// Tries session cookie first, then API key. Rejects ONLY if auth is provided but invalid.
 pub async fn try_auth(
     State(app_state): State<AppState>,
     mut request: Request,
     next: Next,
 ) -> Result<Response, Error> {
     let db_pool = app_state.db;
+    let headers = request.headers();
 
-    let auth_header = request
-        .headers()
+    // Try session cookie first
+    if let Some(session_id) = extract_session_id_from_cookie(headers) {
+        log::debug!("Found session cookie, verifying session: {}", session_id);
+        
+        match sessions::get_session_with_user(&db_pool, session_id).await {
+            Ok(Some((session, Some(user)))) if session.session_type == "full" => {
+                log::debug!("Valid full session found for user: {}", user.handle);
+                request.extensions_mut().insert(user);
+                return Ok(next.run(request).await);
+            }
+            Ok(Some((session, None))) if session.session_type == "temp" => {
+                log::debug!("Valid temp session found, but no user attached");
+                // Temp sessions don't authenticate a user, but we don't fail the request
+                return Ok(next.run(request).await);
+            }
+            Ok(None) => {
+                log::debug!("Session not found or expired");
+                // Continue to try API key auth
+            }
+            Err(e) => {
+                log::warn!("Error checking session: {}", e);
+                // Continue to try API key auth
+            }
+        }
+    }
+
+    // Try API key authentication
+    let auth_header = headers
         .get(header::AUTHORIZATION)
         .and_then(|header| header.to_str().ok());
 
-    // If no auth header is present, proceed without inserting a user
+    // If no auth header is present either, proceed without inserting a user
     let Some(header) = auth_header else {
         log::debug!("No authorization header found, proceeding without authentication.");
         return Ok(next.run(request).await);

@@ -47,6 +47,17 @@ CREATE TABLE user_providers (
   UNIQUE (provider_id, external_id)
 );
 
+-- User session management for web authentication
+CREATE TABLE user_sessions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES users(id) ON DELETE CASCADE, -- NULL for temp sessions
+  session_type text NOT NULL CHECK (session_type IN ('temp', 'full')),
+  provider_id text, -- Which provider for temp sessions
+  data jsonb, -- Provider-specific data during signup flow
+  expires_at timestamp NOT NULL,
+  created_at timestamp DEFAULT now()
+);
+
 -- Steam-specific enrichment tables for TF2 proof-of-skill
 CREATE TABLE steam_user_data (
   user_id uuid REFERENCES users(id) ON DELETE CASCADE PRIMARY KEY,
@@ -168,6 +179,8 @@ CREATE TABLE scoped_slugs(
 CREATE INDEX idx_users_handle ON users(handle);
 CREATE INDEX idx_user_providers_external_id ON user_providers(provider_id, external_id);
 CREATE INDEX idx_user_providers_user_id ON user_providers(user_id);
+CREATE INDEX idx_user_sessions_user_id ON user_sessions(user_id);
+CREATE INDEX idx_user_sessions_expires_at ON user_sessions(expires_at);
 CREATE INDEX idx_steam_user_data_steam_id ON steam_user_data(steam_id);
 CREATE INDEX idx_steam_friends_friend_user_id ON steam_friends(friend_user_id);
 CREATE INDEX idx_steam_medals_tournament ON steam_medals(tournament_name, medal_type);
@@ -192,6 +205,7 @@ DROP TABLE api_keys;
 DROP TABLE steam_medals;
 DROP TABLE steam_friends; 
 DROP TABLE steam_user_data;
+DROP TABLE user_sessions;
 DROP TABLE user_providers;
 DROP TABLE providers;
 DROP TABLE users;

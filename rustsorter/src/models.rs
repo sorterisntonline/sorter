@@ -255,3 +255,37 @@ pub struct SteamMedal {
     pub division: Option<String>,
     pub discovered_at: Option<NaiveDateTime>,
 }
+
+#[derive(sqlx::FromRow, serde::Serialize, Debug, Clone)]
+pub struct UserSession {
+    pub id: Uuid,
+    pub user_id: Option<Uuid>,
+    pub session_type: String, // 'temp' or 'full'
+    pub provider_id: Option<String>,
+    pub data: Option<serde_json::Value>,
+    pub expires_at: NaiveDateTime,
+    pub created_at: Option<NaiveDateTime>,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub enum SessionType {
+    Temp,
+    Full,
+}
+
+impl SessionType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SessionType::Temp => "temp",
+            SessionType::Full => "full",
+        }
+    }
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct TempSessionData {
+    pub steam_id: String,
+    pub steam_username: String,
+    pub steam_avatar: String,
+    pub suggested_handle: String,
+}

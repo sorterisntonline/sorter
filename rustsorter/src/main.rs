@@ -8,6 +8,7 @@ pub mod extractors;
 pub mod models;
 pub mod pagerank;
 pub mod pair;
+pub mod sessions;
 pub mod vote;
 use std::{env, sync::Arc};
 

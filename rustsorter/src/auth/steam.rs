@@ -15,7 +15,8 @@ use uuid::Uuid;
 
 use crate::{
     app_state::AppState,
-    models::{Error, MapErrorSqlx, User, UserProvider},
+    models::{Error, MapErrorSqlx, TempSessionData, User, UserProvider},
+    sessions,
 };
 
 const STEAM_OPENID_URL: &str = "https://steamcommunity.com/openid/login";
@@ -86,6 +87,17 @@ pub fn get_steam_login_url(return_url: &str) -> Result<String> {
         .append_pair("openid.claimed_id", "http://specs.openid.net/auth/2.0/identifier_select");
 
     Ok(url.to_string())
+}
+
+fn generate_suggested_handle(steam_name: &str) -> String {
+    steam_name
+        .chars()
+        .filter(|c| c.is_alphanumeric() || *c == '_' || *c == '-')
+        .collect::<String>()
+        .to_lowercase()
+        .chars()
+        .take(20) // Limit length
+        .collect()
 }
 
 fn extract_steam_id_from_identity(identity: &str) -> Result<String> {
@@ -175,14 +187,10 @@ async fn fetch_steam_user_data(steam_id: &str, api_key: &str, client: &reqwest::
     Ok((summary, bans, games))
 }
 
-async fn create_or_update_user_from_steam(
+async fn check_existing_steam_user(
     pool: &PgPool,
     steam_id: &str,
-    summary: &SteamPlayerSummary,
-    bans: &Option<SteamPlayerBans>,
-    games: &Option<Vec<SteamOwnedGame>>,
-) -> Result<User, Error> {
-    // Check if user already exists
+) -> Result<Option<User>, Error> {
     let existing_provider = sqlx::query_as!(
         UserProvider,
         "SELECT user_id, provider_id, external_id, external_username, profile_data, linked_at, last_sync_at 
@@ -193,9 +201,8 @@ async fn create_or_update_user_from_steam(
     .await
     .map_error("user provider")?;
 
-    let user = if let Some(provider) = existing_provider {
-        // User exists, fetch and update
-        sqlx::query_as!(
+    if let Some(provider) = existing_provider {
+        let user = sqlx::query_as!(
             User,
             "SELECT id, handle, display_name, username, primary_provider, avatar_url, bio, created_at 
              FROM users WHERE id = $1",
@@ -203,104 +210,12 @@ async fn create_or_update_user_from_steam(
         )
         .fetch_one(pool)
         .await
-        .map_error("user")?
-    } else {
-        // Create new user with auto-generated handle
-        let base_handle = summary.personaname.chars()
-            .filter(|c| c.is_alphanumeric() || *c == '_' || *c == '-')
-            .collect::<String>()
-            .to_lowercase();
-        
-        let mut handle = base_handle.clone();
-        let mut counter = 1;
-        
-        // Ensure handle uniqueness
-        while sqlx::query!("SELECT handle FROM users WHERE handle = $1", handle)
-            .fetch_optional(pool)
-            .await
-            .map_error("user")?
-            .is_some()
-        {
-            handle = format!("{}{}", base_handle, counter);
-            counter += 1;
-        }
-
-        let user_id = Uuid::new_v4();
-        
-        sqlx::query!(
-            "INSERT INTO users (id, handle, display_name, username, primary_provider, avatar_url)
-             VALUES ($1, $2, $3, $4, $5, $6)",
-            user_id,
-            handle,
-            summary.personaname,
-            summary.personaname, // temporary for backward compatibility
-            "steam",
-            summary.avatarfull
-        )
-        .execute(pool)
-        .await
         .map_error("user")?;
-
-        // Link Steam provider
-        sqlx::query!(
-            "INSERT INTO user_providers (user_id, provider_id, external_id, external_username, profile_data)
-             VALUES ($1, 'steam', $2, $3, $4)",
-            user_id,
-            steam_id,
-            summary.personaname,
-            serde_json::to_value(summary).unwrap()
-        )
-        .execute(pool)
-        .await
-        .map_error("user provider")?;
-
-        User {
-            id: user_id,
-            handle,
-            display_name: Some(summary.personaname.clone()),
-            username: summary.personaname.clone(),
-            primary_provider: Some("steam".to_string()),
-            avatar_url: Some(summary.avatarfull.clone()),
-            bio: None,
-            created_at: None,
-        }
-    };
-
-    // Update/create Steam user data
-    let tf2_playtime = games.as_ref()
-        .and_then(|games| games.iter().find(|game| game.appid == 440)) // TF2 app ID
-        .map(|game| game.playtime_forever)
-        .unwrap_or(0);
-
-    let total_games = games.as_ref().map(|games| games.len() as i32).unwrap_or(0);
-
-    sqlx::query!(
-        "INSERT INTO steam_user_data (user_id, steam_id, account_created, playtime_tf2, total_games, profile_state, vac_banned, game_bans, days_since_last_ban, last_api_sync)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
-         ON CONFLICT (user_id) DO UPDATE SET
-           playtime_tf2 = $4,
-           total_games = $5,
-           profile_state = $6,
-           vac_banned = $7,
-           game_bans = $8,
-           days_since_last_ban = $9,
-           last_api_sync = NOW()",
-        user.id,
-        steam_id,
-        summary.timecreated.and_then(|ts| chrono::DateTime::from_timestamp(ts, 0))
-            .map(|dt| dt.naive_utc()),
-        tf2_playtime,
-        total_games,
-        summary.profilestate,
-        bans.as_ref().map(|b| b.vac_banned).unwrap_or(false),
-        bans.as_ref().map(|b| b.number_of_game_bans).unwrap_or(0),
-        bans.as_ref().map(|b| b.days_since_last_ban)
-    )
-    .execute(pool)
-    .await
-    .map_error("steam user data")?;
-
-    Ok(user)
+        
+        Ok(Some(user))
+    } else {
+        Ok(None)
+    }
 }
 
 pub async fn steam_login(State(state): State<AppState>) -> impl IntoResponse {
@@ -327,7 +242,8 @@ pub async fn steam_callback(
     // Verify the OpenID response
     if params.openid_mode.as_deref() != Some("id_res") {
         warn!("Invalid OpenID mode: {:?}", params.openid_mode);
-        return (StatusCode::BAD_REQUEST, "Invalid OpenID response").into_response();
+        let redirect_url = format!("{}/auth/error?reason=invalid_openid", state.frontend_url);
+        return Redirect::to(&redirect_url).into_response();
     }
 
     let client = reqwest::Client::new();
@@ -338,11 +254,13 @@ pub async fn steam_callback(
         }
         Ok(false) => {
             warn!("Steam OpenID verification failed");
-            return (StatusCode::UNAUTHORIZED, "Steam authentication failed").into_response();
+            let redirect_url = format!("{}/auth/error?reason=steam_auth_failed", state.frontend_url);
+            return Redirect::to(&redirect_url).into_response();
         }
         Err(e) => {
             warn!("Error during Steam OpenID verification: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, "Authentication error").into_response();
+            let redirect_url = format!("{}/auth/error?reason=verification_error", state.frontend_url);
+            return Redirect::to(&redirect_url).into_response();
         }
     }
 
@@ -352,32 +270,77 @@ pub async fn steam_callback(
         Some(id) => id,
         None => {
             warn!("Failed to extract Steam ID from identity");
-            return (StatusCode::BAD_REQUEST, "Invalid Steam identity").into_response();
+            let redirect_url = format!("{}/auth/error?reason=invalid_steam_id", state.frontend_url);
+            return Redirect::to(&redirect_url).into_response();
         }
     };
 
     info!("Authenticated Steam user: {}", steam_id);
 
-    // Fetch Steam user data
-    let (summary, bans, games) = match fetch_steam_user_data(&steam_id, &state.steam_api_key, &client).await {
-        Ok(data) => data,
-        Err(e) => {
-            warn!("Failed to fetch Steam user data: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch user data").into_response();
+    // Check if user already exists
+    match check_existing_steam_user(&state.db, &steam_id).await {
+        Ok(Some(user)) => {
+            // Existing user - create full session and redirect to success
+            debug!("Existing user found: {}", user.handle);
+            
+            match sessions::create_full_session(&state.db, user.id).await {
+                Ok(session_id) => {
+                    let mut response = Redirect::to(&format!("{}/auth/success", state.frontend_url)).into_response();
+                    
+                    // Set session cookie
+                    let cookie = format!("session_id={}; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000", session_id); // 30 days
+                    response.headers_mut().insert("Set-Cookie", cookie.parse().unwrap());
+                    
+                    response
+                }
+                Err(e) => {
+                    warn!("Failed to create session: {}", e);
+                    let redirect_url = format!("{}/auth/error?reason=session_error", state.frontend_url);
+                    Redirect::to(&redirect_url).into_response()
+                }
+            }
         }
-    };
+        Ok(None) => {
+            // New user - fetch Steam data and create temp session
+            debug!("New user, fetching Steam data");
+            
+            let (summary, _bans, _games) = match fetch_steam_user_data(&steam_id, &state.steam_api_key, &client).await {
+                Ok(data) => data,
+                Err(e) => {
+                    warn!("Failed to fetch Steam user data: {}", e);
+                    let redirect_url = format!("{}/auth/error?reason=steam_data_error", state.frontend_url);
+                    return Redirect::to(&redirect_url).into_response();
+                }
+            };
 
-    // Create or update user
-    let user = match create_or_update_user_from_steam(&state.db, &steam_id, &summary, &bans, &games).await {
-        Ok(user) => user,
-        Err(e) => {
-            warn!("Failed to create/update user: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create user").into_response();
+            let temp_data = TempSessionData {
+                steam_id: steam_id.clone(),
+                steam_username: summary.personaname.clone(),
+                steam_avatar: summary.avatarfull.clone(),
+                suggested_handle: generate_suggested_handle(&summary.personaname),
+            };
+
+            match sessions::create_temp_session(&state.db, "steam", &temp_data).await {
+                Ok(session_id) => {
+                    let mut response = Redirect::to(&format!("{}/auth/choose-username", state.frontend_url)).into_response();
+                    
+                    // Set session cookie
+                    let cookie = format!("session_id={}; HttpOnly; SameSite=Lax; Path=/; Max-Age=900", session_id); // 15 min
+                    response.headers_mut().insert("Set-Cookie", cookie.parse().unwrap());
+                    
+                    response
+                }
+                Err(e) => {
+                    warn!("Failed to create temp session: {}", e);
+                    let redirect_url = format!("{}/auth/error?reason=session_error", state.frontend_url);
+                    Redirect::to(&redirect_url).into_response()
+                }
+            }
         }
-    };
-
-    // For now, redirect to frontend with user handle
-    // In production, you'd want to create a session or JWT token
-    let redirect_url = format!("{}/login-success?handle={}", state.frontend_url, user.handle);
-    Redirect::to(&redirect_url).into_response()
+        Err(e) => {
+            warn!("Database error checking existing user: {}", e);
+            let redirect_url = format!("{}/auth/error?reason=database_error", state.frontend_url);
+            Redirect::to(&redirect_url).into_response()
+        }
+    }
 }
