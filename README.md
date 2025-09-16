@@ -20,47 +20,72 @@ rust and react based pair-wise staunchly democratic social media application
 
 # installation instructions
 
+## Quick Start with sorter-db CLI
+
 ```bash
-# Start local Postgres (in one terminal)
-cd database && ./run-postgres.sh
-# Note: this writes a local DATABASE_URL to repo-root .env (if missing)
+# install bun
+curl -fsSL https://bun.sh/install | bash
 
-# In a new terminal at repo root, install dbmate (macOS example)
-brew install dbmate
+# Install the sorter-db CLI
+cd database/cli
+npm install -g .
+cd -
 
-# Run migrations from repo root
-./migrate.sh
+# Setup environment and check dependencies
+sorter-db setup
+
+# Install all project dependencies (Rust, Node.js, Bun, etc.)
+sorter-db install-all
+
+# Start PostgreSQL container (in one terminal)
+sorter-db run-postgres
+
+# In a new terminal, run migrations
+sorter-db migrate
 
 # Start the server (from rustsorter/)
 cd rustsorter
 RUST_LOG=debug cargo run
+
+# In a new terminal, run frontend
+cd frontsorter
+npm i
+npm run dev
+
+# go to port that vite says (http://localhost:5173/)
 ```
+# database management
 
-# resetting the databse and normal database container workflow (written by gemini)
-*   **To Start & See Logs:**
-    1.  Open a terminal.
-    2.  Go to the `database` directory.
-    3.  Run `./run-postgres.sh`.
-    4.  Your terminal will now be filled with PostgreSQL logs. Keep this terminal open as long as you need the database.
+- **To Start & See Logs:**
 
-*   **To Stop:**
-    1.  Go to the terminal where the database is running.
-    2.  Press **`Ctrl-C`**.
-    3.  The container will stop cleanly, and because of the `--rm` flag, it will also be removed.
+  1.  Open a terminal.
+  2.  Run `sorter-db run-postgres`.
+  3.  Your terminal will now be filled with PostgreSQL logs. Keep this terminal open as long as you need the database.
 
-*   **To Reset the Database:**
-    1.  Make sure the database is **stopped** first (press `Ctrl-C` in its terminal).
-    2.  Run `./run-postgres.sh --reset`. This will nuke the data and exit.
-    3.  You can then start it again normally.
+- **To Stop:**
+
+  1.  Go to the terminal where the database is running.
+  2.  Press **`Ctrl-C`**.
+  3.  The container will stop cleanly, and because of the `--rm` flag, it will also be removed.
+
+- **To Reset the Database:**
+  1.  Make sure the database is **stopped** first (press `Ctrl-C` in its terminal).
+  2.  Run `sorter-db run-postgres --reset`. This will nuke the data and exit.
+  3.  You can then start it again normally.
+
 
 # pytest integration testing
+
 (first set up a venv if you would like)
-Once the migrations are run and the DB and server are running 
+Once the migrations are run and the DB and server are running (use `sorter-db run-postgres` and `sorter-db migrate` to set up the database)
+
 ```bash
 pip install -r ./tests/requirements.txt
 pytest
 ```
+
 or
+
 ```bash
 pip install -r ./tests/requirements.txt
 python -m pytest

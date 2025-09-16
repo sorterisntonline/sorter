@@ -12,3 +12,4 @@ rustsorter/.idea
 
 db/schema.sql
 server.log
+pgdata/

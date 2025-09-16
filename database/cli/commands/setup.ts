@@ -1,0 +1,60 @@
+import { execSync } from 'child_process';
+import { existsSync } from 'fs';
+import { join } from 'path';
+import { paths } from '../utils/paths.js';
+
+export async function setup() {
+  console.log('🚀 Setting up sorter-db-cli environment...\n');
+
+  // Check if we're in a sorter project
+  const hasDatabaseDir = existsSync(paths.database);
+  const hasDbMigrations = existsSync(paths.migrationsDir);
+
+  if (!hasDatabaseDir || !hasDbMigrations) {
+    console.log('⚠️  This doesn\'t appear to be a sorter project directory.');
+    console.log('   Make sure you\'re running this from the database/cli directory');
+    console.log('   or from a sorter project root.\n');
+  }
+
+  // Check dependencies
+  console.log('🔍 Checking dependencies...');
+  try {
+    execSync('sorter-db check-deps', { stdio: 'inherit' });
+  } catch (error) {
+    console.log('\n❌ Dependency check failed. Please install missing dependencies.');
+    console.log('   Run: sorter-db install-deps');
+    return;
+  }
+
+  // Create .env file if it doesn't exist
+  const envFile = paths.envFile;
+  if (!existsSync(envFile)) {
+    console.log('\n📝 Creating .env file...');
+    const envContent = `# Database configuration
+DATABASE_URL=postgres://postgres:password@localhost:5432/postgres?sslmode=disable
+
+# Add other environment variables here
+`;
+    require('fs').writeFileSync(envFile, envContent);
+    console.log('✅ Created .env file with default DATABASE_URL');
+  } else {
+    console.log('✅ .env file already exists');
+  }
+
+  // Check if Docker container is running
+  console.log('\n🐳 Checking Docker container...');
+  try {
+    execSync('docker ps | grep -q postgres-dev', { stdio: 'pipe' });
+    console.log('✅ PostgreSQL container is running');
+  } catch {
+    console.log('⚠️  PostgreSQL container is not running');
+    console.log('   Run: sorter-db run-postgres');
+  }
+
+  console.log('\n🎉 Setup complete!');
+  console.log('\n📖 Next steps:');
+  console.log('   1. Check dependencies: sorter-db check-deps');
+  console.log('   2. Install dependencies: sorter-db install-deps (if needed)');
+  console.log('   3. Start PostgreSQL: sorter-db run-postgres');
+  console.log('   4. Run migrations: sorter-db migrate');
+}
