@@ -127,6 +127,11 @@ sorter/
    # To completely reset database
    sorter-db run-postgres --reset
    sorter-db migrate
+   
+   # IMPORTANT: After modifying database schema or SQL queries
+   cd rustsorter && cargo sqlx prepare
+   # This generates .sqlx files needed for CI/CD offline compilation
+   # Always commit these files along with your schema changes
    ```
 
 4. **Testing**:
