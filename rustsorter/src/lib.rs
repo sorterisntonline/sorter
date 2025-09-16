@@ -9,4 +9,12 @@ pub mod pagerank;
 pub mod pair;
 pub mod vote;
 
-pub use pagerank::{EntityIdentifier, RankedEntity, RankingResponse, RelevantVote, rank_entities};
+pub use pagerank::{
+    EntityIdentifier,
+    RankedEntity,
+    RankingResponse,
+    RelevantVote,
+    rank_entities,
+    rank_entities_dense,
+    rank_entities_sparse,
+};
