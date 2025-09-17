@@ -9,6 +9,10 @@ import { checkDeps } from './commands/check-deps';
 import { installDeps } from './commands/install-deps';
 import { runServer } from './commands/run-server';
 import { runClient } from './commands/run-client';
+import { startAll } from './commands/start-all';
+import { stopAll } from './commands/stop-all';
+import { showLogs } from './commands/logs';
+import { showStatus } from './commands/status';
 
 const program = new Command();
 
@@ -57,5 +61,26 @@ program
   .command('run-client')
   .description('Start the React client in dev mode')
   .action(runClient);
+
+program
+  .command('start-all')
+  .description('Start all services using pm2')
+  .action(startAll);
+
+program
+  .command('stop-all')
+  .description('Stop all pm2 services')
+  .action(stopAll);
+
+program
+  .command('logs')
+  .description('Show logs for processes')
+  .argument('[process-name]', 'Name of process to show logs for (optional)')
+  .action(showLogs);
+
+program
+  .command('status')
+  .description('Show status of all processes')
+  .action(showStatus);
 
 program.parse();

@@ -204,6 +204,10 @@ Every pull request automatically gets a **full preview deployment** via `.github
 2. **Missing dependencies**: Run `sorter-db check-deps` and `sorter-db install-deps`
 3. **Port conflicts**: Frontend typically runs on `:5173`, backend on default Axum port
 4. **Migration issues**: Try `sorter-db reset-migrations` followed by `sorter-db migrate`
+5. **PM2 process failures**: 
+   - Use `pm2 logs --nostream` to check logs without tailing
+   - Rama processes (zookeeper, conductor, supervisor) fail because they use Python script but pm2 defaults to node interpreter
+   - Check individual process logs: `pm2 logs [process-name] --nostream`
 
 ### Development Tips
 
