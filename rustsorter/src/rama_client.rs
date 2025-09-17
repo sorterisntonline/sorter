@@ -10,6 +10,7 @@ use reqwest::{
 };
 use serde_json::{Value, json};
 use tokio::sync::RwLock;
+use urlencoding::encode;
 
 /// Lightweight client for Rama's REST API that understands supervisor redirects
 /// and sticks to JSON payloads so we can call it from Rust easily.
@@ -97,7 +98,7 @@ impl RamaClient {
             let url = format!(
                 "{}/rest/{}/{}",
                 target.trim_end_matches('/'),
-                self.module,
+                encode(&self.module),
                 endpoint
             );
 
