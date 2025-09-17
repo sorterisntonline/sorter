@@ -20,21 +20,13 @@ This will start all services:
 
 ## Process Management
 
-### Using the sorter-db CLI:
+### Using PM2:
 ```bash
-sorter-db start-all                    # Start all services
-sorter-db stop-all                     # Stop all services  
-pm2 status                             # Show service status
-pm2 logs rust-server --nostream       # View specific service logs
-```
-
-### Using PM2 directly:
-```bash
-sorter-db start-all            # Start all services
-pm2 logs postgres --nostream  # View PostgreSQL logs
-pm2 logs rust-server --nostream  # View Rust server logs
-pm2 status                     # Show process status
-sorter-db stop-all             # Stop all services
+pm2 start                             # Start all services from ecosystem.config.js
+pm2 stop all                          # Stop all services  
+pm2 status                            # Show service status
+pm2 logs rust-server --nostream      # View specific service logs
+pm2 restart <service>                 # Restart specific service
 ```
 
 ## Available Services
@@ -51,11 +43,11 @@ sorter-db stop-all             # Stop all services
 
 ## Development Workflow
 
-1. **Start everything**: `sorter-db start-all`
+1. **Start everything**: `pm2 start`
 2. **View logs**: `pm2 logs <service> --nostream` 
 3. **Make changes**: Edit code, changes auto-reload
 4. **Debug issues**: Check specific service logs
-5. **Stop everything**: `sorter-db stop-all`
+5. **Stop everything**: `pm2 stop all`
 
 ## Troubleshooting
 
@@ -63,6 +55,6 @@ sorter-db stop-all             # Stop all services
 - **Rama issues**: `pm2 logs conductor --nostream` or `pm2 logs supervisor --nostream`
 - **API issues**: `pm2 logs rust-server --nostream` to see Rust server logs
 - **Frontend issues**: `pm2 logs vite --nostream` to see React dev server
-- **Reset everything**: `sorter-db stop-all && sorter-db start-all`
+- **Reset everything**: `pm2 stop all && pm2 start`
 
 The playground feature will be available at http://localhost:5173/playground once all services start successfully.
