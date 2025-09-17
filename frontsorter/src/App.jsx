@@ -7,6 +7,7 @@ import ProfilePage from "./pages/ProfilePage";
 import EntitiesIndex from "./pages/EntitiesIndex";
 import EntityDetail from "./pages/EntityDetail";
 import CreateEntityPage from "./pages/CreateEntityPage";
+import PlaygroundPage from "./pages/PlaygroundPage";
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
         <Route path="vote" element={<VotePage />} />{" "}
         {/* Keep existing vote page */}
         <Route path="profile" element={<ProfilePage />} />
+        <Route path="playground" element={<PlaygroundPage />} />
         {/* Add a catch-all or Not Found route if desired */}
         <Route path="*" element={<div className="p-4">Page Not Found</div>} />
       </Route>

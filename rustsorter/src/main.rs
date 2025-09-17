@@ -29,6 +29,8 @@ use rustsorter::{
     models::{Error, Json},
     pagerank,
     pair,
+    playground,
+    rama_client::RamaClient,
     vote,
 };
 use schemars::JsonSchema;
@@ -100,7 +102,21 @@ async fn main() -> Result<(), anyhow::Error> {
         .await
         .expect("Unable to connect to database");
 
-    let app_state = AppState { db: pool.clone() };
+    let rama_client = match (env::var("RAMA_BASE_URL"), env::var("RAMA_MODULE_NAME")) {
+        (Ok(base), Ok(module)) if !base.is_empty() && !module.is_empty() => {
+            Some(RamaClient::new(base, module))
+        }
+        _ => None,
+    };
+
+    if rama_client.is_none() {
+        log::warn!(
+            "Rama client disabled; set RAMA_BASE_URL and RAMA_MODULE_NAME to enable playground \
+             module"
+        );
+    }
+
+    let app_state = AppState::new(pool.clone(), rama_client);
 
     let router = router(app_state);
 
@@ -154,6 +170,7 @@ fn router(app_state: AppState) -> Router {
         .nest("/entity_relationships", entity_relationships::routes())
         .nest("/pair", pair::routes())
         .nest("/vote", vote::routes())
+        .nest("/playground", playground::routes())
         .nest("/rank", pagerank::routes())
         .layer(middleware::from_fn_with_state(
             app_state.clone(),

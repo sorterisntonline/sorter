@@ -7,6 +7,8 @@ pub mod extractors;
 pub mod models;
 pub mod pagerank;
 pub mod pair;
+pub mod playground;
+pub mod rama_client;
 pub mod vote;
 
 pub use pagerank::{EntityIdentifier, RankedEntity, RankingResponse, RelevantVote, rank_entities};
