@@ -4,9 +4,13 @@ pub mod auth_middleware;
 pub mod entity;
 pub mod entity_relationships;
 pub mod extractors;
+pub mod folksonomy;
 pub mod models;
 pub mod pagerank;
 pub mod pair;
 pub mod vote;
+
+#[cfg(test)]
+mod folksonomy_test;
 
 pub use pagerank::{EntityIdentifier, RankedEntity, RankingResponse, RelevantVote, rank_entities};
