@@ -19,17 +19,12 @@ cd database/cli && npm install -g . && cd -
 sorter-db setup
 sorter-db install-all
 
-# Start entire development stack
-./scripts/dev.sh start          # Start all services (PostgreSQL, Rama, API, Frontend)
-./scripts/dev.sh stop           # Stop all services
-./scripts/dev.sh restart        # Restart all services
-./scripts/dev.sh status         # Show service status
-./scripts/dev.sh connect api    # Connect to specific service (postgres, zookeeper, conductor, supervisor, api, frontend)
-
-# Alternative: Use overmind directly
-overmind start                  # Start all services from Procfile
-overmind connect frontend       # Connect to React dev server
-overmind kill                   # Stop all services
+# Start entire development stack (Recommended)
+sorter-db start-all            # Start all services using PM2
+sorter-db stop-all             # Stop all PM2 services
+pm2 status                     # Show PM2 process status
+pm2 logs --nostream            # View all logs
+pm2 logs <service> --nostream  # View logs for specific service
 ```
 
 ### Manual Commands (for troubleshooting)

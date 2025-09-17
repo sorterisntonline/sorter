@@ -8,7 +8,7 @@ cd database/cli && npm install -g . && cd -
 sorter-db setup && sorter-db install-all
 
 # Start entire development environment
-./scripts/dev.sh start
+sorter-db start-all
 ```
 
 This will start all services:
@@ -20,21 +20,21 @@ This will start all services:
 
 ## Process Management
 
-### Using the dev.sh script:
+### Using the sorter-db CLI:
 ```bash
-./scripts/dev.sh start     # Start all services
-./scripts/dev.sh stop      # Stop all services  
-./scripts/dev.sh status    # Show service status
-./scripts/dev.sh connect rust-server    # Connect to specific service
+sorter-db start-all                    # Start all services
+sorter-db stop-all                     # Stop all services  
+pm2 status                             # Show service status
+pm2 logs rust-server --nostream       # View specific service logs
 ```
 
-### Using overmind directly:
+### Using PM2 directly:
 ```bash
-overmind start              # Start from Procfile
-overmind connect postgres   # Connect to PostgreSQL logs
-overmind connect rust-server        # Connect to Rust server logs
-overmind ps                 # Show process status
-overmind kill               # Stop all services
+sorter-db start-all            # Start all services
+pm2 logs postgres --nostream  # View PostgreSQL logs
+pm2 logs rust-server --nostream  # View Rust server logs
+pm2 status                     # Show process status
+sorter-db stop-all             # Stop all services
 ```
 
 ## Available Services
@@ -51,18 +51,18 @@ overmind kill               # Stop all services
 
 ## Development Workflow
 
-1. **Start everything**: `./scripts/dev.sh start`
-2. **View logs**: `overmind connect <service>` 
+1. **Start everything**: `sorter-db start-all`
+2. **View logs**: `pm2 logs <service> --nostream` 
 3. **Make changes**: Edit code, changes auto-reload
-4. **Debug issues**: Connect to specific service logs
-5. **Stop everything**: `./scripts/dev.sh stop` or Ctrl+C
+4. **Debug issues**: Check specific service logs
+5. **Stop everything**: `sorter-db stop-all`
 
 ## Troubleshooting
 
-- **Database issues**: `overmind connect postgres` to see database logs
-- **Rama issues**: `overmind connect conductor` or `overmind connect supervisor`
-- **API issues**: `overmind connect rust-server` to see Rust server logs
-- **Frontend issues**: `overmind connect vite` to see React dev server
-- **Reset everything**: `./scripts/dev.sh restart`
+- **Database issues**: `pm2 logs postgres --nostream` to see database logs
+- **Rama issues**: `pm2 logs conductor --nostream` or `pm2 logs supervisor --nostream`
+- **API issues**: `pm2 logs rust-server --nostream` to see Rust server logs
+- **Frontend issues**: `pm2 logs vite --nostream` to see React dev server
+- **Reset everything**: `sorter-db stop-all && sorter-db start-all`
 
 The playground feature will be available at http://localhost:5173/playground once all services start successfully.

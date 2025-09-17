@@ -32,24 +32,21 @@ const processGroups = [
   [
     {
       name: 'zookeeper',
-      script: './rama',
-      args: ['devZookeeper'],
-      cwd: '/home/tommy/programming/sorter/rama-1.1.0',
-      interpreter: 'python3'
+      script: 'python3',
+      args: ['./rama', 'devZookeeper'],
+      cwd: '/home/tommy/programming/sorter/rama-1.1.0'
     },
     {
       name: 'conductor',
-      script: './rama',
-      args: ['conductor'],
-      cwd: '/home/tommy/programming/sorter/rama-1.1.0',
-      interpreter: 'python3'
+      script: 'python3',
+      args: ['./rama', 'conductor'],
+      cwd: '/home/tommy/programming/sorter/rama-1.1.0'
     },
     {
       name: 'supervisor',
-      script: './rama',
-      args: ['supervisor'], 
-      cwd: '/home/tommy/programming/sorter/rama-1.1.0',
-      interpreter: 'python3'
+      script: 'python3',
+      args: ['./rama', 'supervisor'], 
+      cwd: '/home/tommy/programming/sorter/rama-1.1.0'
     }
   ],
   // Level 2: Wait 5s more, then migrate and start servers in parallel
@@ -62,9 +59,9 @@ const processGroups = [
     },
     {
       name: 'rust-server',
-      script: 'cargo',
-      args: ['run'],
-      cwd: '/home/tommy/programming/sorter/rustsorter'
+      script: 'sorter-db',
+      args: ['run-server'],
+      interpreter: 'none'
     },
     {
       name: 'vite',
