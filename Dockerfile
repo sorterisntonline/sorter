@@ -29,7 +29,7 @@ RUN lein deps
 COPY rama-sorter/ ./
 RUN lein uberjar \
     && mkdir -p /artifacts \
-    && cp target/uberjar/*-standalone.jar /artifacts/rama-playground.jar
+    && cp target/*-standalone.jar /artifacts/rama-playground.jar
 
 # --- Stage 3: Create the final, small runtime image ---
 FROM debian:bookworm-slim as runtime
