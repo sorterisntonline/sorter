@@ -11,16 +11,30 @@ Sorter is a **Rust and React based pair-wise staunchly democratic social media a
 
 ## Quick Start Commands
 
-### Essential Commands (via sorter-db CLI)
+### Unified Development Environment (Recommended)
 
 ```bash
-# Initial setup
+# Initial setup (one-time)
 cd database/cli && npm install -g . && cd -
 sorter-db setup
-
-# Install all dependencies
 sorter-db install-all
 
+# Start entire development stack
+./scripts/dev.sh start          # Start all services (PostgreSQL, Rama, API, Frontend)
+./scripts/dev.sh stop           # Stop all services
+./scripts/dev.sh restart        # Restart all services
+./scripts/dev.sh status         # Show service status
+./scripts/dev.sh connect api    # Connect to specific service (postgres, zookeeper, conductor, supervisor, api, frontend)
+
+# Alternative: Use overmind directly
+overmind start                  # Start all services from Procfile
+overmind connect frontend       # Connect to React dev server
+overmind kill                   # Stop all services
+```
+
+### Manual Commands (for troubleshooting)
+
+```bash
 # Database management
 sorter-db run-postgres          # Start PostgreSQL (foreground)
 sorter-db run-postgres --reset  # Reset database completely
