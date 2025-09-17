@@ -21,7 +21,7 @@ case "$1" in
     "start"|"")
         echo "🚀 Starting Sorter development environment..."
         echo "   Use 'overmind connect <service>' to attach to individual processes"
-        echo "   Available services: postgres, zookeeper, conductor, supervisor, migrate, api, frontend"
+        echo "   Available services: postgres, zookeeper, conductor, supervisor, migrate, rust-server, vite"
         echo "   Press Ctrl+C to stop all services"
         overmind start
         ;;
@@ -41,7 +41,7 @@ case "$1" in
     "connect")
         if [ -z "$2" ]; then
             echo "Usage: $0 connect <service-name>"
-            echo "Available services: postgres, zookeeper, conductor, supervisor, migrate, api, frontend"
+            echo "Available services: postgres, zookeeper, conductor, supervisor, migrate, rust-server, vite"
             exit 1
         fi
         overmind connect "$2"

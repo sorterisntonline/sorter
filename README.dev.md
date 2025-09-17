@@ -25,14 +25,14 @@ This will start all services:
 ./scripts/dev.sh start     # Start all services
 ./scripts/dev.sh stop      # Stop all services  
 ./scripts/dev.sh status    # Show service status
-./scripts/dev.sh connect api    # Connect to specific service
+./scripts/dev.sh connect rust-server    # Connect to specific service
 ```
 
 ### Using overmind directly:
 ```bash
 overmind start              # Start from Procfile
 overmind connect postgres   # Connect to PostgreSQL logs
-overmind connect api        # Connect to Rust server logs
+overmind connect rust-server        # Connect to Rust server logs
 overmind ps                 # Show process status
 overmind kill               # Stop all services
 ```
@@ -46,8 +46,8 @@ overmind kill               # Stop all services
 | conductor | Rama Conductor | 9999 |  
 | supervisor | Rama Supervisor | various |
 | migrate | Database migrations | - |
-| api | Rust API server | 8081 |
-| frontend | React dev server | 5173 |
+| rust-server | Rust API server | 8081 |
+| vite | React dev server | 5173 |
 
 ## Development Workflow
 
@@ -61,8 +61,8 @@ overmind kill               # Stop all services
 
 - **Database issues**: `overmind connect postgres` to see database logs
 - **Rama issues**: `overmind connect conductor` or `overmind connect supervisor`
-- **API issues**: `overmind connect api` to see Rust server logs
-- **Frontend issues**: `overmind connect frontend` to see React dev server
+- **API issues**: `overmind connect rust-server` to see Rust server logs
+- **Frontend issues**: `overmind connect vite` to see React dev server
 - **Reset everything**: `./scripts/dev.sh restart`
 
 The playground feature will be available at http://localhost:5173/playground once all services start successfully.
