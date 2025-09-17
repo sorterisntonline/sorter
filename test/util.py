@@ -1,10 +1,11 @@
 from typing import Any, Dict
 
 import httpx
+import os
 import pytest
 
 
-BASE_URL = "http://localhost:8081/api"
+BASE_URL = os.environ.get("SORTER_TEST_BASE_URL", "http://localhost:8081/api")
 # This MUST match the static key defined in your Rust auth_middleware.rs
 STATIC_ADMIN_KEY = "STATIC_TEST_KEY_FOR_ADMIN_USER_123"
 # Must be consistent with the user id in the users table

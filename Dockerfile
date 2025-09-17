@@ -20,6 +20,17 @@ COPY database/sql ./database/sql
 COPY rustsorter/ ./rustsorter/
 RUN cd rustsorter && cargo build --release --bin rustsorter
 
+# --- Stage 2b: Build Rama playground module jar ---
+FROM clojure:temurin-21-lein as rama-builder
+WORKDIR /app/rama-sorter
+ENV LEIN_ROOT=1
+COPY rama-sorter/project.clj ./
+RUN lein deps
+COPY rama-sorter/ ./
+RUN lein uberjar \
+    && mkdir -p /artifacts \
+    && cp target/uberjar/*-standalone.jar /artifacts/rama-playground.jar
+
 # --- Stage 3: Create the final, small runtime image ---
 FROM debian:bookworm-slim as runtime
 WORKDIR /app
@@ -27,8 +38,13 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+RUN mkdir -p /app/rama
+
 # Copy the compiled Rust binary from the builder stage
 COPY --from=rust-builder /app/rustsorter/target/release/rustsorter .
+
+# Pre-stage Rama playground module jar for later bootstrap steps
+COPY --from=rama-builder /artifacts/rama-playground.jar /app/rama/rama-playground.jar
 
 # Copy the built React assets from the frontend stage into a `public` directory
 # Your Rust app will need to be configured to serve these files.
