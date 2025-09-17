@@ -7,6 +7,10 @@ import ProfilePage from "./pages/ProfilePage";
 import EntitiesIndex from "./pages/EntitiesIndex";
 import EntityDetail from "./pages/EntityDetail";
 import CreateEntityPage from "./pages/CreateEntityPage";
+import FolksonomyPage from "./pages/FolksonomyPage";
+import TagVotePage from "./pages/TagVotePage";
+import TagCollectionsPage from "./pages/TagCollectionsPage";
+import TagHistoryPage from "./pages/TagHistoryPage";
 
 function App() {
   return (
@@ -20,6 +24,13 @@ function App() {
         <Route path="vote" element={<VotePage />} />{" "}
         {/* Keep existing vote page */}
         <Route path="profile" element={<ProfilePage />} />
+        
+        {/* Folksonomy routes */}
+        <Route path="folksonomy" element={<FolksonomyPage />} />
+        <Route path="folksonomy/vote" element={<TagVotePage />} />
+        <Route path="folksonomy/collections" element={<TagCollectionsPage />} />
+        <Route path="folksonomy/history" element={<TagHistoryPage />} />
+        
         {/* Add a catch-all or Not Found route if desired */}
         <Route path="*" element={<div className="p-4">Page Not Found</div>} />
       </Route>
