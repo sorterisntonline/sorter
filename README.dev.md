@@ -8,7 +8,7 @@ cd database/cli && npm install -g . && cd -
 sorter-db setup && sorter-db install-all
 
 # Start entire development environment
-sorter-db start-all
+pm2 start
 ```
 
 This will start all services:

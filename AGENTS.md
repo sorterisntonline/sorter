@@ -20,8 +20,8 @@ sorter-db setup
 sorter-db install-all
 
 # Start entire development stack (Recommended)
-sorter-db start-all            # Start all services using PM2
-sorter-db stop-all             # Stop all PM2 services
+pm2 start                      # Start all services from ecosystem.config.js
+pm2 stop all                   # Stop all PM2 services
 pm2 status                     # Show PM2 process status
 pm2 logs --nostream            # View all logs
 pm2 logs <service> --nostream  # View logs for specific service
@@ -201,8 +201,8 @@ Every pull request automatically gets a **full preview deployment** via `.github
 4. **Migration issues**: Try `sorter-db reset-migrations` followed by `sorter-db migrate`
 5. **PM2 process failures**: 
    - Use `pm2 logs --nostream` to check logs without tailing
-   - Rama processes (zookeeper, conductor, supervisor) fail because they use Python script but pm2 defaults to node interpreter
    - Check individual process logs: `pm2 logs [process-name] --nostream`
+   - Restart specific services: `pm2 restart [process-name]`
 
 ### Development Tips
 
