@@ -19,8 +19,9 @@
     (declare-pstate s $$lists {String java.util.List})
 
     (<<sources s
-      (source> *command-depot :> {:keys [*list *action *value]})
-
+      (source> *command-depot :> {:strs [*list *action *value] :as *command})
+      (println "command1: " *list *action *value)
+      (println "command2: " *command)
       ;; Append: aggregate values into a vector at the specified list key.
       (<<if (= *action "append")
         (+compound $$lists {*list (aggs/+vec-agg *value)}))
