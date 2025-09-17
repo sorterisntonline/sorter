@@ -16,3 +16,4 @@
 - **Service dependency chain**: Unclear startup order and which services must be running before others can start successfully.
 - **Process lifecycle management**: No graceful shutdown coordination, potential for orphaned processes in screen sessions.
 - **Docker permission issues**: `sorter-db run-postgres` fails with Docker socket permissions, forcing manual service coordination instead of containerized approach.
+- **Overmind setup challenges**: While overmind binary downloads and runs successfully, it fails due to underlying Docker permission issues when trying to start the postgres service. The Procfile structure looks good but Docker daemon access blocks the entire service orchestration chain.
