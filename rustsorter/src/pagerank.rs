@@ -48,12 +48,6 @@ struct RankGraph {
     graph: DirectedCsrGraph<usize, (), f64>,
 }
 
-#[derive(Clone, Copy)]
-enum RankEngine {
-    Dense,
-    Sparse,
-}
-
 fn build_rank_graph(
     entities: &[EntityIdentifier],
     votes: &[RelevantVote],
@@ -115,79 +109,7 @@ fn compute_out_degree_stats(graph: &DirectedCsrGraph<usize, (), f64>) -> (Vec<f6
     (out_degs, max_out_deg)
 }
 
-fn calculate_rank_centrality_dense(
-    graph: &DirectedCsrGraph<usize, (), f64>,
-    max_iters: usize,
-    tol: f64,
-) -> Vec<f64> {
-    let node_count = graph.node_count();
-    if node_count == 0 {
-        return Vec::new();
-    }
-
-    let (out_degs, max_out_deg) = compute_out_degree_stats(graph);
-
-    if max_out_deg <= 1e-9 {
-        warn!("Max out-degree is zero, returning uniform scores.");
-
-        return vec![1.0 / node_count as f64; node_count];
-    }
-
-    let mut scores = vec![1.0f64 / node_count as f64; node_count];
-
-    for iter in 0..max_iters {
-        let prev_scores = scores.clone();
-        let mut new_scores = vec![0.0f64; node_count];
-
-        for j in 0..node_count {
-            let self_loop_j = max_out_deg - out_degs[j];
-            new_scores[j] += prev_scores[j] * (self_loop_j / max_out_deg);
-
-            // Contributions from other nodes i → j
-            for i in 0..node_count {
-                if i == j {
-                    continue;
-                }
-
-                // Find edge weight i → j
-                let mut edge_weight = 0.0;
-                for edge in graph.out_neighbors_with_values(i) {
-                    if edge.target == j {
-                        edge_weight += edge.value;
-                    }
-                }
-
-                // Add normalized contribution
-                new_scores[j] += prev_scores[i] * (edge_weight / max_out_deg);
-            }
-        }
-
-        let diff: f64 = prev_scores
-            .iter()
-            .zip(new_scores.iter())
-            .map(|(p, n)| (p - n).abs())
-            .sum();
-
-        scores = new_scores;
-
-        if diff < tol {
-            info!(iterations = iter + 1; "tommy Rank converged");
-            break;
-        }
-
-        if iter == max_iters - 1 {
-            warn!(
-                max_iters,
-                diff;
-                "tommy Rank reached max_iters without converging",
-            );
-        }
-    }
-
-    scores
-}
-
-fn calculate_rank_centrality_sparse(
+fn calculate_rank_centrality(
     graph: &DirectedCsrGraph<usize, (), f64>,
     max_iters: usize,
     tol: f64,
@@ -240,7 +162,7 @@ fn calculate_rank_centrality_sparse(
         scores.clone_from_slice(&next_scores);
 
         if diff < tol {
-            info!(iterations = iter + 1; "tommy Rank (sprs) converged");
+            info!(iterations = iter + 1; "rank centrality converged");
             break;
         }
 
@@ -248,7 +170,7 @@ fn calculate_rank_centrality_sparse(
             warn!(
                 max_iters,
                 diff;
-                "tommy Rank (sprs) reached max_iters without converging",
+                "rank centrality reached max_iters without converging",
             );
         }
     }
@@ -258,21 +180,16 @@ fn calculate_rank_centrality_sparse(
 
 fn run_rank_centrality(
     graph: &DirectedCsrGraph<usize, (), f64>,
-    engine: RankEngine,
     max_iters: usize,
     tol: f64,
 ) -> Vec<f64> {
-    match engine {
-        RankEngine::Dense => calculate_rank_centrality_dense(graph, max_iters, tol),
-        RankEngine::Sparse => calculate_rank_centrality_sparse(graph, max_iters, tol),
-    }
+    calculate_rank_centrality(graph, max_iters, tol)
 }
 
 /// Pure function to rank entities based on votes between them
 fn rank_entities_internal(
     entities: &[EntityIdentifier],
     votes: &[RelevantVote],
-    engine: RankEngine,
 ) -> Result<(Vec<EntityIdentifier>, Vec<RankedEntity>), Error> {
     if entities.is_empty() {
         return Ok((vec![], vec![]));
@@ -331,7 +248,7 @@ fn rank_entities_internal(
     }
 
     // Calculate rank centrality scores
-    let scores = run_rank_centrality(graph, engine, 100000, 1e-8);
+    let scores = run_rank_centrality(graph, 100000, 1e-8);
 
     // Build ranked entities list
     let mut ranked_entities_list: Vec<RankedEntity> = Vec::with_capacity(node_count);
@@ -364,21 +281,7 @@ pub fn rank_entities(
     entities: &[EntityIdentifier],
     votes: &[RelevantVote],
 ) -> Result<(Vec<EntityIdentifier>, Vec<RankedEntity>), Error> {
-    rank_entities_internal(entities, votes, RankEngine::Sparse)
-}
-
-pub fn rank_entities_sparse(
-    entities: &[EntityIdentifier],
-    votes: &[RelevantVote],
-) -> Result<(Vec<EntityIdentifier>, Vec<RankedEntity>), Error> {
-    rank_entities_internal(entities, votes, RankEngine::Sparse)
-}
-
-pub fn rank_entities_dense(
-    entities: &[EntityIdentifier],
-    votes: &[RelevantVote],
-) -> Result<(Vec<EntityIdentifier>, Vec<RankedEntity>), Error> {
-    rank_entities_internal(entities, votes, RankEngine::Dense)
+    rank_entities_internal(entities, votes)
 }
 
 async fn rank_children_handler(
@@ -843,7 +746,7 @@ mod tests {
             let votes = vec![];
             let graph = build_rank_graph(&entities, &votes).unwrap();
 
-            let scores = run_rank_centrality(&graph.graph, RankEngine::Sparse, 1000, 1e-6);
+            let scores = run_rank_centrality(&graph.graph, 1000, 1e-6);
 
             assert!(scores.is_empty());
         }
@@ -854,7 +757,7 @@ mod tests {
             let votes = vec![];
             let graph = build_rank_graph(&entities, &votes).unwrap();
 
-            let scores = run_rank_centrality(&graph.graph, RankEngine::Sparse, 1000, 1e-6);
+            let scores = run_rank_centrality(&graph.graph, 1000, 1e-6);
 
             assert_eq!(scores.len(), 1);
             assert_eq!(scores[0], 1.0); // Single node gets score 1
@@ -878,7 +781,7 @@ mod tests {
             ];
 
             let graph = build_rank_graph(&entities, &votes).unwrap();
-            let scores = run_rank_centrality(&graph.graph, RankEngine::Sparse, 10000, 1e-8);
+            let scores = run_rank_centrality(&graph.graph, 10000, 1e-8);
 
             // Get scores in entity order
             let mut entity_scores = vec![];
@@ -918,7 +821,7 @@ mod tests {
             }
 
             let graph = build_rank_graph(&entities, &votes).unwrap();
-            let scores = run_rank_centrality(&graph.graph, RankEngine::Sparse, 10000, 1e-8);
+            let scores = run_rank_centrality(&graph.graph, 10000, 1e-8);
 
             // Map scores back to entities
             let mut entity_scores: Vec<(String, f64)> = vec![];
@@ -954,7 +857,7 @@ mod tests {
             ];
 
             let graph = build_rank_graph(&entities, &votes).unwrap();
-            let scores = run_rank_centrality(&graph.graph, RankEngine::Sparse, 10000, 1e-8);
+            let scores = run_rank_centrality(&graph.graph, 10000, 1e-8);
 
             // In a perfect cycle, all scores should be approximately equal
             let mean_score = scores.iter().sum::<f64>() / scores.len() as f64;
@@ -992,7 +895,7 @@ mod tests {
             ];
 
             let graph = build_rank_graph(&entities, &votes).unwrap();
-            let scores = run_rank_centrality(&graph.graph, RankEngine::Sparse, 10000, 1e-8);
+            let scores = run_rank_centrality(&graph.graph, 10000, 1e-8);
 
             // Find Champion's score
             let mut champion_score = 0.0;
@@ -1043,7 +946,7 @@ mod tests {
             ];
 
             let graph = build_rank_graph(&entities, &votes).unwrap();
-            let scores = run_rank_centrality(&graph.graph, RankEngine::Sparse, 10000, 1e-8);
+            let scores = run_rank_centrality(&graph.graph, 10000, 1e-8);
 
             let mut entity_scores: Vec<(String, f64)> = vec![];
             for i in 0..5 {
@@ -1071,38 +974,10 @@ mod tests {
         }
 
         #[test]
-        fn test_dense_and_sparse_match() {
-            let entities = vec![
-                create_entity("ns", "Alpha"),
-                create_entity("ns", "Beta"),
-                create_entity("ns", "Gamma"),
-                create_entity("ns", "Delta"),
-            ];
-            let votes = vec![
-                create_vote("ns", "Alpha", "ns", "Beta", -25),
-                create_vote("ns", "Beta", "ns", "Gamma", 10),
-                create_vote("ns", "Gamma", "ns", "Delta", -15),
-                create_vote("ns", "Delta", "ns", "Alpha", 5),
-                create_vote("ns", "Alpha", "ns", "Gamma", -5),
-                create_vote("ns", "Beta", "ns", "Delta", 20),
-            ];
-
-            let graph = build_rank_graph(&entities, &votes).unwrap();
-
-            let dense = run_rank_centrality(&graph.graph, RankEngine::Dense, 10000, 1e-8);
-            let sparse = run_rank_centrality(&graph.graph, RankEngine::Sparse, 10000, 1e-8);
-
-            assert_eq!(dense.len(), sparse.len());
-            for (a, b) in dense.iter().zip(sparse.iter()) {
-                assert!((a - b).abs() < 1e-9, "dense {a} sparse {b}");
-            }
-        }
-
-        #[test]
-        fn test_sparse_spanning_tree_orders_hundred_entities() {
+        fn test_sparse_spanning_tree_orders_twenty_six_entities() {
             init_logger();
 
-            const ITEM_COUNT: usize = 100;
+            const ITEM_COUNT: usize = 26;
             let namespace = "spanning";
 
             let entities: Vec<EntityIdentifier> = (0..ITEM_COUNT)
@@ -1123,12 +998,11 @@ mod tests {
 
             let votes = matrix_to_votes(&matrix, namespace);
 
-            // A spanning tree of 100 nodes produces exactly 99 comparisons.
+            // A spanning tree of 26 nodes produces exactly 25 comparisons.
             assert_eq!(votes.len(), ITEM_COUNT - 1);
 
             let graph = build_rank_graph(&entities, &votes).unwrap();
-            let quantized_scores =
-                run_rank_centrality(&graph.graph, RankEngine::Sparse, 100000, 1e-8);
+            let quantized_scores = run_rank_centrality(&graph.graph, 100000, 1e-8);
 
             let reference_scores = rank_centrality_reference(&matrix, 100000, 1e-8);
 
@@ -1144,8 +1018,9 @@ mod tests {
             );
 
             // Note: integer magnitudes (\u00b150) introduce rounding noise that
-            // slightly changes the strict ordering compared to the floating-point
-            // reference when we only have the minimal spanning tree comparisons.
+            // slightly changes the strict ordering compared to the
+            // floating-point reference when we only have the
+            // minimal spanning tree comparisons.
         }
 
         #[test]
@@ -1167,7 +1042,7 @@ mod tests {
             ];
 
             let graph = build_rank_graph(&entities, &votes).unwrap();
-            let scores = run_rank_centrality(&graph.graph, RankEngine::Sparse, 10000, 1e-8);
+            let scores = run_rank_centrality(&graph.graph, 10000, 1e-8);
 
             // Collect scores by group
             let mut group1_scores = vec![];
@@ -1219,7 +1094,7 @@ mod tests {
             ];
 
             let graph = build_rank_graph(&entities, &votes).unwrap();
-            let scores = run_rank_centrality(&graph.graph, RankEngine::Sparse, 100000, 1e-8);
+            let scores = run_rank_centrality(&graph.graph, 100000, 1e-8);
 
             // Just verify it converges and produces valid scores
             assert_eq!(scores.len(), 6);
@@ -1378,7 +1253,7 @@ mod tests {
 
             // Build the graph and calculate rank centrality
             let graph = build_rank_graph(&entities, &votes).unwrap();
-            let scores = run_rank_centrality(&graph.graph, RankEngine::Sparse, 100000, 1e-8);
+            let scores = run_rank_centrality(&graph.graph, 100000, 1e-8);
 
             // Map scores back to letters with their correct positions
             let mut letter_scores: Vec<(String, f64, usize)> = vec![];

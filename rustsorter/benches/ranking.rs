@@ -1,6 +1,6 @@
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use rand::{Rng, SeedableRng, seq::SliceRandom};
-use rustsorter::{EntityIdentifier, RelevantVote, rank_entities_dense, rank_entities_sparse};
+use rustsorter::{EntityIdentifier, RelevantVote, rank_entities};
 
 fn make_entities(count: usize, namespace: &str) -> Vec<EntityIdentifier> {
     (0..count)
@@ -78,19 +78,10 @@ fn bench_rank_entities(c: &mut Criterion) {
         let votes = matrix_to_votes(&matrix, namespace);
 
         group.bench_function(
-            BenchmarkId::new("dense", format!("{item_count}_items_{extra}_extra")),
-            |b| {
-                b.iter(|| {
-                    let _ = rank_entities_dense(black_box(&entities), black_box(&votes)).unwrap();
-                });
-            },
-        );
-
-        group.bench_function(
             BenchmarkId::new("sprs", format!("{item_count}_items_{extra}_extra")),
             |b| {
                 b.iter(|| {
-                    let _ = rank_entities_sparse(black_box(&entities), black_box(&votes)).unwrap();
+                    let _ = rank_entities(black_box(&entities), black_box(&votes)).unwrap();
                 });
             },
         );
