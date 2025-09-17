@@ -85,7 +85,10 @@ fn entity_to_identifier(entity: &crate::entity::Entity) -> crate::pagerank::Enti
 }
 
 /// Check if an entity matches an EntityIdentifier
-fn entity_matches_identifier(entity: &crate::entity::Entity, identifier: &crate::pagerank::EntityIdentifier) -> bool {
+fn entity_matches_identifier(
+    entity: &crate::entity::Entity,
+    identifier: &crate::pagerank::EntityIdentifier,
+) -> bool {
     entity.pk_namespace == identifier.pk_namespace && entity.pk == identifier.pk
 }
 
@@ -108,7 +111,7 @@ fn select_ranked_entity_pair(
         .iter()
         .filter(|e| unsorted.iter().any(|u| entity_matches_identifier(e, u)))
         .collect();
-    
+
     let right_unsorted: Vec<&crate::entity::Entity> = right_entities
         .iter()
         .filter(|e| unsorted.iter().any(|u| entity_matches_identifier(e, u)))
@@ -121,42 +124,50 @@ fn select_ranked_entity_pair(
             // Find sorted entities in right pool
             let right_sorted: Vec<&crate::entity::Entity> = right_entities
                 .iter()
-                .filter(|e| sorted.iter().any(|s| entity_matches_identifier(e, &s.identifier)))
+                .filter(|e| {
+                    sorted
+                        .iter()
+                        .any(|s| entity_matches_identifier(e, &s.identifier))
+                })
                 .collect();
-            
+
             if right_sorted.is_empty() {
                 // No sorted in right pool, try opposite configuration
                 if !right_unsorted.is_empty() {
                     let left_sorted: Vec<&crate::entity::Entity> = left_entities
                         .iter()
-                        .filter(|e| sorted.iter().any(|s| entity_matches_identifier(e, &s.identifier)))
+                        .filter(|e| {
+                            sorted
+                                .iter()
+                                .any(|s| entity_matches_identifier(e, &s.identifier))
+                        })
                         .collect();
-                    
+
                     if left_sorted.is_empty() {
                         // Both pools only have unsorted, pick randomly from each
                         let left_entity = left_unsorted.choose(&mut rng).unwrap().clone().clone();
                         let mut right_pool = right_unsorted.clone();
                         right_pool.retain(|e| !entities_are_same(e, &left_entity));
-                        
+
                         if right_pool.is_empty() {
                             return Err(PairSelectionError::InsufficientEntities);
                         }
-                        
+
                         let right_entity = right_pool.choose(&mut rng).unwrap().clone().clone();
                         return Ok((left_entity, right_entity));
                     }
-                    
+
                     (right_unsorted, left_sorted, false)
                 } else {
                     // Only left has unsorted, must pick from left
                     let left_entity = left_unsorted.choose(&mut rng).unwrap().clone().clone();
                     let mut right_pool = right_entities.to_vec();
                     right_pool.retain(|e| !entities_are_same(e, &left_entity));
-                    
+
                     if right_pool.is_empty() {
                         return Err(PairSelectionError::InsufficientEntities);
                     }
-                    
+
                     let right_entity = right_pool.choose(&mut rng).unwrap().clone();
                     return Ok((left_entity, right_entity));
                 }
@@ -167,29 +178,34 @@ fn select_ranked_entity_pair(
             // Only right has unsorted
             let left_sorted: Vec<&crate::entity::Entity> = left_entities
                 .iter()
-                .filter(|e| sorted.iter().any(|s| entity_matches_identifier(e, &s.identifier)))
+                .filter(|e| {
+                    sorted
+                        .iter()
+                        .any(|s| entity_matches_identifier(e, &s.identifier))
+                })
                 .collect();
-            
+
             if left_sorted.is_empty() {
                 // No sorted entities available, pick two unsorted
                 let right_entity = right_unsorted.choose(&mut rng).unwrap().clone().clone();
                 let mut left_pool = left_entities.to_vec();
                 left_pool.retain(|e| !entities_are_same(e, &right_entity));
-                
+
                 if left_pool.is_empty() {
                     return Err(PairSelectionError::InsufficientEntities);
                 }
-                
+
                 let left_entity = left_pool.choose(&mut rng).unwrap().clone();
                 return Ok((left_entity, right_entity));
             }
-            
+
             (right_unsorted, left_sorted, false)
         };
 
         // Pick random unsorted and random sorted
         let unsorted_entity = (*unsorted_pool.choose(&mut rng).unwrap()).clone();
-        let mut sorted_pool_filtered: Vec<crate::entity::Entity> = sorted_pool.into_iter().cloned().collect();
+        let mut sorted_pool_filtered: Vec<crate::entity::Entity> =
+            sorted_pool.into_iter().cloned().collect();
         use log::info;
         info!("picking unsorted entity");
         sorted_pool_filtered.retain(|e| !entities_are_same(e, &unsorted_entity));
@@ -199,7 +215,7 @@ fn select_ranked_entity_pair(
         }
 
         let sorted_entity = sorted_pool_filtered.choose(&mut rng).unwrap().clone();
-                
+
         if prefer_left {
             Ok((unsorted_entity, sorted_entity))
         } else {
@@ -207,13 +223,16 @@ fn select_ranked_entity_pair(
         }
     } else {
         // Strategy 2: All entities are sorted, find the best matchup
-        
+
         // Create position map for sorted entities
         let mut position_map = std::collections::HashMap::new();
         for (pos, ranked_entity) in sorted.iter().enumerate() {
             position_map.insert(
-                (ranked_entity.identifier.pk_namespace.clone(), ranked_entity.identifier.pk.clone()),
-                pos + 1  // 1-indexed positions
+                (
+                    ranked_entity.identifier.pk_namespace.clone(),
+                    ranked_entity.identifier.pk.clone(),
+                ),
+                pos + 1, // 1-indexed positions
             );
         }
 
@@ -256,8 +275,9 @@ pub fn select_entity_pair(
     left_entities: &[crate::entity::Entity],
     right_entities: &[crate::entity::Entity],
 ) -> Result<(crate::entity::Entity, crate::entity::Entity), PairSelectionError> {
-    // For backwards compatibility, when no ranking info is available, use random selection
-    
+    // For backwards compatibility, when no ranking info is available, use random
+    // selection
+
     // Check if we have entities in both pools
     if left_entities.is_empty() || right_entities.is_empty() {
         return Err(PairSelectionError::PinNotFound);
@@ -266,7 +286,8 @@ pub fn select_entity_pair(
     let mut left_pool = left_entities.to_vec();
     let mut right_pool = right_entities.to_vec();
 
-    // If right_pool is a singleton, remove it from left_pool to avoid accidental selection
+    // If right_pool is a singleton, remove it from left_pool to avoid accidental
+    // selection
     if right_pool.len() == 1 {
         left_pool.retain(|e| !entities_are_same(e, &right_pool[0]));
         // If this leaves left_pool empty, we can't form a pair
@@ -282,11 +303,11 @@ pub fn select_entity_pair(
 
     // Remove the chosen left entity from right pool to ensure distinct selection
     right_pool.retain(|e| !entities_are_same(e, &left_entity));
-    
+
     if right_pool.is_empty() {
         return Err(PairSelectionError::InsufficientEntities);
     }
-    
+
     let right_entity = right_pool.choose(&mut rng).unwrap().clone();
 
     Ok((left_entity, right_entity))
@@ -320,36 +341,37 @@ async fn get_pair_handler(
 ) -> Result<Json<PairResponse>, Error> {
     // Get left pool
     let left_entities = get_filtered_children(
-        &state, 
-        params.pk_namespace.clone(), 
-        params.pk.clone(), 
-        params.left_pin_ns.clone(), 
-        params.left_pin_pk.clone()
-    ).await?;
-    
+        &state,
+        params.pk_namespace.clone(),
+        params.pk.clone(),
+        params.left_pin_ns.clone(),
+        params.left_pin_pk.clone(),
+    )
+    .await?;
+
     // Get right pool
     let right_entities = get_filtered_children(
-        &state, 
-        params.pk_namespace.clone(), 
-        params.pk.clone(), 
-        params.right_pin_ns.clone(), 
-        params.right_pin_pk.clone()
-    ).await?;
-    
+        &state,
+        params.pk_namespace.clone(),
+        params.pk.clone(),
+        params.right_pin_ns.clone(),
+        params.right_pin_pk.clone(),
+    )
+    .await?;
+
     // Get all children for ranking
     let all_children = get_filtered_children(
         &state,
         params.pk_namespace.clone(),
         params.pk.clone(),
         None,
-        None
-    ).await?;
+        None,
+    )
+    .await?;
 
     // Convert to identifiers for ranking
-    let entity_identifiers: Vec<crate::pagerank::EntityIdentifier> = all_children
-        .iter()
-        .map(entity_to_identifier)
-        .collect();
+    let entity_identifiers: Vec<crate::pagerank::EntityIdentifier> =
+        all_children.iter().map(entity_to_identifier).collect();
 
     // Prepare entity keys for vote query
     let entity_keys: Vec<String> = entity_identifiers
@@ -378,8 +400,8 @@ async fn get_pair_handler(
         // Use ranking-based selection
         select_ranked_entity_pair(&left_entities, &right_entities, &unsorted, &sorted)
     }
-    .map_err(|e| Error::BadRequest { 
-        message: format!("Unable to select valid entity pair: {:?}", e).into()
+    .map_err(|e| Error::BadRequest {
+        message: format!("Unable to select valid entity pair: {:?}", e).into(),
     })?;
 
     Ok(Json(PairResponse {
@@ -394,8 +416,9 @@ pub fn routes() -> ApiRouter<AppState> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use uuid::Uuid;
+
+    use super::*;
 
     // Helper function to create test entities
     fn create_test_entity(ns: &str, pk: &str) -> crate::entity::Entity {
@@ -421,7 +444,7 @@ mod tests {
         for _ in 0..100 {
             let result = select_entity_pair(&entities, &entities);
             assert!(result.is_ok());
-            
+
             let (left, right) = result.unwrap();
             // Ensure entities are distinct
             assert!(!(left.pk_namespace == right.pk_namespace && left.pk == right.pk));
@@ -431,7 +454,7 @@ mod tests {
     #[test]
     fn test_select_pair_insufficient_entities() {
         let entities = vec![create_test_entity("ns1", "pk1")];
-        
+
         let result = select_entity_pair(&entities, &entities);
         assert_eq!(result.err(), Some(PairSelectionError::InsufficientEntities));
     }
@@ -439,7 +462,7 @@ mod tests {
     #[test]
     fn test_select_pair_empty_entities() {
         let entities = vec![];
-        
+
         let result = select_entity_pair(&entities, &entities);
         assert_eq!(result.err(), Some(PairSelectionError::PinNotFound));
     }
@@ -469,7 +492,7 @@ mod tests {
 
         let result = select_entity_pair(&left_entities, &right_entities);
         assert!(result.is_ok());
-        
+
         let (left, right) = result.unwrap();
         assert_eq!(left.pk_namespace, "ns1");
         assert!(!(left.pk_namespace == right.pk_namespace && left.pk == right.pk));
@@ -490,7 +513,7 @@ mod tests {
 
         let result = select_entity_pair(&left_entities, &right_entities);
         assert!(result.is_ok());
-        
+
         let (left, right) = result.unwrap();
         assert_eq!(left.pk, "pk1");
         assert!(!(left.pk_namespace == right.pk_namespace && left.pk == right.pk));
@@ -504,13 +527,11 @@ mod tests {
             create_test_entity("ns2", "pk1"),
         ];
 
-        let left_entities = vec![
-            create_test_entity("ns1", "pk1")
-        ];
-        
+        let left_entities = vec![create_test_entity("ns1", "pk1")];
+
         let result = select_entity_pair(&left_entities, &right_entities);
         assert!(result.is_ok());
-        
+
         let (left, right) = result.unwrap();
         assert_eq!(left.pk_namespace, "ns1");
         assert_eq!(left.pk, "pk1");
@@ -530,7 +551,7 @@ mod tests {
         ];
 
         let result = select_entity_pair(&left_entities, &right_entities);
-        
+
         let (left, right) = result.unwrap();
         assert_eq!(right.pk_namespace, "ns1");
         assert!(!(left.pk_namespace == right.pk_namespace && left.pk == right.pk));
@@ -539,11 +560,11 @@ mod tests {
     #[test]
     fn test_both_pins_different_entities() {
         let result = select_entity_pair(
-            &vec![create_test_entity("ns1", "pk1")], 
+            &vec![create_test_entity("ns1", "pk1")],
             &vec![create_test_entity("ns2", "pk2")],
         );
         assert!(result.is_ok());
-        
+
         let (left, right) = result.unwrap();
         assert_eq!(left.pk_namespace, "ns1");
         assert_eq!(left.pk, "pk1");
@@ -571,13 +592,17 @@ mod tests {
         // Check that we get some variety (not all pairs are identical)
         let first_pair = &results[0];
         let has_variety = results.iter().any(|(left, right)| {
-            left.pk != first_pair.0.pk || 
-            left.pk_namespace != first_pair.0.pk_namespace ||
-            right.pk != first_pair.1.pk || 
-            right.pk_namespace != first_pair.1.pk_namespace
+            left.pk != first_pair.0.pk
+                || left.pk_namespace != first_pair.0.pk_namespace
+                || right.pk != first_pair.1.pk
+                || right.pk_namespace != first_pair.1.pk_namespace
         });
-        
-        // This test might occasionally fail due to randomness, but it's very unlikely with 10 iterations
-        assert!(has_variety || entities.len() == 2, "Expected some variety in random selection");
+
+        // This test might occasionally fail due to randomness, but it's very unlikely
+        // with 10 iterations
+        assert!(
+            has_variety || entities.len() == 2,
+            "Expected some variety in random selection"
+        );
     }
 }
