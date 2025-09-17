@@ -11,14 +11,14 @@ module.exports = {
       max_memory_restart: '1G'
     },
     
-    // Rama services - can start in parallel after postgres
+    // Rama services - can start in parallel after postgres  
     {
       name: 'zookeeper',
       script: './rama',
       args: ['devZookeeper'],
       cwd: '/home/tommy/programming/sorter/rama-1.1.0',
-      interpreter: 'python3',
-      autorestart: false,
+      autorestart: true,
+      restart_delay: 2000,
       watch: false,
       max_memory_restart: '1G'
     },
@@ -28,7 +28,8 @@ module.exports = {
       args: ['conductor'],
       cwd: '/home/tommy/programming/sorter/rama-1.1.0',
       interpreter: 'python3',
-      autorestart: false,
+      autorestart: true,
+      restart_delay: 2000,
       watch: false,
       max_memory_restart: '1G'
     },
@@ -38,7 +39,8 @@ module.exports = {
       args: ['supervisor'],
       cwd: '/home/tommy/programming/sorter/rama-1.1.0',
       interpreter: 'python3',
-      autorestart: false,
+      autorestart: true,
+      restart_delay: 2000,
       watch: false,
       max_memory_restart: '1G'
     },

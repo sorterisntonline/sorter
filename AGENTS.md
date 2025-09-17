@@ -204,6 +204,25 @@ Every pull request automatically gets a **full preview deployment** via `.github
    - Check individual process logs: `pm2 logs [process-name] --nostream`
    - Restart specific services: `pm2 restart [process-name]`
 
+### Rama Service Logs
+
+Rama services (zookeeper, conductor, supervisor) use log4j and write logs directly to files, not stdout/stderr. PM2 logs won't show these. View Rama logs with:
+
+```bash
+# View live logs
+tail -f rama-1.1.0/logs/dev-zookeeper.log
+tail -f rama-1.1.0/logs/conductor.log  
+tail -f rama-1.1.0/logs/supervisor.log
+
+# View recent log entries
+tail -100 rama-1.1.0/logs/dev-zookeeper.log
+tail -100 rama-1.1.0/logs/conductor.log
+tail -100 rama-1.1.0/logs/supervisor.log
+
+# List all Rama log files
+ls -la rama-1.1.0/logs/
+```
+
 ### Development Tips
 
 - Use `RUST_LOG=debug` for verbose backend logging
