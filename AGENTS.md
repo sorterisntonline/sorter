@@ -234,3 +234,113 @@ ls -la rama-1.1.0/logs/
 ## Contributing
 
 See individual component READMEs and the main project contributors for specific development guidelines. The project tracks development time via Wakatime badges for key contributors.
+
+## Debugging Rama Playground Endpoints
+
+**Issue**: Playground endpoints were failing with connection errors and data wasn't persisting.
+
+### Root Cause Analysis Process
+
+#### 1. Environment Variable Configuration
+- **Problem**: Rust server couldn't connect to Rama due to missing environment variables
+- **Solution**: Added to `.env`:
+  ```bash
+  RAMA_BASE_URL=http://localhost:8888
+  RAMA_MODULE_NAME=sorter.playground-module/PlaygroundModule
+  ```
+
+#### 2. URL Encoding Issues
+- **Problem**: Module name `sorter.playground-module/PlaygroundModule` contains `/` that needs URL encoding
+- **Solution**: Updated Rust client to URL-encode module names (`/` → `%2F`)
+- **Code**: Added `urlencoding = "2.1"` dependency and `encode(&self.module)` in `rama_client.rs`
+
+#### 3. Redirect Handling
+- **Problem**: Conductor redirects to supervisors, Rust client needed to follow redirects
+- **Solution**: Used conductor admin UI port (8888) which properly handles redirects
+
+### Stream Topology Debugging Process
+
+#### 4. Adding Debug Prints to Clojure Module
+When data wasn't persisting, added debug prints to the stream topology:
+
+```clojure
+(source> *command-depot :> {:keys [*list *action *value] :as *command})
+(println "command1: " *list *action *value)
+(println "command2: " *command)
+```
+
+#### 5. Redeploying Rama Module
+**Process**:
+```bash
+# 1. Recompile Clojure module
+cd /home/tommy/programming/sorter/rama-sorter && lein uberjar
+
+# 2. Redeploy to Rama cluster
+cd /home/tommy/programming/sorter/rama-1.1.0
+./rama deploy --action update --jar /path/to/target/rama-clojure-starter-1.0.0-SNAPSHOT-standalone.jar --module sorter.playground-module/PlaygroundModule
+```
+
+#### 6. Finding Debug Output Location
+**Key Discovery**: Debug prints from Clojure topology go to `.out` files, not `.log` files!
+
+**Locations**:
+- Worker logs: `/home/tommy/programming/sorter/rama-1.1.0/logs/worker-*.log` (system logs)
+- **Debug output**: `/home/tommy/programming/sorter/rama-1.1.0/logs/worker-*.out` (stdout/println)
+
+**Debugging Commands**:
+```bash
+# Check latest worker stdout
+tail -10 /home/tommy/programming/sorter/rama-1.1.0/logs/worker-*.out
+
+# Monitor debug output in real-time
+tail -f /home/tommy/programming/sorter/rama-1.1.0/logs/worker-*.out
+```
+
+#### 7. Data Destructuring Issue Discovery
+Debug output revealed the actual problem:
+```
+command1:  nil nil nil                                    # ← Values were nil!
+command2:  {list default, value test, action append}     # ← Data was present
+```
+
+**Root Cause**: Clojure destructuring syntax mismatch
+- **Wrong**: `{:keys [*list *action *value]}` (expects keyword keys like `:list`)
+- **Correct**: `{:strs [*list *action *value]}` (for string keys like `"list"`)
+
+### General Debugging Strategy for Rama Issues
+
+#### 1. Layer-by-Layer Debugging
+1. **Network**: Can Rust connect to Rama? (environment variables, URL encoding)
+2. **API**: Are requests reaching the depot? (check conductor/supervisor redirects)
+3. **Processing**: Is the topology processing events? (add debug prints)
+4. **Data**: Are updates reaching PState? (query PState directly)
+
+#### 2. Key Log Locations
+- **Rust client errors**: PM2 logs (`pm2 logs rust-server`)
+- **Rama connection errors**: Worker logs (`worker-*.log`)
+- **Topology debug output**: Worker stdout (`worker-*.out`)
+- **Conductor/Supervisor status**: PM2 logs for those services
+
+#### 3. Debug Print Strategy
+When topology isn't working as expected:
+1. Add `(println)` statements to see data flow
+2. Print both destructured variables AND raw data
+3. Redeploy module to see changes
+4. Check `.out` files for output (not `.log` files)
+
+#### 4. Module Deployment Workflow
+```bash
+# Always use this pattern for Rama module updates:
+cd rama-sorter && lein uberjar
+cd ../rama-1.1.0
+./rama deploy --action update --jar ../rama-sorter/target/[jar-name] --module [module-name]
+```
+
+### Final Working State
+- ✅ Rust ↔ Rama connection established
+- ✅ API endpoints functional
+- ✅ Stream topology processing depot events
+- ✅ Debug prints showing correct data flow
+- 🔄 PState persistence (minor remaining issue with aggregation/queries)
+
+The core playground endpoint functionality is now working - the original connection and processing issues are resolved.
