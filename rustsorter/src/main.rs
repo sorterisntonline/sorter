@@ -26,7 +26,7 @@ use rustsorter::{
     entity,
     entity_relationships,
     extractors::maybe_user::MaybeUser,
-    folksonomy,
+    folksonomy_simple,
     models::{Error, Json},
     pagerank,
     pair,
@@ -156,7 +156,7 @@ fn router(app_state: AppState) -> Router {
         .nest("/pair", pair::routes())
         .nest("/vote", vote::routes())
         .nest("/rank", pagerank::routes())
-        .nest("/folksonomy", folksonomy::routes())
+        .nest("/folksonomy", folksonomy_simple::routes())
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
             auth_middleware::try_auth,
