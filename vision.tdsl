@@ -15,3 +15,4 @@ But it only works if you follow the paths. I need to finish cleaning.
 can be in elcetric. calling http calls to rust. or maybe just postgres seperately? lets do http, to harden the existing code.
 AND it seems like something that would be repl friendly? maybe that will hit snags galore like with rama. im intrigued though
 this is an electric evaluation. because it wasn't perfect before, but v3 might change
+would be also awesome to combine this with playwright mcp, and clojure-mcp
