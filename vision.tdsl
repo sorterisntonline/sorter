@@ -5,7 +5,7 @@ For personal use. Router. Like I'm route solving this cleaning effort. Branching
 
 Render the structure using my json glob system
 
-Sorter has to be electric!!! Use rust+postgres as mutable game world over http,  for xtdb or rama for historical storage.
+Sorter has to be electric!!! Use rust+postgres as mutable game world over http.
 
 Maybe it could live parse this language. And entityify every paragraph? And make that viewable
 
@@ -13,6 +13,6 @@ But it only works if you follow the paths. I need to finish cleaning.
 }
 
 can be in elcetric. calling http calls to rust. or maybe just postgres seperately? lets do http, to harden the existing code.
-AND it seems like something that would be repl friendly? maybe that will hit snags galore like with rama. im intrigued though
+AND it seems like something that would be repl friendly? im intrigued though
 this is an electric evaluation. because it wasn't perfect before, but v3 might change
 would be also awesome to combine this with playwright mcp, and clojure-mcp

@@ -98,6 +98,7 @@ sorter/
 - **Testing**: pytest (Python integration tests)
 - **CLI**: Custom TypeScript CLI tool using Commander.js
 - **Runtime**: Bun for CLI tool, Node.js for frontend
+- **Process Manager**: PM2 for managing background processes
 
 ## Development Workflow
 
