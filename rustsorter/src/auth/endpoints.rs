@@ -151,15 +151,19 @@ pub async fn complete_signup(
     // Create user
     let user_id = Uuid::new_v4();
 
+    let provider_id = session.provider_id.clone();
+    let avatar_url = temp_data.steam_avatar.clone();
+    let handle = payload.handle.clone();
+
     sqlx::query!(
         "INSERT INTO users (id, handle, display_name, username, primary_provider, avatar_url)
          VALUES ($1, $2, $3, $4, $5, $6)",
         user_id,
-        payload.handle,
-        temp_data.steam_username,
-        temp_data.steam_username, // backward compatibility
-        session.provider_id,
-        temp_data.steam_avatar
+        &handle,
+        Option::<&str>::None,
+        &handle,
+        provider_id.as_deref(),
+        &avatar_url
     )
     .execute(&state.db)
     .await
@@ -187,11 +191,11 @@ pub async fn complete_signup(
 
     let user = User {
         id: user_id,
-        handle: payload.handle.clone(),
-        display_name: Some(temp_data.steam_username.clone()),
-        username: temp_data.steam_username,
-        primary_provider: session.provider_id,
-        avatar_url: Some(temp_data.steam_avatar),
+        handle: handle.clone(),
+        display_name: None,
+        username: handle,
+        primary_provider: provider_id,
+        avatar_url: Some(avatar_url),
         bio: None,
         created_at: None,
     };

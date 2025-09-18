@@ -4,21 +4,10 @@ import { useAuth } from './contexts/AuthContext';
 import Sidebar from './Sidebar';
 
 function Layout() {
-  const auth = useAuth();
-
-  if (auth.isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
+  const { isLoading } = useAuth();
 
   return (
-    <div className="flex">
+    <div className="flex" data-auth-loading={isLoading ? 'true' : 'false'}>
       <Sidebar />
       {/* Main content area with padding to offset the fixed sidebar */}
       <main className="flex-grow p-6 pl-[280px]"> {/* pl = sidebar width + padding */}

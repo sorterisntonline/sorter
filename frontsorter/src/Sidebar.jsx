@@ -76,9 +76,6 @@ function Sidebar() {
                 <p className="text-sm font-medium text-gray-900 truncate">
                   @{auth.user.handle}
                 </p>
-                <p className="text-xs text-gray-500 truncate">
-                  {auth.user.display_name}
-                </p>
               </div>
             </div>
           </div>

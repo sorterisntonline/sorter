@@ -108,6 +108,16 @@ fn generate_suggested_handle(steam_name: &str) -> String {
         .collect()
 }
 
+fn steam_id_suffix<'a>(steam_id: &'a str, count: usize) -> &'a str {
+    let len = steam_id.len();
+    if len == 0 {
+        return steam_id;
+    }
+
+    let suffix_len = count.min(len);
+    &steam_id[len - suffix_len..]
+}
+
 fn extract_steam_id_from_identity(identity: &str) -> Result<String> {
     let url = Url::parse(identity)?;
     let path_segments: Vec<&str> = url
@@ -373,16 +383,54 @@ pub async fn steam_callback(
             }
         }
         Ok(None) => {
-            // New user - for now create temp session with basic Steam data
-            debug!("New user, creating temp session with basic data");
+            debug!("New user, creating temp session with Steam bootstrap data");
 
-            // For development, create basic temp data without calling Steam API
-            // TODO: Fetch real Steam data when we have a proper API key
+            let mut steam_display_name: Option<String> = None;
+            let mut steam_avatar_url: Option<String> = None;
+            let mut suggested_handle: Option<String> = None;
+
+            let has_real_api_key = !state.steam_api_key.is_empty()
+                && state.steam_api_key != "dummy_key_for_development";
+
+            if has_real_api_key {
+                match fetch_steam_user_data(&steam_id, &state.steam_api_key, &client).await {
+                    Ok((summary, _bans, _games)) => {
+                        if !summary.personaname.trim().is_empty() {
+                            steam_display_name = Some(summary.personaname.clone());
+
+                            let generated = generate_suggested_handle(&summary.personaname);
+                            if !generated.is_empty() {
+                                suggested_handle = Some(generated);
+                            }
+                        }
+
+                        if !summary.avatarfull.trim().is_empty() {
+                            steam_avatar_url = Some(summary.avatarfull.clone());
+                        } else if !summary.avatarmedium.trim().is_empty() {
+                            steam_avatar_url = Some(summary.avatarmedium.clone());
+                        }
+                    }
+                    Err(error) => {
+                        warn!("Failed to fetch Steam profile data: {}", error);
+                    }
+                }
+            }
+
+            let default_avatar = "https://steamcdn-a.akamaihd.net/steamcommunity/public/images/avatars/fe/fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb_medium.jpg".to_string();
+            let fallback_display = format!("SteamUser{}", steam_id_suffix(&steam_id, 6));
+            let fallback_handle = format!("user{}", steam_id_suffix(&steam_id, 4));
+
+            let chosen_display = steam_display_name.unwrap_or(fallback_display);
+            let chosen_avatar = steam_avatar_url.unwrap_or(default_avatar);
+            let chosen_handle = suggested_handle
+                .filter(|value| !value.is_empty())
+                .unwrap_or(fallback_handle);
+
             let temp_data = TempSessionData {
                 steam_id: steam_id.clone(),
-                steam_username: format!("User_{}", &steam_id[steam_id.len()-6..]), // Last 6 digits of Steam ID
-                steam_avatar: "https://steamcdn-a.akamaihd.net/steamcommunity/public/images/avatars/fe/fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb_medium.jpg".to_string(), // Default Steam avatar
-                suggested_handle: format!("user{}", &steam_id[steam_id.len()-4..]), // Last 4 digits
+                steam_username: chosen_display,
+                steam_avatar: chosen_avatar,
+                suggested_handle: chosen_handle,
             };
 
             match sessions::create_temp_session(&state.db, "steam", &temp_data).await {
