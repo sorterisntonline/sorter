@@ -92,13 +92,17 @@ async fn main() -> Result<(), anyhow::Error> {
     let args: Vec<String> = env::args().collect();
     eprintln!("[rustsorter] args: {:?}", args);
 
-    let database_string = match env::var("DATABASE_URL") {
-        Ok(value) => value.trim().to_string(),
-        Err(_) => {
-            eprintln!("[rustsorter] ERROR: DATABASE_URL is not set");
-            std::process::exit(1);
-        }
-    };
+    fn require_env(key: &str) -> String {
+        env::var(key)
+            .unwrap_or_else(|_| {
+                eprintln!("[rustsorter] ERROR: {key} is not set");
+                std::process::exit(1);
+            })
+            .trim()
+            .to_string()
+    }
+
+    let database_string = require_env("DATABASE_URL");
 
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(5)
@@ -106,43 +110,17 @@ async fn main() -> Result<(), anyhow::Error> {
         .await
         .expect("Unable to connect to database");
 
-    let port: u16 = env::var("PORT")
-        .ok()
-        .and_then(|value| value.parse::<u16>().ok())
-        .unwrap_or(8081);
-
-    let spotify_client_id = env::var("SPOTIFY_CLIENT_ID").unwrap_or_else(|_| {
-        eprintln!("[rustsorter] ERROR: SPOTIFY_CLIENT_ID is not set");
+    let port: u16 = require_env("PORT").parse().unwrap_or_else(|_| {
+        eprintln!("[rustsorter] ERROR: PORT must be a valid u16 integer");
         std::process::exit(1);
     });
 
-    let spotify_client_secret = env::var("SPOTIFY_CLIENT_SECRET").unwrap_or_else(|_| {
-        eprintln!("[rustsorter] ERROR: SPOTIFY_CLIENT_SECRET is not set");
-        std::process::exit(1);
-    });
-
-    let spotify_redirect_uri = env::var("SPOTIFY_REDIRECT_URI").unwrap_or_else(|_| {
-        eprintln!("[rustsorter] ERROR: SPOTIFY_REDIRECT_URI is not set");
-        std::process::exit(1);
-    });
-
-    let spotify_scopes = env::var("SPOTIFY_SCOPES").unwrap_or_else(|_| {
-        eprintln!("[rustsorter] ERROR: SPOTIFY_SCOPES is not set");
-        std::process::exit(1);
-    });
-
-    let base_url = env::var("BASE_URL")
-        .or_else(|_| env::var("APP_URL"))
-        .or_else(|_| env::var("FLY_APP_NAME").map(|name| format!("https://{}.fly.dev", name)))
-        .unwrap_or_else(|_| format!("http://localhost:{}", port));
-
-    let frontend_url = env::var("FRONTEND_URL").unwrap_or_else(|_| {
-        if base_url.contains("localhost") {
-            "http://localhost:5173".to_string()
-        } else {
-            base_url.clone()
-        }
-    });
+    let spotify_client_id = require_env("SPOTIFY_CLIENT_ID");
+    let spotify_client_secret = require_env("SPOTIFY_CLIENT_SECRET");
+    let spotify_redirect_uri = require_env("SPOTIFY_REDIRECT_URI");
+    let spotify_scopes = require_env("SPOTIFY_SCOPES");
+    let base_url = require_env("BASE_URL");
+    let frontend_url = require_env("FRONTEND_URL");
 
     let app_state = AppState {
         db: pool.clone(),

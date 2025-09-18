@@ -37,6 +37,15 @@ jobs:
           BRANCH_NAME=$(echo "${{ github.head_ref }}" | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]' | cut -c1-50)
           echo "branch_name=$BRANCH_NAME" >> "$GITHUB_OUTPUT"
 
+      - name: Compute review app metadata
+        id: review_app
+        run: |
+          set -euo pipefail
+          APP_NAME="pr-${{ github.event.number }}-${{ github.repository_owner }}-${{ github.event.repository.name }}"
+          APP_NAME="${APP_NAME//_/-}"
+          echo "app_name=$APP_NAME" >> "$GITHUB_OUTPUT"
+          echo "base_url=https://$APP_NAME.fly.dev" >> "$GITHUB_OUTPUT"
+
       # Create or reuse Neon branch via official action
       - name: Create Neon Branch
         if: github.event.action != 'closed'
@@ -64,9 +73,12 @@ jobs:
         with:
           # This action automatically detects if the PR is open or closed.
           # If open, it deploys. If closed, it destroys the app.
-          # Provide DATABASE_URL and Spotify credentials to the runtime as Fly secrets
+          # Provide DATABASE_URL and the application credentials to the runtime as Fly secrets
           secrets: |
             DATABASE_URL=${{ steps.neon_create.outputs.db_url }}
+            PORT=8081
+            BASE_URL=${{ steps.review_app.outputs.base_url }}
+            FRONTEND_URL=${{ steps.review_app.outputs.base_url }}
             SPOTIFY_CLIENT_ID=${{ secrets.SPOTIFY_CLIENT_ID }}
             SPOTIFY_CLIENT_SECRET=${{ secrets.SPOTIFY_CLIENT_SECRET }}
             SPOTIFY_REDIRECT_URI=${{ secrets.SPOTIFY_REDIRECT_URI }}
