@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO spotify_user_data (user_id, spotify_user_id, display_name, email, product, avatar_url, last_api_sync)\n         VALUES ($1, $2, $3, $4, $5, $6, NOW())",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c94a70d15122562431654173cb05d675593556dbf8a6992bbda87120cb9ae60a"
+}

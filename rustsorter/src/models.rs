@@ -226,34 +226,23 @@ pub struct UserProvider {
     pub external_id: String,
     pub external_username: Option<String>,
     pub profile_data: Option<serde_json::Value>,
+    pub access_token: Option<String>,
+    pub refresh_token: Option<String>,
+    pub expires_at: Option<NaiveDateTime>,
     pub linked_at: Option<NaiveDateTime>,
     pub last_sync_at: Option<NaiveDateTime>,
 }
 
 #[derive(sqlx::FromRow, serde::Serialize, Debug, Clone)]
-pub struct SteamUserData {
+pub struct SpotifyUserData {
     pub user_id: Uuid,
-    pub steam_id: String,
-    pub account_created: Option<NaiveDateTime>,
-    pub playtime_tf2: Option<i32>,
-    pub total_games: Option<i32>,
-    pub profile_state: Option<i32>,
-    pub vac_banned: Option<bool>,
-    pub game_bans: Option<i32>,
-    pub days_since_last_ban: Option<i32>,
+    pub spotify_user_id: String,
+    pub display_name: Option<String>,
+    pub email: Option<String>,
+    pub product: Option<String>,
+    pub avatar_url: Option<String>,
     pub last_api_sync: Option<NaiveDateTime>,
     pub created_at: Option<NaiveDateTime>,
-}
-
-#[derive(sqlx::FromRow, serde::Serialize, Debug, Clone)]
-pub struct SteamMedal {
-    pub user_id: Uuid,
-    pub item_def_id: i32,
-    pub tournament_name: Option<String>,
-    pub medal_type: Option<String>,
-    pub season: Option<String>,
-    pub division: Option<String>,
-    pub discovered_at: Option<NaiveDateTime>,
 }
 
 #[derive(sqlx::FromRow, serde::Serialize, Debug, Clone)]
@@ -264,6 +253,16 @@ pub struct UserSession {
     pub provider_id: Option<String>,
     pub data: Option<serde_json::Value>,
     pub expires_at: NaiveDateTime,
+    pub created_at: Option<NaiveDateTime>,
+}
+
+#[derive(sqlx::FromRow, Debug, Clone)]
+pub struct OAuthState {
+    pub state: String,
+    pub provider_id: String,
+    pub purpose: String,
+    pub user_id: Option<Uuid>,
+    pub code_verifier: Option<String>,
     pub created_at: Option<NaiveDateTime>,
 }
 
@@ -284,8 +283,14 @@ impl SessionType {
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, schemars::JsonSchema)]
 pub struct TempSessionData {
-    pub steam_id: String,
-    pub steam_username: String,
-    pub steam_avatar: String,
+    pub provider_id: String,
+    pub external_id: String,
+    pub display_name: Option<String>,
+    pub avatar_url: Option<String>,
+    pub email: Option<String>,
     pub suggested_handle: String,
+    pub profile_data: Option<serde_json::Value>,
+    pub access_token: Option<String>,
+    pub refresh_token: Option<String>,
+    pub expires_at: Option<NaiveDateTime>,
 }

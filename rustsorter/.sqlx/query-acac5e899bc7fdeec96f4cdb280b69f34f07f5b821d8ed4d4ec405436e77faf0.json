@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO spotify_user_data (user_id, spotify_user_id, display_name, email, product, avatar_url, last_api_sync)\n         VALUES ($1, $2, $3, $4, $5, $6, NOW())\n         ON CONFLICT (user_id) DO UPDATE SET\n            spotify_user_id = EXCLUDED.spotify_user_id,\n            display_name = EXCLUDED.display_name,\n            email = EXCLUDED.email,\n            product = EXCLUDED.product,\n            avatar_url = EXCLUDED.avatar_url,\n            last_api_sync = EXCLUDED.last_api_sync",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "acac5e899bc7fdeec96f4cdb280b69f34f07f5b821d8ed4d4ec405436e77faf0"
+}

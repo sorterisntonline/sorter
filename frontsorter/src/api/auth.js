@@ -69,7 +69,11 @@ export class AuthAPI {
     return response.json();
   }
 
-  static getSteamLoginUrl() {
-    return `${API_BASE}/auth/steam`;
+  static getSpotifyLoginUrl() {
+    return `${API_BASE}/auth/spotify`;
+  }
+
+  static getSpotifyLinkUrl() {
+    return `${API_BASE}/auth/spotify/link`;
   }
 }

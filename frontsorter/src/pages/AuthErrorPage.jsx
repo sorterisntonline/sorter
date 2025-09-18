@@ -2,13 +2,11 @@ import React from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 const ERROR_MESSAGES = {
-  invalid_openid: 'Invalid Steam authentication response',
-  steam_auth_failed: 'Steam authentication failed',
-  verification_error: 'Error verifying Steam authentication',
-  invalid_steam_id: 'Invalid Steam ID',
-  steam_data_error: 'Failed to fetch Steam profile data',
-  session_error: 'Failed to create session',
-  database_error: 'Database error occurred',
+  spotify_auth_error: 'Spotify authentication failed. Please try again.',
+  spotify_profile_error: 'We could not access your Spotify profile.',
+  session_error: 'Failed to create session. Please try again.',
+  database_error: 'Database error occurred.',
+  no_session: 'You need to be signed in before linking Spotify.',
 };
 
 export default function AuthErrorPage() {

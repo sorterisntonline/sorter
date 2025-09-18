@@ -18,7 +18,7 @@ INSERT INTO users(handle, display_name, username, primary_provider)
 
 -- Multi-provider authentication system
 CREATE TABLE providers (
-  id text PRIMARY KEY, -- 'steam', 'spotify', 'google', etc.
+  id text PRIMARY KEY, -- 'spotify', 'google', etc.
   name text NOT NULL,
   oauth_config jsonb,
   enabled boolean NOT NULL DEFAULT true,
@@ -27,15 +27,14 @@ CREATE TABLE providers (
 
 -- Insert supported providers
 INSERT INTO providers (id, name, enabled) VALUES 
-  ('steam', 'Steam', true),
-  ('spotify', 'Spotify', false),
+  ('spotify', 'Spotify', true),
   ('google', 'Google', false);
 
 -- Link users to external provider accounts
 CREATE TABLE user_providers (
   user_id uuid REFERENCES users(id) ON DELETE CASCADE,
   provider_id text REFERENCES providers(id),
-  external_id text NOT NULL, -- Steam ID64, Spotify user ID, etc.
+  external_id text NOT NULL, -- Spotify user ID, etc.
   external_username text,
   profile_data jsonb, -- Store rich profile data from provider
   access_token text, -- Encrypted access token if needed
@@ -58,39 +57,26 @@ CREATE TABLE user_sessions (
   created_at timestamp DEFAULT now()
 );
 
--- Steam-specific enrichment tables for TF2 proof-of-skill
-CREATE TABLE steam_user_data (
-  user_id uuid REFERENCES users(id) ON DELETE CASCADE PRIMARY KEY,
-  steam_id text NOT NULL UNIQUE,
-  account_created timestamp,
-  playtime_tf2 integer DEFAULT 0, -- minutes
-  total_games integer DEFAULT 0,
-  profile_state integer DEFAULT 0, -- 1=private, 3=public
-  vac_banned boolean DEFAULT false,
-  game_bans integer DEFAULT 0,
-  days_since_last_ban integer,
-  last_api_sync timestamp,
+-- Track short-lived OAuth state for provider handshakes
+CREATE TABLE oauth_states (
+  state text PRIMARY KEY,
+  provider_id text NOT NULL,
+  purpose text NOT NULL CHECK (purpose IN ('login', 'link')),
+  user_id uuid REFERENCES users(id) ON DELETE CASCADE,
+  code_verifier text,
   created_at timestamp DEFAULT now()
 );
 
-CREATE TABLE steam_friends (
-  user_id uuid REFERENCES users(id) ON DELETE CASCADE,
-  friend_user_id uuid REFERENCES users(id) ON DELETE CASCADE,
-  friend_since timestamp,
-  created_at timestamp DEFAULT now(),
-  PRIMARY KEY (user_id, friend_user_id),
-  CHECK (user_id != friend_user_id)
-);
-
-CREATE TABLE steam_medals (
-  user_id uuid REFERENCES users(id) ON DELETE CASCADE,
-  item_def_id integer NOT NULL,
-  tournament_name text,
-  medal_type text, -- 'participant', 'winner', 'runner_up', etc.
-  season text,
-  division text,
-  discovered_at timestamp DEFAULT now(),
-  PRIMARY KEY (user_id, item_def_id)
+-- Spotify enrichment data captured during authentication
+CREATE TABLE spotify_user_data (
+  user_id uuid REFERENCES users(id) ON DELETE CASCADE PRIMARY KEY,
+  spotify_user_id text NOT NULL UNIQUE,
+  display_name text,
+  email text,
+  product text,
+  avatar_url text,
+  last_api_sync timestamp,
+  created_at timestamp DEFAULT now()
 );
 
 -- API keys for backend authentication
@@ -181,9 +167,8 @@ CREATE INDEX idx_user_providers_external_id ON user_providers(provider_id, exter
 CREATE INDEX idx_user_providers_user_id ON user_providers(user_id);
 CREATE INDEX idx_user_sessions_user_id ON user_sessions(user_id);
 CREATE INDEX idx_user_sessions_expires_at ON user_sessions(expires_at);
-CREATE INDEX idx_steam_user_data_steam_id ON steam_user_data(steam_id);
-CREATE INDEX idx_steam_friends_friend_user_id ON steam_friends(friend_user_id);
-CREATE INDEX idx_steam_medals_tournament ON steam_medals(tournament_name, medal_type);
+CREATE INDEX idx_oauth_states_created_at ON oauth_states(created_at);
+CREATE INDEX idx_spotify_user_data_user_id ON spotify_user_data(user_id);
 
 CREATE INDEX idx_api_keys_hashed_key ON api_keys(hashed_key);
 CREATE INDEX idx_api_keys_key_identifier ON api_keys(key_identifier);
@@ -202,10 +187,9 @@ DROP TABLE scoped_slugs;
 DROP TABLE entity_relationships;
 DROP TABLE entities;
 DROP TABLE api_keys;
-DROP TABLE steam_medals;
-DROP TABLE steam_friends; 
-DROP TABLE steam_user_data;
+DROP TABLE spotify_user_data;
 DROP TABLE user_sessions;
+DROP TABLE oauth_states;
 DROP TABLE user_providers;
 DROP TABLE providers;
 DROP TABLE users;

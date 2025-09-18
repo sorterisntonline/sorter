@@ -40,7 +40,10 @@ jobs:
       CARGO_INCREMENTAL: "0"
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db?sslmode=disable
       DBMATE_NO_DUMP_SCHEMA: "1"
-      STEAM_API_KEY: ${{ secrets.STEAM_API_KEY }}
+      SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
+      SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
+      SPOTIFY_REDIRECT_URI: ${{ secrets.SPOTIFY_REDIRECT_URI }}
+      SPOTIFY_SCOPES: ${{ secrets.SPOTIFY_SCOPES }}
 
     steps:
       - name: Checkout

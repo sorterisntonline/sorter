@@ -2,7 +2,15 @@ use chrono::Utc;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::models::{Error, MapErrorSqlx, SessionType, TempSessionData, User, UserSession};
+use crate::models::{
+    Error,
+    MapErrorSqlx,
+    OAuthState,
+    SessionType,
+    TempSessionData,
+    User,
+    UserSession,
+};
 
 pub async fn create_temp_session(
     pool: &PgPool,
@@ -26,6 +34,54 @@ pub async fn create_temp_session(
     .map_error("temp session")?;
 
     Ok(session_id)
+}
+
+pub async fn create_oauth_state(
+    pool: &PgPool,
+    state_id: &str,
+    provider_id: &str,
+    purpose: &str,
+    user_id: Option<Uuid>,
+    code_verifier: Option<&str>,
+) -> Result<(), Error> {
+    sqlx::query!(
+        "INSERT INTO oauth_states (state, provider_id, purpose, user_id, code_verifier)
+         VALUES ($1, $2, $3, $4, $5)",
+        state_id,
+        provider_id,
+        purpose,
+        user_id,
+        code_verifier
+    )
+    .execute(pool)
+    .await
+    .map_error("oauth state")?;
+
+    Ok(())
+}
+
+pub async fn consume_oauth_state(
+    pool: &PgPool,
+    state_id: &str,
+) -> Result<Option<OAuthState>, Error> {
+    let record = sqlx::query_as!(
+        OAuthState,
+        "SELECT state, provider_id, purpose, user_id, code_verifier, created_at
+         FROM oauth_states WHERE state = $1",
+        state_id
+    )
+    .fetch_optional(pool)
+    .await
+    .map_error("oauth state")?;
+
+    if record.is_some() {
+        sqlx::query!("DELETE FROM oauth_states WHERE state = $1", state_id)
+            .execute(pool)
+            .await
+            .map_error("oauth state cleanup")?;
+    }
+
+    Ok(record)
 }
 
 pub async fn create_full_session(pool: &PgPool, user_id: Uuid) -> Result<Uuid, Error> {

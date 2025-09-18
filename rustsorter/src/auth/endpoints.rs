@@ -148,43 +148,70 @@ pub async fn complete_signup(
             })
         })?;
 
+    let provider_id = session.provider_id.clone().ok_or(Error::BadRequest {
+        message: "session missing provider".into(),
+    })?;
+
     // Create user
     let user_id = Uuid::new_v4();
-
-    let provider_id = session.provider_id.clone();
-    let avatar_url = temp_data.steam_avatar.clone();
+    let avatar_url = temp_data.avatar_url.clone();
     let handle = payload.handle.clone();
+
+    let display_name = temp_data.display_name.clone();
+    let external_id = temp_data.external_id.clone();
+    let email = temp_data.email.clone();
+    let profile_data = temp_data.profile_data.clone();
+    let access_token = temp_data.access_token.clone();
+    let refresh_token = temp_data.refresh_token.clone();
+    let expires_at = temp_data.expires_at;
 
     sqlx::query!(
         "INSERT INTO users (id, handle, display_name, username, primary_provider, avatar_url)
          VALUES ($1, $2, $3, $4, $5, $6)",
         user_id,
         &handle,
-        Option::<&str>::None,
+        display_name.as_deref(),
         &handle,
-        provider_id.as_deref(),
-        &avatar_url
+        Some(&provider_id),
+        avatar_url.as_deref()
     )
     .execute(&state.db)
     .await
     .map_error("user creation")?;
 
     // Link provider
-    if let Some(provider_id) = &session.provider_id {
-        sqlx::query!(
-            "INSERT INTO user_providers (user_id, provider_id, external_id, external_username, \
-             profile_data)
-             VALUES ($1, $2, $3, $4, $5)",
-            user_id,
-            provider_id,
-            temp_data.steam_id,
-            temp_data.steam_username,
-            serde_json::to_value(&temp_data).unwrap()
-        )
-        .execute(&state.db)
-        .await
-        .map_error("provider link")?;
-    }
+    sqlx::query!(
+        "INSERT INTO user_providers (user_id, provider_id, external_id, external_username, \
+         profile_data, access_token, refresh_token, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+        user_id,
+        &provider_id,
+        external_id,
+        display_name.as_deref(),
+        profile_data,
+        access_token.as_deref(),
+        refresh_token.as_deref(),
+        expires_at
+    )
+    .execute(&state.db)
+    .await
+    .map_error("provider link")?;
+
+    // Persist Spotify profile snapshot
+    sqlx::query!(
+        "INSERT INTO spotify_user_data (user_id, spotify_user_id, display_name, email, product, \
+         avatar_url, last_api_sync)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW())",
+        user_id,
+        external_id,
+        display_name.as_deref(),
+        email.as_deref(),
+        Option::<&str>::None,
+        avatar_url.as_deref()
+    )
+    .execute(&state.db)
+    .await
+    .map_error("spotify profile")?;
 
     // Upgrade session to full
     sessions::upgrade_temp_session(&state.db, session_id, user_id).await?;
@@ -192,10 +219,10 @@ pub async fn complete_signup(
     let user = User {
         id: user_id,
         handle: handle.clone(),
-        display_name: None,
+        display_name,
         username: handle,
-        primary_provider: provider_id,
-        avatar_url: Some(avatar_url),
+        primary_provider: Some(provider_id),
+        avatar_url,
         bio: None,
         created_at: None,
     };

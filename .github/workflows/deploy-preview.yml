@@ -64,10 +64,13 @@ jobs:
         with:
           # This action automatically detects if the PR is open or closed.
           # If open, it deploys. If closed, it destroys the app.
-          # Provide DATABASE_URL and STEAM_API_KEY to the runtime as Fly secrets
+          # Provide DATABASE_URL and Spotify credentials to the runtime as Fly secrets
           secrets: |
             DATABASE_URL=${{ steps.neon_create.outputs.db_url }}
-            STEAM_API_KEY=${{ secrets.STEAM_API_KEY }}
+            SPOTIFY_CLIENT_ID=${{ secrets.SPOTIFY_CLIENT_ID }}
+            SPOTIFY_CLIENT_SECRET=${{ secrets.SPOTIFY_CLIENT_SECRET }}
+            SPOTIFY_REDIRECT_URI=${{ secrets.SPOTIFY_REDIRECT_URI }}
+            SPOTIFY_SCOPES=${{ secrets.SPOTIFY_SCOPES }}
 
       # Wait until the deployed app responds healthy
       - name: Wait for app health

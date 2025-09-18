@@ -111,8 +111,25 @@ async fn main() -> Result<(), anyhow::Error> {
         .and_then(|value| value.parse::<u16>().ok())
         .unwrap_or(8081);
 
-    let steam_api_key =
-        env::var("STEAM_API_KEY").unwrap_or_else(|_| "dummy_key_for_development".to_string());
+    let spotify_client_id = env::var("SPOTIFY_CLIENT_ID").unwrap_or_else(|_| {
+        eprintln!("[rustsorter] ERROR: SPOTIFY_CLIENT_ID is not set");
+        std::process::exit(1);
+    });
+
+    let spotify_client_secret = env::var("SPOTIFY_CLIENT_SECRET").unwrap_or_else(|_| {
+        eprintln!("[rustsorter] ERROR: SPOTIFY_CLIENT_SECRET is not set");
+        std::process::exit(1);
+    });
+
+    let spotify_redirect_uri = env::var("SPOTIFY_REDIRECT_URI").unwrap_or_else(|_| {
+        eprintln!("[rustsorter] ERROR: SPOTIFY_REDIRECT_URI is not set");
+        std::process::exit(1);
+    });
+
+    let spotify_scopes = env::var("SPOTIFY_SCOPES").unwrap_or_else(|_| {
+        eprintln!("[rustsorter] ERROR: SPOTIFY_SCOPES is not set");
+        std::process::exit(1);
+    });
 
     let base_url = env::var("BASE_URL")
         .or_else(|_| env::var("APP_URL"))
@@ -129,7 +146,10 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let app_state = AppState {
         db: pool.clone(),
-        steam_api_key,
+        spotify_client_id,
+        spotify_client_secret,
+        spotify_redirect_uri,
+        spotify_scopes,
         base_url,
         frontend_url,
     };

@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO user_providers (user_id, provider_id, external_id, external_username, profile_data, access_token, refresh_token, expires_at)\n         VALUES ($1, 'spotify', $2, $3, $4, $5, $6, $7)\n         ON CONFLICT (user_id, provider_id) DO UPDATE SET\n            external_id = EXCLUDED.external_id,\n            external_username = EXCLUDED.external_username,\n            profile_data = EXCLUDED.profile_data,\n            access_token = EXCLUDED.access_token,\n            refresh_token = EXCLUDED.refresh_token,\n            expires_at = EXCLUDED.expires_at,\n            last_sync_at = NOW()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Text",
+        "Text",
+        "Timestamp"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8d7ba903fab9d25fecdde3419742f4a6bc769671203f9bb44d5da0aebaf08358"
+}

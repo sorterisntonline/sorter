@@ -37,7 +37,7 @@ export default function ChooseUsernamePage() {
   const [hasUserTyped, setHasUserTyped] = useState(false);
   const initializedRef = useRef(false);
 
-  // Initialize with suggested handle from Steam data (only once)
+  // Initialize with suggested handle from provider bootstrap data (only once)
   useEffect(() => {
     if (auth.tempData?.suggested_handle && !initializedRef.current && !hasUserTyped) {
       const suggested = auth.tempData.suggested_handle;
@@ -125,11 +125,11 @@ export default function ChooseUsernamePage() {
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="text-center">
           <div className="flex justify-center mb-4">
-            {auth.tempData?.steam_avatar && (
-              <img 
-                src={auth.tempData.steam_avatar} 
-                alt="Steam Avatar"
-                className="w-16 h-16 rounded-full border-2 border-gray-300"
+            {auth.tempData?.avatar_url && (
+              <img
+                src={auth.tempData.avatar_url}
+                alt="Spotify avatar"
+                className="w-16 h-16 rounded-full border-2 border-green-200"
               />
             )}
           </div>
