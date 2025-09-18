@@ -1,31 +1,37 @@
 /**
- * PM2 Ecosystem Configuration for Sorter Development Environment
+ * PM2 Ecosystem Configuration for Sorter (Simplified)
  * 
- * Prerequisites:
- * 1. Install PM2: `npm install -g pm2`
- * 2. Install core dependencies (Docker, Rust, Node.js). Use the CLI for this:
- *    - `cd database/cli && npm install -g .`
- *    - `sorter-db install-deps`
- * 3. Run initial database setup ONE TIME:
- *    - Start the database: `pm2 start ecosystem.config.js --only database`
- *    - Wait a few seconds for it to initialize.
- *    - Run migrations: `sorter-db migrate`
- *    - Stop the database: `pm2 stop database`
+ * This file replaces the `sorter-db` CLI for local development.
+ * It manages the PostgreSQL database, Rust backend, and React frontend.
  * 
- * Usage:
+ * --- ONE-TIME SETUP ---
+ * 1. Install prerequisites: Docker, Rust (nightly), Node.js, PM2 (`npm i -g pm2`), and dbmate.
+ *    (On macOS: `brew install dbmate`. On Linux, follow dbmate docs.)
+ * 2. Create a `.env` file in the project root with the following line. This is for `dbmate` to use.
+ *    DATABASE_URL=postgres://postgres:password@localhost:5438/postgres?sslmode=disable
+ * 3. Start the database ONLY: `pm2 start ecosystem.config.js --only database`
+ * 4. Wait ~10 seconds for it to initialize.
+ * 5. Run migrations: `dbmate --migrations-dir ./db/migrations up`
+ * 
+ * --- DAILY USAGE ---
  * - Start all services: `pm2 start`
  * - Stop all services: `pm2 stop all`
- * - View logs for all services: `pm2 logs`
- * - View logs for a specific service: `pm2 logs backend`
- * - Restart a service: `pm2 restart frontend`
- * - Delete all services from PM2 list: `pm2 delete all`
+ * - View logs: `pm2 logs`
+ * - Restart the backend: `pm2 restart backend`
  */
+
+// --- Configuration Variables ---
+const POSTGRES_PORT = 5438;
+const POSTGRES_USER = 'postgres';
+const POSTGRES_PASSWORD = 'password';
+const POSTGRES_DB = 'postgres';
+const DATABASE_URL = `postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:${POSTGRES_PORT}/${POSTGRES_DB}?sslmode=disable`;
+
 module.exports = {
   apps: [
     {
       // --- 1. PostgreSQL Database via Docker ---
-      // This replicates the logic from `database/cli/commands/run-postgres.ts`.
-      // It uses Docker to run a PostgreSQL 14.1 container, persisting data in the `pgdata/` directory.
+      // Runs a PostgreSQL 14.1 container, persisting data in the `pgdata/` directory.
       name: 'database',
       script: 'docker',
       args: [
@@ -33,57 +39,42 @@ module.exports = {
         '--volume', `${process.cwd()}/pgdata:/var/lib/postgresql/data`,
         '--volume', `${process.cwd()}/database/pg_hba.conf:/etc/postgresql/pg_hba.conf`,
         '--volume', `${process.cwd()}/database/postgresql.conf:/etc/postgresql/postgresql.conf`,
-        '-e', 'POSTGRES_PASSWORD=password',
-        '-e', 'POSTGRES_USER=postgres',
-        '-e', 'PGDATA=/var/lib/postgresql/data',
-        '-p', '5438:5432', // Using port 5438 as defined in the CLI tool
+        '-e', `POSTGRES_PASSWORD=${POSTGRES_PASSWORD}`,
+        '-e', `POSTGRES_USER=${POSTGRES_USER}`,
+        '-e', `POSTGRES_DB=${POSTGRES_DB}`,
+        '-p', `${POSTGRES_PORT}:5432`,
         'postgres:14.1',
         'postgres',
         '-c', 'config_file=/etc/postgresql/postgresql.conf',
         '-c', 'hba_file=/etc/postgresql/pg_hba.conf'
       ],
       watch: false,
-      restart_delay: 5000, // Wait 5s before restarting if it fails
     },
     {
       // --- 2. Rust Backend API Server ---
-      // This replicates `database/cli/commands/run-server.ts`.
-      // It runs the Axum server using `cargo run` with debug logging enabled.
+      // Runs the Axum server. The DATABASE_URL is injected directly by PM2,
+      // solving the startup race condition and removing the need for `dotenv` on launch.
       name: 'backend',
       script: 'cargo',
       args: 'run',
       cwd: './rustsorter',
-      // We watch only the `src` directory. `cargo run` handles recompilation.
       watch: ['./rustsorter/src'],
       ignore_watch: ['./rustsorter/target'],
+      // **SOLUTION**: Inject the environment variable directly into the process.
       env: {
         "RUST_LOG": "debug",
         "RUST_BACKTRACE": "1",
-        // The DATABASE_URL is read from the root .env file, which is created
-        // and managed by the `sorter-db run-postgres` command. Ensure that
-        // command has been run at least once to generate the .env file.
+        "DATABASE_URL": DATABASE_URL,
       },
     },
     {
       // --- 3. React Frontend Development Server ---
-      // This replicates `database/cli/commands/run-client.ts`.
-      // It runs the Vite development server, which provides Hot Module Replacement (HMR).
+      // Runs the Vite development server for the UI.
       name: 'frontend',
       script: 'npm',
       args: 'run dev',
       cwd: './frontsorter',
-      // Vite handles its own file watching and HMR, so PM2 watch is disabled.
-      watch: false,
-    },
-    {
-      // --- 4. Electric ClojureScript Service (Experimental) ---
-      // This service is included from your original `ecosystem.config.js`.
-      // It runs the Shadow CLJS watcher for the Electric app.
-      name: 'electric',
-      script: 'npx',
-      args: 'shadow-cljs watch app',
-      cwd: './electric',
-      // Shadow CLJS handles its own file watching.
+      // Vite handles its own file watching and Hot Module Replacement (HMR).
       watch: false,
     }
   ]
