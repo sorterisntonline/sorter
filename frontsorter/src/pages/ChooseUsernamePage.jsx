@@ -134,10 +134,10 @@ export default function ChooseUsernamePage() {
             )}
           </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Welcome, {auth.tempData?.steam_username}!
+            Pick your sorter handle
           </h1>
           <p className="text-gray-600">
-            Choose your sorter handle to complete signup
+            This is the only name people will see on sorter.
           </p>
         </div>
       </div>
