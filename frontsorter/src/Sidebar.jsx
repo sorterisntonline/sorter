@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, useSearchParams } from 'react-router-dom'; // Use NavLink for active styling
 // Import icons from react-icons
-import { FaHome, FaVoteYea, FaUser, FaSignOutAlt } from 'react-icons/fa';
+import { FaHome, FaVoteYea, FaUser, FaSignOutAlt, FaSignInAlt } from 'react-icons/fa';
 import { useAuth } from './contexts/AuthContext';
 
 function Sidebar() {
@@ -60,7 +60,7 @@ function Sidebar() {
         </NavLink>
       </nav>
       
-      {/* User info and logout */}
+      {/* User info and auth actions */}
       <div className="mt-auto border-t border-gray-200 pt-4">
         {auth.user && (
           <div className="mb-3">
@@ -84,14 +84,24 @@ function Sidebar() {
           </div>
         )}
         
-        <button
-          onClick={handleLogout}
-          disabled={auth.isLoggingOut}
-          className="w-full flex items-center justify-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md transition-colors disabled:opacity-50"
-        >
-          <FaSignOutAlt className="mr-2" />
-          {auth.isLoggingOut ? 'Signing out...' : 'Sign out'}
-        </button>
+        {auth.isAuthenticated ? (
+          <button
+            onClick={handleLogout}
+            disabled={auth.isLoggingOut}
+            className="w-full flex items-center justify-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md transition-colors disabled:opacity-50"
+          >
+            <FaSignOutAlt className="mr-2" />
+            {auth.isLoggingOut ? 'Signing out...' : 'Sign out'}
+          </button>
+        ) : (
+          <button
+            onClick={() => (window.location.href = '/login')}
+            className="w-full flex items-center justify-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+          >
+            <FaSignInAlt className="mr-2" />
+            Sign in
+          </button>
+        )}
       </div>
     </div>
   );

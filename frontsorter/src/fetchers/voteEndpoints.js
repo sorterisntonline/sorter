@@ -75,6 +75,13 @@ export const submitVoteFn = async ({
         body: JSON.stringify(createPayload),
     });
 
+    if (response.status === 401 || response.status === 403) {
+        if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+            window.location.href = '/login';
+        }
+        throw new Error('Authentication required to submit vote.');
+    }
+
     if (response.ok) {
         console.log("Vote created successfully");
         return await response.json(); // Return created vote data

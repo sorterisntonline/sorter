@@ -1,10 +1,10 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Outlet } from 'react-router-dom';
-import { useRequireAuth } from './contexts/AuthContext';
+import { useAuth } from './contexts/AuthContext';
 import Sidebar from './Sidebar';
 
 function Layout() {
-  const auth = useRequireAuth(); // This will redirect to login if not authenticated
+  const auth = useAuth();
 
   if (auth.isLoading) {
     return (

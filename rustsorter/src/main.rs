@@ -14,7 +14,8 @@ use std::{env, sync::Arc};
 
 use aide::{
     axum::{
-        ApiRouter, IntoApiResponse,
+        ApiRouter,
+        IntoApiResponse,
         routing::{get, get_with},
     },
     openapi::{self, OpenApi, SecurityScheme},
@@ -24,7 +25,8 @@ use aide::{
 use anyhow::Result;
 use app_state::AppState;
 use axum::{
-    Extension, Router,
+    Extension,
+    Router,
     http::StatusCode,
     middleware,
     response::{IntoResponse, Response},
@@ -32,7 +34,6 @@ use axum::{
 use dotenv::dotenv;
 use schemars::JsonSchema;
 use serde::Serialize;
-
 use tower_http::{
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
@@ -110,16 +111,23 @@ async fn main() -> Result<(), anyhow::Error> {
         .and_then(|value| value.parse::<u16>().ok())
         .unwrap_or(8081);
 
-    let steam_api_key = env::var("STEAM_API_KEY")
-        .unwrap_or_else(|_| "dummy_key_for_development".to_string());
-    
-    let base_url = env::var("BASE_URL")
-        .unwrap_or_else(|_| format!("http://localhost:{}", port));
-    
-    let frontend_url = env::var("FRONTEND_URL")
-        .unwrap_or_else(|_| "http://localhost:5173".to_string());
+    let steam_api_key =
+        env::var("STEAM_API_KEY").unwrap_or_else(|_| "dummy_key_for_development".to_string());
 
-    let app_state = AppState { 
+    let base_url = env::var("BASE_URL")
+        .or_else(|_| env::var("APP_URL"))
+        .or_else(|_| env::var("FLY_APP_NAME").map(|name| format!("https://{}.fly.dev", name)))
+        .unwrap_or_else(|_| format!("http://localhost:{}", port));
+
+    let frontend_url = env::var("FRONTEND_URL").unwrap_or_else(|_| {
+        if base_url.contains("localhost") {
+            "http://localhost:5173".to_string()
+        } else {
+            base_url.clone()
+        }
+    });
+
+    let app_state = AppState {
         db: pool.clone(),
         steam_api_key,
         base_url,

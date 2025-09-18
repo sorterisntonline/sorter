@@ -1,4 +1,6 @@
-use anyhow::{anyhow, Result};
+use std::collections::HashMap;
+
+use anyhow::{Result, anyhow};
 use axum::{
     extract::{Query, State},
     http::StatusCode,
@@ -9,9 +11,7 @@ use reqwest;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::PgPool;
-use std::collections::HashMap;
 use url::Url;
-
 
 use crate::{
     app_state::AppState,
@@ -79,14 +79,20 @@ pub struct SteamOwnedGame {
 
 pub fn get_steam_login_url(return_url: &str) -> Result<String> {
     let mut url = Url::parse(STEAM_OPENID_URL)?;
-    
+
     url.query_pairs_mut()
         .append_pair("openid.ns", "http://specs.openid.net/auth/2.0")
         .append_pair("openid.mode", "checkid_setup")
         .append_pair("openid.return_to", return_url)
         .append_pair("openid.realm", return_url)
-        .append_pair("openid.identity", "http://specs.openid.net/auth/2.0/identifier_select")
-        .append_pair("openid.claimed_id", "http://specs.openid.net/auth/2.0/identifier_select");
+        .append_pair(
+            "openid.identity",
+            "http://specs.openid.net/auth/2.0/identifier_select",
+        )
+        .append_pair(
+            "openid.claimed_id",
+            "http://specs.openid.net/auth/2.0/identifier_select",
+        );
 
     Ok(url.to_string())
 }
@@ -104,8 +110,11 @@ fn generate_suggested_handle(steam_name: &str) -> String {
 
 fn extract_steam_id_from_identity(identity: &str) -> Result<String> {
     let url = Url::parse(identity)?;
-    let path_segments: Vec<&str> = url.path_segments().ok_or_else(|| anyhow!("Invalid identity URL"))?.collect();
-    
+    let path_segments: Vec<&str> = url
+        .path_segments()
+        .ok_or_else(|| anyhow!("Invalid identity URL"))?
+        .collect();
+
     if let Some(steam_id) = path_segments.last() {
         Ok(steam_id.to_string())
     } else {
@@ -115,18 +124,42 @@ fn extract_steam_id_from_identity(identity: &str) -> Result<String> {
 
 async fn verify_steam_openid(params: &SteamAuthQuery, client: &reqwest::Client) -> Result<bool> {
     let mut form_params = HashMap::new();
-    form_params.insert("openid.assoc_handle", params.openid_assoc_handle.as_deref().unwrap_or(""));
-    form_params.insert("openid.signed", params.openid_signed.as_deref().unwrap_or(""));
+    form_params.insert(
+        "openid.assoc_handle",
+        params.openid_assoc_handle.as_deref().unwrap_or(""),
+    );
+    form_params.insert(
+        "openid.signed",
+        params.openid_signed.as_deref().unwrap_or(""),
+    );
     form_params.insert("openid.sig", params.openid_sig.as_deref().unwrap_or(""));
     form_params.insert("openid.ns", params.openid_ns.as_deref().unwrap_or(""));
     form_params.insert("openid.mode", "check_authentication");
-    form_params.insert("openid.claimed_id", params.openid_claimed_id.as_deref().unwrap_or(""));
-    form_params.insert("openid.identity", params.openid_identity.as_deref().unwrap_or(""));
-    form_params.insert("openid.return_to", params.openid_return_to.as_deref().unwrap_or(""));
-    form_params.insert("openid.response_nonce", params.openid_response_nonce.as_deref().unwrap_or(""));
-    form_params.insert("openid.op_endpoint", params.openid_op_endpoint.as_deref().unwrap_or(""));
+    form_params.insert(
+        "openid.claimed_id",
+        params.openid_claimed_id.as_deref().unwrap_or(""),
+    );
+    form_params.insert(
+        "openid.identity",
+        params.openid_identity.as_deref().unwrap_or(""),
+    );
+    form_params.insert(
+        "openid.return_to",
+        params.openid_return_to.as_deref().unwrap_or(""),
+    );
+    form_params.insert(
+        "openid.response_nonce",
+        params.openid_response_nonce.as_deref().unwrap_or(""),
+    );
+    form_params.insert(
+        "openid.op_endpoint",
+        params.openid_op_endpoint.as_deref().unwrap_or(""),
+    );
 
-    debug!("Sending verification request to Steam with params: {:?}", form_params);
+    debug!(
+        "Sending verification request to Steam with params: {:?}",
+        form_params
+    );
 
     let response = client
         .post(STEAM_OPENID_URL)
@@ -136,30 +169,39 @@ async fn verify_steam_openid(params: &SteamAuthQuery, client: &reqwest::Client) 
 
     let body = response.text().await?;
     debug!("Steam verification response: {}", body);
-    
+
     let is_valid = body.contains("is_valid:true");
     debug!("Steam verification result: {}", is_valid);
-    
+
     Ok(is_valid)
 }
 
-async fn fetch_steam_user_data(steam_id: &str, api_key: &str, client: &reqwest::Client) -> Result<(SteamPlayerSummary, Option<SteamPlayerBans>, Option<Vec<SteamOwnedGame>>)> {
+async fn fetch_steam_user_data(
+    steam_id: &str,
+    api_key: &str,
+    client: &reqwest::Client,
+) -> Result<(
+    SteamPlayerSummary,
+    Option<SteamPlayerBans>,
+    Option<Vec<SteamOwnedGame>>,
+)> {
     // Get player summary
     let summary_url = format!(
         "{}/ISteamUser/GetPlayerSummaries/v2/?key={}&steamids={}",
         STEAM_API_BASE, api_key, steam_id
     );
-    
+
     let summary_response = client.get(&summary_url).send().await?;
     let summary_json: Value = summary_response.json().await?;
-    
+
     let players = summary_json["response"]["players"]
         .as_array()
         .ok_or_else(|| anyhow!("No players in Steam API response"))?;
-    
-    let player = players.first()
+
+    let player = players
+        .first()
         .ok_or_else(|| anyhow!("Player not found in Steam API response"))?;
-    
+
     let summary: SteamPlayerSummary = serde_json::from_value(player.clone())?;
 
     // Get player bans
@@ -167,10 +209,10 @@ async fn fetch_steam_user_data(steam_id: &str, api_key: &str, client: &reqwest::
         "{}/ISteamUser/GetPlayerBans/v1/?key={}&steamids={}",
         STEAM_API_BASE, api_key, steam_id
     );
-    
+
     let bans_response = client.get(&bans_url).send().await?;
     let bans_json: Value = bans_response.json().await?;
-    
+
     let bans = bans_json["players"]
         .as_array()
         .and_then(|arr| arr.first())
@@ -179,17 +221,19 @@ async fn fetch_steam_user_data(steam_id: &str, api_key: &str, client: &reqwest::
 
     // Get owned games (specifically looking for TF2)
     let games_url = format!(
-        "{}/IPlayerService/GetOwnedGames/v1/?key={}&steamid={}&include_played_free_games=1&include_appinfo=1",
+        "{}/IPlayerService/GetOwnedGames/v1/?key={}&steamid={}&include_played_free_games=1&\
+         include_appinfo=1",
         STEAM_API_BASE, api_key, steam_id
     );
-    
+
     let games_response = client.get(&games_url).send().await?;
     let games_json: Value = games_response.json().await?;
-    
+
     let games = games_json["response"]["games"]
         .as_array()
         .map(|games_array| {
-            games_array.iter()
+            games_array
+                .iter()
                 .filter_map(|game| serde_json::from_value(game.clone()).ok())
                 .collect::<Vec<SteamOwnedGame>>()
         });
@@ -197,13 +241,11 @@ async fn fetch_steam_user_data(steam_id: &str, api_key: &str, client: &reqwest::
     Ok((summary, bans, games))
 }
 
-async fn check_existing_steam_user(
-    pool: &PgPool,
-    steam_id: &str,
-) -> Result<Option<User>, Error> {
+async fn check_existing_steam_user(pool: &PgPool, steam_id: &str) -> Result<Option<User>, Error> {
     let existing_provider = sqlx::query_as!(
         UserProvider,
-        "SELECT user_id, provider_id, external_id, external_username, profile_data, linked_at, last_sync_at 
+        "SELECT user_id, provider_id, external_id, external_username, profile_data, linked_at, \
+         last_sync_at 
          FROM user_providers WHERE provider_id = 'steam' AND external_id = $1",
         steam_id
     )
@@ -214,14 +256,15 @@ async fn check_existing_steam_user(
     if let Some(provider) = existing_provider {
         let user = sqlx::query_as!(
             User,
-            "SELECT id, handle, display_name, username, primary_provider, avatar_url, bio, created_at 
+            "SELECT id, handle, display_name, username, primary_provider, avatar_url, bio, \
+             created_at 
              FROM users WHERE id = $1",
             provider.user_id
         )
         .fetch_one(pool)
         .await
         .map_error("user")?;
-        
+
         Ok(Some(user))
     } else {
         Ok(None)
@@ -230,7 +273,7 @@ async fn check_existing_steam_user(
 
 pub async fn steam_login(State(state): State<AppState>) -> impl IntoResponse {
     let return_url = format!("{}/api/auth/steam/callback", state.base_url);
-    
+
     match get_steam_login_url(&return_url) {
         Ok(login_url) => {
             debug!("Redirecting to Steam login: {}", login_url);
@@ -238,7 +281,11 @@ pub async fn steam_login(State(state): State<AppState>) -> impl IntoResponse {
         }
         Err(e) => {
             warn!("Failed to generate Steam login URL: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to generate login URL").into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to generate login URL",
+            )
+                .into_response()
         }
     }
 }
@@ -257,26 +304,33 @@ pub async fn steam_callback(
     }
 
     let client = reqwest::Client::new();
-    
+
     match verify_steam_openid(&params, &client).await {
         Ok(true) => {
             debug!("Steam OpenID verification successful");
         }
         Ok(false) => {
             warn!("Steam OpenID verification failed");
-            let redirect_url = format!("{}/auth/error?reason=steam_auth_failed", state.frontend_url);
+            let redirect_url =
+                format!("{}/auth/error?reason=steam_auth_failed", state.frontend_url);
             return Redirect::to(&redirect_url).into_response();
         }
         Err(e) => {
             warn!("Error during Steam OpenID verification: {}", e);
-            let redirect_url = format!("{}/auth/error?reason=verification_error", state.frontend_url);
+            let redirect_url = format!(
+                "{}/auth/error?reason=verification_error",
+                state.frontend_url
+            );
             return Redirect::to(&redirect_url).into_response();
         }
     }
 
     // Extract Steam ID
-    let steam_id = match params.openid_identity.as_ref()
-        .and_then(|identity| extract_steam_id_from_identity(identity).ok()) {
+    let steam_id = match params
+        .openid_identity
+        .as_ref()
+        .and_then(|identity| extract_steam_id_from_identity(identity).ok())
+    {
         Some(id) => id,
         None => {
             warn!("Failed to extract Steam ID from identity");
@@ -292,20 +346,28 @@ pub async fn steam_callback(
         Ok(Some(user)) => {
             // Existing user - create full session and redirect to success
             debug!("Existing user found: {}", user.handle);
-            
+
             match sessions::create_full_session(&state.db, user.id).await {
                 Ok(session_id) => {
-                    let mut response = Redirect::to(&format!("{}/auth/success", state.frontend_url)).into_response();
-                    
+                    let mut response =
+                        Redirect::to(&format!("{}/auth/success", state.frontend_url))
+                            .into_response();
+
                     // Set session cookie
-                    let cookie = format!("session_id={}; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000", session_id); // 30 days
-                    response.headers_mut().insert("Set-Cookie", cookie.parse().unwrap());
-                    
+                    let cookie = format!(
+                        "session_id={}; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000",
+                        session_id
+                    ); // 30 days
+                    response
+                        .headers_mut()
+                        .insert("Set-Cookie", cookie.parse().unwrap());
+
                     response
                 }
                 Err(e) => {
                     warn!("Failed to create session: {}", e);
-                    let redirect_url = format!("{}/auth/error?reason=session_error", state.frontend_url);
+                    let redirect_url =
+                        format!("{}/auth/error?reason=session_error", state.frontend_url);
                     Redirect::to(&redirect_url).into_response()
                 }
             }
@@ -313,7 +375,7 @@ pub async fn steam_callback(
         Ok(None) => {
             // New user - for now create temp session with basic Steam data
             debug!("New user, creating temp session with basic data");
-            
+
             // For development, create basic temp data without calling Steam API
             // TODO: Fetch real Steam data when we have a proper API key
             let temp_data = TempSessionData {
@@ -325,17 +387,25 @@ pub async fn steam_callback(
 
             match sessions::create_temp_session(&state.db, "steam", &temp_data).await {
                 Ok(session_id) => {
-                    let mut response = Redirect::to(&format!("{}/auth/choose-username", state.frontend_url)).into_response();
-                    
+                    let mut response =
+                        Redirect::to(&format!("{}/auth/choose-username", state.frontend_url))
+                            .into_response();
+
                     // Set session cookie
-                    let cookie = format!("session_id={}; HttpOnly; SameSite=Lax; Path=/; Max-Age=900", session_id); // 15 min
-                    response.headers_mut().insert("Set-Cookie", cookie.parse().unwrap());
-                    
+                    let cookie = format!(
+                        "session_id={}; HttpOnly; SameSite=Lax; Path=/; Max-Age=900",
+                        session_id
+                    ); // 15 min
+                    response
+                        .headers_mut()
+                        .insert("Set-Cookie", cookie.parse().unwrap());
+
                     response
                 }
                 Err(e) => {
                     warn!("Failed to create temp session: {}", e);
-                    let redirect_url = format!("{}/auth/error?reason=session_error", state.frontend_url);
+                    let redirect_url =
+                        format!("{}/auth/error?reason=session_error", state.frontend_url);
                     Redirect::to(&redirect_url).into_response()
                 }
             }

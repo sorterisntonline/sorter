@@ -37,21 +37,22 @@ pub struct LogoutResponse {
     pub message: String,
 }
 
-
-
 fn validate_handle(handle: &str) -> Result<(), Error> {
-    if !handle.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+    if !handle
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+    {
         return Err(Error::BadRequest {
             message: "handle can only contain letters, numbers, underscores, and hyphens".into(),
         });
     }
-    
+
     if handle.len() < 1 || handle.len() > 50 {
         return Err(Error::BadRequest {
             message: "handle must be between 1 and 50 characters".into(),
         });
     }
-    
+
     Ok(())
 }
 
@@ -60,7 +61,7 @@ async fn check_handle_availability(pool: &sqlx::PgPool, handle: &str) -> Result<
         .fetch_optional(pool)
         .await
         .map_error("handle check")?;
-    
+
     Ok(existing.is_none())
 }
 
@@ -69,7 +70,7 @@ pub async fn session_status(
     headers: HeaderMap,
 ) -> Result<Json<SessionStatusResponse>, Error> {
     let session_id = extract_session_id_from_cookie(&headers);
-    
+
     let Some(session_id) = session_id else {
         return Ok(Json(SessionStatusResponse {
             authenticated: false,
@@ -82,7 +83,9 @@ pub async fn session_status(
     match sessions::get_session_with_user(&state.db, session_id).await? {
         Some((session, user)) => {
             let temp_data = if session.session_type == "temp" {
-                session.data.and_then(|data| serde_json::from_value(data).ok())
+                session
+                    .data
+                    .and_then(|data| serde_json::from_value(data).ok())
             } else {
                 None
             };
@@ -108,39 +111,46 @@ pub async fn complete_signup(
     headers: HeaderMap,
     Json(payload): Json<CompleteSignupRequest>,
 ) -> Result<Json<CompleteSignupResponse>, Error> {
-    let session_id = extract_session_id_from_cookie(&headers)
-        .ok_or(Error::NoCredentials)?;
+    let session_id = extract_session_id_from_cookie(&headers).ok_or(Error::NoCredentials)?;
 
     // Validate handle
     validate_handle(&payload.handle)?;
-    
+
     // Check availability
     if !check_handle_availability(&state.db, &payload.handle).await? {
-        return Err(Error::Conflict { 
-            object: "handle".into() 
+        return Err(Error::Conflict {
+            object: "handle".into(),
         });
     }
 
     // Get temp session
     let (session, _) = sessions::get_session_with_user(&state.db, session_id)
         .await?
-        .ok_or(Error::NotFound { object: "session".into() })?;
-    
+        .ok_or(Error::NotFound {
+            object: "session".into(),
+        })?;
+
     if session.session_type != "temp" {
-        return Err(Error::BadRequest { 
-            message: "session is not a temp session".into() 
+        return Err(Error::BadRequest {
+            message: "session is not a temp session".into(),
         });
     }
 
     // Extract temp data
-    let temp_data: TempSessionData = session.data
-        .ok_or(Error::BadRequest { message: "session has no temp data".into() })
-        .and_then(|data| serde_json::from_value(data)
-            .map_err(|_| Error::BadRequest { message: "invalid temp data".into() }))?;
+    let temp_data: TempSessionData = session
+        .data
+        .ok_or(Error::BadRequest {
+            message: "session has no temp data".into(),
+        })
+        .and_then(|data| {
+            serde_json::from_value(data).map_err(|_| Error::BadRequest {
+                message: "invalid temp data".into(),
+            })
+        })?;
 
     // Create user
     let user_id = Uuid::new_v4();
-    
+
     sqlx::query!(
         "INSERT INTO users (id, handle, display_name, username, primary_provider, avatar_url)
          VALUES ($1, $2, $3, $4, $5, $6)",
@@ -158,7 +168,8 @@ pub async fn complete_signup(
     // Link provider
     if let Some(provider_id) = &session.provider_id {
         sqlx::query!(
-            "INSERT INTO user_providers (user_id, provider_id, external_id, external_username, profile_data)
+            "INSERT INTO user_providers (user_id, provider_id, external_id, external_username, \
+             profile_data)
              VALUES ($1, $2, $3, $4, $5)",
             user_id,
             provider_id,
@@ -191,12 +202,9 @@ pub async fn complete_signup(
     }))
 }
 
-pub async fn logout(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
+pub async fn logout(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
     let session_id = extract_session_id_from_cookie(&headers);
-    
+
     if let Some(session_id) = session_id {
         if let Err(e) = sessions::delete_session(&state.db, session_id).await {
             log::warn!("Failed to delete session: {}", e);
@@ -205,28 +213,29 @@ pub async fn logout(
 
     let mut response = Json(LogoutResponse {
         message: "Logged out successfully".to_string(),
-    }).into_response();
-    
+    })
+    .into_response();
+
     // Clear session cookie
     response.headers_mut().insert(
-        "Set-Cookie", 
-        "session_id=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0".parse().unwrap()
+        "Set-Cookie",
+        "session_id=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0"
+            .parse()
+            .unwrap(),
     );
-    
+
     response
 }
 
-pub async fn me(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<User>, Error> {
-    let session_id = extract_session_id_from_cookie(&headers)
-        .ok_or(Error::NoCredentials)?;
+pub async fn me(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<User>, Error> {
+    let session_id = extract_session_id_from_cookie(&headers).ok_or(Error::NoCredentials)?;
 
     let (session, user) = sessions::get_session_with_user(&state.db, session_id)
         .await?
-        .ok_or(Error::NotFound { object: "session".into() })?;
-    
+        .ok_or(Error::NotFound {
+            object: "session".into(),
+        })?;
+
     if session.session_type != "full" {
         return Err(Error::Unauthorized);
     }
@@ -252,11 +261,14 @@ pub async fn check_handle(
     Query(query): Query<HandleAvailabilityQuery>,
 ) -> Result<Json<HandleAvailabilityResponse>, Error> {
     let handle = query.handle.trim();
-    
+
     // Validate format
     let valid = validate_handle(handle).is_ok();
     let message = if !valid {
-        Some("Handle can only contain letters, numbers, underscores, and hyphens (1-50 characters)".to_string())
+        Some(
+            "Handle can only contain letters, numbers, underscores, and hyphens (1-50 characters)"
+                .to_string(),
+        )
     } else {
         None
     };
