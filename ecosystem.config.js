@@ -51,6 +51,15 @@ module.exports = {
       watch: false,
     },
     {
+      name: 'migrations',
+      script: 'dbmate',
+      args: ['--migrations-dir', './db/migrations', 'up'],
+      cwd: './database',
+      env: {
+        "DATABASE_URL": DATABASE_URL,
+      },
+    },
+    {
       // --- 2. Rust Backend API Server ---
       // Runs the Axum server. The DATABASE_URL is injected directly by PM2,
       // solving the startup race condition and removing the need for `dotenv` on launch.
