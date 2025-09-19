@@ -2,9 +2,8 @@ import React from 'react';
 import { NavLink, useSearchParams } from 'react-router-dom'; // Use NavLink for active styling
 // Import icons from react-icons
 
-import { FaHome, FaVoteYea, FaUser, FaSignOutAlt } from 'react-icons/fa';
 import { useAuth } from './contexts/AuthContext';
-import { FaHome, FaVoteYea, FaUser, FaTasks } from 'react-icons/fa';
+import { FaHome, FaVoteYea, FaUser, FaTasks, FaSignOutAlt} from 'react-icons/fa';
 
 
 function Sidebar() {
