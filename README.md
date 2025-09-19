@@ -18,75 +18,103 @@ rust and react based pair-wise staunchly democratic social media application
 - [![prod](https://github.com/sorterisntonline/sorter/actions/workflows/deploy.yml/badge.svg?branch=production)](https://github.com/sorterisntonline/sorter/actions/workflows/deploy.yml) (prod)
 - [![staging](https://github.com/sorterisntonline/sorter/actions/workflows/deploy.yml/badge.svg?branch=staging)](https://github.com/sorterisntonline/sorter/actions/workflows/deploy.yml) (staging)
 
-# installation instructions
+# Quick Start
 
-## Quick Start with sorter-db CLI
+## Prerequisites
 
+Install UV (Python package manager):
 ```bash
-# install bun
-curl -fsSL https://bun.sh/install | bash
-
-# Install the sorter-db CLI
-cd database/cli
-npm install -g .
-cd -
-
-# Setup environment and check dependencies
-sorter-db setup
-
-# Install all project dependencies (Rust, Node.js, Bun, etc.)
-sorter-db install-all
-
-# Start PostgreSQL container (in one terminal)
-sorter-db run-postgres
-
-# In a new terminal, run migrations
-sorter-db migrate
-
-# Start the server (from rustsorter/)
-cd rustsorter
-RUST_LOG=debug cargo run
-
-# In a new terminal, run frontend
-cd frontsorter
-npm i
-npm run dev
-
-# go to port that vite says (http://localhost:5173/)
-```
-# database management
-
-- **To Start & See Logs:**
-
-  1.  Open a terminal.
-  2.  Run `sorter-db run-postgres`.
-  3.  Your terminal will now be filled with PostgreSQL logs. Keep this terminal open as long as you need the database.
-
-- **To Stop:**
-
-  1.  Go to the terminal where the database is running.
-  2.  Press **`Ctrl-C`**.
-  3.  The container will stop cleanly, and because of the `--rm` flag, it will also be removed.
-
-- **To Reset the Database:**
-  1.  Make sure the database is **stopped** first (press `Ctrl-C` in its terminal).
-  2.  Run `sorter-db run-postgres --reset`. This will nuke the data and exit.
-  3.  You can then start it again normally.
-
-
-# pytest integration testing
-
-(first set up a venv if you would like)
-Once the migrations are run and the DB and server are running (use `sorter-db run-postgres` and `sorter-db migrate` to set up the database)
-
-```bash
-pip install -r ./tests/requirements.txt
-pytest
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-or
+## One-Command Setup
 
 ```bash
-pip install -r ./tests/requirements.txt
+# Setup environment and start all services
+uv run main.py setup              # Check dependencies and create environment
+uv run main.py start              # Start all services (PostgreSQL, backend, frontend)
+```
+
+That's it! All services will start automatically with supervisord.
+
+## Development Commands
+
+### Process Management
+```bash
+uv run main.py list               # List all processes
+uv run main.py status             # Get status of all processes  
+uv run main.py logs rust-server   # View server logs
+uv run main.py restart postgres   # Restart database
+```
+
+### Database Operations
+```bash
+uv run main.py migrate            # Run database migrations
+```
+
+### Testing & Building
+```bash
+uv run main.py test               # Run all tests (Rust + Python)
+uv run main.py build              # Build entire project
+```
+
+### Individual Services
+```bash
+uv run main.py dev-server         # Start only Rust backend
+uv run main.py dev-client         # Start only React frontend
+```
+
+## Alternative: Console Script
+
+After first run, you can use the shorter console script:
+```bash
+uv run sorter start               # Same as main.py
+uv run sorter --help              # Show all commands
+```
+
+## URLs
+
+- **Frontend**: http://localhost:5173/ (Vite dev server)
+- **Backend API**: Default Axum port (check logs for exact port)
+- **Database**: PostgreSQL on port 5438
+
+## Advanced Usage
+
+### Manual Installation (Legacy)
+
+For manual component installation:
+
+```bash
+# Frontend dependencies
+cd frontsorter && npm install
+
+# Database migrations (if not using main.py)
+# Create .env with: DATABASE_URL=postgres://postgres:password@localhost:5438/postgres?sslmode=disable
+export PGSSLMODE=disable
+dbmate --migrations-dir ./database/sql up
+```
+
+### Integration Testing
+
+```bash
+# Tests run automatically with: uv run main.py test
+# Or manually:
+pip install -r ./test/requirements.txt
 python -m pytest
 ```
+
+### Process Monitoring
+
+All process logs are stored in `./logs/` directory:
+- `postgres.log` - Database logs
+- `rust-server.log` - Backend logs  
+- `vite-client.log` - Frontend logs
+
+## Troubleshooting
+
+1. **Services not starting**: Check `uv run main.py logs <service-name>`
+2. **Missing dependencies**: Run `uv run main.py setup`
+3. **Port conflicts**: Use `uv run main.py status` to see running processes
+4. **Database issues**: Restart with `uv run main.py restart postgres`
+
+For detailed development workflows, see [AGENTS.md](AGENTS.md).

@@ -136,7 +136,7 @@ class SorterOrchestrator:
         
         return self.run_command([
             "dbmate", 
-            "--migrations-dir", "./database/sql",
+            "--migrations-dir", "./db/migrations",
             "up"
         ], env=env)
 
