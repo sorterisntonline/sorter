@@ -48,13 +48,26 @@ jobs:
           parent_branch: ${{ secrets.NEON_MAIN_BRANCH_NAME }}
           api_key: ${{ secrets.NEON_API_KEY }}
 
+      # Setup Python/UV and install dependencies
+      - name: Set up Python and UV
+        if: github.event.action != 'closed'
+        uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install project dependencies
+        if: github.event.action != 'closed'
+        run: uv sync
+
       # Run DB migrations against the branch
       - name: Run DB migrations
         if: github.event.action != 'closed'
         run: |
           sudo curl -fsSL -o /usr/local/bin/dbmate https://github.com/amacneil/dbmate/releases/latest/download/dbmate-linux-amd64
           sudo chmod +x /usr/local/bin/dbmate
-          DATABASE_URL="${{ steps.neon_create.outputs.db_url }}" dbmate --migrations-dir ./db/migrations up
+          uv run main.py migrate
+        env:
+          DATABASE_URL: ${{ steps.neon_create.outputs.db_url }}
 
       - name: Deploy or Cleanup Preview App on Fly.io
         id: deploy
