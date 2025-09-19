@@ -46,7 +46,7 @@ def validate_config(ctx: typer.Context):
         console.print("Run: uv run main.py setup", style="dim")
         raise typer.Exit(1)
     
-    if not database_url.startswith("postgres://"):
+    if not (database_url.startswith("postgres://") or database_url.startswith("postgresql://")):
         console.print(f"❌ Invalid DATABASE_URL format: {database_url}", style="red")
         raise typer.Exit(1)
 
