@@ -8,6 +8,7 @@ import ProfilePage from "./pages/ProfilePage";
 import EntitiesIndex from "./pages/EntitiesIndex";
 import EntityDetail from "./pages/EntityDetail";
 import CreateEntityPage from "./pages/CreateEntityPage";
+import TodoPage from "./pages/TodoPage";
 
 // Auth pages (outside main layout)
 import LoginPage from "./pages/LoginPage";
@@ -30,6 +31,10 @@ function App() {
         <Route path="entity/new" element={<CreateEntityPage />} />
         <Route path="entity/:pk_namespace/:pk" element={<EntityDetail />} />
         <Route path="vote" element={<VotePage />} />
+        <Route path="vote" element={<VotePage />} />{" "}
+        {/* Keep existing vote page */}
+        <Route path="todos" element={<TodoPage />} />
+
         <Route path="profile" element={<ProfilePage />} />
         <Route path="*" element={<div className="p-4">Page Not Found</div>} />
       </Route>
