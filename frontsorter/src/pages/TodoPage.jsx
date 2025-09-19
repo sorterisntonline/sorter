@@ -1,8 +1,8 @@
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { FaCheckCircle, FaCircle, FaTasks } from 'react-icons/fa';
 import AddTodoForm from '../components/AddTodoForm';
 import TodoItem from '../components/TodoItem';
+import '../styles/retrofuturist.css';
 import { 
   fetchAllTodos, 
   createTodo, 
@@ -109,51 +109,58 @@ const TodoPage = () => {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-64">
-        <div className="text-lg text-gray-600">Loading todos...</div>
+      <div className="retro-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '50vh' }}>
+        <div style={{ color: 'var(--neon-cyan)', fontFamily: 'Orbitron, monospace', fontSize: '1.2rem', textTransform: 'uppercase', letterSpacing: '2px' }}>
+          INITIALIZING SYSTEM...
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-        <div className="text-red-800">
-          Error loading todos: {error.message}
+      <div className="retro-container">
+        <div style={{ 
+          background: 'var(--darker-bg)', 
+          border: '2px solid var(--neon-pink)', 
+          margin: '20px', 
+          padding: '20px',
+          boxShadow: '0 0 20px rgba(255, 0, 128, 0.3)'
+        }}>
+          <div style={{ color: 'var(--neon-pink)', fontFamily: 'Orbitron, monospace', textTransform: 'uppercase' }}>
+            ERROR: {error.message}
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-6">
+    <div className="retro-container">
       {/* Header */}
-      <div className="text-center">
-        <h1 className="text-3xl font-bold text-gray-900 flex items-center justify-center space-x-3">
-          <FaTasks className="text-blue-500" />
-          <span>Todo Demo</span>
+      <div className="retro-header">
+        <h1 className="retro-title">
+          TASK MATRIX
         </h1>
-        <p className="text-gray-600 mt-2">
-          Built using Sorter's entity API as a generic document store
+        <p className="retro-subtitle">
+          Quantum-Linked Entity Management System
         </p>
       </div>
 
-      {/* Stats */}
+      {/* Progress Panel */}
       {totalTodos > 0 && (
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">Progress</h2>
-            <span className="text-sm text-gray-600">
-              {completedTodos} of {totalTodos} completed
-            </span>
+        <div className="progress-panel">
+          <div className="progress-header">System Status</div>
+          <div className="progress-stats">
+            {completedTodos} of {totalTodos} tasks completed
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
+          <div className="progress-bar-container">
             <div 
-              className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+              className="progress-bar-fill"
               style={{ width: `${progress}%` }}
             />
           </div>
-          <div className="text-center mt-2 text-sm font-medium text-gray-700">
+          <div className="progress-percentage">
             {progress.toFixed(0)}%
           </div>
         </div>
@@ -162,16 +169,16 @@ const TodoPage = () => {
       {/* Add Todo Form */}
       <AddTodoForm onAddTodo={handleAddTodo} />
 
-      {/* Todo List */}
-      <div className="space-y-2">
-        {todoTree.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
-            <FaCircle size={48} className="mx-auto mb-4 opacity-30" />
-            <p className="text-lg">No todos yet!</p>
-            <p className="text-sm">Add your first todo above to get started.</p>
-          </div>
-        ) : (
-          todoTree.map((todo) => (
+      {/* Todo Tree */}
+      {todoTree.length === 0 ? (
+        <div className="empty-state">
+          <div className="empty-icon">◉</div>
+          <div className="empty-title">System Ready</div>
+          <div className="empty-subtitle">Initialize your first task to begin</div>
+        </div>
+      ) : (
+        <div className="todo-tree">
+          {todoTree.map((todo, index) => (
             <TodoItem
               key={todo.pk}
               todo={todo}
@@ -180,17 +187,19 @@ const TodoPage = () => {
               onDelete={handleDeleteTodo}
               onAddSubtask={handleAddSubtask}
               children={todo.children}
+              level={0}
+              isLast={index === todoTree.length - 1}
             />
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
 
-      {/* Loading States */}
+      {/* Loading Indicator */}
       {(createTodoMutation.isPending || 
         updateTodoMutation.isPending || 
         deleteTodoMutation.isPending || 
         createSubtaskMutation.isPending) && (
-        <div className="fixed bottom-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg">
+        <div className="loading-indicator">
           Processing...
         </div>
       )}
