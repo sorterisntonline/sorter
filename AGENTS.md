@@ -22,24 +22,19 @@ uv add supervisord-mcp         # Add the MCP server (if not already added)
 ./start.sh                     # Launch all services with supervisord
 
 # Process management (AI-powered with MCP integration!)
-# use your mcp commands if you have them...
-./ctl.sh list                  # List all processes
-./ctl.sh status                # Show detailed status
-./ctl.sh start rust-server     # Start backend
-./ctl.sh stop vite-client      # Stop frontend  
-./ctl.sh restart postgres      # Restart database
-./ctl.sh logs rust-server      # View logs
-./ctl.sh info                  # System information
+# Use MCP supervisord tools directly in your AI agent:
+# - mcp__supervisord__list_processes
+# - mcp__supervisord__get_process_status  
+# - mcp__supervisord__start_process
+# - mcp__supervisord__stop_process
+# - mcp__supervisord__restart_process
+# - mcp__supervisord__get_logs
 
 # Debugging
 ./debug.sh                     # Quick debug overview
-./ctl.sh logs rust-server --lines 50  # More detailed logs
 
-# Database migrations
-./ctl.sh start migrations      # Run migrations (one-time)
-
-# AI Integration (for agents/MCP)
-./ctl.sh mcp                   # Start MCP server for AI agents
+# Database migrations via MCP
+# Use mcp__supervisord__start_process with name="migrations"
 ```
 
 ### Legacy Commands (sorter-db CLI - still available)
