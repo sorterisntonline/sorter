@@ -22,6 +22,7 @@ use dotenv::dotenv;
 use rustsorter::{
     api_key,
     app_state::AppState,
+    auth,
     auth_middleware,
     entity,
     entity_relationships,

@@ -4,11 +4,7 @@
     "playwright": {
         "command": "npx",
         "args": ["-y", "@playwright/mcp@latest", "--headless", "--isolated"]
-    },
-    "supervisord": { 
-	"command": "uv",
-        "args": ["run", "supervisord-mcp", "mcp"]
-     }
+    }
   }
   
 }
