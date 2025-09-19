@@ -1,9 +1,12 @@
 [project]
 name = "sorter"
 version = "0.1.0"
-description = "Add your description here"
+description = "Sorter - Rust and React based pair-wise democratic social media application"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "supervisord-mcp>=1.0.0",
 ]
+
+[project.scripts]
+sorter = "main:main"
