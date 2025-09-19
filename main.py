@@ -30,6 +30,26 @@ app = typer.Typer(
     rich_markup_mode="rich"
 )
 
+@app.callback(invoke_without_command=True)
+def validate_config(ctx: typer.Context):
+    """Validate configuration before running any command."""
+    if ctx.invoked_subcommand is None:
+        return
+    
+    # Skip validation for setup command (it creates the config)
+    if ctx.invoked_subcommand == "setup":
+        return
+        
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        console.print("❌ DATABASE_URL not found in environment", style="red")
+        console.print("Run: uv run main.py setup", style="dim")
+        raise typer.Exit(1)
+    
+    if not database_url.startswith("postgres://"):
+        console.print(f"❌ Invalid DATABASE_URL format: {database_url}", style="red")
+        raise typer.Exit(1)
+
 # Global orchestrator instance
 orchestrator = None
 
@@ -116,7 +136,8 @@ class SorterOrchestrator:
         if not self.check_dependencies(ci_mode=ci_mode):
             raise typer.Exit(1)
             
-        self.ensure_env_file()
+        if not ci_mode:
+            self.ensure_env_file()
         self.ensure_logs_dir()
         
         # Install frontend dependencies if needed
