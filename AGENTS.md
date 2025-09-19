@@ -134,7 +134,7 @@ sorter/
    uv run main.py migrate
    
    # IMPORTANT: After modifying database schema or SQL queries
-   cd rustsorter && cargo sqlx prepare
+   uv run main.py sqlx-prepare
    # This generates .sqlx files needed for CI/CD offline compilation
    # Always commit these files along with your schema changes
    ```

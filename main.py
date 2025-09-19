@@ -447,6 +447,37 @@ def build_rust(
     raise typer.Exit(result)
 
 # Development Commands
+@app.command(name="sqlx-prepare")
+def sqlx_prepare():
+    """Run cargo sqlx prepare to generate .sqlx files"""
+    console.print("🔍 Running cargo sqlx prepare...", style="blue")
+    
+    # Load environment variables for database connection
+    env = os.environ.copy()
+    env["PGSSLMODE"] = "disable"
+    
+    # Source .env file and ensure DATABASE_URL is set
+    env_file = orchestrator.project_root / ".env"
+    if env_file.exists():
+        for line in env_file.read_text().splitlines():
+            if "=" in line and not line.startswith("#"):
+                key, value = line.split("=", 1)
+                env[key] = value
+    
+    # Ensure DATABASE_URL is explicitly set with correct port
+    if "DATABASE_URL" not in env or "5432" in env.get("DATABASE_URL", ""):
+        env["DATABASE_URL"] = "postgres://postgres:password@localhost:5438/postgres?sslmode=disable"
+    
+    result = orchestrator.run_command(["cargo", "sqlx", "prepare"], cwd=orchestrator.project_root / "rustsorter", env=env)
+    
+    if result == 0:
+        console.print("✅ SQLx prepare successful", style="green")
+        console.print("💾 .sqlx files generated and ready for version control", style="dim")
+    else:
+        console.print("❌ SQLx prepare failed", style="red")
+    
+    raise typer.Exit(result)
+
 @app.command(name="dev-server")
 def dev_server():
     """Start development server (Rust backend only)"""
