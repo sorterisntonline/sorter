@@ -304,14 +304,11 @@ def test():
     # Run Python integration tests if available
     test_dir = orchestrator.project_root / "test"
     python_result = 0
-    if test_dir.exists() and (test_dir / "requirements.txt").exists():
+    if test_dir.exists():
         console.print("🐍 Running Python integration tests...", style="blue")
         
-        # Install test dependencies
-        subprocess.run(["pip", "install", "-r", "requirements.txt"], cwd=test_dir, capture_output=True)
-        
-        # Run pytest
-        python_result = orchestrator.run_command(["python", "-m", "pytest"], cwd=test_dir)
+        # Use uv to run pytest with test dependencies
+        python_result = orchestrator.run_command(["uv", "run", "--extra", "test", "--", "python", "-m", "pytest", "test/"], cwd=orchestrator.project_root)
     
     result = max(rust_result, python_result)
     if result == 0:
@@ -355,22 +352,15 @@ def test_python(
         console.print("❌ No Python test directory found", style="red")
         raise typer.Exit(1)
     
-    if not (test_dir / "requirements.txt").exists():
-        console.print("❌ No Python test requirements.txt found", style="red")
-        raise typer.Exit(1)
-    
     console.print("🐍 Running Python integration tests...", style="blue")
     
-    # Install test dependencies
-    subprocess.run(["pip", "install", "-r", "requirements.txt"], cwd=test_dir, capture_output=True)
-    
-    # Build pytest command
-    cmd = ["python", "-m", "pytest", "-q", "--maxfail=1", "--disable-warnings"]
+    # Build pytest command for uv
+    cmd = ["uv", "run", "--extra", "test", "--", "python", "-m", "pytest", "test/", "-q", "--maxfail=1", "--disable-warnings"]
     if junit_xml:
-        cmd.extend(["--junitxml=python-tests.xml"])
+        cmd.append("--junitxml=python-tests.xml")
     
-    # Run pytest
-    result = orchestrator.run_command(cmd, cwd=test_dir)
+    # Run pytest via uv
+    result = orchestrator.run_command(cmd, cwd=orchestrator.project_root)
     
     if result == 0:
         console.print("✅ Python tests passed", style="green")
