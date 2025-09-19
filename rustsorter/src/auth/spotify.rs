@@ -21,6 +21,7 @@ use crate::{
 const SPOTIFY_AUTHORIZE_URL: &str = "https://accounts.spotify.com/authorize";
 const SPOTIFY_TOKEN_URL: &str = "https://accounts.spotify.com/api/token";
 const SPOTIFY_ME_URL: &str = "https://api.spotify.com/v1/me";
+const SPOTIFY_SCOPES: &str = "user-read-email user-read-private";
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SpotifyAuthQuery {
@@ -256,7 +257,7 @@ fn build_authorize_url(state: &AppState, oauth_state: &str) -> Result<String> {
         query.append_pair("client_id", &state.spotify_client_id);
         query.append_pair("response_type", "code");
         query.append_pair("redirect_uri", &state.spotify_redirect_uri);
-        query.append_pair("scope", &state.spotify_scopes);
+        query.append_pair("scope", SPOTIFY_SCOPES);
         query.append_pair("state", oauth_state);
     }
 

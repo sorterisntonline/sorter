@@ -118,7 +118,6 @@ async fn main() -> Result<(), anyhow::Error> {
     let spotify_client_id = require_env("SPOTIFY_CLIENT_ID");
     let spotify_client_secret = require_env("SPOTIFY_CLIENT_SECRET");
     let spotify_redirect_uri = require_env("SPOTIFY_REDIRECT_URI");
-    let spotify_scopes = require_env("SPOTIFY_SCOPES");
     let base_url = require_env("BASE_URL");
     let frontend_url = require_env("FRONTEND_URL");
 
@@ -127,7 +126,6 @@ async fn main() -> Result<(), anyhow::Error> {
         spotify_client_id,
         spotify_client_secret,
         spotify_redirect_uri,
-        spotify_scopes,
         base_url,
         frontend_url,
     };
