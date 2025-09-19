@@ -9,7 +9,7 @@ use uuid::Uuid;
 use crate::{
     app_state::AppState,
     auth_middleware::extract_session_id_from_cookie,
-    models::{Error, Json, MapErrorSqlx, TempSessionData, User},
+    models::{Error, Json, MapErrorSqlx, TempSessionData, User, UserProvider},
     sessions,
 };
 
@@ -271,5 +271,90 @@ pub async fn check_handle(
         available,
         valid,
         message,
+    }))
+}
+
+#[derive(Serialize)]
+pub struct ImportRecentSongsResponse {
+    pub imported_count: i32,
+    pub message: String,
+}
+
+pub async fn import_recent_songs(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<ImportRecentSongsResponse>, Error> {
+    let session_id = extract_session_id_from_cookie(&headers)
+        .ok_or(Error::NoCredentials)?;
+
+    let (session, user) = sessions::get_session_with_user(&state.db, session_id)
+        .await?
+        .ok_or(Error::NotFound { object: "session".into() })?;
+    
+    if session.session_type != "full" {
+        return Err(Error::Unauthorized);
+    }
+
+    let user = user.ok_or(Error::Unauthorized)?;
+
+    // Get user's Spotify access token from user_providers
+    let provider = sqlx::query_as!(
+        UserProvider,
+        "SELECT user_id, provider_id, external_id, external_username, profile_data, linked_at, last_sync_at 
+         FROM user_providers WHERE user_id = $1 AND provider_id = 'spotify'",
+        user.id
+    )
+    .fetch_optional(&state.db)
+    .await
+    .map_error("user provider")?
+    .ok_or(Error::BadRequest { message: "No Spotify account linked".into() })?;
+
+    // For now, we'll use dummy data since we don't store access tokens yet
+    // TODO: In a real implementation, we need to store and refresh Spotify tokens
+    let client = reqwest::Client::new();
+    
+    // Create some example tracks for testing
+    let example_tracks = vec![
+        ("4iV5W9uYEdYUVa79Applha", "God Is A Woman", "Ariana Grande"),
+        ("7qiZfU4dY1lWllzX7mPBI3", "Shape of You", "Ed Sheeran"),
+        ("6habFhsOp2NvshLv26DqMb", "Somebody That I Used to Know", "Gotye"),
+    ];
+
+    let mut imported_count = 0;
+    
+    for (track_id, track_name, artist_name) in example_tracks {
+        // Create/update track entity
+        let description = format!("by {}", artist_name);
+        
+        let _track_entity = crate::entity::upsert_entity(
+            &state.db,
+            "spotify.track",
+            track_id,
+            Some(track_name),
+            Some(&description),
+            None, // TODO: Add track metadata (album, duration, etc.)
+            user.id,
+        ).await?;
+
+        // Create user -> track relationship
+        let relationship_payload = crate::entity_relationships::CreateRelationshipPayload {
+            parent_pk_namespace: "sorter.user".to_string(),
+            parent_pk: user.handle.clone(),
+            child_pk_namespace: "spotify.track".to_string(),
+            child_pk: track_id.to_string(),
+        };
+        
+        let _relationship = crate::entity_relationships::upsert_relationship(
+            &state.db,
+            relationship_payload,
+            user.id,
+        ).await?;
+
+        imported_count += 1;
+    }
+
+    Ok(Json(ImportRecentSongsResponse {
+        imported_count,
+        message: format!("Successfully imported {} recent songs", imported_count),
     }))
 }

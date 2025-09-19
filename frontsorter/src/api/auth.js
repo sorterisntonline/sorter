@@ -72,4 +72,18 @@ export class AuthAPI {
   static getSpotifyLoginUrl() {
     return `${API_BASE}/auth/spotify`;
   }
+
+  static async importRecentSongs() {
+    const response = await fetch(`${API_BASE}/auth/import-recent-songs`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+    
+    return response.json();
+  }
 }

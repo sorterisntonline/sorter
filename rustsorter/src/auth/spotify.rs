@@ -163,6 +163,99 @@ async fn fetch_spotify_user_data(
     Ok(user)
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SpotifyRecentTracksResponse {
+    pub items: Vec<SpotifyPlayHistoryItem>,
+    pub next: Option<String>,
+    pub cursors: Option<SpotifyCursors>,
+    pub limit: i32,
+    pub href: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SpotifyPlayHistoryItem {
+    pub track: SpotifyTrack,
+    pub played_at: String,
+    pub context: Option<SpotifyContext>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SpotifyTrack {
+    pub id: String,
+    pub name: String,
+    pub artists: Vec<SpotifyArtist>,
+    pub album: SpotifyAlbum,
+    pub duration_ms: i32,
+    pub explicit: bool,
+    pub external_urls: SpotifyExternalUrls,
+    pub href: String,
+    pub preview_url: Option<String>,
+    pub track_number: i32,
+    pub uri: String,
+    pub is_local: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SpotifyArtist {
+    pub id: String,
+    pub name: String,
+    pub external_urls: SpotifyExternalUrls,
+    pub href: String,
+    pub uri: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SpotifyAlbum {
+    pub id: String,
+    pub name: String,
+    pub artists: Vec<SpotifyArtist>,
+    pub images: Vec<SpotifyImage>,
+    pub external_urls: SpotifyExternalUrls,
+    pub href: String,
+    pub release_date: String,
+    pub release_date_precision: String,
+    pub total_tracks: i32,
+    pub uri: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SpotifyContext {
+    #[serde(rename = "type")]
+    pub context_type: String,
+    pub href: String,
+    pub external_urls: SpotifyExternalUrls,
+    pub uri: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SpotifyCursors {
+    pub after: String,
+    pub before: String,
+}
+
+pub async fn fetch_recent_tracks(
+    client: &reqwest::Client,
+    access_token: &str,
+    limit: Option<i32>,
+) -> Result<SpotifyRecentTracksResponse> {
+    let limit = limit.unwrap_or(20).min(50); // Spotify API allows max 50
+    
+    let response = client
+        .get(&format!("{}/me/player/recently-played", SPOTIFY_API_BASE))
+        .bearer_auth(access_token)
+        .query(&[("limit", limit)])
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        let error_text = response.text().await?;
+        return Err(anyhow!("Failed to fetch recent tracks: {}", error_text));
+    }
+
+    let recent_tracks: SpotifyRecentTracksResponse = response.json().await?;
+    Ok(recent_tracks)
+}
+
 async fn check_existing_spotify_user(
     pool: &PgPool,
     spotify_id: &str,
