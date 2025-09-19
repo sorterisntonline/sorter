@@ -1,20 +1,9 @@
-pub mod api_key;
-pub mod app_state;
-pub mod auth;
-pub mod auth_middleware;
-pub mod entity;
-pub mod entity_relationships;
-pub mod extractors;
-pub mod models;
-pub mod pagerank;
-pub mod pair;
-pub mod sessions;
-pub mod vote;
 use std::{env, sync::Arc};
 
 use aide::{
     axum::{
-        ApiRouter, IntoApiResponse,
+        ApiRouter,
+        IntoApiResponse,
         routing::{get, get_with},
     },
     openapi::{self, OpenApi, SecurityScheme},
@@ -22,25 +11,31 @@ use aide::{
     transform::TransformOpenApi,
 };
 use anyhow::Result;
-use app_state::AppState;
 use axum::{
-    Extension, Router,
+    Extension,
+    Router,
     http::StatusCode,
     middleware,
     response::{IntoResponse, Response},
 };
 use dotenv::dotenv;
+use rustsorter::{
+    api_key,
+    app_state::AppState,
+    auth_middleware,
+    entity,
+    entity_relationships,
+    extractors::maybe_user::MaybeUser,
+    models::{Error, Json},
+    pagerank,
+    pair,
+    vote,
+};
 use schemars::JsonSchema;
 use serde::Serialize;
-
 use tower_http::{
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
-};
-
-use crate::{
-    extractors::maybe_user::MaybeUser,
-    models::{Error, Json},
 };
 
 #[derive(Serialize, JsonSchema)]

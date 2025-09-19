@@ -11,29 +11,42 @@ Sorter is a **Rust and React based pair-wise staunchly democratic social media a
 
 ## Quick Start Commands
 
-### Essential Commands (via sorter-db CLI)
+### Essential Commands (via UV + supervisord-mcp)
 
 ```bash
-# Initial setup
+# First-time setup for newcomers
+uv --version                   # Check UV is installed (if not: curl -LsSf https://astral.sh/uv/install.sh | sh)
+uv add supervisord-mcp         # Add the MCP server (if not already added)
+
+# Start everything
+./start.sh                     # Launch all services with supervisord
+
+# Process management (AI-powered with MCP integration!)
+# Use MCP supervisord tools directly in your AI agent:
+# - mcp__supervisord__list_processes
+# - mcp__supervisord__get_process_status  
+# - mcp__supervisord__start_process
+# - mcp__supervisord__stop_process
+# - mcp__supervisord__restart_process
+# - mcp__supervisord__get_logs
+
+# Debugging
+./debug.sh                     # Quick debug overview
+
+# Database migrations via MCP
+# Use mcp__supervisord__start_process with name="migrations"
+```
+
+### Legacy Commands (sorter-db CLI - still available)
+
+The TypeScript CLI is still available but we recommend the UV + supervisord-mcp approach above:
+
+```bash
 cd database/cli && npm install -g . && cd -
 sorter-db setup
-
-# Install all dependencies
-sorter-db install-all
-
-# Database management
-sorter-db run-postgres          # Start PostgreSQL (foreground)
-sorter-db run-postgres --reset  # Reset database completely
-sorter-db migrate               # Run database migrations
-sorter-db reset-migrations      # Reset migration state
-
-# Development servers
-sorter-db run-server           # Start Rust backend server
-sorter-db run-client           # Start React frontend client
-
-# Dependency management
-sorter-db check-deps           # Check system dependencies
-sorter-db install-deps         # Install missing dependencies
+sorter-db run-postgres
+sorter-db run-server
+sorter-db run-client
 ```
 
 ### Alternative Manual Commands (if needed)
