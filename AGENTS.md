@@ -22,6 +22,7 @@ uv add supervisord-mcp         # Add the MCP server (if not already added)
 ./start.sh                     # Launch all services with supervisord
 
 # Process management (AI-powered with MCP integration!)
+# use your mcp commands if you have them...
 ./ctl.sh list                  # List all processes
 ./ctl.sh status                # Show detailed status
 ./ctl.sh start rust-server     # Start backend
