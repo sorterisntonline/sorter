@@ -6,4 +6,4 @@ set +a
 # Set SSL mode to disable for dbmate
 export PGSSLMODE=disable
 
-dbmate --migrations-dir ./database/sql "$@"
+dbmate --migrations-dir ./db/migrations up
