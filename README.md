@@ -2,11 +2,6 @@
 
 rust and react based pair-wise staunchly democratic social media application
 
-## agent setup
-``bash
-npm install -g @anthropic/claude-dev
-``
-
 ## project info
 
 ### contributors
