@@ -1,0 +1,43 @@
+2025-09-18 17:42:18,144 INFO RPC interface 'supervisor' initialized
+2025-09-18 17:42:18,144 CRIT Server 'unix_http_server' running without any HTTP authentication checking
+2025-09-18 17:42:18,144 INFO supervisord started with pid 98117
+2025-09-18 17:42:19,151 INFO spawned: 'postgres' with pid 98146
+2025-09-18 17:42:19,156 INFO spawned: 'rust-server' with pid 98147
+2025-09-18 17:42:19,169 INFO spawned: 'vite-client' with pid 98148
+2025-09-18 17:42:19,270 WARN exited: postgres (exit status 125; not expected)
+2025-09-18 17:42:19,304 WARN exited: vite-client (exit status 127; not expected)
+2025-09-18 17:42:20,494 INFO spawned: 'postgres' with pid 98214
+2025-09-18 17:42:20,499 INFO spawned: 'vite-client' with pid 98215
+2025-09-18 17:42:20,614 WARN exited: postgres (exit status 125; not expected)
+2025-09-18 17:42:20,627 WARN exited: vite-client (exit status 127; not expected)
+2025-09-18 17:42:22,636 INFO spawned: 'postgres' with pid 98301
+2025-09-18 17:42:22,641 INFO spawned: 'vite-client' with pid 98302
+2025-09-18 17:42:22,746 WARN exited: postgres (exit status 125; not expected)
+2025-09-18 17:42:22,752 WARN exited: vite-client (exit status 127; not expected)
+2025-09-18 17:42:25,762 INFO spawned: 'postgres' with pid 98380
+2025-09-18 17:42:25,770 INFO spawned: 'vite-client' with pid 98381
+2025-09-18 17:42:25,901 WARN exited: postgres (exit status 125; not expected)
+2025-09-18 17:42:25,907 INFO gave up: postgres entered FATAL state, too many start retries too quickly
+2025-09-18 17:42:25,907 WARN exited: vite-client (exit status 127; not expected)
+2025-09-18 17:42:26,909 INFO gave up: vite-client entered FATAL state, too many start retries too quickly
+2025-09-18 17:42:29,913 INFO success: rust-server entered RUNNING state, process has stayed up for > than 10 seconds (startsecs)
+2025-09-18 17:43:10,472 INFO RPC interface 'supervisor' initialized
+2025-09-18 17:43:10,472 CRIT Server 'unix_http_server' running without any HTTP authentication checking
+2025-09-18 17:43:10,473 INFO supervisord started with pid 99477
+2025-09-18 17:43:11,478 INFO spawned: 'postgres' with pid 99504
+2025-09-18 17:43:11,485 INFO spawned: 'rust-server' with pid 99505
+2025-09-18 17:43:11,497 INFO spawned: 'vite-client' with pid 99506
+2025-09-18 17:43:12,296 WARN exited: rust-server (exit status 101; not expected)
+2025-09-18 17:43:12,538 INFO success: postgres entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+2025-09-18 17:43:13,394 INFO spawned: 'rust-server' with pid 99597
+2025-09-18 17:43:14,288 WARN exited: rust-server (exit status 1; not expected)
+2025-09-18 17:43:16,294 INFO spawned: 'rust-server' with pid 99639
+2025-09-18 17:43:16,488 INFO success: vite-client entered RUNNING state, process has stayed up for > than 5 seconds (startsecs)
+2025-09-18 17:43:17,118 WARN exited: rust-server (exit status 1; not expected)
+2025-09-18 17:43:20,126 INFO spawned: 'rust-server' with pid 99724
+2025-09-18 17:43:20,934 WARN exited: rust-server (exit status 1; not expected)
+2025-09-18 17:43:24,944 INFO spawned: 'rust-server' with pid 99830
+2025-09-18 17:43:25,745 WARN exited: rust-server (exit status 1; not expected)
+2025-09-18 17:43:30,756 INFO spawned: 'rust-server' with pid 99944
+2025-09-18 17:43:31,556 WARN exited: rust-server (exit status 1; not expected)
+2025-09-18 17:43:31,560 INFO gave up: rust-server entered FATAL state, too many start retries too quickly
