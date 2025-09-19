@@ -1,0 +1,162 @@
+/* Sidebar Styles */
+.sidebar {
+  width: 256px;
+  height: 100vh;
+  background: white;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  left: 0;
+  border-right: 1px solid #e5e7eb;
+  z-index: 50;
+}
+
+.sidebar-brand {
+  margin-bottom: 24px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1db954;
+  letter-spacing: -0.5px;
+}
+
+.sidebar-nav {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-link {
+  display: block;
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: #374151;
+  text-decoration: none;
+  transition: all 0.15s ease;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.nav-link:hover {
+  background: #f3f4f6;
+  color: #1f2937;
+}
+
+.nav-link.active {
+  background: #dcfce7;
+  color: #166534;
+  font-weight: 600;
+  border-left: 3px solid #1db954;
+  padding-left: 9px;
+}
+
+.nav-link-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.nav-icon.spotify {
+  color: #1db954;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 16px;
+}
+
+.user-info {
+  margin-bottom: 12px;
+}
+
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #e5e7eb;
+}
+
+.user-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.user-handle {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-name {
+  font-size: 11px;
+  color: #6b7280;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.logout-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #374151;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.logout-button:hover {
+  background: #f3f4f6;
+  color: #1f2937;
+}
+
+.logout-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.logout-icon {
+  margin-right: 6px;
+  width: 14px;
+  height: 14px;
+}
+
+/* Main content adjustment to account for sidebar */
+.main-content {
+  margin-left: 256px;
+  min-height: 100vh;
+  background: #f9fafb;
+}
+
+/* Spin animation for loading spinner */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}

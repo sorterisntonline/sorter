@@ -1,0 +1,269 @@
+/* Vote Page Styles */
+.vote-page {
+  padding: 16px;
+  max-width: 1200px;
+  margin: 0 auto;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.vote-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 24px;
+  margin-bottom: 32px;
+  border-radius: 8px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.vote-items-container {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  justify-content: space-around;
+  gap: 24px;
+}
+
+.vote-item-link {
+  text-decoration: none;
+  transition: opacity 0.2s ease;
+  flex: 1;
+  max-width: 400px;
+}
+
+.vote-item-link:hover {
+  opacity: 0.8;
+}
+
+.vote-item {
+  background: white;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+  transition: all 0.2s ease;
+  height: 100%;
+}
+
+.vote-item:hover {
+  border-color: #3b82f6;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+}
+
+.vote-item.disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Spotify embed styling */
+.spotify-embed {
+  width: 100%;
+  max-width: 300px;
+  margin: 0 auto 12px;
+}
+
+.vote-item-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 8px 0 4px;
+}
+
+.vote-item-type {
+  font-size: 12px;
+  color: #6b7280;
+  margin: 0;
+}
+
+/* Non-Spotify item styling */
+.vote-item-image {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  margin: 0 auto 8px;
+  object-fit: cover;
+}
+
+.vote-item-placeholder {
+  width: 28px;
+  height: 28px;
+  background: #d1d5db;
+  border-radius: 4px;
+  margin: 0 auto 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+/* Slider section */
+.slider-container {
+  width: 100%;
+  max-width: 500px;
+  padding: 0 16px;
+  padding-top: 16px;
+}
+
+.slider-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 8px;
+}
+
+.vote-slider {
+  width: 100%;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  appearance: none;
+  cursor: pointer;
+  outline: none;
+  transition: background 0.2s ease;
+}
+
+.vote-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  background: #3b82f6;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+
+.vote-slider::-webkit-slider-thumb:hover {
+  background: #2563eb;
+  transform: scale(1.1);
+}
+
+.vote-slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  background: #3b82f6;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.vote-slider:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Submit button */
+.submit-button {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+  border: none;
+  padding: 12px 32px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+  min-width: 140px;
+}
+
+.submit-button:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.4);
+}
+
+.submit-button:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Loading and error states */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px;
+  color: #6b7280;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #f3f4f6;
+  border-top: 3px solid #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+.error-container {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  padding: 16px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .vote-container {
+    padding: 16px;
+    gap: 16px;
+  }
+  
+  .vote-items-container {
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .vote-item-link {
+    max-width: none;
+  }
+  
+  .spotify-embed {
+    max-width: 280px;
+  }
+  
+  .slider-container {
+    max-width: none;
+    padding: 0 8px;
+  }
+  
+  .submit-button {
+    width: 100%;
+    max-width: 300px;
+  }
+}
+
+@media (max-width: 480px) {
+  .vote-page {
+    padding: 8px;
+  }
+  
+  .vote-container {
+    padding: 12px;
+    gap: 12px;
+  }
+  
+  .spotify-embed {
+    max-width: 250px;
+  }
+  
+  .vote-item {
+    padding: 12px;
+  }
+}

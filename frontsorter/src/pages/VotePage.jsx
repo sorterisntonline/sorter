@@ -5,6 +5,7 @@ import { useState } from 'react'; // Import useState
 import { useNavigate } from 'react-router-dom'; // Import useNavigate
 
 import { fetchPairFn, submitVoteFn } from '../fetchers/voteEndpoints';
+import '../styles/vote.css';
 
 // Helper function to get the smallest image URL (can be moved to a utils file)
 const getSmallestImageUrl = (images) => {
@@ -61,41 +62,38 @@ function VoteItemDisplay({ item, isDisabled }) { // Removed isSelected, pk is un
     if (isSpotifyTrack || isSpotifyAlbum) {
         const embedType = isSpotifyTrack ? 'track' : 'album';
         return (
-            <div className={`flex flex-col items-center p-1 transition-all duration-200 ease-in-out ${isDisabled ? 'opacity-50' : ''}`}>
+            <div className={`vote-item ${isDisabled ? 'disabled' : ''}`}>
                 {/* Spotify Embed */}
                 <iframe
-                    style={{ borderRadius: '12px' }} // Optional: Spotify's recommended style
+                    className="spotify-embed"
+                    style={{ borderRadius: '12px' }}
                     src={`https://open.spotify.com/embed/${embedType}/${pk}`}
-                    width="300" // Adjust as needed for your layout
-                    height="380" // Adjust as needed for your layout
+                    width="300"
+                    height="380"
                     frameBorder="0"
                     allowFullScreen=""
                     allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
                     loading="lazy"
-                    title={`${embedType}: ${title || 'Spotify Content'}`} // Add a title for accessibility
+                    title={`${embedType}: ${title || 'Spotify Content'}`}
                 ></iframe>
-                 {/* Keep title and type below embed */}
-                 <h4 className="text-xs font-semibold text-center truncate w-full mt-2" title={title}>{title || 'Unknown Title'}</h4>
-                 <p className="text-xs text-gray-500 capitalize">[{entityType}]</p>
+                <h4 className="vote-item-title" title={title}>{title || 'Unknown Title'}</h4>
+                <p className="vote-item-type">[{entityType}]</p>
             </div>
         );
     }
 
     // Fallback for non-Spotify items
-    const imageUrl = profile_picture_url || getSmallestImageUrl(metadata?.images); // Use passed item directly
+    const imageUrl = profile_picture_url || getSmallestImageUrl(metadata?.images);
 
-    // Link wrapper will handle navigation
     return (
-        <div
-            className={`flex flex-col items-center p-3 transition-all duration-200 ease-in-out w-40 ${isDisabled ? 'opacity-50' : 'bg-white'}`}
-        >
+        <div className={`vote-item ${isDisabled ? 'disabled' : ''}`}>
             {imageUrl ? (
-                <img src={imageUrl} alt={`Cover for ${title}`} className="w-28 h-28 object-cover rounded-md mb-2" />
+                <img src={imageUrl} alt={`Cover for ${title}`} className="vote-item-image" />
             ) : (
-                <div className="w-28 h-28 bg-gray-200 rounded-md mb-2 flex items-center justify-center text-gray-400 text-3xl">?</div>
+                <div className="vote-item-placeholder">?</div>
             )}
-            <h4 className="text-xs font-semibold text-center truncate w-full" title={title}>{title || 'Unknown Title'}</h4>
-            <p className="text-xs text-gray-500 capitalize">[{entityType}]</p>
+            <h4 className="vote-item-title" title={title}>{title || 'Unknown Title'}</h4>
+            <p className="vote-item-type">[{entityType}]</p>
         </div>
     );
 }
@@ -174,6 +172,13 @@ function VotePage() {
             // This works regardless of whether it was 'specific', 'children', or 'default' originally
             queryClient.invalidateQueries({ queryKey: queryKey });
 
+            // Also invalidate Spotify ranking if this is a user's spotify tracks
+            const parent_pk_namespace = searchParams.get('pk_namespace');
+            const parent_pk = searchParams.get('pk');
+            if (parent_pk_namespace === 'sorter.user' && parent_pk) {
+                queryClient.invalidateQueries(['spotify-ranking', parent_pk]);
+            }
+
              // Reset slider after successful vote
              setSliderValue(0);
              // TODO: Decide on navigation - refetching might be sufficient
@@ -223,43 +228,44 @@ function VotePage() {
 
     // --- Main Return ---
     return (
-        <div className="min-h-screen bg-gray-50/60 flex flex-col items-center pt-10 pb-10 px-4">
-            <div className="w-full max-w-4xl"> {/* Increased max-width slightly for wider embeds */}
+        <div className="vote-page">
+            <div style={{ width: '100%', maxWidth: '1200px', margin: '0 auto' }}>
                 {loadingPair && (
-                    <div className="text-center text-gray-500 py-10">Loading pair...</div>
+                    <div className="loading-container">
+                        <div className="loading-spinner"></div>
+                        <p>Loading pair...</p>
+                    </div>
                 )}
 
-                 {/* Display combined errors (fetch or mutation) */}
-                {combinedError && !loadingPair && ( // Show only if not loading initially
-                    <div className="text-center text-red-600 bg-red-50 border border-red-200 p-4 rounded-md mb-4">
+                {combinedError && !loadingPair && (
+                    <div className="error-container">
                         <p>Error loading or submitting vote:</p>
-                        {pair.isError && <p className="text-sm mt-1">Loading pair: {pair.error?.message || 'Unknown error'}</p>}
-                        {voteMutation.isError && <p className="text-sm mt-1">Submitting vote: {voteMutation.error?.message || 'Unknown error'}</p>}
-                        {/* Specific error message for API not finding a pair */}
-                        {pair.error?.message?.includes("Could not find") && <p className="text-sm mt-1">{pair.error.message}</p>}
-                        {pair.error?.status === 404 && <p className="text-sm mt-1">Could not find the requested pair.</p>}
+                        {pair.isError && <p style={{ fontSize: '12px', marginTop: '4px' }}>Loading pair: {pair.error?.message || 'Unknown error'}</p>}
+                        {voteMutation.isError && <p style={{ fontSize: '12px', marginTop: '4px' }}>Submitting vote: {voteMutation.error?.message || 'Unknown error'}</p>}
+                        {pair.error?.message?.includes("Could not find") && <p style={{ fontSize: '12px', marginTop: '4px' }}>{pair.error.message}</p>}
+                        {pair.error?.status === 404 && <p style={{ fontSize: '12px', marginTop: '4px' }}>Could not find the requested pair.</p>}
                     </div>
                 )}
 
                 {/* Only display items and slider if the pair query is successful and items exist */}
                 {isSuccess && leftItem && rightItem && (
-                    <div className="flex flex-col items-center justify-center gap-6 p-6 mb-8 rounded-lg">
+                    <div className="vote-container">
                         {/* Container for the two items */}
-                        <div className="flex w-full items-start justify-around gap-4">
+                        <div className="vote-items-container">
                             {/* Left Item - Wrapped in Link */}
-                             <Link to={`/?pk_namespace=${encodeURIComponent(leftItem.pk_namespace)}&pk=${encodeURIComponent(leftItem.pk)}`} className="no-underline hover:opacity-80 transition-opacity">
+                             <Link to={`/?pk_namespace=${encodeURIComponent(leftItem.pk_namespace)}&pk=${encodeURIComponent(leftItem.pk)}`} className="vote-item-link">
                                 <VoteItemDisplay item={leftItem} isDisabled={submittingVote || loadingPair}/>
                             </Link>
 
                             {/* Right Item - Wrapped in Link */}
-                            <Link to={`/?pk_namespace=${encodeURIComponent(rightItem.pk_namespace)}&pk=${encodeURIComponent(rightItem.pk)}`} className="no-underline hover:opacity-80 transition-opacity">
+                            <Link to={`/?pk_namespace=${encodeURIComponent(rightItem.pk_namespace)}&pk=${encodeURIComponent(rightItem.pk)}`} className="vote-item-link">
                                 <VoteItemDisplay item={rightItem} isDisabled={submittingVote || loadingPair}/>
                             </Link>
                         </div>
 
                         {/* Slider */}
-                        <div className="w-full max-w-lg px-4 pt-4">
-                             <div className="flex justify-between text-sm text-gray-600 mb-1">
+                        <div className="slider-container">
+                             <div className="slider-labels">
                                 <span>Strongly Left</span>
                                 <span>Neutral</span>
                                 <span>Strongly Right</span>
@@ -267,34 +273,30 @@ function VotePage() {
                             <input
                                 id="slider"
                                 type="range"
-                                min="-50" // Represents strong preference for left
-                                max="50"  // Represents strong preference for right
-                                step="1" // Or adjust step as needed
+                                min="-50"
+                                max="50"
+                                step="1"
                                 value={sliderValue}
                                 onChange={handleSliderChange}
-                                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-blue-500"
-                                disabled={submittingVote || loadingPair} // Disable slider during submission or loading
+                                className="vote-slider"
+                                disabled={submittingVote || loadingPair}
                             />
                         </div>
 
                         {/* Submit Button */}
                         <button
                             onClick={handleVoteSubmit}
-                            disabled={submittingVote || loadingPair} // Disable if loading pair or submitting
-                            className={`mt-4 px-6 py-2 cursor-pointer text-white rounded font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                                submittingVote || loadingPair
-                                ? 'bg-gray-400 cursor-not-allowed'
-                                : 'bg-blue-500 hover:bg-blue-600'
-                            }`}
+                            disabled={submittingVote || loadingPair}
+                            className="submit-button"
                         >
                             {submittingVote ? 'Submitting...' : 'Submit Vote'}
                         </button>
                     </div>
                 )}
 
-                 {/* Message when no pair is available (e.g., API returns error or empty) */}
+                 {/* Message when no pair is available */}
                  {isSuccess && !leftItem && !rightItem && !loadingPair && (
-                    <div className="text-center text-gray-500 py-10">
+                    <div style={{ textAlign: 'center', color: '#6b7280', padding: '40px 0' }}>
                         No pair available for voting at the moment.
                     </div>
                 )}

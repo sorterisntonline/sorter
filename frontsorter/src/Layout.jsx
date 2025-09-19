@@ -2,26 +2,35 @@ import React, { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { useRequireAuth } from './contexts/AuthContext';
 import Sidebar from './Sidebar';
+import './styles/sidebar.css';
 
 function Layout() {
   const auth = useRequireAuth(); // This will redirect to login if not authenticated
 
   if (auth.isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ 
+            width: '32px', 
+            height: '32px', 
+            border: '2px solid #f3f3f3', 
+            borderTop: '2px solid #1db954',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+            margin: '0 auto 16px'
+          }}></div>
+          <p style={{ color: '#6b7280' }}>Loading...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex">
+    <div style={{ display: 'flex' }}>
       <Sidebar />
       {/* Main content area with padding to offset the fixed sidebar */}
-      <main className="flex-grow p-6 pl-[280px]"> {/* pl = sidebar width + padding */}
+      <main className="main-content" style={{ padding: '24px' }}>
         <Outlet /> {/* Child routes will render here */}
       </main>
     </div>

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { AuthAPI } from '../api/auth';
 import '../styles/spotify.css';
 
@@ -7,13 +8,66 @@ function SpotifySongsPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [importMessage, setImportMessage] = useState('');
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   
+  // Query for current user info
+  const { data: user } = useQuery({
+    queryKey: ['user'],
+    queryFn: AuthAPI.getMe,
+    refetchOnWindowFocus: false,
+  });
+
   // Query for user's recent songs (relationships where parent is current user and child is spotify.track)
   const { data: songs, isLoading, error } = useQuery({
     queryKey: ['spotify-songs'],
     queryFn: AuthAPI.getSpotifySongs,
     refetchOnWindowFocus: false,
   });
+
+  // Query for ranking data
+  const { data: ranking, isLoading: rankingLoading } = useQuery({
+    queryKey: ['spotify-ranking', user?.handle],
+    queryFn: () => AuthAPI.getSpotifyRanking('sorter.user', user.handle),
+    enabled: !!user && !!songs,
+    refetchOnWindowFocus: false,
+  });
+
+  // Process ranking data to organize songs
+  const { rankedSongs, unrankedSongs } = React.useMemo(() => {
+    if (!songs || !ranking) {
+      return { rankedSongs: [], unrankedSongs: songs || [] };
+    }
+
+    // Create a map of songs by their identifier
+    const songsMap = {};
+    songs.forEach(song => {
+      const key = `spotify.track:${song.id}`;
+      songsMap[key] = song;
+    });
+
+    // Process ranked songs
+    const rankedSongs = ranking.sorted
+      .map(rankedEntity => {
+        const key = `${rankedEntity.identifier.pk_namespace}:${rankedEntity.identifier.pk}`;
+        const song = songsMap[key];
+        if (song) {
+          return { ...song, score: rankedEntity.score };
+        }
+        return null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score); // Sort by score descending
+
+    // Process unranked songs
+    const unrankedSongs = ranking.unsorted
+      .map(identifier => {
+        const key = `${identifier.pk_namespace}:${identifier.pk}`;
+        return songsMap[key];
+      })
+      .filter(Boolean);
+
+    return { rankedSongs, unrankedSongs };
+  }, [songs, ranking]);
 
   const handleImportSongs = async () => {
     setIsImporting(true);
@@ -23,8 +77,9 @@ function SpotifySongsPage() {
       const result = await AuthAPI.importRecentSongs();
       setImportMessage(result.message);
       
-      // Refresh songs data
+      // Refresh songs data and ranking
       queryClient.invalidateQueries(['spotify-songs']);
+      queryClient.invalidateQueries(['spotify-ranking', user?.handle]);
     } catch (error) {
       setImportMessage(`Error: ${error.message}`);
     } finally {
@@ -94,11 +149,72 @@ function SpotifySongsPage() {
         </div>
       )}
 
-      <div className="songs-container">
-        {songs && songs.length > 0 ? (
+      {/* Voting section */}
+      {user && songs && songs.length > 0 && (
+        <div style={{ marginBottom: '16px' }}>
+          <button
+            onClick={() => navigate(`/vote?pk_namespace=sorter.user&pk=${encodeURIComponent(user.handle)}`)}
+            className="import-button"
+            style={{ marginRight: '8px' }}
+          >
+            Start Voting
+          </button>
+        </div>
+      )}
+
+      {/* Ranked songs section */}
+      {!rankingLoading && ranking && rankedSongs.length > 0 && (
+        <div className="songs-container" style={{ marginBottom: '16px' }}>
+          <div className="section-header">
+            🏆 Ranked Tracks ({rankedSongs.length})
+          </div>
           <div>
-            {songs.map((song, index) => (
-              <div key={song.id || index} className="song-item">
+            {rankedSongs.map((song, index) => (
+              <div key={song.id} className="song-item">
+                <div className="rank-badge">#{index + 1}</div>
+                {song.album_art && (
+                  <img 
+                    src={song.album_art} 
+                    alt={`${song.title} album art`}
+                    className="album-art"
+                  />
+                )}
+                <div className="song-info">
+                  <div className="song-title">{song.title}</div>
+                  <div className="song-artist">{song.artist}</div>
+                  {song.album && (
+                    <div className="song-album">{song.album}</div>
+                  )}
+                </div>
+                <div className="score-badge">
+                  {Math.round(song.score * 1000) / 1000}
+                </div>
+                <div className="song-actions">
+                  <button 
+                    className="action-button"
+                    onClick={() => navigate(`/vote?pk_namespace=sorter.user&pk=${encodeURIComponent(user.handle)}&left_pin_ns=spotify.track&left_pin_pk=${encodeURIComponent(song.id)}`)}
+                    title="Compare this track"
+                  >
+                    <svg className="action-icon" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M5 10a1 1 0 011-1h3V6a1 1 0 011-1h1a1 1 0 011 1v3h3a1 1 0 011 1v1a1 1 0 01-1 1h-3v3a1 1 0 01-1 1h-1a1 1 0 01-1-1v-3H6a1 1 0 01-1-1v-1z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Unranked songs section */}
+      {!rankingLoading && ranking && unrankedSongs.length > 0 && (
+        <div className="songs-container">
+          <div className="section-header">
+            ⚡ Unranked Tracks ({unrankedSongs.length})
+          </div>
+          <div>
+            {unrankedSongs.map((song) => (
+              <div key={song.id} className="song-item">
                 {song.album_art && (
                   <img 
                     src={song.album_art} 
@@ -114,16 +230,25 @@ function SpotifySongsPage() {
                   )}
                 </div>
                 <div className="song-actions">
-                  <button className="action-button">
+                  <button 
+                    className="action-button"
+                    onClick={() => navigate(`/vote?pk_namespace=sorter.user&pk=${encodeURIComponent(user.handle)}&left_pin_ns=spotify.track&left_pin_pk=${encodeURIComponent(song.id)}`)}
+                    title="Compare this track"
+                  >
                     <svg className="action-icon" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                      <path fillRule="evenodd" d="M5 10a1 1 0 011-1h3V6a1 1 0 011-1h1a1 1 0 011 1v3h3a1 1 0 011 1v1a1 1 0 01-1 1h-3v3a1 1 0 01-1 1h-1a1 1 0 01-1-1v-3H6a1 1 0 01-1 1v-1z" clipRule="evenodd" />
                     </svg>
                   </button>
                 </div>
               </div>
             ))}
           </div>
-        ) : (
+        </div>
+      )}
+
+      {/* Empty state */}
+      {songs && songs.length === 0 && (
+        <div className="songs-container">
           <div className="empty-state">
             <svg className="empty-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
@@ -147,8 +272,8 @@ function SpotifySongsPage() {
               )}
             </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

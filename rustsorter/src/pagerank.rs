@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
-use aide::axum::{ApiRouter, routing::post_with};
-use axum::extract::State;
+use aide::axum::{ApiRouter, routing::{post_with, get_with}};
+use axum::extract::{State, Query};
 use graph::prelude::*;
 use log::{error, info, warn};
 use schemars::JsonSchema;
@@ -317,14 +317,81 @@ async fn rank_children_handler(
     Ok(Json(RankingResponse { unsorted, sorted }))
 }
 
-pub fn routes() -> ApiRouter<AppState> {
-    ApiRouter::new().api_route(
-        "/",
-        post_with(rank_children_handler, |op| {
-            op.description("Rank children of a given entity.")
-                .response::<200, Json<RankingResponse>>()
-        }),
+#[derive(Deserialize, Debug, JsonSchema)]
+pub struct RankQueryParams {
+    pub pk_namespace: String,
+    pub pk: String,
+}
+
+async fn get_ranking_handler(
+    State(state): State<AppState>,
+    Query(params): Query<RankQueryParams>,
+) -> Result<Json<RankingResponse>, Error> {
+    // Fetch children entities
+    let children = sqlx::query_file_as!(
+        crate::entity::Entity,
+        "../database/sql/entity/select_children.sql",
+        params.pk_namespace,
+        params.pk
     )
+    .fetch_all(&state.db)
+    .await
+    .map_error("children entities")?;
+
+    if children.is_empty() {
+        return Ok(Json(RankingResponse {
+            unsorted: vec![],
+            sorted: vec![],
+        }));
+    }
+
+    // Convert to identifiers for ranking
+    let entity_identifiers: Vec<EntityIdentifier> = children
+        .iter()
+        .map(|e| EntityIdentifier {
+            pk_namespace: e.pk_namespace.clone(),
+            pk: e.pk.clone(),
+        })
+        .collect();
+
+    // Prepare entity keys for vote query
+    let entity_keys: Vec<String> = entity_identifiers
+        .iter()
+        .map(|e| format!("{}:{}", e.pk_namespace, e.pk))
+        .collect();
+
+    // Fetch votes
+    let votes = sqlx::query_file_as!(
+        RelevantVote,
+        "../database/sql/vote/select_partial.sql",
+        &entity_keys
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_error("votes")?;
+
+    // Get ranking
+    let (unsorted, sorted) = rank_entities(&entity_identifiers, &votes)?;
+
+    Ok(Json(RankingResponse { unsorted, sorted }))
+}
+
+pub fn routes() -> ApiRouter<AppState> {
+    ApiRouter::new()
+        .api_route(
+            "/",
+            post_with(rank_children_handler, |op| {
+                op.description("Rank children of a given entity.")
+                    .response::<200, Json<RankingResponse>>()
+            })
+        )
+        .api_route(
+            "/rank",
+            get_with(get_ranking_handler, |op| {
+                op.description("Get ranking for children of a given entity.")
+                    .response::<200, Json<RankingResponse>>()
+            })
+        )
 }
 
 #[cfg(test)]

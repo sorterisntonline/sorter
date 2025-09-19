@@ -37,26 +37,32 @@
 }
 
 .import-button {
-  background: #1db954;
+  background: linear-gradient(135deg, #1db954 0%, #1ed760 100%);
   color: white;
   border: none;
   padding: 6px 12px;
-  border-radius: 4px;
+  border-radius: 6px;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 6px;
+  box-shadow: 0 2px 4px rgba(29, 185, 84, 0.3);
+  transition: all 0.2s ease;
 }
 
 .import-button:hover {
-  background: #1ed760;
+  background: linear-gradient(135deg, #1ed760 0%, #1db954 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(29, 185, 84, 0.4);
 }
 
 .import-button:disabled {
   background: #94d3a2;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .spinner {
@@ -131,20 +137,68 @@
 .songs-container {
   background: white;
   border: 1px solid #e1e5e9;
-  border-radius: 4px;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.section-header {
+  padding: 8px 12px;
+  background: linear-gradient(135deg, #f6f8fa 0%, #f1f3f4 100%);
+  border-bottom: 1px solid #e1e5e9;
+  font-weight: 600;
+  font-size: 12px;
+  color: #24292e;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.section-header::before {
+  content: '';
+  width: 3px;
+  height: 12px;
+  background: #1db954;
+  border-radius: 2px;
+}
+
+.rank-badge {
+  background: linear-gradient(135deg, #1db954 0%, #1ed760 100%);
+  color: white;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 10px;
+  min-width: 20px;
+  text-align: center;
+  box-shadow: 0 1px 2px rgba(29, 185, 84, 0.3);
+}
+
+.score-badge {
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  color: #6b7280;
+  font-size: 9px;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 8px;
+  min-width: 35px;
+  text-align: center;
 }
 
 .song-item {
   display: flex;
   align-items: center;
-  padding: 6px 8px;
+  padding: 4px 8px;
   border-bottom: 1px solid #f6f8fa;
   gap: 8px;
   font-size: 12px;
+  transition: background-color 0.1s ease;
 }
 
 .song-item:hover {
-  background: #f6f8fa;
+  background: #f0f9ff;
+  border-left: 2px solid #1db954;
+  padding-left: 6px;
 }
 
 .song-item:last-child {
@@ -217,6 +271,7 @@
 .action-button:hover {
   background: #f0f9f4;
   color: #1ed760;
+  transform: scale(1.1);
 }
 
 .action-icon {

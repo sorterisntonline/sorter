@@ -4,12 +4,11 @@ import { NavLink, useSearchParams } from 'react-router-dom'; // Use NavLink for 
 
 import { useAuth } from './contexts/AuthContext';
 import { FaHome, FaVoteYea, FaUser, FaTasks, FaSignOutAlt, FaSpotify} from 'react-icons/fa';
+import './styles/sidebar.css';
 
 
 function Sidebar() {
   const auth = useAuth();
-  const commonLinkClass = "block px-4 py-2 rounded-md text-gray-700 hover:bg-gray-100";
-  const activeLinkClass = "bg-gray-200 font-semibold";
   const [searchParams] = useSearchParams();
 
   const urlPkNamespace = searchParams.get('pk_namespace');
@@ -28,75 +27,75 @@ function Sidebar() {
   };
 
   return (
-    <div className="w-64 h-screen bg-white p-4 flex flex-col fixed top-0 left-0">
-      <div className="mb-6 text-xl font-bold text-brand-600">sorter</div>
-      <nav className="flex-grow space-y-1">
+    <div className="sidebar">
+      <div className="sidebar-brand">sorter</div>
+      <nav className="sidebar-nav">
         {/* Updated NavLink structure with icons */}
         <NavLink
           to={'/'}
           end
-          className={({ isActive }) => `${commonLinkClass} ${isActive ? activeLinkClass : ''}`}
+          className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
         >
-          <div className="flex items-center space-x-2">
-            <FaHome />
+          <div className="nav-link-content">
+            <FaHome className="nav-icon" />
             <span>Entities</span>
           </div>
         </NavLink>
         <NavLink
           to={'/spotify'}
-          className={({ isActive }) => `${commonLinkClass} ${isActive ? activeLinkClass : ''}`}
+          className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
         >
-          <div className="flex items-center space-x-2">
-            <FaSpotify className="text-green-600" />
+          <div className="nav-link-content">
+            <FaSpotify className="nav-icon spotify" />
             <span>Spotify Songs</span>
           </div>
         </NavLink>
         <NavLink
           to={generateTo('/vote')}
-          className={({ isActive }) => `${commonLinkClass} ${isActive ? activeLinkClass : ''}`}
+          className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
         >
-           <div className="flex items-center space-x-2">
-            <FaVoteYea />
+           <div className="nav-link-content">
+            <FaVoteYea className="nav-icon" />
             <span>Vote</span>
           </div>
         </NavLink>
         <NavLink
           to={'/todos'}
-          className={({ isActive }) => `${commonLinkClass} ${isActive ? activeLinkClass : ''}`}
+          className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
         >
-           <div className="flex items-center space-x-2">
-            <FaTasks />
+           <div className="nav-link-content">
+            <FaTasks className="nav-icon" />
             <span>Todos</span>
           </div>
         </NavLink>
         <NavLink
           to={generateTo('/profile')}
-          className={({ isActive }) => `${commonLinkClass} ${isActive ? activeLinkClass : ''}`}
+          className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
         >
-          <div className="flex items-center space-x-2">
-            <FaUser />
+          <div className="nav-link-content">
+            <FaUser className="nav-icon" />
             <span>Profile</span>
           </div>
         </NavLink>
       </nav>
       
       {/* User info and logout */}
-      <div className="mt-auto border-t border-gray-200 pt-4">
+      <div className="sidebar-footer">
         {auth.user && (
-          <div className="mb-3">
-            <div className="flex items-center space-x-3">
+          <div className="user-info">
+            <div className="user-profile">
               {auth.user.avatar_url && (
                 <img 
                   src={auth.user.avatar_url} 
                   alt="Avatar" 
-                  className="w-8 h-8 rounded-full"
+                  className="user-avatar"
                 />
               )}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
+              <div className="user-details">
+                <p className="user-handle">
                   @{auth.user.handle}
                 </p>
-                <p className="text-xs text-gray-500 truncate">
+                <p className="user-name">
                   {auth.user.display_name}
                 </p>
               </div>
@@ -107,9 +106,9 @@ function Sidebar() {
         <button
           onClick={handleLogout}
           disabled={auth.isLoggingOut}
-          className="w-full flex items-center justify-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md transition-colors disabled:opacity-50"
+          className="logout-button"
         >
-          <FaSignOutAlt className="mr-2" />
+          <FaSignOutAlt className="logout-icon" />
           {auth.isLoggingOut ? 'Signing out...' : 'Sign out'}
         </button>
       </div>
