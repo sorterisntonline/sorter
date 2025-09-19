@@ -210,25 +210,35 @@ class TestApiKeyFlow:
     @pytest.mark.dependency(depends=["TestApiKeyFlow::test_protected_route_real_key"])
     async def test_list_keys_after_use(self):
         """Tests listing keys again to check if last_used_at was updated."""
+        import asyncio
         assert TestApiKeyFlow.created_key_name is not None
-        data = (
-            await make_request(
-                "GET", "/keys", is_authenticated=True, assert_status_code=200
-            )
-        ).json()
-        found_key = False
-        for key in data["api_keys"]:
-            if key["name"] == TestApiKeyFlow.created_key_name:
-                found_key = True
-                assert key["active"] is True
-                # TODO: Fix last_used_at tracking - currently not being updated
-                # assert key["last_used_at"] is not None, (
-                #     "last_used_at should be updated after successful use"
-                # )
-                # You could potentially parse the timestamp and check if it's recent,
-                # but checking for None is usually sufficient here.
-                print(f"Key '{key['name']}' last used at: {key['last_used_at']}")
-        assert found_key
+        
+        # Retry up to 5 times with small delays to handle race condition
+        # The background task in auth middleware may need time to update last_used_at
+        for attempt in range(5):
+            data = (
+                await make_request(
+                    "GET", "/keys", is_authenticated=True, assert_status_code=200
+                )
+            ).json()
+            found_key = False
+            for key in data["api_keys"]:
+                if key["name"] == TestApiKeyFlow.created_key_name:
+                    found_key = True
+                    assert key["active"] is True
+                    if key["last_used_at"] is not None:
+                        # Success - last_used_at was updated
+                        return
+                    break
+            
+            assert found_key, f"Could not find key with name {TestApiKeyFlow.created_key_name}"
+            
+            # Wait a bit before retrying if last_used_at is still None
+            if attempt < 4:  # Don't wait after the last attempt
+                await asyncio.sleep(0.1 * (attempt + 1))  # Exponential backoff
+        
+        # Final assertion if all retries failed
+        assert False, "last_used_at should be updated after successful use (waited with retries)"
 
     @pytest.mark.dependency()
     @pytest.mark.dependency(
