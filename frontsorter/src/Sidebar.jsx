@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, useSearchParams } from 'react-router-dom'; // Use NavLink for active styling
 // Import icons from react-icons
-import { FaHome, FaVoteYea, FaUser } from 'react-icons/fa';
+import { FaHome, FaVoteYea, FaUser, FaTasks } from 'react-icons/fa';
 
 function Sidebar() {
   const commonLinkClass = "block px-4 py-2 rounded-md text-gray-700 hover:bg-gray-100";
@@ -39,6 +39,15 @@ function Sidebar() {
            <div className="flex items-center space-x-2">
             <FaVoteYea />
             <span>Vote</span>
+          </div>
+        </NavLink>
+        <NavLink
+          to={'/todos'}
+          className={({ isActive }) => `${commonLinkClass} ${isActive ? activeLinkClass : ''}`}
+        >
+           <div className="flex items-center space-x-2">
+            <FaTasks />
+            <span>Todos</span>
           </div>
         </NavLink>
         <NavLink

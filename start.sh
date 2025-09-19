@@ -1,9 +1,6 @@
 #!/bin/bash
 echo "🚀 Starting Sorter development environment with Supervisord..."
 
-# Activate the virtual environment
-source .venv/bin/activate
-
 # Stop any previous Docker container
 docker stop postgres-dev > /dev/null 2>&1 || true
 
@@ -16,4 +13,4 @@ if [ ! -f .env ]; then
 fi
 
 # Start supervisord with our local config
-supervisord -c supervisord.conf
+uv run supervisord -c supervisord.conf

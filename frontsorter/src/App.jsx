@@ -8,6 +8,7 @@ import ProfilePage from "./pages/ProfilePage";
 import EntitiesIndex from "./pages/EntitiesIndex";
 import EntityDetail from "./pages/EntityDetail";
 import CreateEntityPage from "./pages/CreateEntityPage";
+import TodoPage from "./pages/TodoPage";
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
         <Route path="entity/:pk_namespace/:pk" element={<EntityDetail />} />
         <Route path="vote" element={<VotePage />} />{" "}
         {/* Keep existing vote page */}
+        <Route path="todos" element={<TodoPage />} />
         <Route path="profile" element={<ProfilePage />} />
         {/* Add a catch-all or Not Found route if desired */}
         <Route path="*" element={<div className="p-4">Page Not Found</div>} />
