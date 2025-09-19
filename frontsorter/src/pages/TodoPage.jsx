@@ -109,9 +109,9 @@ const TodoPage = () => {
 
   if (isLoading) {
     return (
-      <div className="retro-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '50vh' }}>
-        <div style={{ color: 'var(--neon-cyan)', fontFamily: 'Orbitron, monospace', fontSize: '1.2rem', textTransform: 'uppercase', letterSpacing: '2px' }}>
-          INITIALIZING SYSTEM...
+      <div className="academic-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '50vh' }}>
+        <div style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>
+          Loading tasks...
         </div>
       </div>
     );
@@ -119,16 +119,16 @@ const TodoPage = () => {
 
   if (error) {
     return (
-      <div className="retro-container">
+      <div className="academic-container">
         <div style={{ 
-          background: 'var(--darker-bg)', 
-          border: '2px solid var(--neon-pink)', 
-          margin: '20px', 
-          padding: '20px',
-          boxShadow: '0 0 20px rgba(255, 0, 128, 0.3)'
+          background: 'var(--bg-secondary)', 
+          border: '1px solid var(--accent-red)', 
+          borderRadius: '4px',
+          padding: '1.5rem',
+          boxShadow: 'var(--shadow-subtle)'
         }}>
-          <div style={{ color: 'var(--neon-pink)', fontFamily: 'Orbitron, monospace', textTransform: 'uppercase' }}>
-            ERROR: {error.message}
+          <div style={{ color: 'var(--accent-red)' }}>
+            Error: {error.message}
           </div>
         </div>
       </div>
@@ -136,14 +136,14 @@ const TodoPage = () => {
   }
 
   return (
-    <div className="retro-container">
+    <div className="academic-container">
       {/* Header */}
-      <div className="retro-header">
-        <h1 className="retro-title">
-          TASK MATRIX
+      <div className="academic-header">
+        <h1 className="academic-title">
+          Task Management System
         </h1>
-        <p className="retro-subtitle">
-          Quantum-Linked Entity Management System
+        <p className="academic-subtitle">
+          A hierarchical approach to productivity
         </p>
       </div>
 

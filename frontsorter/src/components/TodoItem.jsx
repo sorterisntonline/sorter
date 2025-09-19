@@ -136,13 +136,13 @@ const TodoItem = ({
             />
             <button
               onClick={handleAddSubtask}
-              className="retro-button primary"
+              className="academic-button primary"
             >
               Add
             </button>
             <button
               onClick={() => setShowAddSubtask(false)}
-              className="retro-button secondary"
+              className="academic-button secondary"
             >
               Cancel
             </button>

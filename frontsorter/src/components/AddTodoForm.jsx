@@ -32,7 +32,7 @@ const AddTodoForm = ({ onAddTodo }) => {
         onClick={() => setShowForm(true)}
         className="add-todo-button"
       >
-        + INITIALIZE NEW TASK
+        Add New Task
       </button>
     );
   }
@@ -42,7 +42,7 @@ const AddTodoForm = ({ onAddTodo }) => {
       <div>
         <input
           type="text"
-          placeholder="ENTER TASK DESCRIPTION..."
+          placeholder="What needs to be done?"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           className="input-field"
@@ -50,9 +50,9 @@ const AddTodoForm = ({ onAddTodo }) => {
         />
       </div>
       
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
-        <label style={{ color: 'var(--neon-cyan)', fontFamily: 'Orbitron, monospace', textTransform: 'uppercase', letterSpacing: '1px' }}>
-          Priority Level:
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem' }}>
+        <label style={{ color: 'var(--text-primary)', fontSize: '0.95rem' }}>
+          Priority:
         </label>
         <select
           value={priority}
@@ -69,16 +69,16 @@ const AddTodoForm = ({ onAddTodo }) => {
         <button
           type="button"
           onClick={handleCancel}
-          className="retro-button secondary"
+          className="academic-button secondary"
         >
           Cancel
         </button>
         <button
           type="submit"
           disabled={!title.trim()}
-          className="retro-button primary"
+          className="academic-button primary"
         >
-          Execute
+          Add Task
         </button>
       </div>
     </form>
