@@ -37,7 +37,7 @@ export default function ChooseUsernamePage() {
   const [hasUserTyped, setHasUserTyped] = useState(false);
   const initializedRef = useRef(false);
 
-  // Initialize with suggested handle from Steam data (only once)
+  // Initialize with suggested handle from Spotify data (only once)
   useEffect(() => {
     if (auth.tempData?.suggested_handle && !initializedRef.current && !hasUserTyped) {
       const suggested = auth.tempData.suggested_handle;
@@ -125,16 +125,16 @@ export default function ChooseUsernamePage() {
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="text-center">
           <div className="flex justify-center mb-4">
-            {auth.tempData?.steam_avatar && (
+            {auth.tempData?.spotify_avatar && (
               <img 
-                src={auth.tempData.steam_avatar} 
-                alt="Steam Avatar"
+                src={auth.tempData.spotify_avatar} 
+                alt="Spotify Avatar"
                 className="w-16 h-16 rounded-full border-2 border-gray-300"
               />
             )}
           </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Welcome, {auth.tempData?.steam_username}!
+            Welcome, {auth.tempData?.spotify_username}!
           </h1>
           <p className="text-gray-600">
             Choose your sorter handle to complete signup

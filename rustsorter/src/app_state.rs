@@ -3,7 +3,8 @@ use sqlx::PgPool;
 #[derive(Clone)]
 pub struct AppState {
     pub db: PgPool,
-    pub steam_api_key: String,
+    pub spotify_client_id: String,
+    pub spotify_client_secret: String,
     pub base_url: String,
     pub frontend_url: String,
 }

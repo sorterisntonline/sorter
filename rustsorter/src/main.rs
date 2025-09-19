@@ -106,8 +106,11 @@ async fn main() -> Result<(), anyhow::Error> {
         .and_then(|value| value.parse::<u16>().ok())
         .unwrap_or(8081);
 
-    let steam_api_key = env::var("STEAM_API_KEY")
-        .unwrap_or_else(|_| "dummy_key_for_development".to_string());
+    let spotify_client_id = env::var("SPOTIFY_CLIENT_ID")
+        .unwrap_or_else(|_| "dummy_client_id_for_development".to_string());
+    
+    let spotify_client_secret = env::var("SPOTIFY_CLIENT_SECRET")
+        .unwrap_or_else(|_| "dummy_client_secret_for_development".to_string());
     
     let base_url = env::var("BASE_URL")
         .unwrap_or_else(|_| format!("http://localhost:{}", port));
@@ -117,7 +120,8 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let app_state = AppState { 
         db: pool.clone(),
-        steam_api_key,
+        spotify_client_id,
+        spotify_client_secret,
         base_url,
         frontend_url,
     };

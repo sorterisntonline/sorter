@@ -92,7 +92,10 @@ class SorterOrchestrator:
         env_file = self.project_root / ".env"
         if not env_file.exists():
             console.print("📝 Creating .env file...", style="blue")
-            env_file.write_text("DATABASE_URL=postgres://postgres:password@localhost:5438/postgres?sslmode=disable\n")
+            env_file.write_text("""DATABASE_URL=postgres://postgres:password@localhost:5438/postgres?sslmode=disable
+SPOTIFY_CLIENT_ID=dummy_spotify_client_id_for_development
+SPOTIFY_CLIENT_SECRET=dummy_spotify_client_secret_for_development
+""")
 
     def ensure_logs_dir(self):
         """Create logs directory if it doesn't exist."""

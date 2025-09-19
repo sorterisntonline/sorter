@@ -284,8 +284,8 @@ impl SessionType {
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, schemars::JsonSchema)]
 pub struct TempSessionData {
-    pub steam_id: String,
-    pub steam_username: String,
-    pub steam_avatar: String,
+    pub spotify_id: String,
+    pub spotify_username: String,
+    pub spotify_avatar: String,
     pub suggested_handle: String,
 }

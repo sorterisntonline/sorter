@@ -146,10 +146,10 @@ pub async fn complete_signup(
          VALUES ($1, $2, $3, $4, $5, $6)",
         user_id,
         payload.handle,
-        temp_data.steam_username,
-        temp_data.steam_username, // backward compatibility
+        temp_data.spotify_username,
+        temp_data.spotify_username, // backward compatibility
         session.provider_id,
-        temp_data.steam_avatar
+        temp_data.spotify_avatar
     )
     .execute(&state.db)
     .await
@@ -162,8 +162,8 @@ pub async fn complete_signup(
              VALUES ($1, $2, $3, $4, $5)",
             user_id,
             provider_id,
-            temp_data.steam_id,
-            temp_data.steam_username,
+            temp_data.spotify_id,
+            temp_data.spotify_username,
             serde_json::to_value(&temp_data).unwrap()
         )
         .execute(&state.db)
@@ -177,10 +177,10 @@ pub async fn complete_signup(
     let user = User {
         id: user_id,
         handle: payload.handle.clone(),
-        display_name: Some(temp_data.steam_username.clone()),
-        username: temp_data.steam_username,
+        display_name: Some(temp_data.spotify_username.clone()),
+        username: temp_data.spotify_username,
         primary_provider: session.provider_id,
-        avatar_url: Some(temp_data.steam_avatar),
+        avatar_url: Some(temp_data.spotify_avatar),
         bio: None,
         created_at: None,
     };
