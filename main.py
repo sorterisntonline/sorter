@@ -21,6 +21,16 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
+# Load .env file at startup
+project_root = Path(__file__).parent.absolute()
+env_file = project_root / ".env"
+if env_file.exists():
+    for line in env_file.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith('#') and '=' in line:
+            key, value = line.split('=', 1)
+            os.environ[key] = value
+
 # Initialize console for rich output
 console = Console()
 app = typer.Typer(
