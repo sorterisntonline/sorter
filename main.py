@@ -347,9 +347,9 @@ def test_rust(
     console.print("🦀 Running Rust tests...", style="blue")
     
     if ci:
-        # Use nextest in CI mode with JUnit output
+        # Use nextest in CI mode (JUnit output configured in .config/nextest.toml)
         result = orchestrator.run_command([
-            "cargo", "nextest", "run", "--locked", "--workspace", "--profile", "ci", "--junit-output", "target/nextest/junit.xml"
+            "cargo", "nextest", "run", "--locked", "--workspace", "--profile", "ci"
         ], cwd=orchestrator.project_root / "rustsorter")
     else:
         # Use regular cargo test in development
