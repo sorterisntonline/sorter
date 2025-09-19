@@ -1,3 +1,6 @@
+perfect orchestrator script need to consolidate into just a main.py script, because supervisord works well with it. and i want to invest in that. it could also call dbmate, and do the install scritpt. only one entry point for process supervision, migrations, running applications. orchestrator script. that ai can use. 
+ then fix compile errors in rust. my cursor is not getting the DATABASE_URL env var
+
 append only log arcitecture
 ranking histories
 reddit import api requests + ui
