@@ -17,4 +17,6 @@ pgdata/
 supervisor.pid
 supervisord.log
 
+
 logs/
+logs/*.log

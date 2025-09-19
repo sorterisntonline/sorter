@@ -1,0 +1,468 @@
+/* Academic Todo App Styles - University Professor meets Architect */
+@import url('https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=Source+Sans+Pro:wght@300;400;600&display=swap');
+
+:root {
+  /* Academic Color Palette */
+  --text-primary: #2d3748;
+  --text-secondary: #4a5568;
+  --text-muted: #718096;
+  --text-light: #a0aec0;
+  
+  --bg-primary: #ffffff;
+  --bg-secondary: #f7fafc;
+  --bg-tertiary: #edf2f7;
+  
+  --border-light: #e2e8f0;
+  --border-medium: #cbd5e0;
+  --border-strong: #a0aec0;
+  
+  --accent-blue: #3182ce;
+  --accent-green: #38a169;
+  --accent-orange: #dd6b20;
+  --accent-red: #e53e3e;
+  
+  --shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --shadow-medium: 0 4px 6px rgba(0, 0, 0, 0.05);
+  --shadow-strong: 0 10px 15px rgba(0, 0, 0, 0.1);
+}
+
+.academic-container {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Crimson Text', Georgia, serif;
+  line-height: 1.6;
+  min-height: 100vh;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.academic-header {
+  border-bottom: 1px solid var(--border-light);
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  text-align: center;
+}
+
+.academic-title {
+  font-size: 2.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  letter-spacing: -0.025em;
+}
+
+.academic-subtitle {
+  color: var(--text-secondary);
+  margin: 0.5rem 0 0 0;
+  font-size: 1.1rem;
+  font-style: italic;
+  font-weight: 300;
+  font-family: 'Source Sans Pro', sans-serif;
+}
+
+.progress-panel {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  box-shadow: var(--shadow-subtle);
+}
+
+.progress-header {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 0.75rem 0;
+}
+
+.progress-stats {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  margin-bottom: 0.75rem;
+  font-family: 'Source Sans Pro', sans-serif;
+}
+
+.progress-bar-container {
+  background: var(--bg-tertiary);
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: var(--accent-blue);
+  transition: width 0.3s ease;
+  border-radius: 2px;
+}
+
+.progress-percentage {
+  text-align: center;
+  margin-top: 0.5rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.875rem;
+  font-family: 'Source Sans Pro', sans-serif;
+}
+
+.add-todo-form {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-medium);
+  border-radius: 4px;
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  box-shadow: var(--shadow-subtle);
+}
+
+.add-todo-button {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-medium);
+  color: var(--text-secondary);
+  font-family: 'Source Sans Pro', sans-serif;
+  font-size: 0.95rem;
+  cursor: pointer;
+  margin-bottom: 2rem;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-subtle);
+}
+
+.add-todo-button:hover {
+  background: var(--bg-secondary);
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+  box-shadow: var(--shadow-medium);
+}
+
+.input-field {
+  width: 100%;
+  padding: 0.75rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-medium);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: 'Crimson Text', serif;
+  font-size: 1rem;
+  margin-bottom: 1rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.input-field:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.1);
+}
+
+.priority-selector {
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-medium);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: 'Source Sans Pro', sans-serif;
+  margin-left: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.form-controls {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.academic-button {
+  padding: 0.5rem 1rem;
+  font-family: 'Source Sans Pro', sans-serif;
+  font-size: 0.875rem;
+  cursor: pointer;
+  border: 1px solid;
+  border-radius: 4px;
+  background: var(--bg-primary);
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-subtle);
+}
+
+.academic-button.primary {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+  background: var(--bg-primary);
+}
+
+.academic-button.primary:hover {
+  background: var(--accent-blue);
+  color: var(--bg-primary);
+  box-shadow: var(--shadow-medium);
+}
+
+.academic-button.secondary {
+  border-color: var(--border-medium);
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+}
+
+.academic-button.secondary:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.academic-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--bg-tertiary);
+  color: var(--text-light);
+  border-color: var(--border-light);
+}
+
+/* Academic Tree Styles */
+.todo-tree {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  box-shadow: var(--shadow-subtle);
+  font-family: 'Crimson Text', serif;
+}
+
+.todo-tree-item {
+  border-bottom: 1px solid var(--border-light);
+  position: relative;
+}
+
+.todo-tree-item:last-child {
+  border-bottom: none;
+}
+
+.todo-item-content {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 0;
+  min-height: 48px;
+  cursor: default;
+  transition: background-color 0.2s ease;
+}
+
+.todo-item-content:hover {
+  background: var(--bg-secondary);
+}
+
+.tree-indent {
+  width: 20px;
+  height: 48px;
+  display: inline-block;
+  position: relative;
+  margin-right: 0.5rem;
+}
+
+.tree-connector {
+  position: absolute;
+  border-left: 1px solid var(--border-medium);
+  height: 100%;
+  left: 10px;
+}
+
+.tree-connector.last {
+  height: 50%;
+}
+
+.tree-connector.horizontal {
+  border-bottom: 1px solid var(--border-medium);
+  width: 10px;
+  top: 50%;
+  left: 10px;
+}
+
+.expand-button {
+  width: 18px;
+  height: 18px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-medium);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-family: monospace;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 0.5rem;
+  flex-shrink: 0;
+  border-radius: 2px;
+  transition: all 0.2s ease;
+}
+
+.expand-button:hover {
+  background: var(--bg-secondary);
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+
+.expand-button.expanded {
+  background: var(--accent-blue);
+  color: var(--bg-primary);
+  border-color: var(--accent-blue);
+}
+
+.todo-checkbox {
+  width: 18px;
+  height: 18px;
+  margin-right: 0.75rem;
+  cursor: pointer;
+  accent-color: var(--accent-blue);
+}
+
+.todo-text {
+  flex-grow: 1;
+  margin-right: 0.75rem;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.todo-text.completed {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.todo-text.editing {
+  background: var(--bg-primary);
+  border: 1px solid var(--accent-blue);
+  border-radius: 2px;
+  padding: 0.25rem 0.5rem;
+  color: var(--text-primary);
+  outline: none;
+  font-family: 'Crimson Text', serif;
+}
+
+.priority-badge {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-family: 'Source Sans Pro', sans-serif;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-right: 0.75rem;
+  border-radius: 12px;
+  border: 1px solid;
+}
+
+.priority-badge.high {
+  color: var(--accent-red);
+  background: rgba(229, 62, 62, 0.1);
+  border-color: var(--accent-red);
+}
+
+.priority-badge.medium {
+  color: var(--accent-orange);
+  background: rgba(221, 107, 32, 0.1);
+  border-color: var(--accent-orange);
+}
+
+.priority-badge.low {
+  color: var(--accent-green);
+  background: rgba(56, 161, 105, 0.1);
+  border-color: var(--accent-green);
+}
+
+.todo-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.action-button {
+  width: 28px;
+  height: 28px;
+  background: var(--bg-primary);
+  border: 1px solid;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.action-button.add {
+  border-color: var(--accent-green);
+  color: var(--accent-green);
+}
+
+.action-button.add:hover {
+  background: var(--accent-green);
+  color: var(--bg-primary);
+}
+
+.action-button.delete {
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+}
+
+.action-button.delete:hover {
+  background: var(--accent-red);
+  color: var(--bg-primary);
+}
+
+.subtask-form {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-medium);
+  border-radius: 4px;
+  margin: 0.5rem 0 0.5rem 3rem;
+  padding: 1rem;
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.subtask-input {
+  flex-grow: 1;
+  padding: 0.5rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-medium);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: 'Crimson Text', serif;
+  font-size: 0.9rem;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: var(--text-muted);
+}
+
+.empty-icon {
+  font-size: 3rem;
+  color: var(--text-light);
+  margin-bottom: 1.5rem;
+}
+
+.empty-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: var(--text-secondary);
+}
+
+.empty-subtitle {
+  font-size: 1rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.loading-indicator {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  padding: 0.75rem 1.5rem;
+  background: var(--accent-blue);
+  color: var(--bg-primary);
+  font-family: 'Source Sans Pro', sans-serif;
+  font-weight: 600;
+  border-radius: 4px;
+  box-shadow: var(--shadow-medium);
+}
