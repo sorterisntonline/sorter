@@ -288,4 +288,8 @@ pub struct TempSessionData {
     pub spotify_username: String,
     pub spotify_avatar: String,
     pub suggested_handle: String,
+    pub access_token: Option<String>,
+    pub refresh_token: Option<String>,
+    pub expires_in: Option<i32>,
+    pub token_obtained_at: Option<i64>,
 }

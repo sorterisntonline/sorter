@@ -3,7 +3,7 @@ import { NavLink, useSearchParams } from 'react-router-dom'; // Use NavLink for 
 // Import icons from react-icons
 
 import { useAuth } from './contexts/AuthContext';
-import { FaHome, FaVoteYea, FaUser, FaTasks, FaSignOutAlt} from 'react-icons/fa';
+import { FaHome, FaVoteYea, FaUser, FaTasks, FaSignOutAlt, FaSpotify} from 'react-icons/fa';
 
 
 function Sidebar() {
@@ -40,6 +40,15 @@ function Sidebar() {
           <div className="flex items-center space-x-2">
             <FaHome />
             <span>Entities</span>
+          </div>
+        </NavLink>
+        <NavLink
+          to={'/spotify'}
+          className={({ isActive }) => `${commonLinkClass} ${isActive ? activeLinkClass : ''}`}
+        >
+          <div className="flex items-center space-x-2">
+            <FaSpotify className="text-green-600" />
+            <span>Spotify Songs</span>
           </div>
         </NavLink>
         <NavLink

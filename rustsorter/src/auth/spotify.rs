@@ -4,6 +4,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Redirect},
 };
+use chrono::Utc;
 use log::{debug, info, warn};
 use reqwest;
 use serde::{Deserialize, Serialize};
@@ -401,11 +402,26 @@ pub async fn spotify_callback(
                 .as_ref()
                 .unwrap_or(&spotify_user.id);
 
+            // Store tokens and user data for future API calls
+            let _profile_data = serde_json::json!({
+                "spotify_id": spotify_user.id,
+                "display_name": display_name,
+                "avatar_url": avatar_url,
+                "access_token": token_response.access_token,
+                "refresh_token": token_response.refresh_token,
+                "expires_in": token_response.expires_in,
+                "token_obtained_at": chrono::Utc::now().timestamp()
+            });
+
             let temp_data = TempSessionData {
                 spotify_id: spotify_user.id.clone(),
                 spotify_username: display_name.clone(),
                 spotify_avatar: avatar_url,
                 suggested_handle: generate_suggested_handle(spotify_user.display_name.as_ref(), &spotify_user.id),
+                access_token: Some(token_response.access_token.clone()),
+                refresh_token: token_response.refresh_token.clone(),
+                expires_in: Some(token_response.expires_in),
+                token_obtained_at: Some(Utc::now().timestamp()),
             };
 
             match sessions::create_temp_session(&state.db, "spotify", &temp_data).await {

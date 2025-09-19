@@ -8,10 +8,10 @@ export default function AuthSuccessPage() {
     // Refetch session to get updated state
     auth.refetchSession();
 
-    // Redirect after a short delay to show success message
+    // Redirect immediately after session refresh
     const timer = setTimeout(() => {
       window.location.href = '/';
-    }, 2000);
+    }, 100);
 
     return () => clearTimeout(timer);
   }, [auth]);

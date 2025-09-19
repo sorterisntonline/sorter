@@ -1,34 +1,11 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { fetchAllEntities, fetchAllRelationships } from '../fetchers/entityEndpoints';
-import { AuthAPI } from '../api/auth';
 
 function EntitiesIndex() {
-  const [isImporting, setIsImporting] = useState(false);
-  const [importMessage, setImportMessage] = useState('');
-  const queryClient = useQueryClient();
-  
   const entitiesQuery = useQuery({ queryKey: ['entities'], queryFn: fetchAllEntities, refetchOnWindowFocus: false });
   const relationshipsQuery = useQuery({ queryKey: ['relationships'], queryFn: fetchAllRelationships, refetchOnWindowFocus: false });
-
-  const handleImportSongs = async () => {
-    setIsImporting(true);
-    setImportMessage('');
-    
-    try {
-      const result = await AuthAPI.importRecentSongs();
-      setImportMessage(result.message);
-      
-      // Refresh entities and relationships data
-      queryClient.invalidateQueries(['entities']);
-      queryClient.invalidateQueries(['relationships']);
-    } catch (error) {
-      setImportMessage(`Error: ${error.message}`);
-    } finally {
-      setIsImporting(false);
-    }
-  };
 
   if (entitiesQuery.isLoading || relationshipsQuery.isLoading) {
     return <div className="text-gray-500">Loading…</div>;
@@ -59,28 +36,13 @@ function EntitiesIndex() {
           <h1 className="text-2xl font-semibold">Entities</h1>
           <p className="text-sm text-gray-600">Entities with no parents</p>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={handleImportSongs}
-            disabled={isImporting}
-            className="bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white px-4 py-2 rounded-md font-medium focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
-          >
-            {isImporting ? 'Importing...' : 'Import Spotify Songs'}
-          </button>
-          <Link
-            to="/entity/new"
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          >
-            Create Entity
-          </Link>
-        </div>
+        <Link
+          to="/entity/new"
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+        >
+          Create Entity
+        </Link>
       </div>
-
-      {importMessage && (
-        <div className={`p-4 rounded-md ${importMessage.includes('Error') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
-          {importMessage}
-        </div>
-      )}
 
       {roots.length === 0 ? (
         <div className="text-gray-500">No root entities found.</div>

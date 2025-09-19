@@ -132,8 +132,9 @@ pub async fn complete_signup(
         });
     }
 
-    // Extract temp data
-    let temp_data: TempSessionData = session.data
+    // Extract temp data  
+    let session_data = session.data.clone();
+    let temp_data: TempSessionData = session_data
         .ok_or(Error::BadRequest { message: "session has no temp data".into() })
         .and_then(|data| serde_json::from_value(data)
             .map_err(|_| Error::BadRequest { message: "invalid temp data".into() }))?;
@@ -155,8 +156,13 @@ pub async fn complete_signup(
     .await
     .map_error("user creation")?;
 
-    // Link provider
+    // Link provider with tokens (if available from session data)
     if let Some(provider_id) = &session.provider_id {
+        // Try to get tokens from session data if stored there, otherwise just use basic temp_data
+        let profile_data = session.data
+            .clone()
+            .unwrap_or_else(|| serde_json::to_value(&temp_data).unwrap());
+            
         sqlx::query!(
             "INSERT INTO user_providers (user_id, provider_id, external_id, external_username, profile_data)
              VALUES ($1, $2, $3, $4, $5)",
@@ -164,7 +170,7 @@ pub async fn complete_signup(
             provider_id,
             temp_data.spotify_id,
             temp_data.spotify_username,
-            serde_json::to_value(&temp_data).unwrap()
+            profile_data
         )
         .execute(&state.db)
         .await
@@ -309,28 +315,39 @@ pub async fn import_recent_songs(
     .map_error("user provider")?
     .ok_or(Error::BadRequest { message: "No Spotify account linked".into() })?;
 
-    // For now, we'll use dummy data since we don't store access tokens yet
-    // TODO: In a real implementation, we need to store and refresh Spotify tokens
+    // Extract access token from profile_data
+    let profile_data = provider.profile_data.ok_or(Error::BadRequest { 
+        message: "No Spotify profile data found".into() 
+    })?;
+    
+    let access_token = profile_data.get("access_token")
+        .and_then(|token| token.as_str())
+        .ok_or(Error::BadRequest { 
+            message: "No Spotify access token found".into() 
+        })?;
+
     let client = reqwest::Client::new();
     
-    // Create some example tracks for testing
-    let example_tracks = vec![
-        ("4iV5W9uYEdYUVa79Applha", "God Is A Woman", "Ariana Grande"),
-        ("7qiZfU4dY1lWllzX7mPBI3", "Shape of You", "Ed Sheeran"),
-        ("6habFhsOp2NvshLv26DqMb", "Somebody That I Used to Know", "Gotye"),
-    ];
+    // Fetch recent tracks from Spotify API
+    let recent_tracks = crate::auth::spotify::fetch_recent_tracks(&client, access_token, Some(20))
+        .await
+        .map_err(|e| Error::BadRequest { 
+            message: format!("Failed to fetch Spotify data: {}", e).into() 
+        })?;
 
     let mut imported_count = 0;
     
-    for (track_id, track_name, artist_name) in example_tracks {
-        // Create/update track entity
-        let description = format!("by {}", artist_name);
+    for item in recent_tracks.items {
+        let track = item.track;
+        let artist_names: Vec<&str> = track.artists.iter().map(|a| a.name.as_str()).collect();
+        let artist_display = artist_names.join(", ");
+        let description = format!("by {}", artist_display);
         
         let _track_entity = crate::entity::upsert_entity(
             &state.db,
             "spotify.track",
-            track_id,
-            Some(track_name),
+            &track.id,
+            Some(&track.name),
             Some(&description),
             None, // TODO: Add track metadata (album, duration, etc.)
             user.id,
@@ -341,7 +358,7 @@ pub async fn import_recent_songs(
             parent_pk_namespace: "sorter.user".to_string(),
             parent_pk: user.handle.clone(),
             child_pk_namespace: "spotify.track".to_string(),
-            child_pk: track_id.to_string(),
+            child_pk: track.id.clone(),
         };
         
         let _relationship = crate::entity_relationships::upsert_relationship(

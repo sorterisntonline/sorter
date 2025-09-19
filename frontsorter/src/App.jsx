@@ -9,6 +9,7 @@ import EntitiesIndex from "./pages/EntitiesIndex";
 import EntityDetail from "./pages/EntityDetail";
 import CreateEntityPage from "./pages/CreateEntityPage";
 import TodoPage from "./pages/TodoPage";
+import SpotifySongsPage from "./pages/SpotifySongsPage";
 
 // Auth pages (outside main layout)
 import LoginPage from "./pages/LoginPage";
@@ -28,6 +29,7 @@ function App() {
       {/* Main app routes (with layout) */}
       <Route path="/" element={<Layout />}>
         <Route index element={<EntitiesIndex />} />
+        <Route path="spotify" element={<SpotifySongsPage />} />
         <Route path="entity/new" element={<CreateEntityPage />} />
         <Route path="entity/:pk_namespace/:pk" element={<EntityDetail />} />
         <Route path="vote" element={<VotePage />} />
