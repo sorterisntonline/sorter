@@ -74,9 +74,11 @@ jobs:
           python-version: "3.11"
 
       - name: Install project dependencies
+        working-directory: .
         run: uv sync
 
       - name: Setup environment (CI mode)
+        working-directory: .
         run: uv run main.py setup --ci
 
       - name: Install dbmate
@@ -86,14 +88,17 @@ jobs:
           dbmate --version
 
       - name: Prepare database (create + migrate)
+        working-directory: .
         run: uv run main.py migrate
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db?sslmode=disable
 
       - name: Build Rust backend
+        working-directory: .
         run: uv run main.py build-rust
 
       - name: Run Rust tests (nextest)
+        working-directory: .
         run: uv run main.py test-rust --ci
 
       - name: Debug JUnit presence
@@ -153,6 +158,7 @@ jobs:
 
       
       - name: Run Python tests (pytest)
+        working-directory: .
         run: uv run main.py test-python --junit-xml
 
       - name: Publish Python test report
