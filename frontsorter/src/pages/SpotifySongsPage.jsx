@@ -10,11 +10,7 @@ function SpotifySongsPage() {
   // Query for user's recent songs (relationships where parent is current user and child is spotify.track)
   const { data: songs, isLoading, error } = useQuery({
     queryKey: ['spotify-songs'],
-    queryFn: async () => {
-      // For now, return empty array since we need to implement the backend query
-      // TODO: Implement API endpoint to get user's Spotify tracks
-      return [];
-    },
+    queryFn: AuthAPI.getSpotifySongs,
     refetchOnWindowFocus: false,
   });
 

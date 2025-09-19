@@ -14,4 +14,5 @@ pub fn routes() -> Router<AppState> {
         .route("/me", get(endpoints::me))
         .route("/check-handle", get(endpoints::check_handle))
         .route("/import-recent-songs", post(endpoints::import_recent_songs))
+        .route("/spotify-songs", get(endpoints::get_user_spotify_songs))
 }

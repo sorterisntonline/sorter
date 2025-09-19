@@ -335,6 +335,17 @@ pub async fn import_recent_songs(
             message: format!("Failed to fetch Spotify data: {}", e).into() 
         })?;
 
+    // Ensure user entity exists in sorter.user namespace
+    let _user_entity = crate::entity::upsert_entity(
+        &state.db,
+        "sorter.user",
+        &user.handle,
+        Some(&user.display_name.clone().unwrap_or(user.handle.clone())),
+        Some("User account"),
+        None, // No metadata for user entity
+        user.id,
+    ).await?;
+
     let mut imported_count = 0;
     
     for item in recent_tracks.items {
@@ -343,13 +354,16 @@ pub async fn import_recent_songs(
         let artist_display = artist_names.join(", ");
         let description = format!("by {}", artist_display);
         
+        // Store full Spotify track data as metadata
+        let track_metadata = serde_json::to_value(&track).unwrap();
+        
         let _track_entity = crate::entity::upsert_entity(
             &state.db,
             "spotify.track",
             &track.id,
             Some(&track.name),
             Some(&description),
-            None, // TODO: Add track metadata (album, duration, etc.)
+            Some(&track_metadata),
             user.id,
         ).await?;
 
@@ -374,4 +388,72 @@ pub async fn import_recent_songs(
         imported_count,
         message: format!("Successfully imported {} recent songs", imported_count),
     }))
+}
+
+#[derive(Serialize)]
+pub struct SpotifySong {
+    pub id: String,
+    pub title: String,
+    pub artist: String,
+    pub album: String,
+    pub album_art: Option<String>,
+    pub duration_ms: i32,
+    pub preview_url: Option<String>,
+    pub spotify_url: String,
+}
+
+pub async fn get_user_spotify_songs(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<SpotifySong>>, Error> {
+    let session_id = extract_session_id_from_cookie(&headers)
+        .ok_or(Error::NoCredentials)?;
+
+    let (session, user) = sessions::get_session_with_user(&state.db, session_id)
+        .await?
+        .ok_or(Error::NotFound { object: "session".into() })?;
+    
+    if session.session_type != "full" {
+        return Err(Error::Unauthorized);
+    }
+
+    let user = user.ok_or(Error::Unauthorized)?;
+
+    // Get user's Spotify track entities directly
+    let tracks = sqlx::query!(
+        "SELECT e.pk_namespace, e.pk, e.title, e.metadata 
+         FROM entities e
+         JOIN entity_relationships er ON e.pk_namespace = er.child_pk_namespace AND e.pk = er.child_pk
+         WHERE er.parent_pk_namespace = 'sorter.user' AND er.parent_pk = $1 AND e.pk_namespace = 'spotify.track'
+         ORDER BY er.created_at DESC",
+        user.handle
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_error("spotify tracks")?;
+
+    let mut songs = Vec::new();
+    
+    for track in tracks {
+        if let Some(metadata) = track.metadata {
+            // Parse Spotify track data from metadata
+            if let Ok(track_data) = serde_json::from_value::<crate::auth::spotify::SpotifyTrack>(metadata) {
+                let artist_names: Vec<&str> = track_data.artists.iter().map(|a| a.name.as_str()).collect();
+                let album_art = track_data.album.images.first().map(|img| img.url.clone());
+                
+                songs.push(SpotifySong {
+                    id: track_data.id,
+                    title: track_data.name,
+                    artist: artist_names.join(", "),
+                    album: track_data.album.name,
+                    album_art,
+                    duration_ms: track_data.duration_ms,
+                    preview_url: track_data.preview_url,
+                    spotify_url: track_data.external_urls.spotify,
+                });
+            }
+        }
+    }
+
+    Ok(Json(songs))
 }

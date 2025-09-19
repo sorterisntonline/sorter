@@ -86,4 +86,17 @@ export class AuthAPI {
     
     return response.json();
   }
+
+  static async getSpotifySongs() {
+    const response = await fetch(`${API_BASE}/auth/spotify-songs`, {
+      credentials: 'include',
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+    
+    return response.json();
+  }
 }
