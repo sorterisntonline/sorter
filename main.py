@@ -347,9 +347,9 @@ def test_rust(
     console.print("🦀 Running Rust tests...", style="blue")
     
     if ci:
-        # Use nextest in CI mode
+        # Use nextest in CI mode with JUnit output
         result = orchestrator.run_command([
-            "cargo", "nextest", "run", "--locked", "--workspace", "--profile", "ci"
+            "cargo", "nextest", "run", "--locked", "--workspace", "--profile", "ci", "--junit-output", "target/nextest/junit.xml"
         ], cwd=orchestrator.project_root / "rustsorter")
     else:
         # Use regular cargo test in development
@@ -378,7 +378,7 @@ def test_python(
     # Build pytest command for uv
     cmd = ["uv", "run", "--extra", "test", "--", "python", "-m", "pytest", "test/", "-q", "--maxfail=1", "--disable-warnings"]
     if junit_xml:
-        cmd.append("--junitxml=python-tests.xml")
+        cmd.append("--junitxml=test/python-tests.xml")
     
     # Run pytest via uv
     result = orchestrator.run_command(cmd, cwd=orchestrator.project_root)
