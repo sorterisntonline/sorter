@@ -68,6 +68,17 @@ jobs:
           cargo -V
           cargo nextest -V
 
+      - name: Set up Python and UV
+        uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install project dependencies
+        run: uv sync
+
+      - name: Setup environment (CI mode)
+        run: uv run main.py setup --ci
+
       - name: Install dbmate
         run: |
           sudo curl -fsSL -o /usr/local/bin/dbmate https://github.com/amacneil/dbmate/releases/latest/download/dbmate-linux-amd64
@@ -75,16 +86,15 @@ jobs:
           dbmate --version
 
       - name: Prepare database (create + migrate)
-        run: |
-          dbmate --migrations-dir ../db/migrations --wait up
+        run: uv run main.py migrate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db?sslmode=disable
 
-      - name: Build main binary
-        run: |
-          cargo build --locked --bin rustsorter
+      - name: Build Rust backend
+        run: uv run main.py build-rust
 
-      - name: Run tests (nextest)
-        run: |
-          cargo nextest run --locked --workspace --profile ci
+      - name: Run Rust tests (nextest)
+        run: uv run main.py test-rust --ci
 
       - name: Debug JUnit presence
         if: always()
@@ -112,20 +122,7 @@ jobs:
           name: junit-report
           path: rustsorter/target/nextest/junit.xml
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('test/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
-      - name: Install Python deps
+      - name: Install Python test dependencies
         working-directory: test
         run: |
           python -m pip install --upgrade pip
@@ -156,9 +153,7 @@ jobs:
 
       
       - name: Run Python tests (pytest)
-        working-directory: test
-        run: |
-          pytest -q --maxfail=1 --disable-warnings --junitxml=python-tests.xml
+        run: uv run main.py test-python --junit-xml
 
       - name: Publish Python test report
         uses: dorny/test-reporter@v1
