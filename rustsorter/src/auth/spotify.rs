@@ -369,8 +369,30 @@ pub async fn spotify_callback(
     // Check if user already exists
     match check_existing_spotify_user(&state.db, &spotify_user.id).await {
         Ok(Some(user)) => {
-            // Existing user - create full session and redirect to success
-            debug!("Existing user found: {}", user.handle);
+            // Existing user - update tokens and create full session
+            debug!("Existing user found: {}, updating tokens", user.handle);
+            
+            // Update stored tokens in user_providers
+            let updated_profile_data = serde_json::json!({
+                "spotify_id": spotify_user.id,
+                "display_name": spotify_user.display_name.as_ref().unwrap_or(&spotify_user.id),
+                "avatar_url": spotify_user.images.first().map(|img| img.url.as_str()).unwrap_or(""),
+                "access_token": token_response.access_token,
+                "refresh_token": token_response.refresh_token,
+                "expires_in": token_response.expires_in,
+                "token_obtained_at": Utc::now().timestamp()
+            });
+            
+            if let Err(e) = sqlx::query!(
+                "UPDATE user_providers SET profile_data = $1, last_sync_at = NOW() 
+                 WHERE provider_id = 'spotify' AND external_id = $2",
+                updated_profile_data,
+                spotify_user.id
+            )
+            .execute(&state.db)
+            .await {
+                warn!("Failed to update user tokens: {}", e);
+            }
             
             match sessions::create_full_session(&state.db, user.id).await {
                 Ok(session_id) => {
@@ -401,17 +423,6 @@ pub async fn spotify_callback(
             let display_name = spotify_user.display_name
                 .as_ref()
                 .unwrap_or(&spotify_user.id);
-
-            // Store tokens and user data for future API calls
-            let _profile_data = serde_json::json!({
-                "spotify_id": spotify_user.id,
-                "display_name": display_name,
-                "avatar_url": avatar_url,
-                "access_token": token_response.access_token,
-                "refresh_token": token_response.refresh_token,
-                "expires_in": token_response.expires_in,
-                "token_obtained_at": chrono::Utc::now().timestamp()
-            });
 
             let temp_data = TempSessionData {
                 spotify_id: spotify_user.id.clone(),
