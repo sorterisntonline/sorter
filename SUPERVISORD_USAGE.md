@@ -20,11 +20,12 @@
    ./ctl.sh start migrations       # Run migrations (one-time)
    ```
 
-4. **View logs**:
+4. **Debug and view logs**:
    ```bash
-   tail -f logs/rust-server.log
-   tail -f logs/postgres.log
-   tail -f logs/vite-client.log
+   ./debug.sh                      # Show status and recent logs
+   tail -f logs/rust-server.log    # Follow rust-server logs
+   tail -f logs/postgres.log       # Follow postgres logs
+   tail -f logs/vite-client.log    # Follow vite-client logs
    ```
 
 5. **Stop everything**:
