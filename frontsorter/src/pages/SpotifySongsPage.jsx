@@ -479,8 +479,8 @@ function SpotifySongsPage() {
                       className="vote-slider"
                       disabled={voteMutation.isPending || pairQuery.isPending}
                       style={{
-                        background: `linear-gradient(to right, var(--theme-accent) 0%, var(--theme-accent-light) 50%, var(--theme-accent) 100%)`,
-                        '--slider-thumb-color': theme.colors?.vibrant || 'var(--theme-accent)'
+                        '--slider-thumb-color': theme.colors?.vibrant || 'var(--theme-accent)',
+                        background: `linear-gradient(to right, var(--theme-accent) 0%, var(--theme-accent-light) 50%, var(--theme-accent) 100%)`
                       }}
                     />
                   </div>
