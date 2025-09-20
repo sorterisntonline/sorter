@@ -7,7 +7,6 @@ use axum::{
     http::StatusCode,
 };
 use chrono::NaiveDateTime;
-use log::warn;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
@@ -17,6 +16,22 @@ use crate::{
     extractors::maybe_user::AuthenticatedUser,
     models::{Error, IntoNotFound, Json, MapErrorSqlx},
 };
+
+/// Canonical ordering for entity pairs.
+/// Returns (left_ns, left_pk, right_ns, right_pk, adjusted_magnitude)
+fn canonicalize_entity_pair(
+    left_ns: String,
+    left_pk: String,
+    right_ns: String,
+    right_pk: String,
+    magnitude: i32,
+) -> (String, String, String, String, i32) {
+    if (&left_ns, &left_pk) <= (&right_ns, &right_pk) {
+        (left_ns, left_pk, right_ns, right_pk, magnitude)
+    } else {
+        (right_ns, right_pk, left_ns, left_pk, -magnitude)
+    }
+}
 
 #[derive(Serialize, Debug, sqlx::FromRow, JsonSchema)]
 pub struct Vote {
@@ -56,29 +71,13 @@ async fn create_vote(
     AuthenticatedUser(user): AuthenticatedUser,
     Json(payload): Json<VotePayload>,
 ) -> Result<(StatusCode, Json<Vote>), Error> {
-    let (left_ns, left_pk, right_ns, right_pk, magnitude) = if (
-        payload.left_entity_pk_namespace.clone(),
-        payload.left_entity_pk.clone(),
-    ) < (
-        payload.right_entity_pk_namespace.clone(),
-        payload.right_entity_pk.clone(),
-    ) {
-        (
-            payload.left_entity_pk_namespace,
-            payload.left_entity_pk,
-            payload.right_entity_pk_namespace,
-            payload.right_entity_pk,
-            payload.magnitude,
-        )
-    } else {
-        (
-            payload.right_entity_pk_namespace,
-            payload.right_entity_pk,
-            payload.left_entity_pk_namespace,
-            payload.left_entity_pk,
-            -payload.magnitude,
-        )
-    };
+    let (left_ns, left_pk, right_ns, right_pk, magnitude) = canonicalize_entity_pair(
+        payload.left_entity_pk_namespace,
+        payload.left_entity_pk,
+        payload.right_entity_pk_namespace,
+        payload.right_entity_pk,
+        payload.magnitude,
+    );
 
     let vote = sqlx::query_file_as!(
         Vote,
@@ -102,26 +101,21 @@ async fn get_vote(
     State(state): State<AppState>,
     Path(path): Path<VotePath>,
 ) -> Result<(StatusCode, Json<Vote>), Error> {
-    let (query_left_ns, query_left_pk, query_right_ns, query_right_pk) = if (
-        path.left_ns.clone(),
-        path.left_pk.clone(),
-    ) < (
-        path.right_ns.clone(),
-        path.right_pk.clone(),
-    ) {
-        (path.left_ns, path.left_pk, path.right_ns, path.right_pk)
-    } else {
-        warn!(left_ns = path.left_ns, left_pk = path.left_pk, right_ns = path.right_ns, right_pk = path.right_pk; "request path for get_vote received non-canonical order for pair");
-        (path.left_ns, path.left_pk, path.right_ns, path.right_pk)
-    };
+    let (left_ns, left_pk, right_ns, right_pk, _) = canonicalize_entity_pair(
+        path.left_ns,
+        path.left_pk,
+        path.right_ns,
+        path.right_pk,
+        0, // magnitude doesn't matter for lookup
+    );
 
     let vote = sqlx::query_file_as!(
         Vote,
         "../database/sql/vote/select.sql",
-        query_left_ns,
-        query_left_pk,
-        query_right_ns,
-        query_right_pk,
+        left_ns,
+        left_pk,
+        right_ns,
+        right_pk,
         path.user_id,
         path.attr_id
     )
@@ -184,26 +178,21 @@ async fn delete_vote(
         return Err(Error::Forbidden);
     }
 
-    let (query_left_ns, query_left_pk, query_right_ns, query_right_pk) = if (
-        path.left_ns.clone(),
-        path.left_pk.clone(),
-    ) < (
-        path.right_ns.clone(),
-        path.right_pk.clone(),
-    ) {
-        (path.left_ns, path.left_pk, path.right_ns, path.right_pk)
-    } else {
-        warn!(left_ns = path.left_ns, left_pk = path.left_pk, right_ns = path.right_ns, right_pk = path.right_pk; "request path for delete_vote received non-canonical order for pair");
-        (path.right_ns, path.right_pk, path.left_ns, path.left_pk)
-    };
+    let (left_ns, left_pk, right_ns, right_pk, _) = canonicalize_entity_pair(
+        path.left_ns,
+        path.left_pk,
+        path.right_ns,
+        path.right_pk,
+        0, // magnitude doesn't matter for lookup
+    );
 
     let vote = sqlx::query_file_as!(
         Vote,
         "../database/sql/vote/soft_delete.sql",
-        query_left_ns,
-        query_left_pk,
-        query_right_ns,
-        query_right_pk,
+        left_ns,
+        left_pk,
+        right_ns,
+        right_pk,
         path.user_id,
         path.attr_id
     )

@@ -154,7 +154,7 @@ CREATE TABLE votes(
   attribute_id int NOT NULL REFERENCES attributes(id),
   created_at timestamp DEFAULT now() NOT NULL,
   deleted_at timestamp,
-  CHECK ((left_entity_pk_namespace, left_entity_pk) <(right_entity_pk_namespace, right_entity_pk)),
+
   PRIMARY KEY (left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, user_id, attribute_id, created_at)
 );
 

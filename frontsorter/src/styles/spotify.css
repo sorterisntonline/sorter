@@ -350,16 +350,16 @@
   border-radius: 2px;
 }
 
-.rank-badge {
-  background: linear-gradient(135deg, #1db954 0%, #1ed760 100%);
-  color: white;
-  font-size: 9px;
-  font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 10px;
-  min-width: 20px;
+.rank-number {
+  color: black;
+  font-size: 16px;
+  font-weight: 400;
+  min-width: 30px;
   text-align: center;
-  box-shadow: 0 1px 2px rgba(29, 185, 84, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 0;
 }
 
 .score-badge {
@@ -376,25 +376,30 @@
 
 .song-item {
   display: flex;
-  align-items: center;
-  padding: 4px 8px;
+  align-items: stretch;
+  padding: 0 8px;
   border-bottom: 1px solid #f6f8fa;
   gap: 8px;
   font-size: 12px;
   transition: background-color 0.1s ease;
   cursor: pointer;
+  min-height: 36px;
 }
 
 .song-item:hover {
   background: #f0f9ff;
   border-left: 2px solid #1db954;
   padding-left: 6px;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 .song-item.selected {
   background: #e3f2fd;
   border-left: 2px solid #2196f3;
   padding-left: 6px;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 .song-item:last-child {
@@ -402,10 +407,11 @@
 }
 
 .album-art {
-  width: 20px;
-  height: 20px;
+  width: 36px;
+  height: 100%;
   border-radius: 3px;
   flex-shrink: 0;
+  object-fit: cover;
 }
 
 .song-info {
@@ -414,6 +420,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 8px 0;
 }
 
 .song-title {

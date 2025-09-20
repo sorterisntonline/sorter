@@ -179,7 +179,7 @@ function SpotifySongsPage() {
                 className={`song-item ${selectedSong?.id === song.id ? 'selected' : ''}`}
                 onClick={() => setSelectedSong(song)}
               >
-                <div className="rank-badge">#{index + 1}</div>
+                <span className="rank-number">{index + 1}</span>
                 {song.album_art && (
                   <img 
                     src={song.album_art} 
@@ -193,23 +193,6 @@ function SpotifySongsPage() {
                   {song.album && (
                     <div className="song-album">{song.album}</div>
                   )}
-                </div>
-                <div className="score-badge">
-                  {Math.round(song.score * 1000) / 1000}
-                </div>
-                <div className="song-actions">
-                  <button 
-                    className="action-button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigate(`/vote?pk_namespace=sorter.user&pk=${encodeURIComponent(user.handle)}&left_pin_ns=spotify.track&left_pin_pk=${encodeURIComponent(song.id)}`);
-                    }}
-                    title="Compare this track"
-                  >
-                    <svg className="action-icon" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M5 10a1 1 0 011-1h3V6a1 1 0 011-1h1a1 1 0 011 1v3h3a1 1 0 011 1v1a1 1 0 01-1 1h-3v3a1 1 0 01-1 1h-1a1 1 0 01-1-1v-3H6a1 1 0 01-1-1v-1z" clipRule="evenodd" />
-                    </svg>
-                  </button>
                 </div>
               </div>
             ))}
@@ -243,20 +226,6 @@ function SpotifySongsPage() {
                   {song.album && (
                     <div className="song-album">{song.album}</div>
                   )}
-                </div>
-                <div className="song-actions">
-                  <button 
-                    className="action-button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigate(`/vote?pk_namespace=sorter.user&pk=${encodeURIComponent(user.handle)}&left_pin_ns=spotify.track&left_pin_pk=${encodeURIComponent(song.id)}`);
-                    }}
-                    title="Compare this track"
-                  >
-                    <svg className="action-icon" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M5 10a1 1 0 011-1h3V6a1 1 0 011-1h1a1 1 0 011 1v3h3a1 1 0 011 1v1a1 1 0 01-1 1h-3v3a1 1 0 01-1 1h-1a1 1 0 01-1-1v-3H6a1 1 0 01-1-1v-1z" clipRule="evenodd" />
-                    </svg>
-                  </button>
                 </div>
               </div>
             ))}
