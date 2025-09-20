@@ -160,6 +160,8 @@ pub enum Error {
     NotFound { object: CapitalizedString },
     #[error("Unauthorized")]
     Unauthorized,
+    #[error("Forbidden")]
+    Forbidden,
 }
 
 impl Error {
@@ -172,6 +174,7 @@ impl Error {
             | Self::InvalidKeyFormat
             | Self::NoCredentials
             | Self::Unauthorized => StatusCode::UNAUTHORIZED,
+            Self::Forbidden => StatusCode::FORBIDDEN,
             Self::JsonRejection(error) => error.status(),
             Self::NotFound { .. } => StatusCode::NOT_FOUND,
         }

@@ -1,9 +1,9 @@
 use aide::axum::{
     ApiRouter,
-    routing::{get_with, post_with},
+    routing::{delete_with, get_with, post_with},
 };
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
 };
 use chrono::NaiveDateTime;
@@ -133,21 +133,86 @@ async fn get_vote(
     Ok((StatusCode::OK, Json(vote)))
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, JsonSchema)]
 struct VoteFilterParams {
-    _user_id: Option<Uuid>,
-    _attribute_id: Option<i32>,
-    _parent_entity_ns: Option<String>,
-    _parent_entity_pk: Option<String>,
+    user_id: Option<Uuid>,
+    attribute_id: Option<i32>,
+    limit: Option<i32>,
 }
 
-async fn list_votes(State(state): State<AppState>) -> Result<(StatusCode, Json<Vec<Vote>>), Error> {
-    let votes = sqlx::query_file_as!(Vote, "../database/sql/vote/list.sql",)
+#[derive(Deserialize, JsonSchema)]
+pub struct DeleteVotePath {
+    left_ns: String,
+    left_pk: String,
+    right_ns: String,
+    right_pk: String,
+    user_id: Uuid,
+    attr_id: i32,
+}
+
+async fn list_votes(
+    State(state): State<AppState>,
+    Query(params): Query<VoteFilterParams>,
+) -> Result<(StatusCode, Json<Vec<Vote>>), Error> {
+    let votes = if let Some(user_id) = params.user_id {
+        sqlx::query_file_as!(
+            Vote,
+            "../database/sql/vote/list_by_user.sql",
+            user_id,
+            params.limit
+        )
         .fetch_all(&state.db)
         .await
-        .map_error("votes")?;
+        .map_error("votes")?
+    } else {
+        sqlx::query_file_as!(Vote, "../database/sql/vote/list.sql")
+        .fetch_all(&state.db)
+        .await
+        .map_error("votes")?
+    };
 
     Ok((StatusCode::OK, Json(votes)))
+}
+
+async fn delete_vote(
+    State(state): State<AppState>,
+    AuthenticatedUser(user): AuthenticatedUser,
+    Path(path): Path<DeleteVotePath>,
+) -> Result<(StatusCode, Json<Vote>), Error> {
+    // Ensure user can only delete their own votes
+    if user.id != path.user_id {
+        return Err(Error::Forbidden);
+    }
+
+    let (query_left_ns, query_left_pk, query_right_ns, query_right_pk) = if (
+        path.left_ns.clone(),
+        path.left_pk.clone(),
+    ) < (
+        path.right_ns.clone(),
+        path.right_pk.clone(),
+    ) {
+        (path.left_ns, path.left_pk, path.right_ns, path.right_pk)
+    } else {
+        warn!(left_ns = path.left_ns, left_pk = path.left_pk, right_ns = path.right_ns, right_pk = path.right_pk; "request path for delete_vote received non-canonical order for pair");
+        (path.right_ns, path.right_pk, path.left_ns, path.left_pk)
+    };
+
+    let vote = sqlx::query_file_as!(
+        Vote,
+        "../database/sql/vote/soft_delete.sql",
+        query_left_ns,
+        query_left_pk,
+        query_right_ns,
+        query_right_pk,
+        path.user_id,
+        path.attr_id
+    )
+    .fetch_optional(&state.db)
+    .await
+    .map_error("vote")?
+    .catch_not_found("vote")?;
+
+    Ok((StatusCode::OK, Json(vote)))
 }
 
 pub fn routes() -> ApiRouter<AppState> {
@@ -159,14 +224,18 @@ pub fn routes() -> ApiRouter<AppState> {
                     .response::<201, Json<Vote>>()
             })
             .get_with(list_votes, |op| {
-                op.description("List all votes.")
+                op.description("List votes. Use ?user_id=<uuid> to filter by user.")
                     .response::<200, Json<Vec<Vote>>>()
             }),
         )
         .api_route(
-            "/{left_ns}/{left_pk}/{right_ns}/{right_pk}/{attr_id}",
+            "/{left_ns}/{left_pk}/{right_ns}/{right_pk}/{user_id}/{attr_id}",
             get_with(get_vote, |op| {
                 op.description("Get a vote.").response::<200, Json<Vote>>()
+            })
+            .delete_with(delete_vote, |op| {
+                op.description("Delete a vote (soft delete).")
+                    .response::<200, Json<Vote>>()
             }),
         )
 }

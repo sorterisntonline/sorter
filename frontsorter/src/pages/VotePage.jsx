@@ -5,6 +5,8 @@ import { useState } from 'react'; // Import useState
 import { useNavigate } from 'react-router-dom'; // Import useNavigate
 
 import { fetchPairFn, submitVoteFn } from '../fetchers/voteEndpoints';
+import { AuthAPI } from '../api/auth';
+import VoteHistoryPanel from '../components/VoteHistoryPanel';
 import '../styles/vote.css';
 
 // Helper function to get the smallest image URL (can be moved to a utils file)
@@ -106,6 +108,13 @@ function VotePage() {
     const [sliderValue, setSliderValue] = useState(0);
 
     const [queryKey, queryType] = buildQueryKey(searchParams)
+
+    // Query for current user info
+    const { data: user } = useQuery({
+        queryKey: ['user'],
+        queryFn: AuthAPI.getMe,
+        refetchOnWindowFocus: false,
+    });
 
     const queryOptions = {
         staleTime: 5 * 60 * 1000,
@@ -229,77 +238,85 @@ function VotePage() {
     // --- Main Return ---
     return (
         <div className="vote-page">
-            <div style={{ width: '100%', maxWidth: '1200px', margin: '0 auto' }}>
-                {loadingPair && (
-                    <div className="loading-container">
-                        <div className="loading-spinner"></div>
-                        <p>Loading pair...</p>
-                    </div>
-                )}
-
-                {combinedError && !loadingPair && (
-                    <div className="error-container">
-                        <p>Error loading or submitting vote:</p>
-                        {pair.isError && <p style={{ fontSize: '12px', marginTop: '4px' }}>Loading pair: {pair.error?.message || 'Unknown error'}</p>}
-                        {voteMutation.isError && <p style={{ fontSize: '12px', marginTop: '4px' }}>Submitting vote: {voteMutation.error?.message || 'Unknown error'}</p>}
-                        {pair.error?.message?.includes("Could not find") && <p style={{ fontSize: '12px', marginTop: '4px' }}>{pair.error.message}</p>}
-                        {pair.error?.status === 404 && <p style={{ fontSize: '12px', marginTop: '4px' }}>Could not find the requested pair.</p>}
-                    </div>
-                )}
-
-                {/* Only display items and slider if the pair query is successful and items exist */}
-                {isSuccess && leftItem && rightItem && (
-                    <div className="vote-container">
-                        {/* Container for the two items */}
-                        <div className="vote-items-container">
-                            {/* Left Item - Wrapped in Link */}
-                             <Link to={`/?pk_namespace=${encodeURIComponent(leftItem.pk_namespace)}&pk=${encodeURIComponent(leftItem.pk)}`} className="vote-item-link">
-                                <VoteItemDisplay item={leftItem} isDisabled={submittingVote || loadingPair}/>
-                            </Link>
-
-                            {/* Right Item - Wrapped in Link */}
-                            <Link to={`/?pk_namespace=${encodeURIComponent(rightItem.pk_namespace)}&pk=${encodeURIComponent(rightItem.pk)}`} className="vote-item-link">
-                                <VoteItemDisplay item={rightItem} isDisabled={submittingVote || loadingPair}/>
-                            </Link>
+            <div className="vote-page-layout">
+                {/* Main voting content */}
+                <div className="vote-main-content">
+                    {loadingPair && (
+                        <div className="loading-container">
+                            <div className="loading-spinner"></div>
+                            <p>Loading pair...</p>
                         </div>
+                    )}
 
-                        {/* Slider */}
-                        <div className="slider-container">
-                             <div className="slider-labels">
-                                <span>Strongly Left</span>
-                                <span>Neutral</span>
-                                <span>Strongly Right</span>
+                    {combinedError && !loadingPair && (
+                        <div className="error-container">
+                            <p>Error loading or submitting vote:</p>
+                            {pair.isError && <p style={{ fontSize: '12px', marginTop: '4px' }}>Loading pair: {pair.error?.message || 'Unknown error'}</p>}
+                            {voteMutation.isError && <p style={{ fontSize: '12px', marginTop: '4px' }}>Submitting vote: {voteMutation.error?.message || 'Unknown error'}</p>}
+                            {pair.error?.message?.includes("Could not find") && <p style={{ fontSize: '12px', marginTop: '4px' }}>{pair.error.message}</p>}
+                            {pair.error?.status === 404 && <p style={{ fontSize: '12px', marginTop: '4px' }}>Could not find the requested pair.</p>}
+                        </div>
+                    )}
+
+                    {/* Only display items and slider if the pair query is successful and items exist */}
+                    {isSuccess && leftItem && rightItem && (
+                        <div className="vote-container">
+                            {/* Container for the two items */}
+                            <div className="vote-items-container">
+                                {/* Left Item - Wrapped in Link */}
+                                 <Link to={`/?pk_namespace=${encodeURIComponent(leftItem.pk_namespace)}&pk=${encodeURIComponent(leftItem.pk)}`} className="vote-item-link">
+                                    <VoteItemDisplay item={leftItem} isDisabled={submittingVote || loadingPair}/>
+                                </Link>
+
+                                {/* Right Item - Wrapped in Link */}
+                                <Link to={`/?pk_namespace=${encodeURIComponent(rightItem.pk_namespace)}&pk=${encodeURIComponent(rightItem.pk)}`} className="vote-item-link">
+                                    <VoteItemDisplay item={rightItem} isDisabled={submittingVote || loadingPair}/>
+                                </Link>
                             </div>
-                            <input
-                                id="slider"
-                                type="range"
-                                min="-50"
-                                max="50"
-                                step="1"
-                                value={sliderValue}
-                                onChange={handleSliderChange}
-                                className="vote-slider"
+
+                            {/* Slider */}
+                            <div className="slider-container">
+                                 <div className="slider-labels">
+                                    <span>Strongly Left</span>
+                                    <span>Neutral</span>
+                                    <span>Strongly Right</span>
+                                </div>
+                                <input
+                                    id="slider"
+                                    type="range"
+                                    min="-50"
+                                    max="50"
+                                    step="1"
+                                    value={sliderValue}
+                                    onChange={handleSliderChange}
+                                    className="vote-slider"
+                                    disabled={submittingVote || loadingPair}
+                                />
+                            </div>
+
+                            {/* Submit Button */}
+                            <button
+                                onClick={handleVoteSubmit}
                                 disabled={submittingVote || loadingPair}
-                            />
+                                className="submit-button"
+                            >
+                                {submittingVote ? 'Submitting...' : 'Submit Vote'}
+                            </button>
                         </div>
+                    )}
 
-                        {/* Submit Button */}
-                        <button
-                            onClick={handleVoteSubmit}
-                            disabled={submittingVote || loadingPair}
-                            className="submit-button"
-                        >
-                            {submittingVote ? 'Submitting...' : 'Submit Vote'}
-                        </button>
-                    </div>
-                )}
+                     {/* Message when no pair is available */}
+                     {isSuccess && !leftItem && !rightItem && !loadingPair && (
+                        <div style={{ textAlign: 'center', color: '#6b7280', padding: '40px 0' }}>
+                            No pair available for voting at the moment.
+                        </div>
+                    )}
+                </div>
 
-                 {/* Message when no pair is available */}
-                 {isSuccess && !leftItem && !rightItem && !loadingPair && (
-                    <div style={{ textAlign: 'center', color: '#6b7280', padding: '40px 0' }}>
-                        No pair available for voting at the moment.
-                    </div>
-                )}
+                {/* Right panel - Vote History */}
+                <div className="vote-right-panel">
+                    <VoteHistoryPanel user={user} />
+                </div>
             </div>
         </div>
     );

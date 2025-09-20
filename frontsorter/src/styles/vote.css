@@ -1,9 +1,25 @@
 /* Vote Page Styles */
 .vote-page {
   padding: 16px;
-  max-width: 1200px;
-  margin: 0 auto;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.vote-page-layout {
+  display: flex;
+  gap: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.vote-main-content {
+  flex: 2;
+  min-width: 0;
+}
+
+.vote-right-panel {
+  flex: 1;
+  min-width: 300px;
+  max-width: 400px;
 }
 
 .vote-container {
@@ -161,6 +177,147 @@
   cursor: not-allowed;
 }
 
+/* Vote History Panel Styles */
+.vote-history-panel {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.panel-title {
+  padding: 16px;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+  color: #111827;
+}
+
+.panel-content {
+  padding: 16px;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.vote-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vote-history-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #fafafa;
+  position: relative;
+}
+
+.vote-entities {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.vote-entity {
+  padding: 4px 6px;
+  border-radius: 3px;
+  background: #e5e7eb;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 500;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vote-entity.left {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.vote-entity.right {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.vote-vs {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.vote-details {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+
+.vote-magnitude {
+  font-weight: 600;
+}
+
+.vote-date {
+  color: #6b7280;
+}
+
+.delete-vote-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: #ef4444;
+  color: white;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.delete-vote-btn:hover {
+  opacity: 1;
+}
+
+.delete-vote-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.delete-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.loading-state, .error-state, .empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.error-state {
+  color: #ef4444;
+}
+
 /* Submit button */
 .submit-button {
   background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
@@ -220,6 +377,14 @@
 
 /* Mobile responsiveness */
 @media (max-width: 768px) {
+  .vote-page-layout {
+    flex-direction: column;
+  }
+
+  .vote-right-panel {
+    min-width: 0;
+    max-width: none;
+  }
   .vote-container {
     padding: 16px;
     gap: 16px;
