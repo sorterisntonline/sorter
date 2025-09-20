@@ -94,7 +94,7 @@ pub fn get_spotify_login_url(
     url.query_pairs_mut()
         .append_pair("response_type", "code")
         .append_pair("client_id", client_id)
-        .append_pair("scope", "user-read-private user-read-email user-read-recently-played")
+        .append_pair("scope", "user-read-private user-read-email user-read-recently-played streaming user-read-playback-state user-modify-playback-state")
         .append_pair("redirect_uri", redirect_uri)
         .append_pair("state", state);
 

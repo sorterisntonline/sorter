@@ -1,6 +1,7 @@
 import React from "react";
 import { Routes, Route } from "react-router-dom";
 import "./App.css";
+import "./styles/spotify-player.css";
 
 import Layout from "./Layout";
 import VotePage from "./pages/VotePage";
