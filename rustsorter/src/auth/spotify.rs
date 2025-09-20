@@ -38,13 +38,21 @@ struct SpotifyTokenRequest {
     client_secret: String,
 }
 
+#[derive(Debug, Serialize)]
+struct SpotifyRefreshTokenRequest {
+    grant_type: String,
+    refresh_token: String,
+    client_id: String,
+    client_secret: String,
+}
+
 #[derive(Debug, Deserialize)]
-struct SpotifyTokenResponse {
-    access_token: String,
-    token_type: String,
-    expires_in: i32,
-    refresh_token: Option<String>,
-    scope: String,
+pub struct SpotifyTokenResponse {
+    pub access_token: String,
+    pub token_type: String,
+    pub expires_in: i32,
+    pub refresh_token: Option<String>,
+    pub scope: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -255,6 +263,42 @@ pub async fn fetch_recent_tracks(
 
     let recent_tracks: SpotifyRecentTracksResponse = response.json().await?;
     Ok(recent_tracks)
+}
+
+pub fn is_token_expired(expires_in: i32, token_obtained_at: i64) -> bool {
+    let now = Utc::now().timestamp();
+    let expires_at = token_obtained_at + (expires_in as i64);
+    // Add 60 second buffer to refresh before actual expiration
+    now >= (expires_at - 60)
+}
+
+pub async fn refresh_spotify_token(
+    client: &reqwest::Client,
+    refresh_token: &str,
+    client_id: &str,
+    client_secret: &str,
+) -> Result<SpotifyTokenResponse> {
+    let refresh_request = SpotifyRefreshTokenRequest {
+        grant_type: "refresh_token".to_string(),
+        refresh_token: refresh_token.to_string(),
+        client_id: client_id.to_string(),
+        client_secret: client_secret.to_string(),
+    };
+
+    let response = client
+        .post(&format!("{}/api/token", SPOTIFY_ACCOUNTS_URL))
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .form(&refresh_request)
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        let error_text = response.text().await?;
+        return Err(anyhow!("Failed to refresh token: {}", error_text));
+    }
+
+    let token_response: SpotifyTokenResponse = response.json().await?;
+    Ok(token_response)
 }
 
 async fn check_existing_spotify_user(

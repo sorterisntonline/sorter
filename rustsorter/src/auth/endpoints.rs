@@ -3,6 +3,7 @@ use axum::{
     http::HeaderMap,
     response::IntoResponse,
 };
+use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -315,21 +316,86 @@ pub async fn import_recent_songs(
     .map_error("user provider")?
     .ok_or(Error::BadRequest { message: "No Spotify account linked".into() })?;
 
-    // Extract access token from profile_data
-    let profile_data = provider.profile_data.ok_or(Error::BadRequest { 
+    // Extract tokens and metadata from profile_data
+    let mut profile_data = provider.profile_data.ok_or(Error::BadRequest { 
         message: "No Spotify profile data found".into() 
     })?;
     
-    let access_token = profile_data.get("access_token")
+    let mut access_token = profile_data.get("access_token")
         .and_then(|token| token.as_str())
         .ok_or(Error::BadRequest { 
             message: "No Spotify access token found".into() 
+        })?.to_string();
+
+    let refresh_token = profile_data.get("refresh_token")
+        .and_then(|token| token.as_str())
+        .ok_or(Error::BadRequest { 
+            message: "No Spotify refresh token found".into() 
+        })?;
+
+    let expires_in = profile_data.get("expires_in")
+        .and_then(|exp| exp.as_i64())
+        .ok_or(Error::BadRequest { 
+            message: "No token expiration info found".into() 
+        })? as i32;
+
+    let token_obtained_at = profile_data.get("token_obtained_at")
+        .and_then(|ts| ts.as_i64())
+        .ok_or(Error::BadRequest { 
+            message: "No token timestamp found".into() 
         })?;
 
     let client = reqwest::Client::new();
     
+    // Check if token is expired and refresh if needed
+    if crate::auth::spotify::is_token_expired(expires_in, token_obtained_at) {
+        debug!("Spotify token expired, refreshing...");
+        
+        match crate::auth::spotify::refresh_spotify_token(
+            &client,
+            refresh_token,
+            &state.spotify_client_id,
+            &state.spotify_client_secret,
+        ).await {
+            Ok(token_response) => {
+                access_token = token_response.access_token.clone();
+                
+                // Update stored tokens in database
+                if let Some(obj) = profile_data.as_object_mut() {
+                    obj.insert("access_token".to_string(), serde_json::Value::String(token_response.access_token));
+                    obj.insert("expires_in".to_string(), serde_json::Value::Number(serde_json::Number::from(token_response.expires_in)));
+                    obj.insert("token_obtained_at".to_string(), serde_json::Value::Number(serde_json::Number::from(chrono::Utc::now().timestamp())));
+                    
+                    // Update refresh_token if provided (Spotify may rotate it)
+                    if let Some(new_refresh_token) = token_response.refresh_token {
+                        obj.insert("refresh_token".to_string(), serde_json::Value::String(new_refresh_token));
+                    }
+                }
+                
+                if let Err(e) = sqlx::query!(
+                    "UPDATE user_providers SET profile_data = $1, last_sync_at = NOW() 
+                     WHERE user_id = $2 AND provider_id = 'spotify'",
+                    serde_json::Value::Object(profile_data.as_object().unwrap().clone()),
+                    user.id
+                )
+                .execute(&state.db)
+                .await {
+                    warn!("Failed to update refreshed tokens: {}", e);
+                }
+                
+                info!("Successfully refreshed Spotify token for user {}", user.handle);
+            }
+            Err(e) => {
+                warn!("Failed to refresh Spotify token: {}", e);
+                return Err(Error::BadRequest { 
+                    message: format!("Failed to refresh expired Spotify token: {}", e).into() 
+                });
+            }
+        }
+    }
+    
     // Fetch recent tracks from Spotify API
-    let recent_tracks = crate::auth::spotify::fetch_recent_tracks(&client, access_token, Some(20))
+    let recent_tracks = crate::auth::spotify::fetch_recent_tracks(&client, &access_token, Some(20))
         .await
         .map_err(|e| Error::BadRequest { 
             message: format!("Failed to fetch Spotify data: {}", e).into() 
