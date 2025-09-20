@@ -13,6 +13,7 @@ const useColorExtraction = (imageUrl) => {
       return;
     }
 
+    console.log('🎨 useColorExtraction: Starting extraction for', imageUrl);
     setIsLoading(true);
     const colorThief = new ColorThief();
 
@@ -47,7 +48,7 @@ const useColorExtraction = (imageUrl) => {
               vibrantColor        // Highest scores = most vibrant
             ]).mode('lch');
 
-            setColors({
+            const colorResult = {
               palette: chromaColors,
               dominant: dominantChroma,
               vibrant: vibrantColor,
@@ -65,7 +66,10 @@ const useColorExtraction = (imageUrl) => {
                 gradient: `linear-gradient(135deg, ${darkVibrant.hex()}, ${accent.hex()}, ${lightAccent.hex()})`,
                 radialGradient: `radial-gradient(circle at center, ${accent.hex()}, ${darkVibrant.hex()})`
               }
-            });
+            };
+            
+            console.log('🎨 Color extraction complete:', colorResult.css);
+            setColors(colorResult);
           }
         }
       } catch (error) {
@@ -76,14 +80,10 @@ const useColorExtraction = (imageUrl) => {
       }
     };
 
-    // Create a hidden image element for color extraction
-    if (!imageRef.current) {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      imageRef.current = img;
-    }
-
-    const img = imageRef.current;
+    // Create a fresh image element for each extraction to avoid caching issues
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    imageRef.current = img;
     
     if (img.complete && img.naturalWidth > 0) {
       extractColors();

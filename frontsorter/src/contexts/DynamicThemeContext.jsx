@@ -29,6 +29,7 @@ export const DynamicThemeProvider = ({ children }) => {
 
   useEffect(() => {
     if (extractedColors) {
+      console.log('🎨 DynamicThemeContext: Updating theme with new colors', extractedColors.css);
       setTheme(prevTheme => ({
         ...prevTheme,
         colors: {
@@ -46,6 +47,7 @@ export const DynamicThemeProvider = ({ children }) => {
   }, [extractedColors]);
 
   const updateThemeFromImage = (imageUrl) => {
+    console.log('🎨 updateThemeFromImage called with:', imageUrl);
     setCurrentImageUrl(imageUrl);
   };
 

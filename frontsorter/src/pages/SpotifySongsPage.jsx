@@ -231,8 +231,12 @@ function SpotifySongsPage() {
         imageUrl = leftEntity.profile_picture_url;
       }
       
+      console.log('🎨 New voting pair - extracting colors from:', imageUrl, 'for song:', leftEntity.title);
+      
       if (imageUrl) {
         updateThemeFromImage(imageUrl);
+      } else {
+        console.log('⚠️ No image URL found for entity:', leftEntity);
       }
     }
   }, [pairQuery.data, updateThemeFromImage]);
