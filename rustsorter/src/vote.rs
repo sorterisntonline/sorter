@@ -168,6 +168,47 @@ async fn list_votes(
     Ok((StatusCode::OK, Json(votes)))
 }
 
+#[derive(Deserialize, Debug, JsonSchema)]
+struct SongVoteParams {
+    namespace: String,
+    pk: String,
+    limit: Option<i32>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct SongVote {
+    pub left_ns: String,
+    pub left_pk: String,
+    pub right_ns: String,
+    pub right_pk: String,
+    pub user_id: Uuid,
+    pub attr_id: i32,
+    pub magnitude: i32,
+    pub created_at: NaiveDateTime,
+    pub opponent_id: Option<String>,
+    pub opponent_title: Option<String>,
+}
+
+async fn list_song_votes(
+    State(state): State<AppState>,
+    Query(params): Query<SongVoteParams>,
+) -> Result<(StatusCode, Json<Vec<SongVote>>), Error> {
+    let limit = params.limit.unwrap_or(50) as i64;
+    
+    let votes = sqlx::query_file_as!(
+        SongVote,
+        "../database/sql/vote/list_by_entity.sql",
+        params.namespace,
+        params.pk,
+        limit
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_error("song votes")?;
+
+    Ok((StatusCode::OK, Json(votes)))
+}
+
 async fn delete_vote(
     State(state): State<AppState>,
     AuthenticatedUser(user): AuthenticatedUser,
@@ -215,6 +256,13 @@ pub fn routes() -> ApiRouter<AppState> {
             .get_with(list_votes, |op| {
                 op.description("List votes. Use ?user_id=<uuid> to filter by user.")
                     .response::<200, Json<Vec<Vote>>>()
+            }),
+        )
+        .api_route(
+            "/entity",
+            get_with(list_song_votes, |op| {
+                op.description("List votes for a specific entity. Use ?namespace=<ns>&pk=<pk> to filter.")
+                    .response::<200, Json<Vec<SongVote>>>()
             }),
         )
         .api_route(

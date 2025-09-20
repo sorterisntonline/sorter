@@ -1,5 +1,6 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
+import VoteItem from './VoteItem';
 
 function SelectedSongPanel({ selectedSong, user, onSongSelect }) {
   // Query for votes involving this song
@@ -7,25 +8,18 @@ function SelectedSongPanel({ selectedSong, user, onSongSelect }) {
     queryKey: ['song-votes', selectedSong?.id],
     queryFn: async () => {
       if (!selectedSong?.id) return [];
-      // For now, return empty array - we'd need a specific endpoint for song votes
-      // This could be implemented later to show all votes involving this song
-      return [];
+      
+      const response = await fetch(`/api/vote/entity?namespace=spotify.track&pk=${encodeURIComponent(selectedSong.id)}&limit=20`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch song votes');
+      }
+      return response.json();
     },
     enabled: !!selectedSong?.id,
     refetchOnWindowFocus: false,
   });
 
-  // Query for entity relationships (if we want to show related entities)
-  const { data: relationships = [], isLoading: relLoading } = useQuery({
-    queryKey: ['song-relationships', selectedSong?.id],
-    queryFn: async () => {
-      if (!selectedSong?.id) return [];
-      // For now, return empty array - we'd need entity relationship data
-      return [];
-    },
-    enabled: !!selectedSong?.id,
-    refetchOnWindowFocus: false,
-  });
+
 
   if (!selectedSong) {
     return (
@@ -71,7 +65,7 @@ function SelectedSongPanel({ selectedSong, user, onSongSelect }) {
             className="spotify-player"
             src={`https://open.spotify.com/embed/track/${selectedSong.id}`}
             width="100%"
-            height="152"
+            height="180"
             frameBorder="0"
             allowFullScreen=""
             allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
@@ -80,27 +74,7 @@ function SelectedSongPanel({ selectedSong, user, onSongSelect }) {
           ></iframe>
         </div>
 
-        {/* Entity Relationships */}
-        <div className="relationships-section">
-          <h4 className="section-title">Relationships</h4>
-          {relLoading ? (
-            <div className="loading-state">
-              <span>Loading relationships...</span>
-            </div>
-          ) : relationships.length > 0 ? (
-            <div className="relationships-list">
-              {relationships.map((rel, index) => (
-                <div key={index} className="relationship-item">
-                  {rel.type}: {rel.target}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="empty-state">
-              No relationships found for this song
-            </div>
-          )}
-        </div>
+
 
         {/* Votes involving this song */}
         <div className="song-votes-section">
@@ -112,14 +86,11 @@ function SelectedSongPanel({ selectedSong, user, onSongSelect }) {
           ) : songVotes.length > 0 ? (
             <div className="song-votes-list">
               {songVotes.map((vote, index) => (
-                <div key={index} className="vote-item">
-                  <span className="vote-comparison">
-                    vs {vote.opponent_title || 'Unknown'}
-                  </span>
-                  <span className="vote-result">
-                    {vote.magnitude > 0 ? '+' : ''}{vote.magnitude}
-                  </span>
-                </div>
+                <VoteItem 
+                  key={index} 
+                  vote={vote} 
+                  compact={true} 
+                />
               ))}
             </div>
           ) : (

@@ -1,0 +1,78 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \n    v.left_entity_pk_namespace as left_ns,\n    v.left_entity_pk as left_pk,\n    v.right_entity_pk_namespace as right_ns, \n    v.right_entity_pk as right_pk,\n    v.user_id,\n    v.attribute_id as attr_id,\n    v.magnitude,\n    v.created_at,\n    CASE \n        WHEN v.left_entity_pk_namespace = $1 AND v.left_entity_pk = $2 THEN \n            CONCAT(v.right_entity_pk_namespace, ':', v.right_entity_pk)\n        ELSE \n            CONCAT(v.left_entity_pk_namespace, ':', v.left_entity_pk)\n    END as opponent_id,\n    CASE \n        WHEN v.left_entity_pk_namespace = $1 AND v.left_entity_pk = $2 THEN \n            COALESCE(e2.title, v.right_entity_pk)\n        ELSE \n            COALESCE(e1.title, v.left_entity_pk)\n    END as opponent_title\nFROM votes v\nLEFT JOIN entities e1 ON v.left_entity_pk_namespace = e1.pk_namespace AND v.left_entity_pk = e1.pk\nLEFT JOIN entities e2 ON v.right_entity_pk_namespace = e2.pk_namespace AND v.right_entity_pk = e2.pk\nWHERE (v.left_entity_pk_namespace = $1 AND v.left_entity_pk = $2) \n   OR (v.right_entity_pk_namespace = $1 AND v.right_entity_pk = $2)\n   AND v.deleted_at IS NULL\nORDER BY v.created_at DESC\nLIMIT $3;\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "left_ns",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "left_pk",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "right_ns",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "right_pk",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "attr_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "magnitude",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 8,
+        "name": "opponent_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "opponent_title",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "f9cfc64faa8f871cd59d5998768982c8f013f4ce9d123581b5c4a78da30e152f"
+}

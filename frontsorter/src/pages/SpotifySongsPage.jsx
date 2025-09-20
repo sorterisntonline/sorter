@@ -35,8 +35,8 @@ function VoteItemDisplay({ item, isDisabled }) {
           className="spotify-embed"
           style={{ borderRadius: '12px' }}
           src={`https://open.spotify.com/embed/${embedType}/${pk}`}
-          width="320"
-          height="450"
+          width="380"
+          height="300"
           frameBorder="0"
           allowFullScreen=""
           allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
