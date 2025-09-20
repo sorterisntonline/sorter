@@ -1,0 +1,238 @@
+/* Ranking History Panel Styles */
+.history-snapshots {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.snapshot-item {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+  transition: box-shadow 0.2s ease;
+}
+
+.snapshot-item:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.snapshot-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.snapshot-header:hover {
+  background: #f3f4f6;
+}
+
+.snapshot-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.snapshot-title {
+  font-weight: 600;
+  color: #374151;
+  font-size: 14px;
+}
+
+.snapshot-date {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.snapshot-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.ranked-count {
+  color: #059669;
+  font-weight: 500;
+}
+
+.unranked-count {
+  color: #d97706;
+  font-weight: 500;
+}
+
+.expand-icon {
+  width: 16px;
+  height: 16px;
+  color: #6b7280;
+  transition: transform 0.2s ease;
+}
+
+.expand-icon.expanded {
+  transform: rotate(180deg);
+}
+
+.snapshot-details {
+  padding: 16px;
+  background: white;
+}
+
+.ranked-section,
+.unranked-section {
+  margin-bottom: 16px;
+}
+
+.ranked-section:last-child,
+.unranked-section:last-child {
+  margin-bottom: 0;
+}
+
+.ranked-section h4,
+.unranked-section h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.ranked-list,
+.unranked-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ranked-item,
+.unranked-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  background: #f9fafb;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.rank-position {
+  font-weight: 700;
+  color: #374151;
+  min-width: 24px;
+}
+
+.song-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.song-title {
+  font-weight: 500;
+  color: #374151;
+  line-height: 1.2;
+}
+
+.song-artist {
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.song-score {
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 11px;
+  color: #6b7280;
+  background: #e5e7eb;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .snapshot-item {
+    border-color: #374151;
+  }
+
+  .snapshot-header {
+    background: #374151;
+    border-bottom-color: #4b5563;
+  }
+
+  .snapshot-header:hover {
+    background: #4b5563;
+  }
+
+  .snapshot-title {
+    color: #f9fafb;
+  }
+
+  .snapshot-date {
+    color: #d1d5db;
+  }
+
+  .expand-icon {
+    color: #d1d5db;
+  }
+
+  .snapshot-details {
+    background: #1f2937;
+  }
+
+  .ranked-section h4,
+  .unranked-section h4 {
+    color: #f9fafb;
+  }
+
+  .ranked-item,
+  .unranked-item {
+    background: #374151;
+  }
+
+  .rank-position {
+    color: #f9fafb;
+  }
+
+  .song-title {
+    color: #f9fafb;
+  }
+
+  .song-artist {
+    color: #d1d5db;
+  }
+
+  .song-score {
+    color: #d1d5db;
+    background: #4b5563;
+  }
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .snapshot-header {
+    padding: 10px 12px;
+  }
+
+  .snapshot-summary {
+    gap: 8px;
+  }
+
+  .snapshot-details {
+    padding: 12px;
+  }
+
+  .ranked-item,
+  .unranked-item {
+    padding: 6px;
+    gap: 8px;
+  }
+
+  .song-title {
+    font-size: 12px;
+  }
+
+  .song-artist {
+    font-size: 11px;
+  }
+}

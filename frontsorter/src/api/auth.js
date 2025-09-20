@@ -101,19 +101,36 @@ export class AuthAPI {
   }
 
   static async getSpotifyRanking(userNs, userPk) {
+  const params = new URLSearchParams({
+  pk_namespace: userNs,
+  pk: userPk
+  });
+  const response = await fetch(`${API_BASE}/rank/rank?${params}`, {
+  credentials: 'include',
+  });
+
+  if (!response.ok) {
+  const error = await response.json();
+  throw new Error(error.error || `HTTP ${response.status}`);
+  }
+
+  return response.json();
+  }
+
+  static async getRankingHistory(userNs, userPk) {
     const params = new URLSearchParams({
       pk_namespace: userNs,
       pk: userPk
     });
-    const response = await fetch(`${API_BASE}/rank/rank?${params}`, {
+    const response = await fetch(`${API_BASE}/rank/history?${params}`, {
       credentials: 'include',
     });
-    
+
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || `HTTP ${response.status}`);
     }
-    
+
     return response.json();
   }
 }

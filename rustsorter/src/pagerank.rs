@@ -476,7 +476,7 @@ pub fn routes() -> ApiRouter<AppState> {
             }),
         )
         .api_route(
-            "/rank/history",
+            "/history",
             get_with(get_ranking_history_handler, |op| {
                 op.description("Get ranking history snapshots for children of a given entity.")
                     .response::<200, Json<RankingHistoryResponse>>()

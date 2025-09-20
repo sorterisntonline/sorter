@@ -4,9 +4,11 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AuthAPI } from '../api/auth';
 import SelectedSongPanel from '../components/SelectedSongPanel';
 import VoteHistoryPanel from '../components/VoteHistoryPanel';
+import RankingHistoryPanel from '../components/RankingHistoryPanel';
 import { fetchPairFn, submitVoteFn } from '../fetchers/voteEndpoints';
 import '../styles/spotify.css';
 import '../styles/vote.css';
+import '../styles/ranking-history.css';
 
 // Helper function to get the smallest image URL
 const getSmallestImageUrl = (images) => {
@@ -65,7 +67,7 @@ function SpotifySongsPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [importMessage, setImportMessage] = useState('');
   const [selectedSong, setSelectedSong] = useState(null);
-  const [rightPanelTab, setRightPanelTab] = useState('selected'); // 'selected' or 'history'
+  const [rightPanelTab, setRightPanelTab] = useState('selected'); // 'selected', 'history', or 'ranking-history'
   const [sliderValue, setSliderValue] = useState(0);
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
@@ -118,11 +120,12 @@ function SpotifySongsPage() {
       if (user) {
         queryClient.invalidateQueries(['pair', 'children', 'sorter.user', user.handle]);
         queryClient.invalidateQueries(['spotify-ranking', user.handle]);
+        queryClient.invalidateQueries(['ranking-history', user.handle]);
         queryClient.invalidateQueries(['vote-history', user.id]);
       }
       setSliderValue(0);
-      // Switch to history tab to show the new vote
-      setRightPanelTab('history');
+      // Switch to ranking history tab to show the new vote impact
+      setRightPanelTab('ranking-history');
     },
     onError: (error) => {
       console.error("Vote submission failed:", error);
@@ -438,13 +441,21 @@ function SpotifySongsPage() {
             >
               Vote History
             </button>
+            <button 
+              className={`panel-tab ${rightPanelTab === 'ranking-history' ? 'active' : ''}`}
+              onClick={() => setRightPanelTab('ranking-history')}
+            >
+              Ranking History
+            </button>
           </div>
 
           <div className="panel-content-wrapper">
             {rightPanelTab === 'selected' ? (
               <SelectedSongPanel selectedSong={selectedSong} user={user} onSongSelect={setSelectedSong} />
-            ) : (
+            ) : rightPanelTab === 'history' ? (
               <VoteHistoryPanel user={user} />
+            ) : (
+              <RankingHistoryPanel user={user} songs={songs} />
             )}
           </div>
         </div>
