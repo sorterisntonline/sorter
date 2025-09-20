@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import chroma from 'chroma-js';
@@ -7,15 +7,17 @@ import SelectedSongPanel from '../components/SelectedSongPanel';
 import VoteHistoryPanel from '../components/VoteHistoryPanel';
 import RankingHistoryGraph from '../components/RankingHistoryGraph';
 import { useSpotifyPlayer } from '../contexts/SpotifyPlayerContext';
+import { useDynamicTheme } from '../contexts/DynamicThemeContext';
 import { fetchPairFn, submitVoteFn } from '../fetchers/voteEndpoints';
 import '../styles/spotify.css';
 import '../styles/vote.css';
 import '../styles/ranking-history-graph.css';
+import '../styles/dynamic-theme.css';
 
-// Helper function to get the smallest image URL
-const getSmallestImageUrl = (images) => {
+// Helper function to get the largest image URL
+const getLargestImageUrl = (images) => {
   if (!images || images.length === 0) return null;
-  return images[images.length - 1].url;
+  return images[0].url;
 };
 
 // Vote Item Display Component
@@ -81,7 +83,7 @@ function VoteItemDisplay({ item, isDisabled }) {
   }
 
   // Fallback for non-Spotify items
-  const imageUrl = profile_picture_url || getSmallestImageUrl(metadata?.images);
+  const imageUrl = profile_picture_url || getLargestImageUrl(metadata?.images);
   return (
     <div className={`vote-item ${isDisabled ? 'disabled' : ''}`}>
       {imageUrl ? (
@@ -106,6 +108,7 @@ function SpotifySongsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { updateThemeFromImage, getScoreColors, getCSSVariables, theme } = useDynamicTheme();
   
   // Query for current user info
   const { data: user } = useQuery({
@@ -167,9 +170,9 @@ function SpotifySongsPage() {
   });
 
   // Process ranking data to organize songs
-  const { rankedSongs, unrankedSongs, colorScale } = React.useMemo(() => {
+  const { rankedSongs, unrankedSongs, scoreRange } = React.useMemo(() => {
     if (!songs || !ranking) {
-      return { rankedSongs: [], unrankedSongs: songs || [], colorScale: null };
+      return { rankedSongs: [], unrankedSongs: songs || [], scoreRange: { min: 0, max: 1 } };
     }
 
     // Create a map of songs by their identifier
@@ -192,16 +195,14 @@ function SpotifySongsPage() {
       .filter(Boolean)
       .sort((a, b) => b.score - a.score); // Sort by score descending
 
-    // Create color scale based on score range
-    let colorScale = null;
+    // Calculate score range for dynamic theming
+    let scoreRange = { min: 0, max: 1 };
     if (rankedSongs.length > 0) {
       const scores = rankedSongs.map(song => song.score);
-      const minScore = Math.min(...scores);
-      const maxScore = Math.max(...scores);
-      
-      // Create beautiful blue-to-white gradient scale
-      colorScale = chroma.scale(['#1e3a8a', '#3b82f6', '#93c5fd', '#dbeafe', '#ffffff'])
-        .domain([maxScore, minScore]);
+      scoreRange = {
+        min: Math.min(...scores),
+        max: Math.max(...scores)
+      };
     }
 
     // Process unranked songs
@@ -212,20 +213,29 @@ function SpotifySongsPage() {
       })
       .filter(Boolean);
 
-    return { rankedSongs, unrankedSongs, colorScale };
+    return { rankedSongs, unrankedSongs, scoreRange };
   }, [songs, ranking]);
 
-  // Helper function to get background and text colors for a score
-  const getScoreColors = (score) => {
-    if (!colorScale) return { backgroundColor: 'white', textColor: 'black' };
-    
-    const backgroundColor = colorScale(score).hex();
-    
-    // Use dynamic luminance threshold controlled by slider
-    const textColor = chroma(backgroundColor).luminance() > luminanceThreshold ? 'black' : 'white';
-    
-    return { backgroundColor, textColor };
-  };
+  // Update theme when voting pair changes (use left song for theming)
+  useEffect(() => {
+    if (pairQuery.data?.left_entity) {
+      const leftEntity = pairQuery.data.left_entity;
+      // Try to get album art from metadata or profile picture
+      let imageUrl = null;
+      
+      if (leftEntity.metadata?.album?.images?.[0]?.url) {
+        imageUrl = leftEntity.metadata.album.images[0].url;
+      } else if (leftEntity.metadata?.images?.[0]?.url) {
+        imageUrl = leftEntity.metadata.images[0].url;
+      } else if (leftEntity.profile_picture_url) {
+        imageUrl = leftEntity.profile_picture_url;
+      }
+      
+      if (imageUrl) {
+        updateThemeFromImage(imageUrl);
+      }
+    }
+  }, [pairQuery.data, updateThemeFromImage]);
 
   const handleImportSongs = async () => {
     setIsImporting(true);
@@ -288,8 +298,11 @@ function SpotifySongsPage() {
   }
 
   return (
-    <div className="spotify-page">
-      <div className="combined-layout">
+    <div className="spotify-page" style={getCSSVariables()}>
+      <div className="combined-layout" style={{
+        background: `linear-gradient(145deg, var(--theme-primary) 0%, var(--theme-secondary) 50%, var(--theme-primary) 100%)`,
+        minHeight: '100vh'
+      }}>
         {/* Left Panel - Songs List */}
         <div className="songs-panel">
           {/* Header Panel */}
@@ -332,7 +345,7 @@ function SpotifySongsPage() {
             <div className="songs-container" style={{ marginBottom: '16px' }}>
               <div>
                 {rankedSongs.map((song, index) => {
-                  const { backgroundColor, textColor } = getScoreColors(song.score);
+                  const { backgroundColor, textColor } = getScoreColors(song.score, scoreRange);
                   return (
                     <div 
                       key={song.id} 
@@ -432,7 +445,14 @@ function SpotifySongsPage() {
               )}
 
               {pairQuery.data && pairQuery.data.left_entity && pairQuery.data.right_entity && (
-                <div className="vote-container">
+                <div className="vote-container" style={{
+                  background: theme.extractedColors?.css?.radialGradient || 'var(--theme-radial-gradient)',
+                  borderRadius: '16px',
+                  padding: '24px',
+                  backdropFilter: 'blur(10px)',
+                  border: '1px solid var(--theme-accent)',
+                  boxShadow: `0 8px 32px ${theme.colors?.accentDark || 'var(--theme-accent)'}20`
+                }}>
                   <div className="vote-items-container">
                     <VoteItemDisplay 
                       item={pairQuery.data.left_entity} 
@@ -459,6 +479,10 @@ function SpotifySongsPage() {
                       onChange={handleSliderChange}
                       className="vote-slider"
                       disabled={voteMutation.isPending || pairQuery.isPending}
+                      style={{
+                        background: `linear-gradient(to right, var(--theme-accent) 0%, var(--theme-accent-light) 50%, var(--theme-accent) 100%)`,
+                        '--slider-thumb-color': theme.colors?.vibrant || 'var(--theme-accent)'
+                      }}
                     />
                   </div>
 

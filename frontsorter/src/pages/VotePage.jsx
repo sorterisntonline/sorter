@@ -9,11 +9,11 @@ import { AuthAPI } from '../api/auth';
 import VoteHistoryPanel from '../components/VoteHistoryPanel';
 import '../styles/vote.css';
 
-// Helper function to get the smallest image URL (can be moved to a utils file)
-const getSmallestImageUrl = (images) => {
+// Helper function to get the largest image URL (can be moved to a utils file)
+const getLargestImageUrl = (images) => {
     if (!images || images.length === 0) return null;
-    // Assuming the API returns images sorted from largest to smallest
-    return images[images.length - 1].url;
+    // Return the first image which should be the largest
+    return images[0].url;
 };
 
 const buildQueryKey = params => {
@@ -85,7 +85,7 @@ function VoteItemDisplay({ item, isDisabled }) { // Removed isSelected, pk is un
     }
 
     // Fallback for non-Spotify items
-    const imageUrl = profile_picture_url || getSmallestImageUrl(metadata?.images);
+    const imageUrl = profile_picture_url || getLargestImageUrl(metadata?.images);
 
     return (
         <div className={`vote-item ${isDisabled ? 'disabled' : ''}`}>
