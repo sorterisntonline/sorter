@@ -563,6 +563,59 @@
   text-align: center;
 }
 
+.songs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+  font-size: 12px;
+  min-height: 36px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.songs-title {
+  font-weight: 600;
+  color: #374151;
+}
+
+.refresh-button {
+  background: none;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.1s ease;
+  color: #6b7280;
+}
+
+.refresh-button:hover:not(:disabled) {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.refresh-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.refresh-button.refreshing {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .song-item {
   display: flex;
   align-items: stretch;

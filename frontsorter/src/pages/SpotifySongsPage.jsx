@@ -66,6 +66,7 @@ function VoteItemDisplay({ item, isDisabled }) {
 function SpotifySongsPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [importMessage, setImportMessage] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedSong, setSelectedSong] = useState(null);
   const [rightPanelTab, setRightPanelTab] = useState('selected'); // 'selected', 'history', or 'ranking-history'
   const [sliderValue, setSliderValue] = useState(0);
@@ -259,6 +260,42 @@ function SpotifySongsPage() {
       <div className="combined-layout">
         {/* Left Panel - Songs List */}
         <div className="songs-panel">
+          {/* Header Panel */}
+          <div className="songs-header">
+            <span className="songs-title">sorter</span>
+            <button 
+              className={`refresh-button ${isRefreshing ? 'refreshing' : ''}`}
+              onClick={async () => {
+                setIsRefreshing(true);
+                try {
+                  const response = await fetch('/api/auth/import-recent-songs', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    credentials: 'include'
+                  });
+                  
+                  if (response.ok) {
+                    const result = await response.json();
+                    console.log('Imported songs:', result);
+                    // Invalidate queries after successful import
+                    queryClient.invalidateQueries(['spotify-songs']);
+                    queryClient.invalidateQueries(['spotify-ranking', user?.handle]);
+                  }
+                } catch (error) {
+                  console.error('Failed to import songs:', error);
+                } finally {
+                  setIsRefreshing(false);
+                }
+              }}
+              disabled={isLoading || rankingLoading || isRefreshing}
+              title="Import fresh songs from Spotify"
+            >
+              {isRefreshing ? '⟳' : '↻'}
+            </button>
+          </div>
+          
           {!rankingLoading && ranking && rankedSongs.length > 0 && (
             <div className="songs-container" style={{ marginBottom: '16px' }}>
               <div>

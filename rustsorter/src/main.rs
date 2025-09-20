@@ -187,7 +187,10 @@ fn router(app_state: AppState) -> Router {
 
     let router = Router::new()
         .merge(api_router)
-        .nest("/api/auth", auth::routes()) // Plain axum auth routes
+        .nest("/api/auth", auth::routes().layer(middleware::from_fn_with_state(
+            app_state.clone(),
+            auth_middleware::try_auth,
+        ))) // Auth routes with auth middleware
         .with_state(app_state)
         .layer(TraceLayer::new_for_http())
         .layer(Extension(Arc::new(api)));
