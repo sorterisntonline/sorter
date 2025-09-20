@@ -19,29 +19,7 @@ export const SpotifyPlayerProvider = ({ children, user }) => {
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(0.5);
-  const [queue, setQueue] = useState([]);
   const [accessToken, setAccessToken] = useState(null);
-
-  // Fetch full queue from Spotify API
-  const fetchQueue = useCallback(async () => {
-    if (!accessToken) return;
-
-    try {
-      const response = await fetch('https://api.spotify.com/v1/me/player/queue', {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`
-        }
-      });
-
-      if (response.ok) {
-        const queueData = await response.json();
-        console.log('Full queue from API:', queueData);
-        setQueue(queueData.queue || []);
-      }
-    } catch (error) {
-      console.error('Error fetching queue:', error);
-    }
-  }, [accessToken]);
 
   // Fetch Spotify access token
   useEffect(() => {
@@ -126,7 +104,6 @@ export const SpotifyPlayerProvider = ({ children, user }) => {
           setIsPlaying(false);
           setPosition(0);
           setDuration(0);
-          setQueue([]);
           return;
         }
 
@@ -134,9 +111,6 @@ export const SpotifyPlayerProvider = ({ children, user }) => {
         setIsPlaying(!state.paused);
         setPosition(state.position);
         setDuration(state.duration);
-        
-        // Fetch full queue from API when track changes
-        fetchQueue();
       });
 
       // Connect to the player
@@ -211,13 +185,10 @@ export const SpotifyPlayerProvider = ({ children, user }) => {
       if (!response.ok) {
         throw new Error(`Failed to queue track: ${response.status}`);
       }
-
-      // Refresh the full queue after adding
-      setTimeout(() => fetchQueue(), 500); // Small delay to let Spotify update
     } catch (error) {
       console.error('Error queueing track:', error);
     }
-  }, [accessToken, fetchQueue]);
+  }, [accessToken]);
 
   // Toggle play/pause
   const togglePlay = useCallback(async () => {
@@ -284,7 +255,6 @@ export const SpotifyPlayerProvider = ({ children, user }) => {
     position,
     duration,
     volume,
-    queue,
     accessToken,
     // Methods
     playTrack,

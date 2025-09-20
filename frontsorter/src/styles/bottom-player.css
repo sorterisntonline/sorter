@@ -7,32 +7,15 @@
   color: white;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   z-index: 1000;
-  min-width: 320px;
-  max-width: 400px;
+  width: 350px;
   transition: all 0.3s ease;
 }
 
-.bottom-spotify-player.collapsed {
-  height: auto;
-}
-
-.bottom-spotify-player.expanded {
-  max-height: 600px;
-  width: 380px;
-}
-
-/* Player Bar */
-.player-bar {
+.player-content {
+  padding: 16px;
   display: flex;
-  align-items: center;
-  padding: 12px 16px;
-  cursor: pointer;
+  flex-direction: column;
   gap: 12px;
-  transition: background-color 0.2s ease;
-}
-
-.player-bar:hover {
-  background-color: rgba(255, 255, 255, 0.1);
 }
 
 .current-track-info {
@@ -71,11 +54,12 @@
   white-space: nowrap;
 }
 
-/* Basic Controls */
-.basic-controls {
+/* Player Controls */
+.player-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  gap: 16px;
 }
 
 .control-btn {
@@ -121,16 +105,7 @@
   cursor: not-allowed;
 }
 
-.expand-indicator {
-  font-size: 14px;
-  color: #b3b3b3;
-}
 
-/* Expanded Player */
-.expanded-player {
-  padding: 0 16px 16px;
-  border-top: 1px solid #333;
-}
 
 /* Progress Section */
 .progress-section {
@@ -200,100 +175,6 @@
   background: #1db954;
   cursor: pointer;
   border: none;
-}
-
-/* Queue Controls */
-.queue-controls {
-  margin: 12px 0;
-}
-
-.queue-toggle-btn {
-  background: transparent;
-  border: 1px solid #404040;
-  color: #b3b3b3;
-  padding: 8px 12px;
-  cursor: pointer;
-  font-size: 12px;
-  transition: all 0.2s ease;
-}
-
-.queue-toggle-btn:hover {
-  border-color: #1db954;
-  color: #1db954;
-}
-
-.queue-toggle-btn.active {
-  background-color: #1db954;
-  border-color: #1db954;
-  color: white;
-}
-
-/* Queue Panel */
-.queue-panel {
-  border-top: 1px solid #333;
-  padding: 16px;
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.queue-title {
-  margin: 0 0 12px 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: white;
-}
-
-.queue-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.queue-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px;
-  transition: background-color 0.2s ease;
-}
-
-.queue-item:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-}
-
-.queue-item-image {
-  width: 32px;
-  height: 32px;
-  object-fit: cover;
-}
-
-.queue-item-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.queue-item-name {
-  font-size: 13px;
-  color: white;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.queue-item-artist {
-  font-size: 11px;
-  color: #b3b3b3;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.queue-empty {
-  text-align: center;
-  color: #b3b3b3;
-  font-size: 12px;
-  padding: 20px;
 }
 
 /* Vote Item Controls (for the voting interface) */
