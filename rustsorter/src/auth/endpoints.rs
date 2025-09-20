@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::{
     app_state::AppState,
     auth_middleware::extract_session_id_from_cookie,
+    extractors::maybe_user::AuthenticatedUser,
     models::{Error, Json, MapErrorSqlx, TempSessionData, User, UserProvider},
     sessions,
 };
@@ -466,6 +467,38 @@ pub struct SpotifySong {
     pub duration_ms: i32,
     pub preview_url: Option<String>,
     pub spotify_url: String,
+}
+
+pub async fn get_spotify_access_token(
+    State(state): State<AppState>,
+    AuthenticatedUser(user): AuthenticatedUser,
+) -> Result<Json<serde_json::Value>, Error> {
+    // Get user's Spotify access token from user_providers
+    let provider = sqlx::query_as!(
+        UserProvider,
+        "SELECT user_id, provider_id, external_id, external_username, profile_data, linked_at, last_sync_at 
+         FROM user_providers WHERE user_id = $1 AND provider_id = 'spotify'",
+        user.id
+    )
+    .fetch_optional(&state.db)
+    .await
+    .map_error("user provider")?
+    .ok_or(Error::BadRequest { message: "No Spotify account linked".into() })?;
+
+    // Extract tokens from profile_data
+    let profile_data = provider.profile_data.ok_or(Error::BadRequest { 
+        message: "No Spotify profile data found".into() 
+    })?;
+    
+    let access_token = profile_data.get("access_token")
+        .and_then(|token| token.as_str())
+        .ok_or(Error::BadRequest { 
+            message: "No Spotify access token found".into() 
+        })?;
+
+    Ok(Json(serde_json::json!({
+        "access_token": access_token
+    })))
 }
 
 pub async fn get_user_spotify_songs(

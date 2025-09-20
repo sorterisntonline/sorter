@@ -9,6 +9,7 @@ const SpotifyPlayer = ({ trackId, trackUri, title, artist, albumArt, compact = f
     position,
     duration,
     volume,
+    accessToken,
     playTrack,
     queueTrack,
     togglePlay,
@@ -71,7 +72,7 @@ const SpotifyPlayer = ({ trackId, trackUri, title, artist, albumArt, compact = f
           <button 
             className="play-btn-compact" 
             onClick={handlePlayClick}
-            disabled={!isReady}
+            disabled={!isReady || !accessToken}
             title={isCurrentTrack && isPlaying ? 'Pause' : 'Play'}
           >
             {isCurrentTrack && isPlaying ? '⏸️' : '▶️'}
@@ -79,7 +80,7 @@ const SpotifyPlayer = ({ trackId, trackUri, title, artist, albumArt, compact = f
           <button 
             className="queue-btn-compact" 
             onClick={handleQueueClick}
-            disabled={!isReady}
+            disabled={!isReady || !accessToken}
             title="Add to queue"
           >
             ➕

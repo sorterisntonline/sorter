@@ -6,6 +6,7 @@ import { AuthAPI } from '../api/auth';
 import SelectedSongPanel from '../components/SelectedSongPanel';
 import VoteHistoryPanel from '../components/VoteHistoryPanel';
 import RankingHistoryGraph from '../components/RankingHistoryGraph';
+import SpotifyPlayer from '../components/SpotifyPlayer';
 import { fetchPairFn, submitVoteFn } from '../fetchers/voteEndpoints';
 import '../styles/spotify.css';
 import '../styles/vote.css';
@@ -29,20 +30,18 @@ function VoteItemDisplay({ item, isDisabled }) {
   // Conditionally render Spotify Embed
   if (isSpotifyTrack || isSpotifyAlbum) {
     const embedType = isSpotifyTrack ? 'track' : 'album';
+    const artist = metadata?.artist || 'Unknown Artist';
+    const albumArt = metadata?.album_art || profile_picture_url;
+    
     return (
       <div className={`vote-item ${isDisabled ? 'disabled' : ''}`}>
-        <iframe
-          className="spotify-embed"
-          style={{ borderRadius: '12px' }}
-          src={`https://open.spotify.com/embed/${embedType}/${pk}`}
-          width="380"
-          height="300"
-          frameBorder="0"
-          allowFullScreen=""
-          allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-          loading="lazy"
-          title={`${embedType}: ${title || 'Spotify Content'}`}
-        ></iframe>
+        <SpotifyPlayer
+          trackId={pk}
+          title={title}
+          artist={artist}
+          albumArt={albumArt}
+          compact={true}
+        />
         <h4 className="vote-item-title" title={title}>{title || 'Unknown Title'}</h4>
         <p className="vote-item-type">[{entityType}]</p>
       </div>

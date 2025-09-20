@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { useRequireAuth } from './contexts/AuthContext';
+import { SpotifyPlayerProvider } from './contexts/SpotifyPlayerContext';
 import FloatingNav from './components/FloatingNav';
 import './styles/floating-nav.css';
 
@@ -27,13 +28,15 @@ function Layout() {
   }
 
   return (
-    <div style={{ position: 'relative', minHeight: '100vh' }}>
-      <FloatingNav />
-      {/* Main content area with full width */}
-      <main style={{ padding: '0', maxWidth: '100%', height: '100vh' }}>
-        <Outlet /> {/* Child routes will render here */}
-      </main>
-    </div>
+    <SpotifyPlayerProvider user={auth.user}>
+      <div style={{ position: 'relative', minHeight: '100vh' }}>
+        <FloatingNav />
+        {/* Main content area with full width */}
+        <main style={{ padding: '0', maxWidth: '100%', height: '100vh' }}>
+          <Outlet /> {/* Child routes will render here */}
+        </main>
+      </div>
+    </SpotifyPlayerProvider>
   );
 }
 

@@ -20,17 +20,51 @@ export const SpotifyPlayerProvider = ({ children, user }) => {
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(0.5);
   const [queue, setQueue] = useState([]);
+  const [accessToken, setAccessToken] = useState(null);
 
-  // Initialize Spotify Player when user is available and has tokens
+  // Fetch Spotify access token
   useEffect(() => {
-    if (!user?.spotifyAccessToken || !window.Spotify) {
+    if (!user) return;
+
+    const fetchToken = async () => {
+      try {
+        const response = await fetch('/api/auth/spotify-token', {
+          credentials: 'include'
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setAccessToken(data.access_token);
+        }
+      } catch (error) {
+        console.error('Failed to fetch Spotify token:', error);
+      }
+    };
+
+    fetchToken();
+  }, [user]);
+
+  // Initialize Spotify Player when token is available
+  useEffect(() => {
+    if (!accessToken) {
       return;
     }
 
+    let playerInstance = null;
+
     const initializePlayer = () => {
+      if (!window.Spotify?.Player) {
+        console.warn('Spotify SDK not loaded yet');
+        return;
+      }
+
+      console.log('Initializing Spotify Player with token');
+      
       const spotifyPlayer = new window.Spotify.Player({
         name: 'Sorter Music Player',
-        getOAuthToken: cb => { cb(user.spotifyAccessToken); },
+        getOAuthToken: cb => { 
+          console.log('Spotify requesting token');
+          cb(accessToken); 
+        },
         volume: volume,
       });
 
@@ -83,25 +117,33 @@ export const SpotifyPlayerProvider = ({ children, user }) => {
       // Connect to the player
       spotifyPlayer.connect();
       setPlayer(spotifyPlayer);
+      playerInstance = spotifyPlayer;
     };
 
-    // Wait for Spotify SDK to be ready
-    if (window.Spotify) {
-      initializePlayer();
+    // Listen for SDK ready event
+    const handleSDKReady = () => {
+      if (window.Spotify?.Player) {
+        initializePlayer();
+      }
+    };
+
+    if (window.spotifySDKReady) {
+      handleSDKReady();
     } else {
-      window.onSpotifyWebPlaybackSDKReady = initializePlayer;
+      window.addEventListener('spotifySDKReady', handleSDKReady);
     }
 
     return () => {
-      if (player) {
-        player.disconnect();
+      window.removeEventListener('spotifySDKReady', handleSDKReady);
+      if (playerInstance) {
+        playerInstance.disconnect();
       }
     };
-  }, [user?.spotifyAccessToken, volume]);
+  }, [accessToken, volume]);
 
   // Play a track
   const playTrack = useCallback(async (trackUri) => {
-    if (!user?.spotifyAccessToken || !deviceId) {
+    if (!accessToken || !deviceId) {
       console.warn('Cannot play track: no token or device');
       return;
     }
@@ -111,7 +153,7 @@ export const SpotifyPlayerProvider = ({ children, user }) => {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user.spotifyAccessToken}`
+          'Authorization': `Bearer ${accessToken}`
         },
         body: JSON.stringify({
           uris: [trackUri]
@@ -124,11 +166,11 @@ export const SpotifyPlayerProvider = ({ children, user }) => {
     } catch (error) {
       console.error('Error playing track:', error);
     }
-  }, [user?.spotifyAccessToken, deviceId]);
+  }, [accessToken, deviceId]);
 
   // Queue a track
   const queueTrack = useCallback(async (trackUri) => {
-    if (!user?.spotifyAccessToken) {
+    if (!accessToken) {
       console.warn('Cannot queue track: no token');
       return;
     }
@@ -137,7 +179,7 @@ export const SpotifyPlayerProvider = ({ children, user }) => {
       const response = await fetch(`https://api.spotify.com/v1/me/player/queue?uri=${encodeURIComponent(trackUri)}`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${user.spotifyAccessToken}`
+          'Authorization': `Bearer ${accessToken}`
         }
       });
 
@@ -150,7 +192,7 @@ export const SpotifyPlayerProvider = ({ children, user }) => {
     } catch (error) {
       console.error('Error queueing track:', error);
     }
-  }, [user?.spotifyAccessToken]);
+  }, [accessToken]);
 
   // Toggle play/pause
   const togglePlay = useCallback(async () => {
@@ -218,6 +260,7 @@ export const SpotifyPlayerProvider = ({ children, user }) => {
     duration,
     volume,
     queue,
+    accessToken,
     // Methods
     playTrack,
     queueTrack,

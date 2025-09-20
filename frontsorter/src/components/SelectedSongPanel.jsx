@@ -1,6 +1,7 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import VoteItem from './VoteItem';
+import SpotifyPlayer from './SpotifyPlayer';
 
 function SelectedSongPanel({ selectedSong, user, onSongSelect }) {
   // Query for votes involving this song
@@ -58,20 +59,16 @@ function SelectedSongPanel({ selectedSong, user, onSongSelect }) {
           </div>
         </div>
 
-        {/* Spotify Player Embed */}
+        {/* Spotify Player */}
         <div className="player-section">
           <h4 className="section-title">Player</h4>
-          <iframe
-            className="spotify-player"
-            src={`https://open.spotify.com/embed/track/${selectedSong.id}`}
-            width="100%"
-            height="180"
-            frameBorder="0"
-            allowFullScreen=""
-            allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-            loading="lazy"
-            title={`Spotify Player: ${selectedSong.title}`}
-          ></iframe>
+          <SpotifyPlayer
+            trackId={selectedSong.id}
+            title={selectedSong.title}
+            artist={selectedSong.artist}
+            albumArt={selectedSong.album_art}
+            compact={false}
+          />
         </div>
 
 
