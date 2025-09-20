@@ -446,12 +446,7 @@ function SpotifySongsPage() {
 
               {pairQuery.data && pairQuery.data.left_entity && pairQuery.data.right_entity && (
                 <div className="vote-container" style={{
-                  background: theme.extractedColors?.css?.radialGradient || 'var(--theme-radial-gradient)',
-                  borderRadius: '16px',
-                  padding: '24px',
-                  backdropFilter: 'blur(10px)',
-                  border: '1px solid var(--theme-accent)',
-                  boxShadow: `0 8px 32px ${theme.colors?.accentDark || 'var(--theme-accent)'}20`
+                    width: '100%',
                 }}>
                   <div className="vote-items-container">
                     <VoteItemDisplay 

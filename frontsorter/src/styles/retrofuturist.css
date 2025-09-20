@@ -156,7 +156,7 @@
 .priority-selector {
   padding: 0.5rem 0.75rem;
   background: var(--bg-primary);
-  border: 1px solid var(--border-medium);
+  border: 1px solid var(--border-medium);   
   color: var(--text-primary);
   font-family: 'Source Sans Pro', sans-serif;
   margin-left: 0.75rem;

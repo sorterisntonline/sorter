@@ -37,7 +37,6 @@
   width: 100%;
   align-items: flex-start;
   justify-content: space-around;
-  gap: 24px;
 }
 
 .vote-item-link {
@@ -49,23 +48,6 @@
 
 .vote-item-link:hover {
   opacity: 0.8;
-}
-
-.vote-item {
-  background: white;
-  padding: 16px;
-  text-align: center;
-  transition: all 0.2s ease;
-  min-height: 550px;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-}
-
-.vote-item:hover {
-  border-color: #3b82f6;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
 }
 
 .vote-item.disabled {
@@ -83,13 +65,13 @@
 .vote-item-title {
   font-size: 16px;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--theme-text);
   margin: 8px 0 4px;
 }
 
 .vote-item-type {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--theme-text-secondary);
   margin: 0;
 }
 
@@ -372,14 +354,9 @@
     min-width: 0;
     max-width: none;
   }
-  .vote-container {
-    padding: 16px;
-    gap: 16px;
-  }
   
   .vote-items-container {
     flex-direction: column;
-    gap: 16px;
   }
   
   .vote-item-link {
@@ -413,9 +390,5 @@
   
   .spotify-embed {
     max-width: 250px;
-  }
-  
-  .vote-item {
-    padding: 12px;
   }
 }
