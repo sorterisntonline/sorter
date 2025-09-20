@@ -1,0 +1,349 @@
+/* Ranking History Graph Styles */
+.ranking-history-header {
+  text-align: center;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.ranking-history-header h3 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.panel-subtitle {
+  margin: 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.timeline-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: #f9fafb;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  border: 1px solid #e5e7eb;
+}
+
+.play-pause-btn,
+.reset-btn {
+  width: 40px;
+  height: 40px;
+  border: 1px solid #d1d5db;
+  background: white;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.2s ease;
+}
+
+.play-pause-btn:hover,
+.reset-btn:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.play-pause-btn:disabled,
+.reset-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.timeline-slider {
+  flex: 1;
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+.timeline-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #2563eb;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.timeline-slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #2563eb;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.timeline-info {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+  min-width: 100px;
+  text-align: right;
+}
+
+.current-snapshot-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #eff6ff;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  font-size: 12px;
+  border: 1px solid #dbeafe;
+}
+
+.vote-info {
+  font-weight: 600;
+  color: #1e40af;
+}
+
+.ranking-summary {
+  color: #374151;
+}
+
+.chart-timeline-container {
+  display: flex;
+  gap: 20px;
+  height: 400px;
+}
+
+.chart-wrapper {
+  flex: 3;
+  min-width: 0;
+  position: relative;
+}
+
+.rankings-legend {
+  flex: 1;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+  overflow-y: auto;
+  max-height: 400px;
+}
+
+.rankings-legend h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 8px;
+}
+
+.rankings-legend h5 {
+  margin: 16px 0 8px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.ranked-songs,
+.unranked-songs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.legend-item:hover {
+  background: white;
+}
+
+.color-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.rank-position {
+  font-weight: 700;
+  color: #374151;
+  min-width: 20px;
+  font-size: 12px;
+}
+
+.song-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.song-title {
+  font-weight: 500;
+  color: #374151;
+  font-size: 12px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.song-artist {
+  color: #6b7280;
+  font-size: 11px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unranked-item {
+  display: flex;
+  align-items: center;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.unranked-item .song-info {
+  margin-left: 4px;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .ranking-history-header {
+    border-bottom-color: #374151;
+  }
+
+  .ranking-history-header h3 {
+    color: #f9fafb;
+  }
+
+  .panel-subtitle {
+    color: #d1d5db;
+  }
+
+  .timeline-controls {
+    background: #374151;
+    border-color: #4b5563;
+  }
+
+  .play-pause-btn,
+  .reset-btn {
+    background: #1f2937;
+    border-color: #4b5563;
+    color: #f9fafb;
+  }
+
+  .play-pause-btn:hover,
+  .reset-btn:hover {
+    background: #374151;
+    border-color: #6b7280;
+  }
+
+  .timeline-slider {
+    background: #4b5563;
+  }
+
+  .timeline-info {
+    color: #d1d5db;
+  }
+
+  .current-snapshot-info {
+    background: #1e3a8a;
+    border-color: #1e40af;
+  }
+
+  .vote-info {
+    color: #93c5fd;
+  }
+
+  .ranking-summary {
+    color: #f3f4f6;
+  }
+
+  .rankings-legend {
+    background: #1f2937;
+    border-color: #374151;
+  }
+
+  .rankings-legend h4 {
+    color: #f9fafb;
+    border-bottom-color: #374151;
+  }
+
+  .rankings-legend h5 {
+    color: #d1d5db;
+  }
+
+  .legend-item:hover {
+    background: #374151;
+  }
+
+  .rank-position {
+    color: #f9fafb;
+  }
+
+  .song-title {
+    color: #f9fafb;
+  }
+
+  .song-artist {
+    color: #d1d5db;
+  }
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .chart-timeline-container {
+    flex-direction: column;
+    height: auto;
+  }
+
+  .chart-wrapper {
+    height: 300px;
+  }
+
+  .rankings-legend {
+    max-height: 200px;
+  }
+
+  .timeline-controls {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .timeline-slider {
+    order: 3;
+    width: 100%;
+    margin-top: 8px;
+  }
+
+  .timeline-info {
+    order: 4;
+    width: 100%;
+    text-align: left;
+    margin-top: 4px;
+  }
+
+  .current-snapshot-info {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+}

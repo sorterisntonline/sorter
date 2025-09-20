@@ -1,8 +1,8 @@
 import React, { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { useRequireAuth } from './contexts/AuthContext';
-import Sidebar from './Sidebar';
-import './styles/sidebar.css';
+import FloatingNav from './components/FloatingNav';
+import './styles/floating-nav.css';
 
 function Layout() {
   const auth = useRequireAuth(); // This will redirect to login if not authenticated
@@ -27,10 +27,10 @@ function Layout() {
   }
 
   return (
-    <div style={{ display: 'flex' }}>
-      <Sidebar />
-      {/* Main content area with padding to offset the fixed sidebar */}
-      <main className="main-content" style={{ padding: '24px' }}>
+    <div style={{ position: 'relative', minHeight: '100vh' }}>
+      <FloatingNav />
+      {/* Main content area with full width */}
+      <main style={{ padding: '24px', maxWidth: '100%' }}>
         <Outlet /> {/* Child routes will render here */}
       </main>
     </div>

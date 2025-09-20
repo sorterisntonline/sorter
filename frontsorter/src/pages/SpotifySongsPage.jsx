@@ -4,11 +4,11 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AuthAPI } from '../api/auth';
 import SelectedSongPanel from '../components/SelectedSongPanel';
 import VoteHistoryPanel from '../components/VoteHistoryPanel';
-import RankingHistoryPanel from '../components/RankingHistoryPanel';
+import RankingHistoryGraph from '../components/RankingHistoryGraph';
 import { fetchPairFn, submitVoteFn } from '../fetchers/voteEndpoints';
 import '../styles/spotify.css';
 import '../styles/vote.css';
-import '../styles/ranking-history.css';
+import '../styles/ranking-history-graph.css';
 
 // Helper function to get the smallest image URL
 const getSmallestImageUrl = (images) => {
@@ -34,8 +34,8 @@ function VoteItemDisplay({ item, isDisabled }) {
           className="spotify-embed"
           style={{ borderRadius: '12px' }}
           src={`https://open.spotify.com/embed/${embedType}/${pk}`}
-          width="280"
-          height="360"
+          width="320"
+          height="450"
           frameBorder="0"
           allowFullScreen=""
           allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
@@ -455,7 +455,7 @@ function SpotifySongsPage() {
             ) : rightPanelTab === 'history' ? (
               <VoteHistoryPanel user={user} />
             ) : (
-              <RankingHistoryPanel user={user} songs={songs} />
+              <RankingHistoryGraph user={user} songs={songs} />
             )}
           </div>
         </div>
