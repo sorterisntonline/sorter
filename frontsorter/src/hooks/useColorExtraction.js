@@ -38,12 +38,13 @@ const useColorExtraction = (imageUrl) => {
             const accent = vibrantColor.set('hsl.l', 0.6); // Medium lightness for accents
             const lightAccent = vibrantColor.set('hsl.l', 0.8); // Light version
 
-            // Create gradient scale: high scores = dark/vibrant, low scores = light
+            // Create gradient scale: low scores = black (fade to background), high scores = vibrant
             const gradientScale = chroma.scale([
-              lightAccent,      // Low scores = light
-              accent,           // Medium scores = medium
-              darkVibrant,      // High scores = dark vibrant
-              dominantChroma.set('hsl.l', 0.15) // Highest scores = very dark
+              chroma('#000000'),  // Low scores = pure black (disappears into background)
+              chroma('#1a1a1a'),  // Very low = almost black
+              darkVibrant,        // Medium-high scores = dark vibrant
+              accent,             // High scores = vibrant accent
+              vibrantColor        // Highest scores = most vibrant
             ]).mode('lch');
 
             setColors({

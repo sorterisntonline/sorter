@@ -48,6 +48,12 @@
   flex: 1.5;
   min-width: 280px;
   overflow-y: auto;
+  /* disable scrollbar */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none;  /* IE and Edge */ 
+}
+.songs-panel::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
 }
 
 .vote-panel {
@@ -455,7 +461,7 @@
 }
 
 .songs-container {
-  background: white;
+  background: black;
 }
 
 .section-header {
