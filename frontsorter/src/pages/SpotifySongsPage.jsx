@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import chroma from 'chroma-js';
 import { AuthAPI } from '../api/auth';
 import SelectedSongPanel from '../components/SelectedSongPanel';
 import VoteHistoryPanel from '../components/VoteHistoryPanel';
@@ -69,6 +70,7 @@ function SpotifySongsPage() {
   const [selectedSong, setSelectedSong] = useState(null);
   const [rightPanelTab, setRightPanelTab] = useState('selected'); // 'selected', 'history', or 'ranking-history'
   const [sliderValue, setSliderValue] = useState(0);
+  const [luminanceThreshold, setLuminanceThreshold] = useState(0.6);
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -133,9 +135,9 @@ function SpotifySongsPage() {
   });
 
   // Process ranking data to organize songs
-  const { rankedSongs, unrankedSongs } = React.useMemo(() => {
+  const { rankedSongs, unrankedSongs, colorScale } = React.useMemo(() => {
     if (!songs || !ranking) {
-      return { rankedSongs: [], unrankedSongs: songs || [] };
+      return { rankedSongs: [], unrankedSongs: songs || [], colorScale: null };
     }
 
     // Create a map of songs by their identifier
@@ -158,6 +160,18 @@ function SpotifySongsPage() {
       .filter(Boolean)
       .sort((a, b) => b.score - a.score); // Sort by score descending
 
+    // Create color scale based on score range
+    let colorScale = null;
+    if (rankedSongs.length > 0) {
+      const scores = rankedSongs.map(song => song.score);
+      const minScore = Math.min(...scores);
+      const maxScore = Math.max(...scores);
+      
+      // Create beautiful blue-to-white gradient scale
+      colorScale = chroma.scale(['#1e3a8a', '#3b82f6', '#93c5fd', '#dbeafe', '#ffffff'])
+        .domain([maxScore, minScore]);
+    }
+
     // Process unranked songs
     const unrankedSongs = ranking.unsorted
       .map(identifier => {
@@ -166,8 +180,20 @@ function SpotifySongsPage() {
       })
       .filter(Boolean);
 
-    return { rankedSongs, unrankedSongs };
+    return { rankedSongs, unrankedSongs, colorScale };
   }, [songs, ranking]);
+
+  // Helper function to get background and text colors for a score
+  const getScoreColors = (score) => {
+    if (!colorScale) return { backgroundColor: 'white', textColor: 'black' };
+    
+    const backgroundColor = colorScale(score).hex();
+    
+    // Use dynamic luminance threshold controlled by slider
+    const textColor = chroma(backgroundColor).luminance() > luminanceThreshold ? 'black' : 'white';
+    
+    return { backgroundColor, textColor };
+  };
 
   const handleImportSongs = async () => {
     setIsImporting(true);
@@ -237,29 +263,40 @@ function SpotifySongsPage() {
           {!rankingLoading && ranking && rankedSongs.length > 0 && (
             <div className="songs-container" style={{ marginBottom: '16px' }}>
               <div>
-                {rankedSongs.map((song, index) => (
-                  <div 
-                    key={song.id} 
-                    className={`song-item ${selectedSong?.id === song.id ? 'selected' : ''}`}
-                    onClick={() => setSelectedSong(song)}
-                  >
-                    <span className="rank-number">{index + 1}</span>
-                    {song.album_art && (
-                      <img 
-                        src={song.album_art} 
-                        alt={`${song.title} album art`}
-                        className="album-art"
-                      />
-                    )}
-                    <div className="song-info">
-                      <div className="song-title">{song.title}</div>
-                      <div className="song-artist">{song.artist}</div>
-                      {song.album && (
-                        <div className="song-album">{song.album}</div>
+                {rankedSongs.map((song, index) => {
+                  const { backgroundColor, textColor } = getScoreColors(song.score);
+                  return (
+                    <div 
+                      key={song.id} 
+                      className={`song-item ${selectedSong?.id === song.id ? 'selected' : ''}`}
+                      onClick={() => setSelectedSong(song)}
+                      style={{ 
+                        backgroundColor, 
+                        color: textColor,
+                        '--text-color': textColor 
+                      }}
+                    >
+                      <span className="rank-number">{index + 1}</span>
+                      {song.album_art && (
+                        <img 
+                          src={song.album_art} 
+                          alt={`${song.title} album art`}
+                          className="album-art"
+                        />
                       )}
+                      <div className="song-info">
+                        <div className="song-title">{song.title}</div>
+                        <div className="song-artist">{song.artist}</div>
+                        {song.album && (
+                          <div className="song-album">{song.album}</div>
+                        )}
+                      </div>
+                      <div className="score-display">
+                        {song.score.toFixed(4)}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
