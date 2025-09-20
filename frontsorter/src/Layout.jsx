@@ -3,7 +3,9 @@ import { Outlet } from 'react-router-dom';
 import { useRequireAuth } from './contexts/AuthContext';
 import { SpotifyPlayerProvider } from './contexts/SpotifyPlayerContext';
 import FloatingNav from './components/FloatingNav';
+import BottomSpotifyPlayer from './components/BottomSpotifyPlayer';
 import './styles/floating-nav.css';
+import './styles/bottom-player.css';
 
 function Layout() {
   const auth = useRequireAuth(); // This will redirect to login if not authenticated
@@ -35,6 +37,7 @@ function Layout() {
         <main style={{ padding: '0', maxWidth: '100%', height: '100vh' }}>
           <Outlet /> {/* Child routes will render here */}
         </main>
+        <BottomSpotifyPlayer />
       </div>
     </SpotifyPlayerProvider>
   );

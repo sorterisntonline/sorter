@@ -22,6 +22,27 @@ export const SpotifyPlayerProvider = ({ children, user }) => {
   const [queue, setQueue] = useState([]);
   const [accessToken, setAccessToken] = useState(null);
 
+  // Fetch full queue from Spotify API
+  const fetchQueue = useCallback(async () => {
+    if (!accessToken) return;
+
+    try {
+      const response = await fetch('https://api.spotify.com/v1/me/player/queue', {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        }
+      });
+
+      if (response.ok) {
+        const queueData = await response.json();
+        console.log('Full queue from API:', queueData);
+        setQueue(queueData.queue || []);
+      }
+    } catch (error) {
+      console.error('Error fetching queue:', error);
+    }
+  }, [accessToken]);
+
   // Fetch Spotify access token
   useEffect(() => {
     if (!user) return;
@@ -65,7 +86,7 @@ export const SpotifyPlayerProvider = ({ children, user }) => {
           console.log('Spotify requesting token');
           cb(accessToken); 
         },
-        volume: volume,
+        volume: 0.5,
       });
 
       // Error handling
@@ -105,6 +126,7 @@ export const SpotifyPlayerProvider = ({ children, user }) => {
           setIsPlaying(false);
           setPosition(0);
           setDuration(0);
+          setQueue([]);
           return;
         }
 
@@ -112,6 +134,9 @@ export const SpotifyPlayerProvider = ({ children, user }) => {
         setIsPlaying(!state.paused);
         setPosition(state.position);
         setDuration(state.duration);
+        
+        // Fetch full queue from API when track changes
+        fetchQueue();
       });
 
       // Connect to the player
@@ -139,7 +164,7 @@ export const SpotifyPlayerProvider = ({ children, user }) => {
         playerInstance.disconnect();
       }
     };
-  }, [accessToken, volume]);
+  }, [accessToken]);
 
   // Play a track
   const playTrack = useCallback(async (trackUri) => {
@@ -187,12 +212,12 @@ export const SpotifyPlayerProvider = ({ children, user }) => {
         throw new Error(`Failed to queue track: ${response.status}`);
       }
 
-      // Update local queue state
-      setQueue(prev => [...prev, trackUri]);
+      // Refresh the full queue after adding
+      setTimeout(() => fetchQueue(), 500); // Small delay to let Spotify update
     } catch (error) {
       console.error('Error queueing track:', error);
     }
-  }, [accessToken]);
+  }, [accessToken, fetchQueue]);
 
   // Toggle play/pause
   const togglePlay = useCallback(async () => {

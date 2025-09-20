@@ -6,7 +6,7 @@ import { AuthAPI } from '../api/auth';
 import SelectedSongPanel from '../components/SelectedSongPanel';
 import VoteHistoryPanel from '../components/VoteHistoryPanel';
 import RankingHistoryGraph from '../components/RankingHistoryGraph';
-import SpotifyPlayer from '../components/SpotifyPlayer';
+import { useSpotifyPlayer } from '../contexts/SpotifyPlayerContext';
 import { fetchPairFn, submitVoteFn } from '../fetchers/voteEndpoints';
 import '../styles/spotify.css';
 import '../styles/vote.css';
@@ -20,6 +20,8 @@ const getSmallestImageUrl = (images) => {
 
 // Vote Item Display Component
 function VoteItemDisplay({ item, isDisabled }) {
+  const { playTrack, queueTrack, isReady, accessToken } = useSpotifyPlayer();
+  
   if (!item) return null;
 
   const { title, pk_namespace, pk, metadata, profile_picture_url } = item;
@@ -27,23 +29,53 @@ function VoteItemDisplay({ item, isDisabled }) {
   const isSpotifyTrack = pk_namespace?.includes('spotify.track');
   const isSpotifyAlbum = pk_namespace?.includes('spotify.album');
 
-  // Conditionally render Spotify Embed
+  const handlePlay = () => {
+    if (isSpotifyTrack || isSpotifyAlbum) {
+      const uri = `spotify:${isSpotifyTrack ? 'track' : 'album'}:${pk}`;
+      playTrack(uri);
+    }
+  };
+
+  const handleQueue = () => {
+    if (isSpotifyTrack || isSpotifyAlbum) {
+      const uri = `spotify:${isSpotifyTrack ? 'track' : 'album'}:${pk}`;
+      queueTrack(uri);
+    }
+  };
+
+  // Extract album art from metadata for Spotify tracks
   if (isSpotifyTrack || isSpotifyAlbum) {
-    const embedType = isSpotifyTrack ? 'track' : 'album';
-    const artist = metadata?.artist || 'Unknown Artist';
-    const albumArt = metadata?.album_art || profile_picture_url;
+    const artist = metadata?.artists?.[0]?.name || metadata?.artist || 'Unknown Artist';
+    const albumArt = metadata?.album?.images?.[0]?.url || metadata?.images?.[0]?.url || profile_picture_url;
     
     return (
       <div className={`vote-item ${isDisabled ? 'disabled' : ''}`}>
-        <SpotifyPlayer
-          trackId={pk}
-          title={title}
-          artist={artist}
-          albumArt={albumArt}
-          compact={true}
-        />
-        <h4 className="vote-item-title" title={title}>{title || 'Unknown Title'}</h4>
-        <p className="vote-item-type">[{entityType}]</p>
+        <div className="track-info">
+          {albumArt && <img src={albumArt} alt={title} className="vote-item-image" />}
+          <div className="track-details">
+            <h4 className="vote-item-title" title={title}>{title || 'Unknown Title'}</h4>
+            <p className="vote-item-artist">{artist}</p>
+            <p className="vote-item-type">[{entityType}]</p>
+          </div>
+        </div>
+        <div className="vote-item-controls">
+          <button 
+            className="play-btn" 
+            onClick={handlePlay}
+            disabled={!isReady || !accessToken || isDisabled}
+            title="Play"
+          >
+            ▶️
+          </button>
+          <button 
+            className="queue-btn" 
+            onClick={handleQueue}
+            disabled={!isReady || !accessToken || isDisabled}
+            title="Add to queue"
+          >
+            ➕
+          </button>
+        </div>
       </div>
     );
   }

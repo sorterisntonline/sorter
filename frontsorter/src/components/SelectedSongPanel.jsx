@@ -1,9 +1,11 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import VoteItem from './VoteItem';
-import SpotifyPlayer from './SpotifyPlayer';
+import { useSpotifyPlayer } from '../contexts/SpotifyPlayerContext';
 
 function SelectedSongPanel({ selectedSong, user, onSongSelect }) {
+  const { playTrack, queueTrack, isReady, accessToken } = useSpotifyPlayer();
+  
   // Query for votes involving this song
   const { data: songVotes = [], isLoading: votesLoading } = useQuery({
     queryKey: ['song-votes', selectedSong?.id],
@@ -59,16 +61,27 @@ function SelectedSongPanel({ selectedSong, user, onSongSelect }) {
           </div>
         </div>
 
-        {/* Spotify Player */}
-        <div className="player-section">
-          <h4 className="section-title">Player</h4>
-          <SpotifyPlayer
-            trackId={selectedSong.id}
-            title={selectedSong.title}
-            artist={selectedSong.artist}
-            albumArt={selectedSong.album_art}
-            compact={false}
-          />
+        {/* Playback Controls */}
+        <div className="playback-section">
+          <h4 className="section-title">Playback</h4>
+          <div className="playback-controls">
+            <button 
+              className="control-btn play-btn-large" 
+              onClick={() => playTrack(`spotify:track:${selectedSong.id}`)}
+              disabled={!isReady || !accessToken}
+              title="Play now"
+            >
+              ▶️ Play
+            </button>
+            <button 
+              className="control-btn queue-btn-large" 
+              onClick={() => queueTrack(`spotify:track:${selectedSong.id}`)}
+              disabled={!isReady || !accessToken}
+              title="Add to queue"
+            >
+              ➕ Add to Queue
+            </button>
+          </div>
         </div>
 
 
