@@ -1,3 +1,4 @@
+use chrono::{Duration, NaiveDate, NaiveDateTime};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use rand::{Rng, SeedableRng, seq::SliceRandom};
 use rustsorter::{EntityIdentifier, RelevantVote, rank_entities};
@@ -42,6 +43,11 @@ fn matrix_to_votes(matrix: &[Vec<f64>], namespace: &str) -> Vec<RelevantVote> {
     let n = matrix.len();
     let mut votes = Vec::new();
 
+    let epoch = NaiveDate::from_ymd_opt(1970, 1, 1)
+        .unwrap()
+        .and_hms_opt(0, 0, 0)
+        .unwrap();
+
     for i in 0..n {
         for j in (i + 1)..n {
             let a_ij = matrix[i][j];
@@ -59,6 +65,7 @@ fn matrix_to_votes(matrix: &[Vec<f64>], namespace: &str) -> Vec<RelevantVote> {
                 right_entity_pk_namespace: namespace.to_string(),
                 right_entity_pk: j.to_string(),
                 magnitude: magnitude.clamp(-50, 50),
+                created_at: epoch + Duration::seconds((votes.len() + 1) as i64),
             });
         }
     }
