@@ -1,7 +1,11 @@
 use std::collections::{HashMap, HashSet};
 
-use aide::axum::{ApiRouter, routing::{post_with, get_with}};
-use axum::extract::{State, Query};
+use aide::axum::{
+    ApiRouter,
+    routing::{get_with, post_with},
+};
+use axum::extract::{Query, State};
+use chrono::NaiveDateTime;
 use graph::prelude::*;
 use log::{error, info, warn};
 use schemars::JsonSchema;
@@ -31,7 +35,20 @@ pub struct RankingResponse {
     sorted: Vec<RankedEntity>,
 }
 
-#[derive(sqlx::FromRow, Debug)]
+#[derive(Serialize, Debug, JsonSchema)]
+pub struct RankingSnapshot {
+    pub vote_index: usize,
+    pub created_at: NaiveDateTime,
+    pub unsorted: Vec<EntityIdentifier>,
+    pub sorted: Vec<RankedEntity>,
+}
+
+#[derive(Serialize, Debug, JsonSchema)]
+pub struct RankingHistoryResponse {
+    pub snapshots: Vec<RankingSnapshot>,
+}
+
+#[derive(sqlx::FromRow, Debug, Clone)]
 pub struct RelevantVote {
     pub left_entity_pk_namespace: String,
     pub left_entity_pk: String,
@@ -39,6 +56,7 @@ pub struct RelevantVote {
     pub right_entity_pk: String,
 
     pub magnitude: i32,
+    pub created_at: NaiveDateTime,
 }
 
 struct RankGraph {
@@ -284,6 +302,26 @@ pub fn rank_entities(
     rank_entities_internal(entities, votes)
 }
 
+fn build_ranking_history(
+    entities: &[EntityIdentifier],
+    votes: &[RelevantVote],
+) -> Result<Vec<RankingSnapshot>, Error> {
+    let mut snapshots = Vec::with_capacity(votes.len());
+
+    for (idx, vote) in votes.iter().enumerate() {
+        let (unsorted, sorted) = rank_entities_internal(entities, &votes[..=idx])?;
+
+        snapshots.push(RankingSnapshot {
+            vote_index: idx + 1,
+            created_at: vote.created_at,
+            unsorted,
+            sorted,
+        });
+    }
+
+    Ok(snapshots)
+}
+
 async fn rank_children_handler(
     State(state): State<AppState>,
     Json(payload): Json<Vec<EntityIdentifier>>,
@@ -376,6 +414,51 @@ async fn get_ranking_handler(
     Ok(Json(RankingResponse { unsorted, sorted }))
 }
 
+async fn get_ranking_history_handler(
+    State(state): State<AppState>,
+    Query(params): Query<RankQueryParams>,
+) -> Result<Json<RankingHistoryResponse>, Error> {
+    let children = sqlx::query_file_as!(
+        crate::entity::Entity,
+        "../database/sql/entity/select_children.sql",
+        params.pk_namespace,
+        params.pk
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_error("children entities")?;
+
+    if children.is_empty() {
+        return Ok(Json(RankingHistoryResponse { snapshots: vec![] }));
+    }
+
+    let entity_identifiers: Vec<EntityIdentifier> = children
+        .iter()
+        .map(|e| EntityIdentifier {
+            pk_namespace: e.pk_namespace.clone(),
+            pk: e.pk.clone(),
+        })
+        .collect();
+
+    let entity_keys: Vec<String> = entity_identifiers
+        .iter()
+        .map(|e| format!("{}:{}", e.pk_namespace, e.pk))
+        .collect();
+
+    let votes = sqlx::query_file_as!(
+        RelevantVote,
+        "../database/sql/vote/select_partial_ordered.sql",
+        &entity_keys
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_error("votes")?;
+
+    let snapshots = build_ranking_history(&entity_identifiers, &votes)?;
+
+    Ok(Json(RankingHistoryResponse { snapshots }))
+}
+
 pub fn routes() -> ApiRouter<AppState> {
     ApiRouter::new()
         .api_route(
@@ -383,14 +466,21 @@ pub fn routes() -> ApiRouter<AppState> {
             post_with(rank_children_handler, |op| {
                 op.description("Rank children of a given entity.")
                     .response::<200, Json<RankingResponse>>()
-            })
+            }),
         )
         .api_route(
             "/rank",
             get_with(get_ranking_handler, |op| {
                 op.description("Get ranking for children of a given entity.")
                     .response::<200, Json<RankingResponse>>()
-            })
+            }),
+        )
+        .api_route(
+            "/rank/history",
+            get_with(get_ranking_history_handler, |op| {
+                op.description("Get ranking history snapshots for children of a given entity.")
+                    .response::<200, Json<RankingHistoryResponse>>()
+            }),
         )
 }
 
@@ -399,6 +489,7 @@ mod tests {
     // TODO: deal with how CSR graph has weird behavior around non-voted nodes.
     // either delete those currently ignored edge case tests (empty graph tests), or
     // add edge case handlingß
+    use chrono::{Duration, NaiveDate};
     use log::debug;
 
     use super::*;
@@ -420,6 +511,14 @@ mod tests {
     }
 
     // Helper function to create a vote
+    fn naive_timestamp(seconds: i64) -> NaiveDateTime {
+        NaiveDate::from_ymd_opt(1970, 1, 1)
+            .unwrap()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            + Duration::seconds(seconds)
+    }
+
     fn create_vote(
         left_ns: &str,
         left_pk: &str,
@@ -433,6 +532,7 @@ mod tests {
             right_entity_pk_namespace: right_ns.to_string(),
             right_entity_pk: right_pk.to_string(),
             magnitude,
+            created_at: naive_timestamp(0),
         }
     }
 
@@ -463,6 +563,7 @@ mod tests {
                     right_entity_pk_namespace: namespace.to_string(),
                     right_entity_pk: j.to_string(),
                     magnitude: magnitude.clamp(-50, 50),
+                    created_at: naive_timestamp((votes.len() + 1) as i64),
                 });
             }
         }
@@ -746,6 +847,45 @@ mod tests {
                 weights.sort_by(|a, b| a.partial_cmp(b).unwrap());
                 assert_eq!(weights, vec![30.0, 70.0]);
             }
+        }
+
+        #[test]
+        fn test_build_ranking_history_snapshots() {
+            let entities = vec![create_entity("ns", "A"), create_entity("ns", "B")];
+
+            let first_time = naive_timestamp(1);
+            let second_time = first_time + Duration::seconds(1);
+
+            let votes = vec![
+                RelevantVote {
+                    left_entity_pk_namespace: "ns".to_string(),
+                    left_entity_pk: "A".to_string(),
+                    right_entity_pk_namespace: "ns".to_string(),
+                    right_entity_pk: "B".to_string(),
+                    magnitude: -20,
+                    created_at: first_time,
+                },
+                RelevantVote {
+                    left_entity_pk_namespace: "ns".to_string(),
+                    left_entity_pk: "A".to_string(),
+                    right_entity_pk_namespace: "ns".to_string(),
+                    right_entity_pk: "B".to_string(),
+                    magnitude: 20,
+                    created_at: second_time,
+                },
+            ];
+
+            let snapshots = build_ranking_history(&entities, &votes).expect("history snapshots");
+
+            assert_eq!(snapshots.len(), 2);
+            assert_eq!(snapshots[0].vote_index, 1);
+            assert_eq!(snapshots[0].created_at, first_time);
+            assert_eq!(snapshots[0].unsorted.len(), 0);
+            assert_eq!(snapshots[0].sorted.len(), 2);
+
+            assert_eq!(snapshots[1].vote_index, 2);
+            assert_eq!(snapshots[1].created_at, second_time);
+            assert_eq!(snapshots[1].sorted.len(), 2);
         }
 
         #[test]

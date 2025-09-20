@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE user_providers SET profile_data = $1, last_sync_at = NOW() \n                     WHERE user_id = $2 AND provider_id = 'spotify'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Jsonb",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3aaf4d79bec80fbd7e84be913b0aae59ab1996df637f231e085096fb2c6281e0"
+}
