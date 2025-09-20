@@ -70,8 +70,8 @@ function VoteItemDisplay({ item, isDisabled }) { // Removed isSelected, pk is un
                     className="spotify-embed"
                     style={{ borderRadius: '12px' }}
                     src={`https://open.spotify.com/embed/${embedType}/${pk}`}
-                    width="300"
-                    height="380"
+                    width="320"
+                    height="450"
                     frameBorder="0"
                     allowFullScreen=""
                     allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"

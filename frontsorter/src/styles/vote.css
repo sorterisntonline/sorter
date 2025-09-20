@@ -62,7 +62,10 @@
   padding: 16px;
   text-align: center;
   transition: all 0.2s ease;
-  height: 100%;
+  min-height: 550px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
 }
 
 .vote-item:hover {

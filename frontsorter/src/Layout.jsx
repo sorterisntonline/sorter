@@ -30,7 +30,7 @@ function Layout() {
     <div style={{ position: 'relative', minHeight: '100vh' }}>
       <FloatingNav />
       {/* Main content area with full width */}
-      <main style={{ padding: '24px', maxWidth: '100%' }}>
+      <main style={{ padding: '0', maxWidth: '100%', height: '100vh' }}>
         <Outlet /> {/* Child routes will render here */}
       </main>
     </div>
