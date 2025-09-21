@@ -255,9 +255,9 @@ function SpotifySongsPage() {
     
     try {
       await voteMutation.mutateAsync({
-        left_ns: left_entity.pk_namespace,
+        left_ns: left_entity.ns,
         left_pk: left_entity.pk,
-        right_ns: right_entity.pk_namespace,
+        right_ns: right_entity.ns,
         right_pk: right_entity.pk,
         attribute_id: 1,
         magnitude: sliderValue

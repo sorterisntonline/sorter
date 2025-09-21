@@ -73,8 +73,8 @@ function VoteHistoryPanel({ user, selectedSong }) {
       // Check if the vote involves the selected song (either as left or right entity)
       const leftEntityId = vote.left_entity_pk;
       const rightEntityId = vote.right_entity_pk;
-      const isSpotifyTrack = vote.left_entity_pk_namespace?.includes('spotify.track') || 
-                            vote.right_entity_pk_namespace?.includes('spotify.track');
+      const isSpotifyTrack = vote.left_entity_ns?.includes('spotify.track') || 
+                            vote.right_entity_ns?.includes('spotify.track');
       
       return isSpotifyTrack && (leftEntityId === selectedSongId || rightEntityId === selectedSongId);
     });
