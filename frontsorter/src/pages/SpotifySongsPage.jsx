@@ -9,6 +9,7 @@ import RankingHistoryGraph from '../components/RankingHistoryGraph';
 import { useSpotifyPlayer } from '../contexts/SpotifyPlayerContext';
 import { useDynamicTheme } from '../contexts/DynamicThemeContext';
 import { fetchPairFn, submitVoteFn } from '../fetchers/voteEndpoints';
+import usePinnedSongStore from '../stores/pinnedSongStore';
 import '../styles/spotify.css';
 import '../styles/vote.css';
 import '../styles/ranking-history-graph.css';
@@ -102,13 +103,14 @@ function SpotifySongsPage() {
   const [importMessage, setImportMessage] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedSong, setSelectedSong] = useState(null);
-  const [rightPanelTab, setRightPanelTab] = useState('selected'); // 'selected', 'history', or 'ranking-history'
+
   const [sliderValue, setSliderValue] = useState(0);
   const [luminanceThreshold, setLuminanceThreshold] = useState(0.6);
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { updateThemeFromImage, getScoreColors, getCSSVariables, theme } = useDynamicTheme();
+  const { pinnedSong, setPinnedSong, clearPinnedSong } = usePinnedSongStore();
   
   // Query for current user info
   const { data: user } = useQuery({
@@ -135,6 +137,9 @@ function SpotifySongsPage() {
   // Build query key for voting
   const buildVoteQueryKey = () => {
     if (!user) return null;
+    if (pinnedSong) {
+      return ['pair', 'children', 'sorter.user', user.handle, 'spotify.track', pinnedSong.id];
+    }
     return ['pair', 'children', 'sorter.user', user.handle];
   };
 
@@ -143,7 +148,7 @@ function SpotifySongsPage() {
     queryKey: buildVoteQueryKey(),
     queryFn: fetchPairFn,
     enabled: !!user,
-    staleTime: 5 * 60 * 1000,
+    staleTime: pinnedSong ? 0 : 5 * 60 * 1000, // Don't cache when pinned
     retry: 1,
     refetchOnWindowFocus: false,
   });
@@ -161,8 +166,6 @@ function SpotifySongsPage() {
         queryClient.invalidateQueries(['vote-history', user.id]);
       }
       setSliderValue(0);
-      // Switch to ranking history tab to show the new vote impact
-      setRightPanelTab('ranking-history');
     },
     onError: (error) => {
       console.error("Vote submission failed:", error);
@@ -241,6 +244,29 @@ function SpotifySongsPage() {
     }
   }, [pairQuery.data, updateThemeFromImage]);
 
+  const handleSliderChange = (e) => {
+    setSliderValue(parseInt(e.target.value));
+  };
+
+  const handleVoteSubmit = async () => {
+    if (!pairQuery.data?.left_entity || !pairQuery.data?.right_entity) return;
+    
+    const { left_entity, right_entity } = pairQuery.data;
+    
+    try {
+      await voteMutation.mutateAsync({
+        left_ns: left_entity.pk_namespace,
+        left_pk: left_entity.pk,
+        right_ns: right_entity.pk_namespace,
+        right_pk: right_entity.pk,
+        attribute_id: 1,
+        magnitude: sliderValue
+      });
+    } catch (error) {
+      console.error('Vote submission failed:', error);
+    }
+  };
+
   const handleImportSongs = async () => {
     setIsImporting(true);
     setImportMessage('');
@@ -259,28 +285,7 @@ function SpotifySongsPage() {
     }
   };
 
-  // Voting event handlers
-  const handleSliderChange = (event) => {
-    setSliderValue(parseInt(event.target.value, 10));
-  };
 
-  const handleVoteSubmit = () => {
-    const leftItem = pairQuery.data?.left_entity;
-    const rightItem = pairQuery.data?.right_entity;
-
-    if (!leftItem || !rightItem || voteMutation.isPending || pairQuery.isPending) return;
-
-    const voteData = {
-      left_ns: leftItem.pk_namespace,
-      left_pk: leftItem.pk,
-      right_ns: rightItem.pk_namespace,
-      right_pk: rightItem.pk,
-      magnitude: sliderValue,
-      attribute_id: 1,
-    };
-
-    voteMutation.mutate(voteData);
-  };
 
   if (isLoading) {
     return (
@@ -354,7 +359,7 @@ function SpotifySongsPage() {
                     <div 
                       key={song.id} 
                       className={`song-item ${selectedSong?.id === song.id ? 'selected' : ''}`}
-                      onClick={() => setSelectedSong(song)}
+                      onClick={() => setSelectedSong(selectedSong?.id === song.id ? null : song)}
                       style={{ 
                         backgroundColor, 
                         color: textColor,
@@ -393,7 +398,7 @@ function SpotifySongsPage() {
                   <div 
                     key={song.id} 
                     className={`song-item ${selectedSong?.id === song.id ? 'selected' : ''}`}
-                    onClick={() => setSelectedSong(song)}
+                    onClick={() => setSelectedSong(selectedSong?.id === song.id ? null : song)}
                   >
                     {song.album_art && (
                       <img 
@@ -432,6 +437,22 @@ function SpotifySongsPage() {
 
         {/* Center Panel - Voting Interface */}
         <div className="vote-panel">
+          {pinnedSong && (
+            <div className="pinned-song-indicator">
+              <div className="pinned-song-info">
+                <span className="pin-icon">📌</span>
+                <span>Comparing: <strong>{pinnedSong.title}</strong> by {pinnedSong.artist}</span>
+                <button 
+                  className="unpin-button"
+                  onClick={clearPinnedSong}
+                  title="Stop comparing"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
+          
           {user && songs && songs.length > 0 && (
             <div className="vote-section">
               
@@ -504,30 +525,13 @@ function SpotifySongsPage() {
           )}
         </div>
 
-        {/* Right Panel - Selected Song / Vote History */}
+        {/* Right Panel - Song Details and Vote History */}
         <div className="spotify-right-panel">
-          <div className="panel-tabs">
-            <button 
-              className={`panel-tab ${rightPanelTab === 'selected' ? 'active' : ''}`}
-              onClick={() => setRightPanelTab('selected')}
-            >
-              Selected Song
-            </button>
-            <button 
-              className={`panel-tab ${rightPanelTab === 'history' ? 'active' : ''}`}
-              onClick={() => setRightPanelTab('history')}
-            >
-              Vote History
-            </button>
-
-          </div>
-
           <div className="panel-content-wrapper">
-            {rightPanelTab === 'selected' ? (
+            {selectedSong && (
               <SelectedSongPanel selectedSong={selectedSong} user={user} onSongSelect={setSelectedSong} />
-            ) : (
-              <VoteHistoryPanel user={user} />
             )}
+            <VoteHistoryPanel user={user} selectedSong={selectedSong} />
           </div>
         </div>
       </div>

@@ -3,7 +3,8 @@ const STATIC_KEY = "STATIC_TEST_KEY_FOR_ADMIN_USER_123";
 // --- API Fetching Function for a PAIR ---
 export const fetchPairFn = async ({ queryKey }) => {
     // Destructure parameters from the queryKey
-    const [_key, type, param1, param2, param3, param4] = queryKey; // e.g., ['pair', 'specific', ns, pk, ns, pk] or ['pair', 'children', ns, pk]
+    const [_key, type, param1, param2, param3, param4, param5, param6] = queryKey; 
+    // e.g., ['pair', 'specific', ns, pk, ns, pk] or ['pair', 'children', ns, pk, left_pin_ns, left_pin_pk]
 
     let apiUrl = '/api/pair';
     const params = new URLSearchParams();
@@ -16,6 +17,12 @@ export const fetchPairFn = async ({ queryKey }) => {
     } else if (type === 'children' && param1 && param2) {
         params.append('pk_namespace', param1);
         params.append('pk', param2);
+        
+        // Add pinning parameters if provided
+        if (param3 && param4) {
+            params.append('left_pin_ns', param3);
+            params.append('left_pin_pk', param4);
+        }
     }
     // If type is 'default' or params are missing for specific/children,
     // we send no query parameters, letting the backend provide a default pair.

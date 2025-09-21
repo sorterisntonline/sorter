@@ -5,7 +5,7 @@ import VoteItem from './VoteItem';
 
 
 
-function VoteHistoryPanel({ user }) {
+function VoteHistoryPanel({ user, selectedSong }) {
   const queryClient = useQueryClient();
 
   // Query for user's vote history
@@ -64,9 +64,30 @@ function VoteHistoryPanel({ user }) {
     );
   }
 
+  // Filter votes by selected song if one is selected
+  const filteredVotes = React.useMemo(() => {
+    if (!selectedSong || !votes) return votes;
+    
+    const selectedSongId = selectedSong.id;
+    return votes.filter(vote => {
+      // Check if the vote involves the selected song (either as left or right entity)
+      const leftEntityId = vote.left_entity_pk;
+      const rightEntityId = vote.right_entity_pk;
+      const isSpotifyTrack = vote.left_entity_pk_namespace?.includes('spotify.track') || 
+                            vote.right_entity_pk_namespace?.includes('spotify.track');
+      
+      return isSpotifyTrack && (leftEntityId === selectedSongId || rightEntityId === selectedSongId);
+    });
+  }, [votes, selectedSong]);
+
+  const panelTitle = selectedSong ? `Vote History - ${selectedSong.title}` : 'Vote History';
+  const emptyMessage = selectedSong 
+    ? `No votes involving "${selectedSong.title}" yet.`
+    : 'No votes yet. Start voting to see your history here.';
+
   return (
     <div className="vote-history-panel">
-      <h3 className="panel-title">Vote History</h3>
+      <h3 className="panel-title">{panelTitle}</h3>
       <div className="panel-content">
         {isLoading && (
           <div className="loading-state">
@@ -81,15 +102,15 @@ function VoteHistoryPanel({ user }) {
           </div>
         )}
 
-        {votes && votes.length === 0 && !isLoading && (
+        {filteredVotes && filteredVotes.length === 0 && !isLoading && (
           <div className="empty-state">
-            No votes yet. Start voting to see your history here.
+            {emptyMessage}
           </div>
         )}
 
-        {votes && votes.length > 0 && (
+        {filteredVotes && filteredVotes.length > 0 && (
           <div className="vote-history-list">
-            {votes.map((vote, index) => (
+            {filteredVotes.map((vote, index) => (
               <VoteItem
                 key={`${vote.left_entity_pk_namespace}-${vote.left_entity_pk}-${vote.right_entity_pk_namespace}-${vote.right_entity_pk}-${vote.created_at}-${index}`}
                 vote={vote}

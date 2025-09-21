@@ -1,26 +1,10 @@
 import React from 'react';
-import { useQuery } from '@tanstack/react-query';
-import VoteItem from './VoteItem';
 import { useSpotifyPlayer } from '../contexts/SpotifyPlayerContext';
+import usePinnedSongStore from '../stores/pinnedSongStore';
 
 function SelectedSongPanel({ selectedSong, user, onSongSelect }) {
   const { playTrack, queueTrack, isReady, accessToken } = useSpotifyPlayer();
-  
-  // Query for votes involving this song
-  const { data: songVotes = [], isLoading: votesLoading } = useQuery({
-    queryKey: ['song-votes', selectedSong?.id],
-    queryFn: async () => {
-      if (!selectedSong?.id) return [];
-      
-      const response = await fetch(`/api/vote/entity?namespace=spotify.track&pk=${encodeURIComponent(selectedSong.id)}&limit=20`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch song votes');
-      }
-      return response.json();
-    },
-    enabled: !!selectedSong?.id,
-    refetchOnWindowFocus: false,
-  });
+  const { pinnedSong, setPinnedSong, clearPinnedSong, isSongPinned } = usePinnedSongStore();
 
 
 
@@ -39,7 +23,16 @@ function SelectedSongPanel({ selectedSong, user, onSongSelect }) {
 
   return (
     <div className="selected-song-panel">
-      <h3 className="panel-title">Selected Song</h3>
+      <div className="panel-header">
+        <h3 className="panel-title">Selected Song</h3>
+        <button 
+          className="close-button"
+          onClick={() => onSongSelect(null)}
+          title="Clear selection"
+        >
+          ✕
+        </button>
+      </div>
       <div className="panel-content">
         {/* Song Details */}
         <div className="song-details-section">
@@ -86,42 +79,22 @@ function SelectedSongPanel({ selectedSong, user, onSongSelect }) {
 
 
 
-        {/* Votes involving this song */}
-        <div className="song-votes-section">
-          <h4 className="section-title">Votes</h4>
-          {votesLoading ? (
-            <div className="loading-state">
-              <span>Loading votes...</span>
-            </div>
-          ) : songVotes.length > 0 ? (
-            <div className="song-votes-list">
-              {songVotes.map((vote, index) => (
-                <VoteItem 
-                  key={index} 
-                  vote={vote} 
-                  compact={true} 
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="empty-state">
-              No votes found for this song yet
-            </div>
-          )}
-        </div>
+
 
         {/* Actions */}
         {user && (
           <div className="song-actions-section">
             <button 
-              className="action-button primary"
+              className={`action-button ${isSongPinned(selectedSong) ? 'secondary' : 'primary'}`}
               onClick={() => {
-                // Navigate to vote page with this song pinned
-                const url = `/vote?pk_namespace=sorter.user&pk=${encodeURIComponent(user.handle)}&left_pin_ns=spotify.track&left_pin_pk=${encodeURIComponent(selectedSong.id)}`;
-                window.location.href = url;
+                if (isSongPinned(selectedSong)) {
+                  clearPinnedSong();
+                } else {
+                  setPinnedSong(selectedSong);
+                }
               }}
             >
-              Compare This Song
+              {isSongPinned(selectedSong) ? 'Stop Comparing' : 'Compare This Song'}
             </button>
           </div>
         )}
