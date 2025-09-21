@@ -14,7 +14,7 @@ export const fetchPairFn = async ({ queryKey }) => {
         params.append('right_ns', param3);
         params.append('right_pk', param4);
     } else if (type === 'children' && param1 && param2) {
-        params.append('pk_namespace', param1);
+        params.append('ns', param1);
         params.append('pk', param2);
     }
     // If type is 'default' or params are missing for specific/children,
@@ -58,9 +58,9 @@ export const submitVoteFn = async ({
     const createUrl = '/api/vote'; // Only POST endpoint is used now
 
     const createPayload = {
-        left_entity_pk_namespace: left_ns,
+        left_entity_ns: left_ns,
         left_entity_pk: left_pk,
-        right_entity_pk_namespace: right_ns,
+        right_entity_ns: right_ns,
         right_entity_pk: right_pk,
         attribute_id: attributeIdToUse,
         magnitude: magnitude,
@@ -103,19 +103,19 @@ export const submitVoteFn = async ({
 
 export const addChildFn = async ({
     child_pk,
-    child_pk_namespace,
+    child_ns,
     parent_pk,
-    parent_pk_namespace
+    parent_ns
 }) => {
     const url = "/api/entity_relationships"
-    console.log(JSON.stringify({child_pk, child_pk_namespace, parent_pk, parent_pk_namespace}))
+    console.log(JSON.stringify({child_pk, child_ns, parent_pk, parent_ns}))
     const response = await fetch(url, {
         method: 'POST',
         headers: { 
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${STATIC_KEY}`,
         },
-        body: JSON.stringify({child_pk, child_pk_namespace, parent_pk, parent_pk_namespace}),
+        body: JSON.stringify({child_pk, child_ns, parent_pk, parent_ns}),
     });
 
     if (response.ok) {

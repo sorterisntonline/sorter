@@ -35,7 +35,7 @@ const RankingHistoryPanel = ({ user, songs }) => {
   };
 
   const getSongInfo = (identifier) => {
-    const key = `${identifier.pk_namespace}:${identifier.pk}`;
+    const key = `${identifier.ns}:${identifier.pk}`;
     return songsMap[key];
   };
 

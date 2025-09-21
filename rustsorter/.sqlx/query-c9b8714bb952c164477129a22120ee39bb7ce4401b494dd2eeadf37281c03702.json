@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "DELETE FROM entities\nWHERE pk_namespace = $1\n    AND pk = $2\n",
+  "query": "DELETE FROM entities\nWHERE ns = $1\n    AND pk = $2\n",
   "describe": {
     "columns": [],
     "parameters": {
@@ -11,5 +11,5 @@
     },
     "nullable": []
   },
-  "hash": "30244d11094150fbdc4262139cb61c9447c88e64d52acc7eedc484c66bc0a64f"
+  "hash": "c9b8714bb952c164477129a22120ee39bb7ce4401b494dd2eeadf37281c03702"
 }

@@ -31,14 +31,14 @@ async def get_entities():
     return [
         entity
         for entity in entity_list
-        if entity["pk_namespace"] == NAMESPACE
+        if entity["ns"] == NAMESPACE
     ]
 
 
 async def create_entities():
     for title in range(1, 21):
         payload = {
-            "pk_namespace": NAMESPACE,
+            "ns": NAMESPACE,
             "pk": f"test_rank_pk_{uuid.uuid4()}",
             "title": str(title),
             "metadata": None,
@@ -53,13 +53,13 @@ async def delete_entities():
     entities = [
         entity
         for entity in entity_list
-        if entity["pk_namespace"] == NAMESPACE
+        if entity["ns"] == NAMESPACE
     ]
 
     for entity in entities:
         await make_request(
             "DELETE",
-            f"/entity/{entity['pk_namespace']}/{entity['pk']}",
+            f"/entity/{entity['ns']}/{entity['pk']}",
             is_authenticated=True,
             assert_status_code=204,
         )
@@ -81,9 +81,9 @@ async def vote_pair(left_pk, left_title, right_pk, right_title):
     magnitude = round(magnitude)
 
     payload = {
-        "left_entity_pk_namespace": NAMESPACE,
+        "left_entity_ns": NAMESPACE,
         "left_entity_pk": left_pk,
-        "right_entity_pk_namespace": NAMESPACE,
+        "right_entity_ns": NAMESPACE,
         "right_entity_pk": right_pk,
         "voter_user_id": USER_ID,
         "magnitude": magnitude,
@@ -105,7 +105,7 @@ class TestRank:
 
         payload = [
             {
-                "pk_namespace": entity["pk_namespace"],
+                "ns": entity["ns"],
                 "pk": entity["pk"],
             }
             for entity in entities

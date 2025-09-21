@@ -5,8 +5,8 @@ function VoteItem({ vote, showDelete = false, onDelete, isDeleting, compact = fa
   // Handle different vote data structures
   const leftEntity = vote.left_entity_pk || vote.left_pk;
   const rightEntity = vote.right_entity_pk || vote.right_pk;
-  const leftNamespace = vote.left_entity_pk_namespace || vote.left_ns;
-  const rightNamespace = vote.right_entity_pk_namespace || vote.right_ns;
+  const leftNamespace = vote.left_entity_ns || vote.left_ns;
+  const rightNamespace = vote.right_entity_ns || vote.right_ns;
   
   // For selected song votes, we have opponent_title
   const opponentTitle = vote.opponent_title;

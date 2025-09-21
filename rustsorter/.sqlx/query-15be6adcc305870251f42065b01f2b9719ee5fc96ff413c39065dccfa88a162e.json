@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT e.pk_namespace, e.pk, e.title, e.metadata \n         FROM entities e\n         JOIN entity_relationships er ON e.pk_namespace = er.child_pk_namespace AND e.pk = er.child_pk\n         WHERE er.parent_pk_namespace = 'sorter.user' AND er.parent_pk = $1 AND e.pk_namespace = 'spotify.track'\n         ORDER BY er.created_at DESC",
+  "query": "SELECT e.ns, e.pk, e.title, e.metadata \n         FROM entities e\n         JOIN entity_relationships er ON e.ns = er.child_ns AND e.pk = er.child_pk\n         WHERE er.parent_ns = 'sorter.user' AND er.parent_pk = $1 AND e.ns = 'spotify.track'\n         ORDER BY er.created_at DESC",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "pk_namespace",
+        "name": "ns",
         "type_info": "Text"
       },
       {
@@ -36,5 +36,5 @@
       true
     ]
   },
-  "hash": "1f63de537c57614dc270f630e17e0607556c70fa6818aedf4dbeb9dfec3ef162"
+  "hash": "15be6adcc305870251f42065b01f2b9719ee5fc96ff413c39065dccfa88a162e"
 }

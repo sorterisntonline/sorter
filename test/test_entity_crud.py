@@ -16,9 +16,9 @@ async def cleanup_entity(ns: str, pk: str):
 async def cleanup_relationship(parent_ns: str, parent_pk: str, child_ns: str, child_pk: str):
     """Attempts to delete a relationship, ignoring errors."""
     params = {
-        "parent_pk_namespace": parent_ns,
+        "parent_ns": parent_ns,
         "parent_pk": parent_pk,
-        "child_pk_namespace": child_ns,
+        "child_ns": child_ns,
         "child_pk": child_pk,
     }
     print(f"Cleanup Attempt: Deleting relationship {parent_ns}/{parent_pk} -> {child_ns}/{child_pk}")
@@ -40,14 +40,14 @@ class TestEntityCrud:
         ns = "test.namespace"
         pk = f"test_pk_{uuid.uuid4()}"
         payload = {
-            "pk_namespace": ns,
+            "ns": ns,
             "pk": pk,
             "title": "My Test Entity",
             "metadata": {"key": "value", "num": 123}
         }
         data = (await make_request("POST", "/entity", json_payload=payload, is_authenticated=True, assert_status_code=201)).json()
 
-        assert data["pk_namespace"] == ns
+        assert data["ns"] == ns
         assert data["pk"] == pk
         assert data["title"] == "My Test Entity"
         assert data["metadata"] == {"key": "value", "num": 123}
@@ -64,7 +64,7 @@ class TestEntityCrud:
         assert TestEntityCrud.created_entity_ns is not None
         assert TestEntityCrud.created_entity_pk is not None
         payload = { # Use the same PKs as the successfully created entity
-            "pk_namespace": TestEntityCrud.created_entity_ns,
+            "ns": TestEntityCrud.created_entity_ns,
             "pk": TestEntityCrud.created_entity_pk,
             "title": "Attempt to duplicate",
             "metadata": {}
@@ -76,7 +76,7 @@ class TestEntityCrud:
     async def test_create_entity_no_auth(self):
         """Tests creating an entity without authentication."""
         payload = {
-            "pk_namespace": "noauth.ns",
+            "ns": "noauth.ns",
             "pk": f"noauth_pk_{uuid.uuid4()}",
             "title": "No Auth Test",
             "metadata": None
@@ -87,7 +87,7 @@ class TestEntityCrud:
     async def test_create_entity_invalid_payload(self):
         """Tests creating an entity with missing required fields (e.g., pk)."""
         payload = {
-            "pk_namespace": "invalid.ns",
+            "ns": "invalid.ns",
             # Missing "pk"
             "title": "Invalid Payload"
         }
@@ -107,7 +107,7 @@ class TestEntityCrud:
 
         data = (await make_request("GET", f"/entity/{ns}/{pk}", is_authenticated=True, assert_status_code=200)).json()
         data = data["entity"]
-        assert data["pk_namespace"] == ns
+        assert data["ns"] == ns
         assert data["pk"] == pk
         assert data["title"] == "My Test Entity" # Title from creation
         assert data["metadata"] == {"key": "value", "num": 123} # Metadata from creation
@@ -134,9 +134,9 @@ class TestEntityCrud:
 
         found = False
         for entity in data:
-            assert "pk_namespace" in entity
+            assert "ns" in entity
             assert "pk" in entity
-            if entity["pk_namespace"] == ns and entity["pk"] == pk:
+            if entity["ns"] == ns and entity["pk"] == pk:
                 found = True
                 assert entity["title"] == "My Test Entity" # Check original title
         assert found, f"Entity {ns}/{pk} not found in list"
@@ -158,13 +158,13 @@ class TestEntityCrud:
         pk = TestEntityCrud.created_entity_pk
 
         payload = {
-            "pk_namespace": ns, # Must match path
+            "ns": ns, # Must match path
             "pk": pk,           # Must match path
             "title": "Updated Test Entity Title",
             "metadata": {"new_key": "new_value"}
         }
         data = (await make_request("PUT", f"/entity/{ns}/{pk}", json_payload=payload, is_authenticated=True, assert_status_code=200)).json()
-        assert data["pk_namespace"] == ns
+        assert data["ns"] == ns
         assert data["pk"] == pk
         assert data["title"] == "Updated Test Entity Title"
         assert data["metadata"] == {"new_key": "new_value"}
@@ -180,7 +180,7 @@ class TestEntityCrud:
         ns = "nonexistent.ns"
         pk = f"nonexistent_pk_{uuid.uuid4()}"
         payload = {
-            "pk_namespace": ns, "pk": pk,
+            "ns": ns, "pk": pk,
             "title": "Update Non Existent", "metadata": {}
         }
         await make_request("PUT", f"/entity/{ns}/{pk}", json_payload=payload, is_authenticated=True, assert_status_code=404)
@@ -193,7 +193,7 @@ class TestEntityCrud:
         ns = TestEntityCrud.created_entity_ns
         pk = TestEntityCrud.created_entity_pk
         payload = {
-            "pk_namespace": "mismatch.ns", # Different from path
+            "ns": "mismatch.ns", # Different from path
             "pk": "mismatch.pk",         # Different from path
             "title": "Mismatch Test", "metadata": {}
         }
@@ -207,7 +207,7 @@ class TestEntityCrud:
         assert TestEntityCrud.created_entity_pk is not None
         ns = TestEntityCrud.created_entity_ns
         pk = TestEntityCrud.created_entity_pk
-        payload = {"pk_namespace": ns, "pk": pk, "title": "No Auth Update"}
+        payload = {"ns": ns, "pk": pk, "title": "No Auth Update"}
         await make_request("PUT", f"/entity/{ns}/{pk}", json_payload=payload, assert_status_code=401)
 
     # --- Delete Tests ---
@@ -241,7 +241,7 @@ class TestEntityCrud:
         # Create a temporary entity to try deleting without auth
         temp_ns = "tempdel.ns"
         temp_pk = f"tempdel_pk_{uuid.uuid4()}"
-        payload = {"pk_namespace": temp_ns, "pk": temp_pk, "title": "Temp Delete"}
+        payload = {"ns": temp_ns, "pk": temp_pk, "title": "Temp Delete"}
         await make_request("POST", "/entity", json_payload=payload, is_authenticated=True, assert_status_code=201)
 
         # Attempt delete without auth

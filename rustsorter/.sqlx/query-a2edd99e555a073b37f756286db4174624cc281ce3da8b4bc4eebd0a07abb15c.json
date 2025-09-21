@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT e.*\nFROM entities e\nJOIN entity_relationships er ON e.pk_namespace = er.child_pk_namespace\n    AND e.pk = er.child_pk\nWHERE er.parent_pk_namespace = $1\n    AND er.parent_pk = $2\n    AND ($3::text IS NULL OR e.pk_namespace = $3)  -- pin_ns filter\n    AND ($4::text IS NULL OR e.pk = $4)           -- pin_pk filter",
+  "query": "SELECT\n    e.*\nFROM\n    entities e\n    JOIN entity_relationships er ON e.ns = er.child_ns\n        AND e.pk = er.child_pk\nWHERE\n    er.parent_ns = $1\n    AND er.parent_pk = $2\n",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "pk_namespace",
+        "name": "ns",
         "type_info": "Text"
       },
       {
@@ -42,8 +42,6 @@
     "parameters": {
       "Left": [
         "Text",
-        "Text",
-        "Text",
         "Text"
       ]
     },
@@ -57,5 +55,5 @@
       true
     ]
   },
-  "hash": "8a025497fd68ab66945892ad33dd64d4cbc370360f7e7e2e01ccb61ed6921b94"
+  "hash": "a2edd99e555a073b37f756286db4174624cc281ce3da8b4bc4eebd0a07abb15c"
 }

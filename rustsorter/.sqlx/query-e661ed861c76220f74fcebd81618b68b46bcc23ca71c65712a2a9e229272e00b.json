@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE\n    entities\nSET\n    title = $3,\n    metadata = $4,\n    profile_picture_url = $5,\n    user_id = $6\nWHERE\n    pk_namespace = $1\n    AND pk = $2\nRETURNING\n    pk_namespace,\n    pk,\n    title,\n    metadata,\n    created_at,\n    profile_picture_url,\n    user_id\n",
+  "query": "INSERT INTO entities(ns, pk, title, metadata, profile_picture_url, user_id)\n    VALUES ($1, $2, $3, $4, $5, $6)\nON CONFLICT (ns, pk)\nDO UPDATE SET\n    title = EXCLUDED.title,\n    metadata = EXCLUDED.metadata,\n    profile_picture_url = EXCLUDED.profile_picture_url,\n    user_id = EXCLUDED.user_id\nRETURNING\n    ns,\n    pk,\n    title,\n    metadata,\n    created_at,\n    profile_picture_url,\n    user_id\n\n\n",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "pk_namespace",
+        "name": "ns",
         "type_info": "Text"
       },
       {
@@ -59,5 +59,5 @@
       false
     ]
   },
-  "hash": "17e919bbe5841c2148c862dd0bccd918736afcf9e28b2ed30a36e98c8bf41857"
+  "hash": "e661ed861c76220f74fcebd81618b68b46bcc23ca71c65712a2a9e229272e00b"
 }

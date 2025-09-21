@@ -26,10 +26,10 @@ function VoteItemDisplay({ item, isDisabled }) {
   
   if (!item) return null;
 
-  const { title, pk_namespace, pk, metadata, profile_picture_url } = item;
-  const entityType = pk_namespace?.split('.')[1] || 'item';
-  const isSpotifyTrack = pk_namespace?.includes('spotify.track');
-  const isSpotifyAlbum = pk_namespace?.includes('spotify.album');
+  const { title, ns, pk, metadata, profile_picture_url } = item;
+  const entityType = ns?.split('.')[1] || 'item';
+  const isSpotifyTrack = ns?.includes('spotify.track');
+  const isSpotifyAlbum = ns?.includes('spotify.album');
 
   const handlePlay = () => {
     if (isSpotifyTrack || isSpotifyAlbum) {
@@ -185,7 +185,7 @@ function SpotifySongsPage() {
     // Process ranked songs
     const rankedSongs = ranking.sorted
       .map(rankedEntity => {
-        const key = `${rankedEntity.identifier.pk_namespace}:${rankedEntity.identifier.pk}`;
+        const key = `${rankedEntity.identifier.ns}:${rankedEntity.identifier.pk}`;
         const song = songsMap[key];
         if (song) {
           return { ...song, score: rankedEntity.score };
@@ -208,7 +208,7 @@ function SpotifySongsPage() {
     // Process unranked songs
     const unrankedSongs = ranking.unsorted
       .map(identifier => {
-        const key = `${identifier.pk_namespace}:${identifier.pk}`;
+        const key = `${identifier.ns}:${identifier.pk}`;
         return songsMap[key];
       })
       .filter(Boolean);
@@ -271,9 +271,9 @@ function SpotifySongsPage() {
     if (!leftItem || !rightItem || voteMutation.isPending || pairQuery.isPending) return;
 
     const voteData = {
-      left_ns: leftItem.pk_namespace,
+      left_ns: leftItem.ns,
       left_pk: leftItem.pk,
-      right_ns: rightItem.pk_namespace,
+      right_ns: rightItem.ns,
       right_pk: rightItem.pk,
       magnitude: sliderValue,
       attribute_id: 1,

@@ -12,8 +12,8 @@ export const fetchAllRelationships = async () => {
   return res.json();
 };
 
-export const fetchEntityWithChildren = async ({ pk_namespace, pk }) => {
-  const url = `/api/entity/${encodeURIComponent(pk_namespace)}/${encodeURIComponent(pk)}?children=true`;
+export const fetchEntityWithChildren = async ({ ns, pk }) => {
+  const url = `/api/entity/${encodeURIComponent(ns)}/${encodeURIComponent(pk)}?children=true`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch entity: ${res.status}`);
   return res.json();

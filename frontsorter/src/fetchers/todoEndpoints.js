@@ -8,7 +8,7 @@ export const fetchAllTodos = async () => {
   if (!res.ok) throw new Error(`Failed to fetch todos: ${res.status}`);
   const entities = await res.json();
   // Filter to only todo entities
-  return entities.filter(entity => entity.pk_namespace === TODO_NAMESPACE);
+  return entities.filter(entity => entity.ns === TODO_NAMESPACE);
 };
 
 export const fetchTodoWithSubtasks = async (pk) => {
@@ -20,7 +20,7 @@ export const fetchTodoWithSubtasks = async (pk) => {
 
 export const createTodo = async (todoData) => {
   const entity = {
-    pk_namespace: TODO_NAMESPACE,
+    ns: TODO_NAMESPACE,
     pk: todoData.id || `todo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     title: todoData.title,
     metadata: {
@@ -50,7 +50,7 @@ export const updateTodo = async (pk, updates) => {
   const current = await currentRes.json();
   
   const updated = {
-    pk_namespace: TODO_NAMESPACE,
+    ns: TODO_NAMESPACE,
     pk: pk,
     title: updates.title !== undefined ? updates.title : current.entity.title,
     metadata: {
@@ -90,9 +90,9 @@ export const createSubtask = async (parentPk, subtaskData) => {
   
   // Then create the parent-child relationship
   const relationship = {
-    parent_pk_namespace: TODO_NAMESPACE,
+    parent_ns: TODO_NAMESPACE,
     parent_pk: parentPk,
-    child_pk_namespace: TODO_NAMESPACE,
+    child_ns: TODO_NAMESPACE,
     child_pk: subtask.pk
   };
 
@@ -111,9 +111,9 @@ export const createSubtask = async (parentPk, subtaskData) => {
 
 export const deleteSubtaskRelationship = async (parentPk, childPk) => {
   const params = new URLSearchParams({
-    parent_pk_namespace: TODO_NAMESPACE,
+    parent_ns: TODO_NAMESPACE,
     parent_pk: parentPk,
-    child_pk_namespace: TODO_NAMESPACE,
+    child_ns: TODO_NAMESPACE,
     child_pk: childPk
   });
 

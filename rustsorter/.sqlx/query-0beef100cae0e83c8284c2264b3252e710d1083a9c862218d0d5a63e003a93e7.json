@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO votes(left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, magnitude, attribute_id, user_id, deleted_at)\n    VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)\nRETURNING\n    left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, magnitude, attribute_id, user_id, created_at, deleted_at\n",
+  "query": "UPDATE votes \nSET deleted_at = NOW()\nWHERE left_entity_ns = $1 \n    AND left_entity_pk = $2 \n    AND right_entity_ns = $3 \n    AND right_entity_pk = $4 \n    AND user_id = $5 \n    AND attribute_id = $6\n    AND deleted_at IS NULL\nRETURNING \n    left_entity_ns,\n    left_entity_pk,\n    right_entity_ns,\n    right_entity_pk,\n    user_id,\n    magnitude,\n    attribute_id,\n    created_at,\n    deleted_at;\n",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "left_entity_pk_namespace",
+        "name": "left_entity_ns",
         "type_info": "Text"
       },
       {
@@ -15,7 +15,7 @@
       },
       {
         "ordinal": 2,
-        "name": "right_entity_pk_namespace",
+        "name": "right_entity_ns",
         "type_info": "Text"
       },
       {
@@ -25,18 +25,18 @@
       },
       {
         "ordinal": 4,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
         "name": "magnitude",
         "type_info": "Int4"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "attribute_id",
         "type_info": "Int4"
-      },
-      {
-        "ordinal": 6,
-        "name": "user_id",
-        "type_info": "Uuid"
       },
       {
         "ordinal": 7,
@@ -55,9 +55,8 @@
         "Text",
         "Text",
         "Text",
-        "Int4",
-        "Int4",
-        "Uuid"
+        "Uuid",
+        "Int4"
       ]
     },
     "nullable": [
@@ -72,5 +71,5 @@
       true
     ]
   },
-  "hash": "c0e4fbe2fb6c7273c7fd9ec542c90a58498b7cf83e138e117803574fe08d0431"
+  "hash": "0beef100cae0e83c8284c2264b3252e710d1083a9c862218d0d5a63e003a93e7"
 }

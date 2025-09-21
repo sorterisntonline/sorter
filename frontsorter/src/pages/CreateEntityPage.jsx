@@ -7,7 +7,7 @@ function CreateEntityPage() {
   const handleSuccess = (data) => {
     console.log('Entity created successfully:', data);
     // Navigate to the new entity's detail page
-    navigate(`/entity/${encodeURIComponent(data.pk_namespace)}/${encodeURIComponent(data.pk)}`);
+    navigate(`/entity/${encodeURIComponent(data.ns)}/${encodeURIComponent(data.pk)}`);
   };
 
   const handleCancel = () => {

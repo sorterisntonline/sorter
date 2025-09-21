@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO entities(pk_namespace, pk, title, metadata, profile_picture_url, user_id)\n    VALUES ($1, $2, $3, $4, $5, $6)\nRETURNING\n    pk_namespace, pk, title, metadata, created_at, profile_picture_url, user_id\n",
+  "query": "SELECT\n    ns,\n    pk,\n    title,\n    metadata,\n    created_at,\n    profile_picture_url,\n    user_id\nFROM\n    entities\nWHERE\n    ns = $1\n    AND pk = $2\n",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "pk_namespace",
+        "name": "ns",
         "type_info": "Text"
       },
       {
@@ -42,11 +42,7 @@
     "parameters": {
       "Left": [
         "Text",
-        "Text",
-        "Text",
-        "Jsonb",
-        "Text",
-        "Uuid"
+        "Text"
       ]
     },
     "nullable": [
@@ -59,5 +55,5 @@
       false
     ]
   },
-  "hash": "73e4b6fd3971285fa165b085271da732b728f45d50f27ff1fc181cee72f60003"
+  "hash": "7260fdd2c4efd127b34e710cbaed3f555531f0f5ef4737869e97ab5b68ddbb6c"
 }

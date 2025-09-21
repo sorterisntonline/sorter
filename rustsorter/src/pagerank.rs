@@ -19,7 +19,7 @@ use crate::{
 
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq, Hash, Serialize, JsonSchema)]
 pub struct EntityIdentifier {
-    pub pk_namespace: String,
+    pub ns: String,
     pub pk: String,
 }
 
@@ -50,9 +50,9 @@ pub struct RankingHistoryResponse {
 
 #[derive(sqlx::FromRow, Debug, Clone)]
 pub struct RelevantVote {
-    pub left_entity_pk_namespace: String,
+    pub left_entity_ns: String,
     pub left_entity_pk: String,
-    pub right_entity_pk_namespace: String,
+    pub right_entity_ns: String,
     pub right_entity_pk: String,
 
     pub magnitude: i32,
@@ -76,7 +76,7 @@ fn build_rank_graph(
     let mut node_count = 0;
 
     for entity in entities {
-        let key = format!("{}:{}", entity.pk_namespace, entity.pk);
+        let key = format!("{}:{}", entity.ns, entity.pk);
         if !entity_key_to_index.contains_key(&key) {
             entity_key_to_index.insert(key.clone(), node_count);
             index_to_entity_identifier.insert(node_count, entity.clone());
@@ -85,10 +85,10 @@ fn build_rank_graph(
     }
 
     for vote in votes {
-        let left_key = format!("{}:{}", vote.left_entity_pk_namespace, vote.left_entity_pk);
+        let left_key = format!("{}:{}", vote.left_entity_ns, vote.left_entity_pk);
         let right_key = format!(
             "{}:{}",
-            vote.right_entity_pk_namespace, vote.right_entity_pk
+            vote.right_entity_ns, vote.right_entity_pk
         );
 
         let Some(&left_idx) = entity_key_to_index.get(&left_key) else {
@@ -220,11 +220,11 @@ fn rank_entities_internal(
     let mut voted_entities = HashSet::new();
     for vote in votes {
         let left_id = EntityIdentifier {
-            pk_namespace: vote.left_entity_pk_namespace.clone(),
+            ns: vote.left_entity_ns.clone(),
             pk: vote.left_entity_pk.clone(),
         };
         let right_id = EntityIdentifier {
-            pk_namespace: vote.right_entity_pk_namespace.clone(),
+            ns: vote.right_entity_ns.clone(),
             pk: vote.right_entity_pk.clone(),
         };
 
@@ -336,7 +336,7 @@ async fn rank_children_handler(
     // Prepare entity keys for SQL query
     let entity_keys: Vec<String> = payload
         .iter()
-        .map(|e| format!("{}:{}", e.pk_namespace, e.pk))
+        .map(|e| format!("{}:{}", e.ns, e.pk))
         .collect();
 
     // Fetch votes from database
@@ -357,7 +357,7 @@ async fn rank_children_handler(
 
 #[derive(Deserialize, Debug, JsonSchema)]
 pub struct RankQueryParams {
-    pub pk_namespace: String,
+    pub ns: String,
     pub pk: String,
 }
 
@@ -369,7 +369,7 @@ async fn get_ranking_handler(
     let children = sqlx::query_file_as!(
         crate::entity::Entity,
         "../database/sql/entity/select_children.sql",
-        params.pk_namespace,
+        params.ns,
         params.pk
     )
     .fetch_all(&state.db)
@@ -387,7 +387,7 @@ async fn get_ranking_handler(
     let entity_identifiers: Vec<EntityIdentifier> = children
         .iter()
         .map(|e| EntityIdentifier {
-            pk_namespace: e.pk_namespace.clone(),
+            ns: e.ns.clone(),
             pk: e.pk.clone(),
         })
         .collect();
@@ -395,7 +395,7 @@ async fn get_ranking_handler(
     // Prepare entity keys for vote query
     let entity_keys: Vec<String> = entity_identifiers
         .iter()
-        .map(|e| format!("{}:{}", e.pk_namespace, e.pk))
+        .map(|e| format!("{}:{}", e.ns, e.pk))
         .collect();
 
     // Fetch votes
@@ -421,7 +421,7 @@ async fn get_ranking_history_handler(
     let children = sqlx::query_file_as!(
         crate::entity::Entity,
         "../database/sql/entity/select_children.sql",
-        params.pk_namespace,
+        params.ns,
         params.pk
     )
     .fetch_all(&state.db)
@@ -435,14 +435,14 @@ async fn get_ranking_history_handler(
     let entity_identifiers: Vec<EntityIdentifier> = children
         .iter()
         .map(|e| EntityIdentifier {
-            pk_namespace: e.pk_namespace.clone(),
+            ns: e.ns.clone(),
             pk: e.pk.clone(),
         })
         .collect();
 
     let entity_keys: Vec<String> = entity_identifiers
         .iter()
-        .map(|e| format!("{}:{}", e.pk_namespace, e.pk))
+        .map(|e| format!("{}:{}", e.ns, e.pk))
         .collect();
 
     let votes = sqlx::query_file_as!(
@@ -505,7 +505,7 @@ mod tests {
     // Helper function to create test entities
     fn create_entity(namespace: &str, pk: &str) -> EntityIdentifier {
         EntityIdentifier {
-            pk_namespace: namespace.to_string(),
+            ns: namespace.to_string(),
             pk: pk.to_string(),
         }
     }
@@ -527,9 +527,9 @@ mod tests {
         magnitude: i32,
     ) -> RelevantVote {
         RelevantVote {
-            left_entity_pk_namespace: left_ns.to_string(),
+            left_entity_ns: left_ns.to_string(),
             left_entity_pk: left_pk.to_string(),
-            right_entity_pk_namespace: right_ns.to_string(),
+            right_entity_ns: right_ns.to_string(),
             right_entity_pk: right_pk.to_string(),
             magnitude,
             created_at: naive_timestamp(0),
@@ -558,9 +558,9 @@ mod tests {
                 let left_prob = a_ji / total;
                 let magnitude = ((0.5 - left_prob) * 100.0).round() as i32;
                 votes.push(RelevantVote {
-                    left_entity_pk_namespace: namespace.to_string(),
+                    left_entity_ns: namespace.to_string(),
                     left_entity_pk: i.to_string(),
-                    right_entity_pk_namespace: namespace.to_string(),
+                    right_entity_ns: namespace.to_string(),
                     right_entity_pk: j.to_string(),
                     magnitude: magnitude.clamp(-50, 50),
                     created_at: naive_timestamp((votes.len() + 1) as i64),
@@ -858,17 +858,17 @@ mod tests {
 
             let votes = vec![
                 RelevantVote {
-                    left_entity_pk_namespace: "ns".to_string(),
+                    left_entity_ns: "ns".to_string(),
                     left_entity_pk: "A".to_string(),
-                    right_entity_pk_namespace: "ns".to_string(),
+                    right_entity_ns: "ns".to_string(),
                     right_entity_pk: "B".to_string(),
                     magnitude: -20,
                     created_at: first_time,
                 },
                 RelevantVote {
-                    left_entity_pk_namespace: "ns".to_string(),
+                    left_entity_ns: "ns".to_string(),
                     left_entity_pk: "A".to_string(),
-                    right_entity_pk_namespace: "ns".to_string(),
+                    right_entity_ns: "ns".to_string(),
                     right_entity_pk: "B".to_string(),
                     magnitude: 20,
                     created_at: second_time,
@@ -1189,7 +1189,7 @@ mod tests {
 
             let entities: Vec<EntityIdentifier> = (0..ITEM_COUNT)
                 .map(|i| EntityIdentifier {
-                    pk_namespace: namespace.to_string(),
+                    ns: namespace.to_string(),
                     pk: i.to_string(),
                 })
                 .collect();

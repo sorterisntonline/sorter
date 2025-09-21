@@ -32,7 +32,7 @@ function App() {
         <Route index element={<EntitiesIndex />} />
         <Route path="spotify" element={<SpotifySongsPage />} />
         <Route path="entity/new" element={<CreateEntityPage />} />
-        <Route path="entity/:pk_namespace/:pk" element={<EntityDetail />} />
+        <Route path="entity/:ns/:pk" element={<EntityDetail />} />
         <Route path="vote" element={<VotePage />} />
         <Route path="vote" element={<VotePage />} />{" "}
         {/* Keep existing vote page */}
