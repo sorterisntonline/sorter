@@ -117,7 +117,7 @@ function SelectedSongPanel({ selectedSong, user, onSongSelect }) {
               className="action-button primary"
               onClick={() => {
                 // Navigate to vote page with this song pinned
-                const url = `/vote?pk_namespace=sorter.user&pk=${encodeURIComponent(user.handle)}&left_pin_ns=spotify.track&left_pin_pk=${encodeURIComponent(selectedSong.id)}`;
+                const url = `/vote?ns=sorter.user&pk=${encodeURIComponent(user.handle)}&left_pin_ns=spotify.track&left_pin_pk=${encodeURIComponent(selectedSong.id)}`;
                 window.location.href = url;
               }}
             >

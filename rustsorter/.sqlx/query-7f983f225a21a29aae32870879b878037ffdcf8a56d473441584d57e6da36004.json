@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM entity_relationships\nWHERE parent_ns = $1\n    AND parent_pk = $2\n    AND child_ns = $3\n    AND child_pk = $4\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7f983f225a21a29aae32870879b878037ffdcf8a56d473441584d57e6da36004"
+}

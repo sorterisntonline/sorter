@@ -11,13 +11,13 @@ function Sidebar() {
   const auth = useAuth();
   const [searchParams] = useSearchParams();
 
-  const urlPkNamespace = searchParams.get('pk_namespace');
+  const urlPkNamespace = searchParams.get('ns');
   const urlPk = searchParams.get('pk');
   const entitySet = urlPkNamespace && urlPk;
 
   // Helper function to generate the 'to' prop value
   const generateTo = (path) => {
-    return entitySet ? `${path}?pk_namespace=${urlPkNamespace}&pk=${urlPk}` : path;
+    return entitySet ? `${path}?ns=${urlPkNamespace}&pk=${urlPk}` : path;
   };
 
   const handleLogout = () => {

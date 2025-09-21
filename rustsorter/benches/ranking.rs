@@ -6,7 +6,7 @@ use rustsorter::{EntityIdentifier, RelevantVote, rank_entities};
 fn make_entities(count: usize, namespace: &str) -> Vec<EntityIdentifier> {
     (0..count)
         .map(|i| EntityIdentifier {
-            pk_namespace: namespace.to_string(),
+            ns: namespace.to_string(),
             pk: i.to_string(),
         })
         .collect()
@@ -60,9 +60,9 @@ fn matrix_to_votes(matrix: &[Vec<f64>], namespace: &str) -> Vec<RelevantVote> {
             let left_prob = a_ji / total;
             let magnitude = ((0.5 - left_prob) * 100.0).round() as i32;
             votes.push(RelevantVote {
-                left_entity_pk_namespace: namespace.to_string(),
+                left_entity_ns: namespace.to_string(),
                 left_entity_pk: i.to_string(),
-                right_entity_pk_namespace: namespace.to_string(),
+                right_entity_ns: namespace.to_string(),
                 right_entity_pk: j.to_string(),
                 magnitude: magnitude.clamp(-50, 50),
                 created_at: epoch + Duration::seconds((votes.len() + 1) as i64),

@@ -436,9 +436,9 @@ pub async fn import_recent_songs(
 
         // Create user -> track relationship
         let relationship_payload = crate::entity_relationships::CreateRelationshipPayload {
-            parent_pk_namespace: "sorter.user".to_string(),
+            parent_ns: "sorter.user".to_string(),
             parent_pk: user.handle.clone(),
-            child_pk_namespace: "spotify.track".to_string(),
+            child_ns: "spotify.track".to_string(),
             child_pk: track.id.clone(),
         };
         
@@ -520,10 +520,10 @@ pub async fn get_user_spotify_songs(
 
     // Get user's Spotify track entities directly
     let tracks = sqlx::query!(
-        "SELECT e.pk_namespace, e.pk, e.title, e.metadata 
+        "SELECT e.ns, e.pk, e.title, e.metadata 
          FROM entities e
-         JOIN entity_relationships er ON e.pk_namespace = er.child_pk_namespace AND e.pk = er.child_pk
-         WHERE er.parent_pk_namespace = 'sorter.user' AND er.parent_pk = $1 AND e.pk_namespace = 'spotify.track'
+         JOIN entity_relationships er ON e.ns = er.child_ns AND e.pk = er.child_pk
+         WHERE er.parent_ns = 'sorter.user' AND er.parent_pk = $1 AND e.ns = 'spotify.track'
          ORDER BY er.created_at DESC",
         user.handle
     )

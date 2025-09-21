@@ -1,5 +1,5 @@
 SELECT
-    pk_namespace,
+    ns,
     pk,
     title,
     metadata,

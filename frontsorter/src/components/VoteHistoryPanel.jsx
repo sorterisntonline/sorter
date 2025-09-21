@@ -29,7 +29,7 @@ function VoteHistoryPanel({ user }) {
   const deleteMutation = useMutation({
     mutationFn: async (vote) => {
       const response = await fetch(
-        `/api/vote/${encodeURIComponent(vote.left_entity_pk_namespace)}/${encodeURIComponent(vote.left_entity_pk)}/${encodeURIComponent(vote.right_entity_pk_namespace)}/${encodeURIComponent(vote.right_entity_pk)}/${vote.user_id}/${vote.attribute_id}`,
+        `/api/vote/${encodeURIComponent(vote.left_entity_ns)}/${encodeURIComponent(vote.left_entity_pk)}/${encodeURIComponent(vote.right_entity_ns)}/${encodeURIComponent(vote.right_entity_pk)}/${vote.user_id}/${vote.attribute_id}`,
         {
           method: 'DELETE',
           credentials: 'include'
@@ -91,7 +91,7 @@ function VoteHistoryPanel({ user }) {
           <div className="vote-history-list">
             {votes.map((vote, index) => (
               <VoteItem
-                key={`${vote.left_entity_pk_namespace}-${vote.left_entity_pk}-${vote.right_entity_pk_namespace}-${vote.right_entity_pk}-${vote.created_at}-${index}`}
+                key={`${vote.left_entity_ns}-${vote.left_entity_pk}-${vote.right_entity_ns}-${vote.right_entity_pk}-${vote.created_at}-${index}`}
                 vote={vote}
                 showDelete={true}
                 onDelete={deleteMutation.mutate}

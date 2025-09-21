@@ -8,12 +8,12 @@ function FloatingNav() {
   const auth = useAuth();
   const [searchParams] = useSearchParams();
 
-  const urlPkNamespace = searchParams.get('pk_namespace');
+  const urlPkNamespace = searchParams.get('ns');
   const urlPk = searchParams.get('pk');
   const entitySet = urlPkNamespace && urlPk;
 
   const generateTo = (path) => {
-    return entitySet ? `${path}?pk_namespace=${urlPkNamespace}&pk=${urlPk}` : path;
+    return entitySet ? `${path}?ns=${urlPkNamespace}&pk=${urlPk}` : path;
   };
 
   const handleLogout = () => {

@@ -36,7 +36,7 @@ This is the "Summoning" flow. It's a critical first impression that needs to be 
 4.  **The Payoff:**
     *   The backend finishes fetching from Reddit and populating the database.
     *   The API call returns a success status.
-    *   The frontend automatically **redirects** the user to the canonical voting URL, which is now populated with content: `sorter.social/vote?pk_namespace=reddit.com.subreddit&pk=AmItheAsshole`.
+    *   The frontend automatically **redirects** the user to the canonical voting URL, which is now populated with content: `sorter.social/vote?ns=reddit.com.subreddit&pk=AmItheAsshole`.
     *   The user is immediately presented with their first pairwise comparison of two posts from the set they just imported. The magic happens.
 
 #### A2. The Refresh (Revisiting a Subreddit)
@@ -44,7 +44,7 @@ This is the "Summoning" flow. It's a critical first impression that needs to be 
 **User Flow:**
 
 1.  **Navigation:** User goes to `sorter.social/r/AmItheAsshole` a week later.
-2.  **Instant Content:** This time, the backend finds the parent entity. The frontend **does not** show the summoning gate. Instead, it immediately redirects to the voting page `sorter.social/vote?pk_namespace=...` and the user can start sorting the previously imported posts right away.
+2.  **Instant Content:** This time, the backend finds the parent entity. The frontend **does not** show the summoning gate. Instead, it immediately redirects to the voting page `sorter.social/vote?ns=...` and the user can start sorting the previously imported posts right away.
 3.  **The Desire for New Content:** On this voting page, there needs to be a clear, non-intrusive UI element for adding more posts.
     *   **UI Element:** A button, perhaps in a corner or a header bar, labeled `[+ Fetch More Posts]`.
 4.  **The Refresh Modal:**
@@ -72,14 +72,14 @@ This is the "Summoning" flow. It's a critical first impression that needs to be 
     *   **UI:** Shows the title of the Reddit post (which the API should fetch first and fast). A message like: "Summoning all comments from *'{Post Title}'*. This can take several minutes for very large threads." and a prominent loading spinner.
 5.  **The Payoff:**
     *   The synchronous API call completes once all comments are ingested and relationships are built.
-    *   The frontend redirects to the canonical voting URL for that post's comments: `sorter.social/vote?pk_namespace=reddit.com.post&pk={post_id}`.
+    *   The frontend redirects to the canonical voting URL for that post's comments: `sorter.social/vote?ns=reddit.com.post&pk={post_id}`.
     *   The user is immediately shown the first pair of comments to sort.
 
 #### B-Option 2: The "Drill-Down" Flow
 
 This flow starts from the Subreddit View (Use Case A).
 
-1.  **The Context:** The user is at `sorter.social/vote?pk_namespace=reddit.com.subreddit&pk=AmItheAsshole`, voting on posts.
+1.  **The Context:** The user is at `sorter.social/vote?ns=reddit.com.subreddit&pk=AmItheAsshole`, voting on posts.
 2.  **The UI Element:** The `VoteItemDisplay` component for each post is now not just for display, it's a gateway. The title of the post is a link.
 3.  **The Action (The Drill-Down):** The user clicks the title of a post that looks interesting.
 4.  **The Entity Detail Page:** Instead of immediately importing, they are taken to a dedicated page for that entity.
@@ -88,11 +88,11 @@ This flow starts from the Subreddit View (Use Case A).
         *   Shows the post's title, author, and metadata (score, body text/image).
         *   Checks if comments have already been imported (i.e., if this post entity has children).
         *   **If not imported:** It shows a big button: `[Sort the Comments in this Thread]`.
-        *   **If already imported:** The button says `[Continue Sorting Comments]` and it links directly to `sorter.social/vote?pk_namespace=reddit.com.post&pk={post_id}`.
+        *   **If already imported:** The button says `[Continue Sorting Comments]` and it links directly to `sorter.social/vote?ns=reddit.com.post&pk={post_id}`.
 5.  **The Wait & Payoff:**
     *   User clicks `[Sort the Comments in this Thread]`.
     *   The button triggers the same API call and loading state as the paste-a-link flow. Because it's synchronous, the page just waits, showing a spinner on the button.
-    *   When the API returns, the page redirects to the vote URL (`.../vote?pk_namespace=reddit.com.post&pk={post_id}`), and the user can begin sorting comments.
+    *   When the API returns, the page redirects to the vote URL (`.../vote?ns=reddit.com.post&pk={post_id}`), and the user can begin sorting comments.
 
 ### Summary of API Endpoints Required:
 

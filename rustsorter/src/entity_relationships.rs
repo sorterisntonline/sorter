@@ -17,26 +17,26 @@ use crate::{
 #[derive(Serialize, Debug, sqlx::FromRow, JsonSchema)]
 pub struct EntityRelationship {
     pub user_id: Uuid,
-    pub parent_pk_namespace: String,
+    pub parent_ns: String,
     pub parent_pk: String,
-    pub child_pk_namespace: String,
+    pub child_ns: String,
     pub child_pk: String,
     pub created_at: Option<NaiveDateTime>,
 }
 
 #[derive(Deserialize, Debug, JsonSchema)]
 pub struct CreateRelationshipPayload {
-    pub parent_pk_namespace: String,
+    pub parent_ns: String,
     pub parent_pk: String,
-    pub child_pk_namespace: String,
+    pub child_ns: String,
     pub child_pk: String,
 }
 
 #[derive(Deserialize, Debug, JsonSchema)]
 pub struct ListRelationshipsQuery {
-    parent_pk_namespace: Option<String>,
+    parent_ns: Option<String>,
     parent_pk: Option<String>,
-    child_pk_namespace: Option<String>,
+    child_ns: Option<String>,
     child_pk: Option<String>,
     submitter_user_id: Option<Uuid>,
 }
@@ -48,9 +48,9 @@ pub struct EntityRelationshipCreateQueryParams {
 
 #[derive(Deserialize, Debug, JsonSchema)]
 pub struct DeleteRelationshipQuery {
-    parent_pk_namespace: String,
+    parent_ns: String,
     parent_pk: String,
-    child_pk_namespace: String,
+    child_ns: String,
     child_pk: String,
 }
 
@@ -81,9 +81,9 @@ pub async fn create_relationship<'e, E: PgExecutor<'e>>(
     sqlx::query_file_as!(
         EntityRelationship,
         "../database/sql/entity_relationship/insert.sql",
-        payload.parent_pk_namespace,
+        payload.parent_ns,
         payload.parent_pk,
-        payload.child_pk_namespace,
+        payload.child_ns,
         payload.child_pk,
         user_id
     )
@@ -100,9 +100,9 @@ pub async fn create_relationship_ignore_conflict<'e, E: PgExecutor<'e>>(
     sqlx::query_file_as!(
         EntityRelationship,
         "../database/sql/entity_relationship/insert_ignore_conflict.sql",
-        payload.parent_pk_namespace,
+        payload.parent_ns,
         payload.parent_pk,
-        payload.child_pk_namespace,
+        payload.child_ns,
         payload.child_pk,
         user_id
     )
@@ -119,9 +119,9 @@ pub async fn upsert_relationship<'e, E: PgExecutor<'e>>(
     sqlx::query_file_as!(
         EntityRelationship,
         "../database/sql/entity_relationship/upsert.sql",
-        payload.parent_pk_namespace,
+        payload.parent_ns,
         payload.parent_pk,
-        payload.child_pk_namespace,
+        payload.child_ns,
         payload.child_pk,
         user_id
     )
@@ -154,9 +154,9 @@ async fn list_relationships(
     let relationships = sqlx::query_file_as!(
         EntityRelationship,
         "../database/sql/entity_relationship/list.sql",
-        params.parent_pk_namespace,
+        params.parent_ns,
         params.parent_pk,
-        params.child_pk_namespace,
+        params.child_ns,
         params.child_pk,
         params.submitter_user_id
     )
@@ -176,9 +176,9 @@ async fn delete_relationship(
 
     sqlx::query_file!(
         "../database/sql/entity_relationship/delete.sql",
-        params.parent_pk_namespace,
+        params.parent_ns,
         params.parent_pk,
-        params.child_pk_namespace,
+        params.child_ns,
         params.child_pk
     )
     .execute(&state.db)

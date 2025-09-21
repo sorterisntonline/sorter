@@ -1,5 +1,5 @@
 SELECT
-    pk_namespace,
+    ns,
     pk,
     title,
     metadata,
@@ -9,5 +9,5 @@ SELECT
 FROM
     entities
 WHERE
-    pk_namespace = $1
+    ns = $1
     AND pk = $2
