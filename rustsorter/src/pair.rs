@@ -92,12 +92,31 @@ fn entity_matches_identifier(
     entity.ns == identifier.ns && entity.pk == identifier.pk
 }
 
+/// Check if a pair of entities has already been voted on
+fn pair_already_voted(
+    entity1: &crate::entity::Entity,
+    entity2: &crate::entity::Entity,
+    existing_votes: &[crate::pagerank::RelevantVote],
+) -> bool {
+    existing_votes.iter().any(|vote| {
+        (vote.left_entity_ns == entity1.ns
+            && vote.left_entity_pk == entity1.pk
+            && vote.right_entity_ns == entity2.ns
+            && vote.right_entity_pk == entity2.pk)
+            || (vote.left_entity_ns == entity2.ns
+                && vote.left_entity_pk == entity2.pk
+                && vote.right_entity_ns == entity1.ns
+                && vote.right_entity_pk == entity1.pk)
+    })
+}
+
 /// Select a pair using ranking-based algorithm
 fn select_ranked_entity_pair(
     left_entities: &[crate::entity::Entity],
     right_entities: &[crate::entity::Entity],
     unsorted: &[crate::pagerank::EntityIdentifier],
     sorted: &[crate::pagerank::RankedEntity],
+    existing_votes: &[crate::pagerank::RelevantVote],
 ) -> Result<(crate::entity::Entity, crate::entity::Entity), PairSelectionError> {
     // Check if we have entities in both pools
     if left_entities.is_empty() || right_entities.is_empty() {
@@ -145,7 +164,7 @@ fn select_ranked_entity_pair(
 
                     if left_sorted.is_empty() {
                         // Both pools only have unsorted, pick randomly from each
-                        let left_entity = left_unsorted.choose(&mut rng).unwrap().clone().clone();
+                        let left_entity = (*left_unsorted.choose(&mut rng).unwrap()).clone();
                         let mut right_pool = right_unsorted.clone();
                         right_pool.retain(|e| !entities_are_same(e, &left_entity));
 
@@ -153,14 +172,14 @@ fn select_ranked_entity_pair(
                             return Err(PairSelectionError::InsufficientEntities);
                         }
 
-                        let right_entity = right_pool.choose(&mut rng).unwrap().clone().clone();
+                        let right_entity = (*right_pool.choose(&mut rng).unwrap()).clone();
                         return Ok((left_entity, right_entity));
                     }
 
                     (right_unsorted, left_sorted, false)
                 } else {
                     // Only left has unsorted, must pick from left
-                    let left_entity = left_unsorted.choose(&mut rng).unwrap().clone().clone();
+                    let left_entity = (*left_unsorted.choose(&mut rng).unwrap()).clone();
                     let mut right_pool = right_entities.to_vec();
                     right_pool.retain(|e| !entities_are_same(e, &left_entity));
 
@@ -187,7 +206,7 @@ fn select_ranked_entity_pair(
 
             if left_sorted.is_empty() {
                 // No sorted entities available, pick two unsorted
-                let right_entity = right_unsorted.choose(&mut rng).unwrap().clone().clone();
+                let right_entity = (*right_unsorted.choose(&mut rng).unwrap()).clone();
                 let mut left_pool = left_entities.to_vec();
                 left_pool.retain(|e| !entities_are_same(e, &right_entity));
 
@@ -222,51 +241,77 @@ fn select_ranked_entity_pair(
             Ok((sorted_entity, unsorted_entity))
         }
     } else {
-        // Strategy 2: All entities are sorted, find the best matchup
+        // Strategy 2: All entities are sorted, find adjacent pairs in ranking order
+        // that haven't been voted on yet (1st vs 2nd, then 2nd vs 3rd, etc.)
 
-        // Create position map for sorted entities
-        let mut position_map = std::collections::HashMap::new();
-        for (pos, ranked_entity) in sorted.iter().enumerate() {
-            position_map.insert(
-                (
-                    ranked_entity.identifier.ns.clone(),
-                    ranked_entity.identifier.pk.clone(),
-                ),
-                pos + 1, // 1-indexed positions
+        // Create entity lookup maps for both pools
+        let mut left_entity_map = std::collections::HashMap::new();
+        for entity in left_entities {
+            left_entity_map.insert(
+                (entity.ns.clone(), entity.pk.clone()),
+                entity,
             );
         }
 
-        // Find best pair (lowest combined rank)
-        let mut best_pair: Option<(crate::entity::Entity, crate::entity::Entity, usize)> = None;
+        let mut right_entity_map = std::collections::HashMap::new();
+        for entity in right_entities {
+            right_entity_map.insert(
+                (entity.ns.clone(), entity.pk.clone()),
+                entity,
+            );
+        }
 
-        for left_entity in left_entities {
-            let left_key = (left_entity.ns.clone(), left_entity.pk.clone());
-            let Some(&left_pos) = position_map.get(&left_key) else {
-                continue; // Skip if not in sorted list
-            };
+        // Try adjacent pairs in ranking order
+        for i in 0..sorted.len().saturating_sub(1) {
+            let first_ranked = &sorted[i];
+            let second_ranked = &sorted[i + 1];
 
-            for right_entity in right_entities {
-                // Skip if same entity
-                if entities_are_same(left_entity, right_entity) {
-                    continue;
-                }
+            let first_key = (
+                first_ranked.identifier.ns.clone(),
+                first_ranked.identifier.pk.clone(),
+            );
+            let second_key = (
+                second_ranked.identifier.ns.clone(),
+                second_ranked.identifier.pk.clone(),
+            );
 
-                let right_key = (right_entity.ns.clone(), right_entity.pk.clone());
-                let Some(&right_pos) = position_map.get(&right_key) else {
-                    continue; // Skip if not in sorted list
-                };
+            // Check if we can form a pair with these adjacent entities
+            if let (Some(&first_entity), Some(&second_entity)) = (
+                left_entity_map.get(&first_key).or_else(|| right_entity_map.get(&first_key)),
+                left_entity_map.get(&second_key).or_else(|| right_entity_map.get(&second_key)),
+            ) {
+                // Check if both entities are in different pools (or same pool if no restrictions)
+                let first_in_left = left_entity_map.contains_key(&first_key);
+                let second_in_left = left_entity_map.contains_key(&second_key);
+                let first_in_right = right_entity_map.contains_key(&first_key);
+                let second_in_right = right_entity_map.contains_key(&second_key);
 
-                let combined_rank = left_pos + right_pos;
+                // Must have one entity available in each pool
+                let can_pair = (first_in_left && second_in_right) || (first_in_right && second_in_left);
 
-                if best_pair.is_none() || combined_rank < best_pair.as_ref().unwrap().2 {
-                    best_pair = Some((left_entity.clone(), right_entity.clone(), combined_rank));
+                if can_pair && !pair_already_voted(first_entity, second_entity, existing_votes) {
+                    // Return the pair with the left pool entity first if possible
+                    if first_in_left {
+                        return Ok((first_entity.clone(), second_entity.clone()));
+                    } else {
+                        return Ok((second_entity.clone(), first_entity.clone()));
+                    }
                 }
             }
         }
 
-        best_pair
-            .map(|(left, right, _)| (left, right))
-            .ok_or(PairSelectionError::InsufficientEntities)
+        // If no adjacent pairs are available, fall back to any valid unvoted pair
+        for left_entity in left_entities {
+            for right_entity in right_entities {
+                if !entities_are_same(left_entity, right_entity)
+                    && !pair_already_voted(left_entity, right_entity, existing_votes)
+                {
+                    return Ok((left_entity.clone(), right_entity.clone()));
+                }
+            }
+        }
+
+        Err(PairSelectionError::InsufficientEntities)
     }
 }
 
@@ -398,7 +443,7 @@ async fn get_pair_handler(
         select_entity_pair(&left_entities, &right_entities)
     } else {
         // Use ranking-based selection
-        select_ranked_entity_pair(&left_entities, &right_entities, &unsorted, &sorted)
+        select_ranked_entity_pair(&left_entities, &right_entities, &unsorted, &sorted, &votes)
     }
     .map_err(|e| Error::BadRequest {
         message: format!("Unable to select valid entity pair: {:?}", e).into(),
