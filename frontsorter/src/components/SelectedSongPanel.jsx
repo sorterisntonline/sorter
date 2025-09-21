@@ -1,10 +1,12 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSpotifyPlayer } from '../contexts/SpotifyPlayerContext';
 import usePinnedSongStore from '../stores/pinnedSongStore';
 
 function SelectedSongPanel({ selectedSong, user, onSongSelect }) {
+  const navigate = useNavigate();
   const { playTrack, queueTrack, isReady, accessToken } = useSpotifyPlayer();
-  const { pinnedSong, setPinnedSong, clearPinnedSong, isSongPinned } = usePinnedSongStore();
+  const { pinnedSong, setPinnedSong, clearPinnedSong, isSongPinned, togglePinnedSong } = usePinnedSongStore();
 
 
 
@@ -87,9 +89,11 @@ function SelectedSongPanel({ selectedSong, user, onSongSelect }) {
             <button 
               className={`action-button ${isSongPinned(selectedSong) ? 'secondary' : 'primary'}`}
               onClick={() => {
-                // Navigate to vote page with this song pinned
-                const url = `/vote?ns=sorter.user&pk=${encodeURIComponent(user.handle)}&left_pin_ns=spotify.track&left_pin_pk=${encodeURIComponent(selectedSong.id)}`;
-                window.location.href = url;
+                if (isSongPinned(selectedSong)) {
+                  clearPinnedSong();
+                } else {
+                  setPinnedSong(selectedSong);
+                }
               }}
             >
               {isSongPinned(selectedSong) ? 'Stop Comparing' : 'Compare This Song'}
