@@ -7,6 +7,7 @@ use chrono::NaiveDateTime;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sqlx::PgExecutor;
+use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::{
@@ -14,7 +15,8 @@ use crate::{
     models::{Error, IntoNotFound, Json, MapErrorAnyhow, MapErrorSqlx, User},
 };
 
-#[derive(Serialize, Debug, sqlx::FromRow, JsonSchema)]
+#[derive(Serialize, Debug, sqlx::FromRow, JsonSchema, TS)]
+#[ts(export)]
 pub struct EntityRelationship {
     pub user_id: Uuid,
     pub parent_ns: String,
@@ -24,7 +26,8 @@ pub struct EntityRelationship {
     pub created_at: Option<NaiveDateTime>,
 }
 
-#[derive(Deserialize, Debug, JsonSchema)]
+#[derive(Deserialize, Debug, JsonSchema, TS)]
+#[ts(export)]
 pub struct CreateRelationshipPayload {
     pub parent_ns: String,
     pub parent_pk: String,

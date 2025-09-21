@@ -11,7 +11,7 @@ pub async fn create_temp_session(
 ) -> Result<Uuid, Error> {
     let session_id = Uuid::new_v4();
     let expires_at = Utc::now().naive_utc() + chrono::Duration::minutes(15); // 15 min expiry
-    
+
     sqlx::query!(
         "INSERT INTO user_sessions (id, session_type, provider_id, data, expires_at)
          VALUES ($1, $2, $3, $4, $5)",
@@ -24,17 +24,14 @@ pub async fn create_temp_session(
     .execute(pool)
     .await
     .map_error("temp session")?;
-    
+
     Ok(session_id)
 }
 
-pub async fn create_full_session(
-    pool: &PgPool,
-    user_id: Uuid,
-) -> Result<Uuid, Error> {
+pub async fn create_full_session(pool: &PgPool, user_id: Uuid) -> Result<Uuid, Error> {
     let session_id = Uuid::new_v4();
     let expires_at = Utc::now().naive_utc() + chrono::Duration::days(30); // 30 day expiry
-    
+
     sqlx::query!(
         "INSERT INTO user_sessions (id, user_id, session_type, expires_at)
          VALUES ($1, $2, $3, $4)",
@@ -46,7 +43,7 @@ pub async fn create_full_session(
     .execute(pool)
     .await
     .map_error("full session")?;
-    
+
     Ok(session_id)
 }
 
@@ -61,7 +58,7 @@ pub async fn get_session(pool: &PgPool, session_id: Uuid) -> Result<Option<UserS
     .fetch_optional(pool)
     .await
     .map_error("session")?;
-    
+
     Ok(session)
 }
 
@@ -70,13 +67,14 @@ pub async fn get_session_with_user(
     session_id: Uuid,
 ) -> Result<Option<(UserSession, Option<User>)>, Error> {
     let session = get_session(pool, session_id).await?;
-    
+
     if let Some(session) = session {
         let user = if let Some(user_id) = session.user_id {
             Some(
                 sqlx::query_as!(
                     User,
-                    "SELECT id, handle, display_name, username, primary_provider, avatar_url, bio, created_at 
+                    "SELECT id, handle, display_name, username, primary_provider, avatar_url, \
+                     bio, created_at 
                      FROM users WHERE id = $1",
                     user_id
                 )
@@ -87,7 +85,7 @@ pub async fn get_session_with_user(
         } else {
             None
         };
-        
+
         Ok(Some((session, user)))
     } else {
         Ok(None)
@@ -99,7 +97,7 @@ pub async fn delete_session(pool: &PgPool, session_id: Uuid) -> Result<(), Error
         .execute(pool)
         .await
         .map_error("session")?;
-    
+
     Ok(())
 }
 
@@ -108,7 +106,7 @@ pub async fn cleanup_expired_sessions(pool: &PgPool) -> Result<(), Error> {
         .execute(pool)
         .await
         .map_error("expired sessions")?;
-    
+
     Ok(())
 }
 
@@ -118,7 +116,7 @@ pub async fn upgrade_temp_session(
     user_id: Uuid,
 ) -> Result<(), Error> {
     let expires_at = Utc::now().naive_utc() + chrono::Duration::days(30);
-    
+
     sqlx::query!(
         "UPDATE user_sessions 
          SET user_id = $1, session_type = $2, data = NULL, provider_id = NULL, expires_at = $3
@@ -131,6 +129,6 @@ pub async fn upgrade_temp_session(
     .execute(pool)
     .await
     .map_error("session upgrade")?;
-    
+
     Ok(())
 }

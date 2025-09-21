@@ -10,6 +10,7 @@ use chrono::NaiveDateTime;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
+use ts_rs::TS;
 
 use crate::{
     app_state::AppState,
@@ -33,7 +34,8 @@ fn canonicalize_entity_pair(
     }
 }
 
-#[derive(Serialize, Debug, sqlx::FromRow, JsonSchema)]
+#[derive(Serialize, Debug, sqlx::FromRow, JsonSchema, TS)]
+#[ts(export)]
 pub struct Vote {
     pub left_entity_ns: String,
     pub left_entity_pk: String,
@@ -56,7 +58,8 @@ pub struct VotePath {
     attr_id: i32,
 }
 
-#[derive(Deserialize, Debug, JsonSchema)]
+#[derive(Deserialize, Debug, JsonSchema, TS)]
+#[ts(export)]
 pub struct VotePayload {
     left_entity_ns: String,
     left_entity_pk: String,
@@ -160,9 +163,9 @@ async fn list_votes(
         .map_error("votes")?
     } else {
         sqlx::query_file_as!(Vote, "../database/sql/vote/list.sql")
-        .fetch_all(&state.db)
-        .await
-        .map_error("votes")?
+            .fetch_all(&state.db)
+            .await
+            .map_error("votes")?
     };
 
     Ok((StatusCode::OK, Json(votes)))
@@ -194,7 +197,7 @@ async fn list_song_votes(
     Query(params): Query<SongVoteParams>,
 ) -> Result<(StatusCode, Json<Vec<SongVote>>), Error> {
     let limit = params.limit.unwrap_or(50) as i64;
-    
+
     let votes = sqlx::query_file_as!(
         SongVote,
         "../database/sql/vote/list_by_entity.sql",
@@ -261,8 +264,10 @@ pub fn routes() -> ApiRouter<AppState> {
         .api_route(
             "/entity",
             get_with(list_song_votes, |op| {
-                op.description("List votes for a specific entity. Use ?namespace=<ns>&pk=<pk> to filter.")
-                    .response::<200, Json<Vec<SongVote>>>()
+                op.description(
+                    "List votes for a specific entity. Use ?namespace=<ns>&pk=<pk> to filter.",
+                )
+                .response::<200, Json<Vec<SongVote>>>()
             }),
         )
         .api_route(

@@ -11,31 +11,36 @@ use log::{error, info, warn};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sprs::{TriMat, prod::mul_acc_mat_vec_csr};
+use ts_rs::TS;
 
 use crate::{
     app_state::AppState,
     models::{Error, Json, MapErrorSqlx},
 };
 
-#[derive(Deserialize, Debug, Clone, PartialEq, Eq, Hash, Serialize, JsonSchema)]
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq, Hash, Serialize, JsonSchema, TS)]
+#[ts(export)]
 pub struct EntityIdentifier {
     pub ns: String,
     pub pk: String,
 }
 
-#[derive(Serialize, Debug, Clone, JsonSchema)]
+#[derive(Serialize, Debug, Clone, JsonSchema, TS)]
+#[ts(export)]
 pub struct RankedEntity {
     pub identifier: EntityIdentifier,
     pub score: f64,
 }
 
-#[derive(Serialize, Debug, JsonSchema)]
+#[derive(Serialize, Debug, JsonSchema, TS)]
+#[ts(export)]
 pub struct RankingResponse {
     unsorted: Vec<EntityIdentifier>,
     sorted: Vec<RankedEntity>,
 }
 
-#[derive(Serialize, Debug, JsonSchema)]
+#[derive(Serialize, Debug, JsonSchema, TS)]
+#[ts(export)]
 pub struct RankingSnapshot {
     pub vote_index: usize,
     pub created_at: NaiveDateTime,
@@ -43,7 +48,8 @@ pub struct RankingSnapshot {
     pub sorted: Vec<RankedEntity>,
 }
 
-#[derive(Serialize, Debug, JsonSchema)]
+#[derive(Serialize, Debug, JsonSchema, TS)]
+#[ts(export)]
 pub struct RankingHistoryResponse {
     pub snapshots: Vec<RankingSnapshot>,
 }
@@ -86,10 +92,7 @@ fn build_rank_graph(
 
     for vote in votes {
         let left_key = format!("{}:{}", vote.left_entity_ns, vote.left_entity_pk);
-        let right_key = format!(
-            "{}:{}",
-            vote.right_entity_ns, vote.right_entity_pk
-        );
+        let right_key = format!("{}:{}", vote.right_entity_ns, vote.right_entity_pk);
 
         let Some(&left_idx) = entity_key_to_index.get(&left_key) else {
             continue;

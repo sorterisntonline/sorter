@@ -12,6 +12,7 @@ use schemars::JsonSchema;
 use serde::Serialize;
 use serde_json::json;
 use sqlx::{Acquire, Postgres, postgres::PgQueryResult};
+use ts_rs::TS;
 use uuid::Uuid;
 
 pub trait PgAcquire<'a>: Acquire<'a, Database = Postgres> {}
@@ -197,7 +198,8 @@ impl IntoResponse for Error {
     }
 }
 
-#[derive(sqlx::FromRow, serde::Serialize, Debug, Clone, schemars::JsonSchema)]
+#[derive(sqlx::FromRow, serde::Serialize, Debug, Clone, schemars::JsonSchema, TS)]
+#[ts(export)]
 pub struct User {
     pub id: Uuid,
     pub handle: String,
@@ -285,7 +287,8 @@ impl SessionType {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, schemars::JsonSchema)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, schemars::JsonSchema, TS)]
+#[ts(export)]
 pub struct TempSessionData {
     pub spotify_id: String,
     pub spotify_username: String,
