@@ -23,7 +23,7 @@ const buildQueryKey = params => {
     const url_right_ns = params.get('right_ns');
     const url_right_pk = params.get('right_pk');
     // Get parent context parameters
-    const parent_pk_namespace = params.get('pk_namespace');
+    const parent_ns = params.get('ns');
     const parent_pk = params.get('pk');
 
     // --- Determine Query Type and Construct Query Key ---
@@ -33,10 +33,10 @@ const buildQueryKey = params => {
     if (url_left_ns && url_left_pk && url_right_ns && url_right_pk) {
         queryType = 'specific';
         queryKeyParams = [url_left_ns, url_left_pk, url_right_ns, url_right_pk];
-    } else if (parent_pk_namespace && parent_pk) {
+    } else if (parent_ns && parent_pk) {
         // Only treat as 'children' if specific params are NOT set
         queryType = 'children';
-        queryKeyParams = [parent_pk_namespace, parent_pk];
+        queryKeyParams = [parent_ns, parent_pk];
     }
     // else: queryType remains 'default', queryKeyParams remains empty
 
@@ -54,10 +54,10 @@ function VoteItemDisplay({ item, isDisabled }) { // Removed isSelected, pk is un
     if (!item) return null;
 
     // Assume item structure is now consistent as returned by /api/pair
-    const { title, pk_namespace, pk, metadata, profile_picture_url } = item;
-    const entityType = pk_namespace?.split('.')[1] || 'item'; // Add optional chaining
-    const isSpotifyTrack = pk_namespace?.includes('spotify.track');
-    const isSpotifyAlbum = pk_namespace?.includes('spotify.album');
+    const { title, ns, pk, metadata, profile_picture_url } = item;
+    const entityType = ns?.split('.')[1] || 'item'; // Add optional chaining
+    const isSpotifyTrack = ns?.includes('spotify.track');
+    const isSpotifyAlbum = ns?.includes('spotify.album');
 
 
     // Conditionally render Spotify Embed
@@ -137,15 +137,15 @@ function VotePage() {
 
              // Always try to set left/right based on response
              if (data?.left_entity) {
-                 if (currentParams.get('left_ns') !== data.left_entity.pk_namespace || currentParams.get('left_pk') !== data.left_entity.pk) {
-                     currentParams.set('left_ns', data.left_entity.pk_namespace);
+                 if (currentParams.get('left_ns') !== data.left_entity.ns || currentParams.get('left_pk') !== data.left_entity.pk) {
+                     currentParams.set('left_ns', data.left_entity.ns);
                      currentParams.set('left_pk', data.left_entity.pk);
                      changed = true;
                  }
              }
             if (data?.right_entity) {
-                 if (currentParams.get('right_ns') !== data.right_entity.pk_namespace || currentParams.get('right_pk') !== data.right_entity.pk) {
-                    currentParams.set('right_ns', data.right_entity.pk_namespace);
+                 if (currentParams.get('right_ns') !== data.right_entity.ns || currentParams.get('right_pk') !== data.right_entity.pk) {
+                    currentParams.set('right_ns', data.right_entity.ns);
                     currentParams.set('right_pk', data.right_entity.pk);
                     changed = true;
                  }
@@ -155,8 +155,8 @@ function VotePage() {
             // the parent pk/namespace params now that we have specific children in the URL.
             // Or keep them for context? Let's remove them for cleaner URLs reflecting the current view.
             if (queryType === 'children') {
-                if (currentParams.has('pk_namespace')) {
-                    currentParams.delete('pk_namespace');
+                if (currentParams.has('ns')) {
+                    currentParams.delete('ns');
                     changed = true;
                 }
                 if (currentParams.has('pk')) {
@@ -182,9 +182,9 @@ function VotePage() {
             queryClient.invalidateQueries({ queryKey: queryKey });
 
             // Also invalidate Spotify ranking if this is a user's spotify tracks
-            const parent_pk_namespace = searchParams.get('pk_namespace');
+            const parent_ns = searchParams.get('ns');
             const parent_pk = searchParams.get('pk');
-            if (parent_pk_namespace === 'sorter.user' && parent_pk) {
+            if (parent_ns === 'sorter.user' && parent_pk) {
                 queryClient.invalidateQueries(['spotify-ranking', parent_pk]);
             }
 
@@ -213,9 +213,9 @@ function VotePage() {
         console.log("Submitting Vote:");
         const voteData = {
             // Use the pk/ns from the fetched data
-            left_ns: leftItem.pk_namespace,
+            left_ns: leftItem.ns,
             left_pk: leftItem.pk,
-            right_ns: rightItem.pk_namespace,
+            right_ns: rightItem.ns,
             right_pk: rightItem.pk,
             magnitude: sliderValue, // Use the slider value directly as magnitude
             attribute_id: 1, // Placeholder, will be handled in submitVoteFn ('like') - ID is 1
@@ -264,12 +264,12 @@ function VotePage() {
                             {/* Container for the two items */}
                             <div className="vote-items-container">
                                 {/* Left Item - Wrapped in Link */}
-                                 <Link to={`/?pk_namespace=${encodeURIComponent(leftItem.pk_namespace)}&pk=${encodeURIComponent(leftItem.pk)}`} className="vote-item-link">
+                                 <Link to={`/?ns=${encodeURIComponent(leftItem.ns)}&pk=${encodeURIComponent(leftItem.pk)}`} className="vote-item-link">
                                     <VoteItemDisplay item={leftItem} isDisabled={submittingVote || loadingPair}/>
                                 </Link>
 
                                 {/* Right Item - Wrapped in Link */}
-                                <Link to={`/?pk_namespace=${encodeURIComponent(rightItem.pk_namespace)}&pk=${encodeURIComponent(rightItem.pk)}`} className="vote-item-link">
+                                <Link to={`/?ns=${encodeURIComponent(rightItem.ns)}&pk=${encodeURIComponent(rightItem.pk)}`} className="vote-item-link">
                                     <VoteItemDisplay item={rightItem} isDisabled={submittingVote || loadingPair}/>
                                 </Link>
                             </div>

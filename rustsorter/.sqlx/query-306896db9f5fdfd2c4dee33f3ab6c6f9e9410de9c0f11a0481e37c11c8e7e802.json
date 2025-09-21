@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n    pk_namespace,\n    pk,\n    title,\n    metadata,\n    created_at,\n    profile_picture_url,\n    user_id\nFROM\n    entities\nWHERE\n    pk_namespace = $1\n    AND pk = $2\n",
+  "query": "SELECT\n    ns,\n    pk,\n    title,\n    metadata,\n    created_at,\n    profile_picture_url,\n    user_id\nFROM\n    entities\nORDER BY\n    created_at DESC\n",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "pk_namespace",
+        "name": "ns",
         "type_info": "Text"
       },
       {
@@ -40,10 +40,7 @@
       }
     ],
     "parameters": {
-      "Left": [
-        "Text",
-        "Text"
-      ]
+      "Left": []
     },
     "nullable": [
       false,
@@ -55,5 +52,5 @@
       false
     ]
   },
-  "hash": "1e04e8506183a65d80d575cf7358d9d9730f5019b5ed66107d0c68e5482a246f"
+  "hash": "306896db9f5fdfd2c4dee33f3ab6c6f9e9410de9c0f11a0481e37c11c8e7e802"
 }

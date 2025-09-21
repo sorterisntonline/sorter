@@ -87,11 +87,9 @@ function SelectedSongPanel({ selectedSong, user, onSongSelect }) {
             <button 
               className={`action-button ${isSongPinned(selectedSong) ? 'secondary' : 'primary'}`}
               onClick={() => {
-                if (isSongPinned(selectedSong)) {
-                  clearPinnedSong();
-                } else {
-                  setPinnedSong(selectedSong);
-                }
+                // Navigate to vote page with this song pinned
+                const url = `/vote?ns=sorter.user&pk=${encodeURIComponent(user.handle)}&left_pin_ns=spotify.track&left_pin_pk=${encodeURIComponent(selectedSong.id)}`;
+                window.location.href = url;
               }}
             >
               {isSongPinned(selectedSong) ? 'Stop Comparing' : 'Compare This Song'}

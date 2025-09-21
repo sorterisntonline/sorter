@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO entity_relationships(parent_pk_namespace, parent_pk, child_pk_namespace, child_pk, user_id)\n    VALUES ($1, $2, $3, $4, $5)\nON CONFLICT (parent_pk_namespace, parent_pk, child_pk_namespace, child_pk)\n    DO NOTHING\nRETURNING\n    parent_pk_namespace, parent_pk, child_pk_namespace, child_pk, user_id, created_at\n",
+  "query": "SELECT\n    parent_ns,\n    parent_pk,\n    child_ns,\n    child_pk,\n    user_id,\n    created_at\nFROM\n    entity_relationships\nWHERE ($1::text IS NULL\n    OR parent_ns = $1::text)\nAND ($2::text IS NULL\n    OR parent_pk = $2::text)\nAND ($3::text IS NULL\n    OR child_ns = $3::text)\nAND ($4::text IS NULL\n    OR child_pk = $4::text)\nAND ($5::uuid IS NULL\n    OR user_id = $5::uuid)\nORDER BY\n    created_at DESC\n",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "parent_pk_namespace",
+        "name": "parent_ns",
         "type_info": "Text"
       },
       {
@@ -15,7 +15,7 @@
       },
       {
         "ordinal": 2,
-        "name": "child_pk_namespace",
+        "name": "child_ns",
         "type_info": "Text"
       },
       {
@@ -52,5 +52,5 @@
       true
     ]
   },
-  "hash": "5c95802e3ff162bb1312c3994fd6c0f7c0cefd25382586bd7b4393b524a99910"
+  "hash": "28f49588ff9d0c8f12e1a5f672bf52fe08a8e4811e5da618f5b93aca9b2947e1"
 }

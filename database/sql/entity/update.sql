@@ -6,10 +6,10 @@ SET
     profile_picture_url = $5,
     user_id = $6
 WHERE
-    pk_namespace = $1
+    ns = $1
     AND pk = $2
 RETURNING
-    pk_namespace,
+    ns,
     pk,
     title,
     metadata,

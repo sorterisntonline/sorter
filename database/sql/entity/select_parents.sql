@@ -2,8 +2,8 @@ SELECT
     e.*
 FROM
     entities e
-    JOIN entity_relationships er ON e.pk_namespace = er.parent_pk_namespace
+    JOIN entity_relationships er ON e.ns = er.parent_ns
         AND e.pk = er.parent_pk
 WHERE
-    er.child_pk_namespace = $1
+    er.child_ns = $1
     AND er.child_pk = $2

@@ -52,7 +52,7 @@ struct _Vote {
 
 #[derive(Deserialize, Debug, JsonSchema)]
 pub struct PairQueryParams {
-    pk_namespace: String,
+    ns: String,
     pk: String,
     left_pin_ns: Option<String>,
     left_pin_pk: Option<String>,
@@ -73,13 +73,13 @@ pub enum PairSelectionError {
 }
 
 fn entities_are_same(a: &crate::entity::Entity, b: &crate::entity::Entity) -> bool {
-    a.pk_namespace == b.pk_namespace && a.pk == b.pk
+    a.ns == b.ns && a.pk == b.pk
 }
 
 /// Convert Entity to EntityIdentifier for ranking
 fn entity_to_identifier(entity: &crate::entity::Entity) -> crate::pagerank::EntityIdentifier {
     crate::pagerank::EntityIdentifier {
-        pk_namespace: entity.pk_namespace.clone(),
+        ns: entity.ns.clone(),
         pk: entity.pk.clone(),
     }
 }
@@ -89,7 +89,7 @@ fn entity_matches_identifier(
     entity: &crate::entity::Entity,
     identifier: &crate::pagerank::EntityIdentifier,
 ) -> bool {
-    entity.pk_namespace == identifier.pk_namespace && entity.pk == identifier.pk
+    entity.ns == identifier.ns && entity.pk == identifier.pk
 }
 
 /// Select a pair using ranking-based algorithm
@@ -229,7 +229,7 @@ fn select_ranked_entity_pair(
         for (pos, ranked_entity) in sorted.iter().enumerate() {
             position_map.insert(
                 (
-                    ranked_entity.identifier.pk_namespace.clone(),
+                    ranked_entity.identifier.ns.clone(),
                     ranked_entity.identifier.pk.clone(),
                 ),
                 pos + 1, // 1-indexed positions
@@ -240,7 +240,7 @@ fn select_ranked_entity_pair(
         let mut best_pair: Option<(crate::entity::Entity, crate::entity::Entity, usize)> = None;
 
         for left_entity in left_entities {
-            let left_key = (left_entity.pk_namespace.clone(), left_entity.pk.clone());
+            let left_key = (left_entity.ns.clone(), left_entity.pk.clone());
             let Some(&left_pos) = position_map.get(&left_key) else {
                 continue; // Skip if not in sorted list
             };
@@ -251,7 +251,7 @@ fn select_ranked_entity_pair(
                     continue;
                 }
 
-                let right_key = (right_entity.pk_namespace.clone(), right_entity.pk.clone());
+                let right_key = (right_entity.ns.clone(), right_entity.pk.clone());
                 let Some(&right_pos) = position_map.get(&right_key) else {
                     continue; // Skip if not in sorted list
                 };
@@ -342,7 +342,7 @@ async fn get_pair_handler(
     // Get left pool
     let left_entities = get_filtered_children(
         &state,
-        params.pk_namespace.clone(),
+        params.ns.clone(),
         params.pk.clone(),
         params.left_pin_ns.clone(),
         params.left_pin_pk.clone(),
@@ -352,7 +352,7 @@ async fn get_pair_handler(
     // Get right pool
     let right_entities = get_filtered_children(
         &state,
-        params.pk_namespace.clone(),
+        params.ns.clone(),
         params.pk.clone(),
         params.right_pin_ns.clone(),
         params.right_pin_pk.clone(),
@@ -362,7 +362,7 @@ async fn get_pair_handler(
     // Get all children for ranking
     let all_children = get_filtered_children(
         &state,
-        params.pk_namespace.clone(),
+        params.ns.clone(),
         params.pk.clone(),
         None,
         None,
@@ -376,7 +376,7 @@ async fn get_pair_handler(
     // Prepare entity keys for vote query
     let entity_keys: Vec<String> = entity_identifiers
         .iter()
-        .map(|e| format!("{}:{}", e.pk_namespace, e.pk))
+        .map(|e| format!("{}:{}", e.ns, e.pk))
         .collect();
 
     // Fetch votes
@@ -424,7 +424,7 @@ mod tests {
     fn create_test_entity(ns: &str, pk: &str) -> crate::entity::Entity {
         crate::entity::Entity {
             user_id: Uuid::new_v4(),
-            pk_namespace: ns.to_string(),
+            ns: ns.to_string(),
             pk: pk.to_string(),
             title: Some(format!("Test Entity {}-{}", ns, pk)),
             profile_picture_url: None,
@@ -447,7 +447,7 @@ mod tests {
 
             let (left, right) = result.unwrap();
             // Ensure entities are distinct
-            assert!(!(left.pk_namespace == right.pk_namespace && left.pk == right.pk));
+            assert!(!(left.ns == right.ns && left.pk == right.pk));
         }
     }
 
@@ -494,8 +494,8 @@ mod tests {
         assert!(result.is_ok());
 
         let (left, right) = result.unwrap();
-        assert_eq!(left.pk_namespace, "ns1");
-        assert!(!(left.pk_namespace == right.pk_namespace && left.pk == right.pk));
+        assert_eq!(left.ns, "ns1");
+        assert!(!(left.ns == right.ns && left.pk == right.pk));
     }
 
     #[test]
@@ -516,7 +516,7 @@ mod tests {
 
         let (left, right) = result.unwrap();
         assert_eq!(left.pk, "pk1");
-        assert!(!(left.pk_namespace == right.pk_namespace && left.pk == right.pk));
+        assert!(!(left.ns == right.ns && left.pk == right.pk));
     }
 
     #[test]
@@ -533,9 +533,9 @@ mod tests {
         assert!(result.is_ok());
 
         let (left, right) = result.unwrap();
-        assert_eq!(left.pk_namespace, "ns1");
+        assert_eq!(left.ns, "ns1");
         assert_eq!(left.pk, "pk1");
-        assert!(!(left.pk_namespace == right.pk_namespace && left.pk == right.pk));
+        assert!(!(left.ns == right.ns && left.pk == right.pk));
     }
 
     #[test]
@@ -553,8 +553,8 @@ mod tests {
         let result = select_entity_pair(&left_entities, &right_entities);
 
         let (left, right) = result.unwrap();
-        assert_eq!(right.pk_namespace, "ns1");
-        assert!(!(left.pk_namespace == right.pk_namespace && left.pk == right.pk));
+        assert_eq!(right.ns, "ns1");
+        assert!(!(left.ns == right.ns && left.pk == right.pk));
     }
 
     #[test]
@@ -566,9 +566,9 @@ mod tests {
         assert!(result.is_ok());
 
         let (left, right) = result.unwrap();
-        assert_eq!(left.pk_namespace, "ns1");
+        assert_eq!(left.ns, "ns1");
         assert_eq!(left.pk, "pk1");
-        assert_eq!(right.pk_namespace, "ns2");
+        assert_eq!(right.ns, "ns2");
         assert_eq!(right.pk, "pk2");
     }
 
@@ -593,9 +593,9 @@ mod tests {
         let first_pair = &results[0];
         let has_variety = results.iter().any(|(left, right)| {
             left.pk != first_pair.0.pk
-                || left.pk_namespace != first_pair.0.pk_namespace
+                || left.ns != first_pair.0.ns
                 || right.pk != first_pair.1.pk
-                || right.pk_namespace != first_pair.1.pk_namespace
+                || right.ns != first_pair.1.ns
         });
 
         // This test might occasionally fail due to randomness, but it's very unlikely

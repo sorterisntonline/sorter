@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE votes \nSET deleted_at = NOW()\nWHERE left_entity_pk_namespace = $1 \n    AND left_entity_pk = $2 \n    AND right_entity_pk_namespace = $3 \n    AND right_entity_pk = $4 \n    AND user_id = $5 \n    AND attribute_id = $6\n    AND deleted_at IS NULL\nRETURNING \n    left_entity_pk_namespace,\n    left_entity_pk,\n    right_entity_pk_namespace,\n    right_entity_pk,\n    user_id,\n    magnitude,\n    attribute_id,\n    created_at,\n    deleted_at;\n",
+  "query": "SELECT \n    left_entity_ns,\n    left_entity_pk,\n    right_entity_ns,\n    right_entity_pk,\n    user_id,\n    magnitude,\n    attribute_id,\n    created_at,\n    deleted_at\nFROM votes \nWHERE user_id = $1 \n    AND deleted_at IS NULL\nORDER BY created_at DESC\nLIMIT COALESCE($2, 100);\n",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "left_entity_pk_namespace",
+        "name": "left_entity_ns",
         "type_info": "Text"
       },
       {
@@ -15,7 +15,7 @@
       },
       {
         "ordinal": 2,
-        "name": "right_entity_pk_namespace",
+        "name": "right_entity_ns",
         "type_info": "Text"
       },
       {
@@ -51,10 +51,6 @@
     ],
     "parameters": {
       "Left": [
-        "Text",
-        "Text",
-        "Text",
-        "Text",
         "Uuid",
         "Int4"
       ]
@@ -71,5 +67,5 @@
       true
     ]
   },
-  "hash": "290268452af9a153394fb1cc772f9952591ba34fef3ba17a9bb8243ec15a37bf"
+  "hash": "f42bc65aeb362bb240a89dc8168fa834bfb6714f886116235c499a1fddc8985a"
 }

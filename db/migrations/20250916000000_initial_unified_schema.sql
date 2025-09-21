@@ -107,29 +107,29 @@ CREATE TABLE api_keys(
 
 -- Core sorter entities system
 CREATE TABLE entities(
-  pk_namespace text NOT NULL,
+  ns text NOT NULL,
   pk text NOT NULL,
   user_id uuid REFERENCES users(id) NOT NULL,
   title text,
   profile_picture_url text,
   metadata jsonb,
   created_at timestamp DEFAULT now(),
-  PRIMARY KEY (pk_namespace, pk)
+  PRIMARY KEY (ns, pk)
 );
 
 CREATE TABLE entity_relationships(
-  parent_pk_namespace text NOT NULL,
+  parent_ns text NOT NULL,
   parent_pk text NOT NULL,
   user_id uuid REFERENCES users(id) NOT NULL,
-  child_pk_namespace text NOT NULL,
+  child_ns text NOT NULL,
   child_pk text NOT NULL,
   created_at timestamp DEFAULT now(),
-  PRIMARY KEY (parent_pk_namespace, parent_pk, child_pk_namespace, child_pk),
-  FOREIGN KEY (parent_pk_namespace, parent_pk) 
-    REFERENCES entities (pk_namespace, pk) 
+  PRIMARY KEY (parent_ns, parent_pk, child_ns, child_pk),
+  FOREIGN KEY (parent_ns, parent_pk) 
+    REFERENCES entities (ns, pk) 
     ON DELETE CASCADE,
-  FOREIGN KEY (child_pk_namespace, child_pk) 
-    REFERENCES entities (pk_namespace, pk) 
+  FOREIGN KEY (child_ns, child_pk) 
+    REFERENCES entities (ns, pk) 
     ON DELETE CASCADE
 );
 
@@ -145,9 +145,9 @@ INSERT INTO attributes(id, slug, description)
 
 -- Pairwise voting system
 CREATE TABLE votes(
-  left_entity_pk_namespace text NOT NULL,
+  left_entity_ns text NOT NULL,
   left_entity_pk text NOT NULL,
-  right_entity_pk_namespace text NOT NULL,
+  right_entity_ns text NOT NULL,
   right_entity_pk text NOT NULL,
   user_id uuid REFERENCES users(id) NOT NULL,
   magnitude int NOT NULL,
@@ -155,24 +155,24 @@ CREATE TABLE votes(
   created_at timestamp DEFAULT now() NOT NULL,
   deleted_at timestamp,
 
-  PRIMARY KEY (left_entity_pk_namespace, left_entity_pk, right_entity_pk_namespace, right_entity_pk, user_id, attribute_id, created_at)
+  PRIMARY KEY (left_entity_ns, left_entity_pk, right_entity_ns, right_entity_pk, user_id, attribute_id, created_at)
 );
 
 -- Slug system for entity discovery
 CREATE TABLE global_slugs(
   slug text PRIMARY KEY,
-  pk_namespace text NOT NULL,
+  ns text NOT NULL,
   pk text NOT NULL,
-  FOREIGN KEY (pk_namespace, pk) REFERENCES entities(pk_namespace, pk)
+  FOREIGN KEY (ns, pk) REFERENCES entities(ns, pk)
 );
 
 CREATE TABLE scoped_slugs(
   namespace text NOT NULL,
   slug text NOT NULL,
-  pk_namespace text NOT NULL,
+  ns text NOT NULL,
   pk text NOT NULL,
   PRIMARY KEY (namespace, slug),
-  FOREIGN KEY (pk_namespace, pk) REFERENCES entities(pk_namespace, pk)
+  FOREIGN KEY (ns, pk) REFERENCES entities(ns, pk)
 );
 
 -- Performance indexes
@@ -191,8 +191,8 @@ CREATE INDEX idx_api_keys_user_id ON api_keys(user_id);
 CREATE UNIQUE INDEX api_keys_user_id_name_active_key_idx ON api_keys(user_id, name) 
 WHERE active = TRUE;
 
-CREATE INDEX ON entity_relationships(parent_pk_namespace, parent_pk);
-CREATE INDEX ON entity_relationships(child_pk_namespace, child_pk);
+CREATE INDEX ON entity_relationships(parent_ns, parent_pk);
+CREATE INDEX ON entity_relationships(child_ns, child_pk);
 
 -- migrate:down
 DROP TABLE votes;

@@ -102,7 +102,7 @@ export class AuthAPI {
 
   static async getSpotifyRanking(userNs, userPk) {
   const params = new URLSearchParams({
-  pk_namespace: userNs,
+  ns: userNs,
   pk: userPk
   });
   const response = await fetch(`${API_BASE}/rank/rank?${params}`, {
@@ -119,7 +119,7 @@ export class AuthAPI {
 
   static async getRankingHistory(userNs, userPk) {
     const params = new URLSearchParams({
-      pk_namespace: userNs,
+      ns: userNs,
       pk: userPk
     });
     const response = await fetch(`${API_BASE}/rank/history?${params}`, {

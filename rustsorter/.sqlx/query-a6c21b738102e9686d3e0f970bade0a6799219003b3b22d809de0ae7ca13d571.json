@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n    left_entity_pk_namespace,\n    left_entity_pk,\n    right_entity_pk_namespace,\n    right_entity_pk,\n    user_id,\n    magnitude,\n    attribute_id,\n    created_at,\n    deleted_at\nFROM\n    votes\nWHERE\n    left_entity_pk_namespace = $1\n    AND left_entity_pk = $2\n    AND right_entity_pk_namespace = $3\n    AND right_entity_pk = $4\n    AND user_id = $5\n    AND attribute_id = $6\n    AND deleted_at IS NULL\nORDER BY\n    created_at DESC\nLIMIT 1\n",
+  "query": "SELECT\n    left_entity_ns,\n    left_entity_pk,\n    right_entity_ns,\n    right_entity_pk,\n    user_id,\n    magnitude,\n    attribute_id,\n    created_at,\n    deleted_at\nFROM\n    votes\nWHERE\n    left_entity_ns = $1\n    AND left_entity_pk = $2\n    AND right_entity_ns = $3\n    AND right_entity_pk = $4\n    AND user_id = $5\n    AND attribute_id = $6\n    AND deleted_at IS NULL\nORDER BY\n    created_at DESC\nLIMIT 1\n",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "left_entity_pk_namespace",
+        "name": "left_entity_ns",
         "type_info": "Text"
       },
       {
@@ -15,7 +15,7 @@
       },
       {
         "ordinal": 2,
-        "name": "right_entity_pk_namespace",
+        "name": "right_entity_ns",
         "type_info": "Text"
       },
       {
@@ -71,5 +71,5 @@
       true
     ]
   },
-  "hash": "396bc46479335e6b29997e6e99f0537a2816584b09b518d161e3230669335e7e"
+  "hash": "a6c21b738102e9686d3e0f970bade0a6799219003b3b22d809de0ae7ca13d571"
 }

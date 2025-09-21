@@ -5,7 +5,7 @@
     "columns": [
       {
         "ordinal": 0,
-        "name": "left_entity_pk_namespace",
+        "name": "left_entity_ns",
         "type_info": "Text"
       },
       {
@@ -15,7 +15,7 @@
       },
       {
         "ordinal": 2,
-        "name": "right_entity_pk_namespace",
+        "name": "right_entity_ns",
         "type_info": "Text"
       },
       {

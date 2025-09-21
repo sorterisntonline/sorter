@@ -6,7 +6,7 @@ import { createEntity } from '../fetchers/entityEndpoints';
 
 // Zod schema matching backend EntityPayload
 const entitySchema = z.object({
-  pk_namespace: z.string().min(1, 'Namespace is required'),
+  ns: z.string().min(1, 'Namespace is required'),
   pk: z.string().min(1, 'Primary key is required'),
   title: z.string().optional(),
   profile_picture_url: z.string().url('Must be a valid URL').optional().or(z.literal('')),
@@ -32,7 +32,7 @@ function EntityForm({ onSuccess, onCancel }) {
   } = useForm({
     resolver: zodResolver(entitySchema),
     defaultValues: {
-      pk_namespace: '',
+      ns: '',
       pk: '',
       title: '',
       profile_picture_url: '',
@@ -67,18 +67,18 @@ function EntityForm({ onSuccess, onCancel }) {
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         {/* Namespace */}
         <div>
-          <label htmlFor="pk_namespace" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="ns" className="block text-sm font-medium text-gray-700 mb-1">
             Namespace *
           </label>
           <input
-            {...register('pk_namespace')}
+            {...register('ns')}
             type="text"
-            id="pk_namespace"
+            id="ns"
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             placeholder="e.g., spotify.track, custom.person"
           />
-          {errors.pk_namespace && (
-            <p className="text-red-600 text-sm mt-1">{errors.pk_namespace.message}</p>
+          {errors.ns && (
+            <p className="text-red-600 text-sm mt-1">{errors.ns.message}</p>
           )}
         </div>
 
