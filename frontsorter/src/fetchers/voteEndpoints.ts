@@ -1,7 +1,9 @@
+import { VoteData, VoteResponse, VoteEntity, VoteParams, ApiError, QueryKeyParams } from '../types/api';
+
 const STATIC_KEY = "STATIC_TEST_KEY_FOR_ADMIN_USER_123";
 
 // --- API Fetching Function for a PAIR ---
-export const fetchPairFn = async ({ queryKey }) => {
+export const fetchPairFn = async ({ queryKey }: { queryKey: QueryKeyParams }): Promise<VoteEntity> => {
     // Destructure parameters from the queryKey
     const [_key, type, param1, param2, param3, param4] = queryKey; // e.g., ['pair', 'specific', ns, pk, ns, pk] or ['pair', 'children', ns, pk]
 
@@ -30,7 +32,7 @@ export const fetchPairFn = async ({ queryKey }) => {
 
     if (!response.ok) {
         const errorText = await response.text();
-        const error = new Error(`HTTP error! status: ${response.status} for ${apiUrl}. ${errorText}`);
+        const error: ApiError = new Error(`HTTP error! status: ${response.status} for ${apiUrl}. ${errorText}`);
         error.status = response.status; // Attach status code
         throw error;
     }
@@ -49,7 +51,7 @@ export const fetchPairFn = async ({ queryKey }) => {
 export const submitVoteFn = async ({
     left_ns, left_pk, right_ns, right_pk, attribute_id, magnitude
     // voter_user_id is no longer needed, obtained from auth token
-}) => {
+}: VoteData): Promise<VoteResponse> => {
 
     // TODO: Allow selecting attribute_id (defaulting to 'like' = 1)
     // NOTE: The 'like' attribute ID is 1 based on the migration, not 0.
@@ -96,7 +98,7 @@ export const submitVoteFn = async ({
     // Handle other errors
     const errorText = await response.text();
     console.error(`Failed to submit vote. Status: ${response.status}. Body: ${errorText}`);
-    const error = new Error(`Failed to submit vote. Status: ${response.status}.`);
+    const error: ApiError = new Error(`Failed to submit vote. Status: ${response.status}.`);
     error.status = response.status;
     throw error;
 };
@@ -106,7 +108,7 @@ export const addChildFn = async ({
     child_pk_namespace,
     parent_pk,
     parent_pk_namespace
-}) => {
+}: VoteParams): Promise<any> => {
     const url = "/api/entity_relationships"
     console.log(JSON.stringify({child_pk, child_pk_namespace, parent_pk, parent_pk_namespace}))
     const response = await fetch(url, {

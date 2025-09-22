@@ -1,17 +1,24 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import '../styles/retrofuturist.css';
+import { TodoItemProps, Todo } from '../types/api';
 
-const TodoItem = ({ 
-  todo, 
-  onToggleComplete, 
-  onUpdateTitle, 
-  onDelete, 
+interface ExtendedTodoItemProps extends TodoItemProps {
+  children?: Todo[];
+  level?: number;
+  isLast?: boolean;
+}
+
+const TodoItem = ({
+  todo,
+  onToggleComplete,
+  onUpdateTitle,
+  onDelete,
   onAddSubtask,
   children = [],
   level = 0,
   isLast = false,
-  parentExpanded = true 
-}) => {
+  parentExpanded = true
+}: ExtendedTodoItemProps) => {
   const [isExpanded, setIsExpanded] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(todo.title || '');

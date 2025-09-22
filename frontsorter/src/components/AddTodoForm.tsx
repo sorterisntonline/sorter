@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import '../styles/retrofuturist.css';
+import { AddTodoFormProps } from '../types/api';
 
-const AddTodoForm = ({ onAddTodo }) => {
+const AddTodoForm = ({ onAddTodo }: AddTodoFormProps) => {
   const [title, setTitle] = useState('');
   const [priority, setPriority] = useState('medium');
   const [showForm, setShowForm] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (title.trim()) {
       onAddTodo({

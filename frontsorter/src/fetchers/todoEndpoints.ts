@@ -1,24 +1,26 @@
+import { Todo, CreateTodoData, UpdateTodoData, CreateSubtaskData, Entity } from '../types/api';
+
 // --- Todo API Fetchers ---
 
 const TODO_NAMESPACE = 'todos';
 const STATIC_KEY = "STATIC_TEST_KEY_FOR_ADMIN_USER_123";
 
-export const fetchAllTodos = async () => {
+export const fetchAllTodos = async (): Promise<Todo[]> => {
   const res = await fetch('/api/entity');
   if (!res.ok) throw new Error(`Failed to fetch todos: ${res.status}`);
   const entities = await res.json();
   // Filter to only todo entities
-  return entities.filter(entity => entity.pk_namespace === TODO_NAMESPACE);
+  return entities.filter((entity: Entity) => entity.pk_namespace === TODO_NAMESPACE);
 };
 
-export const fetchTodoWithSubtasks = async (pk) => {
+export const fetchTodoWithSubtasks = async (pk: string): Promise<Todo> => {
   const url = `/api/entity/${encodeURIComponent(TODO_NAMESPACE)}/${encodeURIComponent(pk)}?children=true`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch todo: ${res.status}`);
   return res.json();
 };
 
-export const createTodo = async (todoData) => {
+export const createTodo = async (todoData: CreateTodoData): Promise<Todo> => {
   const entity = {
     pk_namespace: TODO_NAMESPACE,
     pk: todoData.id || `todo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -43,7 +45,7 @@ export const createTodo = async (todoData) => {
   return res.json();
 };
 
-export const updateTodo = async (pk, updates) => {
+export const updateTodo = async (pk: string, updates: UpdateTodoData): Promise<Todo> => {
   // First fetch the current todo to merge updates
   const currentRes = await fetch(`/api/entity/${encodeURIComponent(TODO_NAMESPACE)}/${encodeURIComponent(pk)}`);
   if (!currentRes.ok) throw new Error(`Failed to fetch current todo: ${currentRes.status}`);
@@ -73,7 +75,7 @@ export const updateTodo = async (pk, updates) => {
   return res.json();
 };
 
-export const deleteTodo = async (pk) => {
+export const deleteTodo = async (pk: string): Promise<boolean> => {
   const res = await fetch(`/api/entity/${encodeURIComponent(TODO_NAMESPACE)}/${encodeURIComponent(pk)}`, {
     method: 'DELETE',
     headers: {
@@ -84,7 +86,7 @@ export const deleteTodo = async (pk) => {
   return true;
 };
 
-export const createSubtask = async (parentPk, subtaskData) => {
+export const createSubtask = async (parentPk: string, subtaskData: CreateSubtaskData): Promise<Todo> => {
   // First create the subtask entity
   const subtask = await createTodo(subtaskData);
   
@@ -109,7 +111,7 @@ export const createSubtask = async (parentPk, subtaskData) => {
   return subtask;
 };
 
-export const deleteSubtaskRelationship = async (parentPk, childPk) => {
+export const deleteSubtaskRelationship = async (parentPk: string, childPk: string): Promise<boolean> => {
   const params = new URLSearchParams({
     parent_pk_namespace: TODO_NAMESPACE,
     parent_pk: parentPk,
