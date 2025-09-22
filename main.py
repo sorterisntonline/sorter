@@ -475,7 +475,33 @@ def sqlx_prepare():
         console.print("💾 .sqlx files generated and ready for version control", style="dim")
     else:
         console.print("❌ SQLx prepare failed", style="red")
-    
+
+    raise typer.Exit(result)
+
+
+@app.command(name="generate-types")
+def generate_types():
+    """Generate TypeScript bindings from Rust models using ts-rs."""
+    console.print("🧬 Generating TypeScript bindings...", style="blue")
+
+    target_dir = orchestrator.project_root / "frontsorter" / "src" / "types" / "generated"
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    env = os.environ.copy()
+    env.setdefault("TS_RS_EXPORT_DIR", str(target_dir))
+
+    result = orchestrator.run_command(
+        ["cargo", "test", "--lib"],
+        cwd=orchestrator.project_root / "rustsorter",
+        env=env,
+    )
+
+    if result == 0:
+        console.print("✅ TypeScript bindings refreshed", style="green")
+        console.print(f"📁 Output directory: {target_dir}", style="dim")
+    else:
+        console.print("❌ Failed to generate TypeScript bindings", style="red")
+
     raise typer.Exit(result)
 
 @app.command(name="dev-server")
