@@ -1,11 +1,15 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react-swc'
 import tailwindcss from '@tailwindcss/vite'
-
+import autoTypesPlugin from './plugins/auto-types.js'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    autoTypesPlugin() // 🚀 Automatic type generation from Rust backend!
+  ],
   server: {
     // Assuming Vite runs on default 5173 and Rust on 8081
     port: 5173, // Optional: explicitly set Vite's port if needed

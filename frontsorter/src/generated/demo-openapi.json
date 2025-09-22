@@ -1,0 +1,211 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "sorter.social",
+    "description": "HTTP API for sorter.social",
+    "version": "0.1.3"
+  },
+  "paths": {
+    "/api/entity": {
+      "get": {
+        "summary": "List all entities",
+        "responses": {
+          "200": {
+            "description": "List of entities",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Entity"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a new entity",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEntityData"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Entity created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Entity"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vote": {
+      "post": {
+        "summary": "Submit a vote",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoteData"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Vote submitted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoteResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Entity": {
+        "type": "object",
+        "required": ["pk", "pk_namespace", "created_at", "updated_at"],
+        "properties": {
+          "pk": {
+            "type": "string",
+            "description": "Primary key"
+          },
+          "pk_namespace": {
+            "type": "string",
+            "description": "Namespace for the primary key"
+          },
+          "title": {
+            "type": "string",
+            "nullable": true,
+            "description": "Entity title"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "description": "Entity description"
+          },
+          "profile_picture_url": {
+            "type": "string",
+            "nullable": true,
+            "description": "URL to profile picture"
+          },
+          "metadata": {
+            "type": "object",
+            "nullable": true,
+            "description": "Additional metadata"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Creation timestamp"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Last update timestamp"
+          }
+        }
+      },
+      "CreateEntityData": {
+        "type": "object",
+        "required": ["pk_namespace"],
+        "properties": {
+          "pk_namespace": {
+            "type": "string",
+            "description": "Namespace for the primary key"
+          },
+          "pk": {
+            "type": "string",
+            "nullable": true,
+            "description": "Primary key (auto-generated if not provided)"
+          },
+          "title": {
+            "type": "string",
+            "nullable": true,
+            "description": "Entity title"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "description": "Entity description"
+          },
+          "profile_picture_url": {
+            "type": "string",
+            "nullable": true,
+            "description": "URL to profile picture"
+          },
+          "metadata": {
+            "type": "object",
+            "nullable": true,
+            "description": "Additional metadata"
+          }
+        }
+      },
+      "VoteData": {
+        "type": "object",
+        "required": ["left_ns", "left_pk", "right_ns", "right_pk", "magnitude"],
+        "properties": {
+          "left_ns": {
+            "type": "string",
+            "description": "Left entity namespace"
+          },
+          "left_pk": {
+            "type": "string",
+            "description": "Left entity primary key"
+          },
+          "right_ns": {
+            "type": "string",
+            "description": "Right entity namespace"
+          },
+          "right_pk": {
+            "type": "string",
+            "description": "Right entity primary key"
+          },
+          "attribute_id": {
+            "type": "integer",
+            "description": "Attribute ID for the vote",
+            "default": 1
+          },
+          "magnitude": {
+            "type": "number",
+            "description": "Vote magnitude (-1 or 1)"
+          }
+        }
+      },
+      "VoteResponse": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "Response status"
+          },
+          "message": {
+            "type": "string",
+            "nullable": true,
+            "description": "Optional response message"
+          }
+        }
+      }
+    }
+  }
+}

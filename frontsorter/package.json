@@ -5,10 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "dev:full": "concurrently \"npm run dev\" \"npm run backend:watch\"",
+    "build": "npm run generate-types && tsc && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "generate-types": "node scripts/generate-types.js",
+    "generate-types:watch": "nodemon --watch ../rustsorter/src --ext rs --exec 'npm run generate-types'",
+    "backend:watch": "nodemon --watch ../rustsorter/src --ext rs --exec 'echo \"🦀 Rust files changed - types will auto-regenerate\"'",
+    "postinstall": "npm run generate-types || echo 'Backend not available - types will generate when backend starts'"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -27,6 +32,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
+    "@openapi-codegen/cli": "^3.1.0",
+    "@openapi-codegen/typescript": "^11.0.1",
     "@types/node": "^24.5.2",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
@@ -34,10 +41,14 @@
     "@typescript-eslint/eslint-plugin": "^8.44.0",
     "@typescript-eslint/parser": "^8.44.0",
     "@vitejs/plugin-react-swc": "^3.8.0",
+    "concurrently": "^9.2.1",
     "eslint": "^9.21.0",
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-react-refresh": "^0.4.19",
     "globals": "^15.15.0",
+    "nodemon": "^3.1.10",
+    "openapi-typescript": "^7.9.1",
+    "openapi-zod-client": "^1.18.3",
     "typescript": "^5.9.2",
     "vite": "^6.2.0"
   }
