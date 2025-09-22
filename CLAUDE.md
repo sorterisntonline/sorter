@@ -11,6 +11,33 @@ Sorter is a multi-component democratic social media application with the followi
 - **database/cli/**: TypeScript-based CLI tool (`sorter-db`) for database management and development setup
 - **test/**: Python-based integration tests using pytest
 
+## 🚀 Automatic Type Generation System
+
+This project features **automatic TypeScript type generation** from the Rust backend's OpenAPI specification:
+
+### Automatic Features
+- **Real-time type sync**: Types auto-regenerate when Rust backend changes during development
+- **Runtime validation**: All API responses validated with Zod schemas at runtime
+- **Compile-time safety**: Full TypeScript integration with path completion and error checking
+- **Zero manual maintenance**: Types stay in sync automatically via Vite plugin and GitHub Actions
+
+### Generated Files (Auto-managed)
+- `frontsorter/src/generated/api-types.ts` - TypeScript type definitions from OpenAPI
+- `frontsorter/src/generated/api-client.ts` - Zod schemas + type-safe client with validation
+- `frontsorter/src/generated/openapi.json` - Raw OpenAPI spec from backend
+
+### Type Generation Commands
+```bash
+# Manual generation (usually not needed)
+npm run generate-types
+
+# Watch mode for development
+npm run generate-types:watch
+
+# Full development with backend watching
+npm run dev:full
+```
+
 ## Common Development Commands
 
 ### Database Setup
