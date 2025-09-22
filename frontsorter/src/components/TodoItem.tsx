@@ -1,12 +1,6 @@
 import { useState } from 'react';
 import '../styles/retrofuturist.css';
-import { TodoItemProps, Todo } from '../types/api';
-
-interface ExtendedTodoItemProps extends TodoItemProps {
-  children?: Todo[];
-  level?: number;
-  isLast?: boolean;
-}
+import { ExtendedTodoItemProps } from '../generated/types';
 
 const TodoItem = ({
   todo,
@@ -27,14 +21,14 @@ const TodoItem = ({
 
   const handleSaveEdit = () => {
     if (editTitle.trim() && editTitle !== todo.title) {
-      onUpdateTitle(todo.pk, editTitle.trim());
+      onUpdateTitle?.(todo.pk, editTitle.trim());
     }
     setIsEditing(false);
   };
 
   const handleAddSubtask = () => {
     if (newSubtaskTitle.trim()) {
-      onAddSubtask(todo.pk, { 
+      onAddSubtask?.(todo.pk, {
         title: newSubtaskTitle.trim(),
         priority: 'medium'
       });
@@ -74,7 +68,7 @@ const TodoItem = ({
           <input
             type="checkbox"
             checked={todo.metadata?.completed || false}
-            onChange={(e) => onToggleComplete(todo.pk, e.target.checked)}
+            onChange={(e) => onToggleComplete?.(todo.pk, e.target.checked)}
             className="todo-checkbox"
           />
 
@@ -118,7 +112,7 @@ const TodoItem = ({
             </button>
             <button
               className="action-button delete"
-              onClick={() => onDelete(todo.pk)}
+              onClick={() => onDelete?.(todo.pk)}
               title="Delete todo"
             >
               ×

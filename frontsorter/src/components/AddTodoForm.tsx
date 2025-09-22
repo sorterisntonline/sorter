@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import '../styles/retrofuturist.css';
-import { AddTodoFormProps } from '../types/api';
+import { AddTodoFormProps } from '../generated/types';
 
 const AddTodoForm = ({ onAddTodo }: AddTodoFormProps) => {
   const [title, setTitle] = useState('');

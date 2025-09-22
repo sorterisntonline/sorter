@@ -7,26 +7,31 @@ const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8081';
 const API_SPEC_URL = `${BACKEND_URL}/api.json`;
 const OUTPUT_DIR = './src/generated';
 
-console.log('🔄 Generating types from Rust backend...');
+console.log('🔧 Generating TypeScript types from Rust backend...');
 
 async function generateTypes() {
   try {
-    // Ensure output directory exists
     mkdirSync(OUTPUT_DIR, { recursive: true });
 
     console.log(`📡 Fetching OpenAPI spec from ${API_SPEC_URL}...`);
 
     // Fetch OpenAPI spec from running backend
-    const response = await fetch(API_SPEC_URL);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch OpenAPI spec: ${response.status} ${response.statusText}`);
+    let openApiSpec;
+    try {
+      const response = await fetch(API_SPEC_URL);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      openApiSpec = await response.json();
+      console.log('✅ Fetched OpenAPI spec from backend');
+    } catch (error) {
+      console.error('❌ Backend not available:', error.message);
+      console.error('💡 Start the backend with: cd ../rustsorter && cargo run');
+      process.exit(1);
     }
 
-    const openApiSpec = await response.json();
-
-    // Save the spec for reference
+    // Save the spec
     writeFileSync(`${OUTPUT_DIR}/openapi.json`, JSON.stringify(openApiSpec, null, 2));
-    console.log('💾 Saved OpenAPI spec to openapi.json');
 
     // Generate TypeScript types
     console.log('🏗️  Generating TypeScript types...');
@@ -34,22 +39,94 @@ async function generateTypes() {
       stdio: 'inherit'
     });
 
-    // Generate Zod schemas with type-safe client
-    console.log('🛡️  Generating Zod schemas and type-safe client...');
-    execSync(`npx openapi-zod-client ${OUTPUT_DIR}/openapi.json -o ${OUTPUT_DIR}/api-client.ts`, {
-      stdio: 'inherit'
-    });
+    // Create simple types file for existing code
+    const typesContent = `// Re-export generated types for existing code compatibility
+import type { components } from './api-types';
+
+// Core API types from Rust backend
+export type Entity = components['schemas']['Entity'];
+export type CreateEntityData = components['schemas']['CreateEntityData'];
+export type VoteData = components['schemas']['VoteData'];
+export type VoteResponse = components['schemas']['VoteResponse'];
+
+// Compatibility types for existing frontend code
+export interface VoteEntity {
+  left_entity: Entity;
+  right_entity: Entity;
+}
+
+export interface VoteParams {
+  child_pk: string;
+  child_pk_namespace: string;
+  parent_pk: string;
+  parent_pk_namespace: string;
+}
+
+export interface QueryKeyParams {
+  queryKey: string[];
+}
+
+export interface ApiError {
+  message: string;
+  status?: number;
+}
+
+// Todo types (using Entity as base)
+export type Todo = Entity & {
+  children?: Todo[];
+  parent_pk?: string;
+  metadata?: {
+    completed?: boolean;
+    priority?: string;
+    [key: string]: any;
+  };
+};
+
+export type CreateTodoData = CreateEntityData & {
+  entity_pk?: string;
+  priority?: string;
+  completed?: boolean;
+  id?: string;
+};
+
+export type UpdateTodoData = {
+  title?: string;
+  completed?: boolean;
+  metadata?: {
+    [key: string]: any;
+  };
+  priority?: string;
+};
+
+export type CreateSubtaskData = CreateTodoData;
+
+// Component props (if these are only used locally, consider moving to component files)
+export interface EntityFormProps {
+  onEntityCreated?: (entity: Entity) => void;
+}
+
+export interface AddTodoFormProps {
+  onTodoAdded?: (todo: Todo) => void;
+  entityPk?: string;
+}
+
+export interface TodoItemProps {
+  todo: Todo;
+  onUpdate?: (todo: Todo) => void;
+  onDelete?: (todoId: string) => void;
+}
+`;
+
+    writeFileSync(`${OUTPUT_DIR}/types.ts`, typesContent);
 
     console.log('✅ Type generation complete!');
-    console.log(`   📁 Generated files in ${OUTPUT_DIR}/`);
-    console.log('   📄 api-types.ts    - TypeScript type definitions');
-    console.log('   🛡️  api-client.ts  - Zod schemas + type-safe client');
-    console.log('   📋 openapi.json    - Raw OpenAPI specification');
+    console.log(`   📁 Files: ${OUTPUT_DIR}/`);
+    console.log('   📄 api-types.ts - Raw OpenAPI types');
+    console.log('   📄 types.ts     - App-specific types');
+    console.log('   📄 openapi.json  - OpenAPI spec');
 
   } catch (error) {
     console.error('❌ Type generation failed:', error.message);
-    console.error('\n💡 Make sure the Rust backend is running at', BACKEND_URL);
-    console.error('   You can start it with: cd ../rustsorter && cargo run');
     process.exit(1);
   }
 }

@@ -1,4 +1,4 @@
-import { VoteData, VoteResponse, VoteEntity, VoteParams, ApiError, QueryKeyParams } from '../types/api';
+import { VoteData, VoteResponse, VoteEntity, VoteParams, ApiError, QueryKeyParams } from '../generated/types';
 
 const STATIC_KEY = "STATIC_TEST_KEY_FOR_ADMIN_USER_123";
 

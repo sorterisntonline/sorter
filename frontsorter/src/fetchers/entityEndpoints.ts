@@ -1,4 +1,4 @@
-import { Entity, CreateEntityData } from '../types/api';
+import { Entity, CreateEntityData } from '../generated/types';
 
 // --- Entity API Fetchers ---
 

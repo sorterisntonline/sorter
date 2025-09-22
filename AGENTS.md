@@ -4,10 +4,11 @@
 
 Sorter is a **Rust and React based pair-wise staunchly democratic social media application**. The project consists of:
 
-- **Backend**: Rust server (`rustsorter/`) using Axum web framework
-- **Frontend**: React client (`frontsorter/`) using Vite, TypeScript, and TailwindCSS
+- **Backend**: Rust server (`rustsorter/`) using Axum web framework with OpenAPI support
+- **Frontend**: React client (`frontsorter/`) using Vite, TypeScript, and TailwindCSS with auto-generated types
 - **Database**: PostgreSQL with migrations managed by dbmate
 - **CLI Tool**: Custom `sorter-db` CLI for project management
+- **Type Safety**: Automatic TypeScript type generation from Rust backend OpenAPI specification
 
 ## Quick Start Commands
 
@@ -77,12 +78,19 @@ sorter/
 ├── database/
 │   ├── cli/                 # Custom sorter-db CLI tool (TypeScript/Bun)
 │   └── sql/                 # Database migrations and schema
-├── rustsorter/              # Rust backend server
-│   └── src/                 # Rust source code
-├── frontsorter/             # React frontend client
-│   └── src/                 # React source code
+├── rustsorter/              # Rust backend server (OpenAPI source)
+│   └── src/                 # Rust source code with aide for OpenAPI
+├── frontsorter/             # React frontend client (TypeScript)
+│   ├── src/
+│   │   ├── generated/       # 🤖 Auto-generated types from Rust backend
+│   │   ├── api/             # Type-safe API client wrappers
+│   │   ├── components/      # React components (TypeScript)
+│   │   ├── pages/           # Application pages (TypeScript)
+│   │   └── ...
+│   ├── scripts/             # Type generation automation
+│   └── plugins/             # Vite plugins for auto-type generation
 ├── test/                    # Python integration tests
-├── .github/                 # GitHub Actions CI/CD
+├── .github/                 # GitHub Actions CI/CD + type sync workflows
 └── pgdata/                  # PostgreSQL data directory (local dev)
 ```
 

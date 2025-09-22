@@ -1,4 +1,4 @@
-import { Todo, CreateTodoData, UpdateTodoData, CreateSubtaskData, Entity } from '../types/api';
+import { Todo, CreateTodoData, UpdateTodoData, CreateSubtaskData, Entity } from '../generated/types';
 
 // --- Todo API Fetchers ---
 

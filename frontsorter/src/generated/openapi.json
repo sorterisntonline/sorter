@@ -83,7 +83,12 @@
     "schemas": {
       "Entity": {
         "type": "object",
-        "required": ["pk", "pk_namespace", "created_at", "updated_at"],
+        "required": [
+          "pk",
+          "pk_namespace",
+          "created_at",
+          "updated_at"
+        ],
         "properties": {
           "pk": {
             "type": "string",
@@ -127,7 +132,9 @@
       },
       "CreateEntityData": {
         "type": "object",
-        "required": ["pk_namespace"],
+        "required": [
+          "pk_namespace"
+        ],
         "properties": {
           "pk_namespace": {
             "type": "string",
@@ -162,7 +169,13 @@
       },
       "VoteData": {
         "type": "object",
-        "required": ["left_ns", "left_pk", "right_ns", "right_pk", "magnitude"],
+        "required": [
+          "left_ns",
+          "left_pk",
+          "right_ns",
+          "right_pk",
+          "magnitude"
+        ],
         "properties": {
           "left_ns": {
             "type": "string",
@@ -193,7 +206,9 @@
       },
       "VoteResponse": {
         "type": "object",
-        "required": ["status"],
+        "required": [
+          "status"
+        ],
         "properties": {
           "status": {
             "type": "string",

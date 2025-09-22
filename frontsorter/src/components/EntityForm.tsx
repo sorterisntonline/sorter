@@ -3,7 +3,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createEntity } from '../fetchers/entityEndpoints';
-import { EntityFormProps } from '../types/api';
+import { EntityFormProps } from '../generated/types';
 
 // Zod schema matching backend EntityPayload
 const entitySchema = z.object({
