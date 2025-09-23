@@ -222,13 +222,10 @@ export function PoolPage() {
   }
 
   return (
-    <div className="spotify-page" style={getCSSVariables()}>
-      <div className="combined-layout pool-layout" style={{
-        background: `linear-gradient(145deg, var(--theme-primary) 0%, var(--theme-secondary) 50%, var(--theme-primary) 100%)`,
-        minHeight: '100vh'
-      }}>
+    <div className="pool-page">
+      <div className="pool-layout">
         {/* Left Panel - IN POOL */}
-        <div className="songs-panel pool-panel-left">
+        <div className="pool-panel-left">
           <div className="songs-header">
             <span className="songs-title">IN POOL</span>
             <span className="count">({inPoolEntities.length})</span>
@@ -306,7 +303,7 @@ export function PoolPage() {
         </div>
 
         {/* Center Panel - CONTROLS */}
-        <div className="vote-panel pool-controls-panel">
+        <div className="pool-controls-panel">
           <div className="pool-control-buttons">
             <h3>CONTROLS</h3>
             
@@ -350,7 +347,7 @@ export function PoolPage() {
         </div>
 
         {/* Right Panel - NOT IN POOL */}
-        <div className="details-panel pool-panel-right">
+        <div className="pool-panel-right">
           <div className="songs-header">
             <span className="songs-title">NOT IN POOL</span>
             <span className="count">({notInPoolEntities.length})</span>
