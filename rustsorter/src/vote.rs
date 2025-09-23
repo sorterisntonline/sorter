@@ -10,6 +10,7 @@ use chrono::NaiveDateTime;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
+use ts_rs::TS;
 
 use crate::{
     app_state::AppState,
@@ -33,7 +34,8 @@ fn canonicalize_entity_pair(
     }
 }
 
-#[derive(Serialize, Debug, sqlx::FromRow, JsonSchema)]
+#[derive(Serialize, Debug, sqlx::FromRow, JsonSchema, TS)]
+#[ts(export)]
 pub struct Vote {
     pub left_entity_ns: String,
     pub left_entity_pk: String,
@@ -46,7 +48,8 @@ pub struct Vote {
     pub deleted_at: Option<NaiveDateTime>,
 }
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Deserialize, JsonSchema, TS)]
+#[ts(export)]
 pub struct VotePath {
     left_ns: String,
     left_pk: String,
@@ -56,7 +59,8 @@ pub struct VotePath {
     attr_id: i32,
 }
 
-#[derive(Deserialize, Debug, JsonSchema)]
+#[derive(Deserialize, Debug, JsonSchema, TS)]
+#[ts(export)]
 pub struct VotePayload {
     left_entity_ns: String,
     left_entity_pk: String,

@@ -9,6 +9,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use sqlx::{PgExecutor, query_file_as};
+use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::{
@@ -17,7 +18,8 @@ use crate::{
     models::{Error, IntoNotFound, Json, MapErrorAnyhow, MapErrorSqlx, PgAcquire},
 };
 
-#[derive(Serialize, Debug, sqlx::FromRow, Clone, JsonSchema)]
+#[derive(Serialize, Debug, sqlx::FromRow, Clone, JsonSchema, TS)]
+#[ts(export)]
 pub struct Entity {
     pub user_id: Uuid,
     pub ns: String,
@@ -25,38 +27,45 @@ pub struct Entity {
     pub title: Option<String>,
     pub profile_picture_url: Option<String>,
     #[sqlx(json)]
+    #[ts(type = "any")]
     pub metadata: Option<JsonValue>,
     pub created_at: Option<NaiveDateTime>,
 }
 
-#[derive(Deserialize, Debug, JsonSchema)]
+#[derive(Deserialize, Debug, JsonSchema, TS)]
+#[ts(export)]
 pub struct EntityPayload {
     pub ns: String,
     pub pk: String,
     pub title: Option<String>,
+    #[ts(type = "any")]
     pub metadata: Option<JsonValue>,
     pub profile_picture_url: Option<String>,
 }
 
-#[derive(Deserialize, Debug, JsonSchema)]
+#[derive(Deserialize, Debug, JsonSchema, TS)]
+#[ts(export)]
 pub struct EntityQueryParams {
     parents: Option<bool>,
     children: Option<bool>,
 }
 
-#[derive(Deserialize, Debug, JsonSchema)]
+#[derive(Deserialize, Debug, JsonSchema, TS)]
+#[ts(export)]
 pub struct EntityCreateQueryParams {
     upsert: Option<bool>,
 }
 
-#[derive(Serialize, JsonSchema)]
+#[derive(Serialize, JsonSchema, TS)]
+#[ts(export)]
 pub struct EntityWithParentsAndChildren {
     pub entity: Entity,
     parents: Option<Vec<Entity>>,
     children: Option<Vec<Entity>>,
 }
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Deserialize, JsonSchema, TS)]
+#[ts(export)]
 pub struct EntityPath {
     pub ns: String,
     pub pk: String,

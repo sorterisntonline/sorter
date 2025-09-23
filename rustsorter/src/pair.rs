@@ -3,6 +3,7 @@ use axum::extract::{Query, State};
 use rand::seq::SliceRandom;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::{
     app_state::AppState,
@@ -50,7 +51,8 @@ struct _Vote {
     _magnitude: i32,
 }
 
-#[derive(Deserialize, Debug, JsonSchema)]
+#[derive(Deserialize, Debug, JsonSchema, TS)]
+#[ts(export)]
 pub struct PairQueryParams {
     ns: String,
     pk: String,
@@ -60,7 +62,8 @@ pub struct PairQueryParams {
     right_pin_pk: Option<String>,
 }
 
-#[derive(Serialize, Debug, JsonSchema)]
+#[derive(Serialize, Debug, JsonSchema, TS)]
+#[ts(export)]
 pub struct PairResponse {
     left_entity: crate::entity::Entity,
     right_entity: crate::entity::Entity,
