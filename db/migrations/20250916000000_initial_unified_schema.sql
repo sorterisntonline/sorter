@@ -133,6 +133,45 @@ CREATE TABLE entity_relationships(
     ON DELETE CASCADE
 );
 
+-- Optional per-list behavior configuration so lists can act as allowlists or denylists
+CREATE TABLE list_behaviors(
+  parent_ns text NOT NULL,
+  parent_pk text NOT NULL,
+  include_by_default boolean NOT NULL DEFAULT true,
+  created_at timestamp DEFAULT now(),
+  updated_at timestamp DEFAULT now(),
+  PRIMARY KEY (parent_ns, parent_pk),
+  FOREIGN KEY (parent_ns, parent_pk)
+    REFERENCES entities (ns, pk)
+    ON DELETE CASCADE
+);
+
+-- Append-only log of user list actions (allow/deny/reset/temporary block)
+CREATE TABLE user_list_actions(
+  id bigserial PRIMARY KEY,
+  user_id uuid REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+  list_ns text NOT NULL,
+  list_pk text NOT NULL,
+  entity_ns text NOT NULL,
+  entity_pk text NOT NULL,
+  action text NOT NULL CHECK (action IN ('allow', 'deny', 'reset', 'temporary_block')),
+  created_at timestamp DEFAULT now() NOT NULL,
+  expires_at timestamp,
+  FOREIGN KEY (list_ns, list_pk)
+    REFERENCES entities (ns, pk)
+    ON DELETE CASCADE,
+  FOREIGN KEY (entity_ns, entity_pk)
+    REFERENCES entities (ns, pk)
+    ON DELETE CASCADE
+);
+
+CREATE INDEX user_list_actions_lookup_idx
+  ON user_list_actions (user_id, list_ns, list_pk, entity_ns, entity_pk, created_at DESC);
+
+CREATE INDEX user_list_actions_active_idx
+  ON user_list_actions (user_id, expires_at)
+  WHERE expires_at IS NOT NULL;
+
 -- Voting attributes system
 CREATE TABLE attributes(
   id serial PRIMARY KEY,

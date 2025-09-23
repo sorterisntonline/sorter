@@ -27,6 +27,7 @@ use rustsorter::{
     entity,
     entity_relationships,
     extractors::maybe_user::MaybeUser,
+    list_actions,
     models::{Error, Json},
     pagerank,
     pair,
@@ -171,6 +172,7 @@ fn router(app_state: AppState) -> Router {
         .nest("/keys", api_key::routes())
         .nest("/entity", entity::routes())
         .nest("/entity_relationships", entity_relationships::routes())
+        .nest("/list-actions", list_actions::routes())
         .nest("/pair", pair::routes())
         .nest("/vote", vote::routes())
         .nest("/rank", pagerank::routes())

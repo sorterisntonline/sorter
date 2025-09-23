@@ -3,10 +3,13 @@ use axum::extract::{Query, State};
 use rand::seq::SliceRandom;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use sqlx::types::Uuid;
 use ts_rs::TS;
 
 use crate::{
     app_state::AppState,
+    extractors::maybe_user::AuthenticatedUser,
+    list_actions,
     models::{Error, Json, MapErrorSqlx},
 };
 
@@ -363,10 +366,11 @@ pub fn select_entity_pair(
 
 async fn get_filtered_children(
     state: &AppState,
-    parent_ns: String,
-    parent_pk: String,
-    pin_ns: Option<String>,
-    pin_pk: Option<String>,
+    user_id: Uuid,
+    parent_ns: &str,
+    parent_pk: &str,
+    pin_ns: Option<&str>,
+    pin_pk: Option<&str>,
 ) -> Result<Vec<crate::entity::Entity>, Error> {
     let children = sqlx::query_file_as!(
         crate::entity::Entity,
@@ -380,42 +384,47 @@ async fn get_filtered_children(
     .await
     .map_error("entity")?;
 
-    Ok(children)
+    let (_, membership) =
+        list_actions::resolve_children_membership(state, user_id, parent_ns, parent_pk, children)
+            .await?;
+
+    Ok(membership
+        .into_iter()
+        .filter_map(|(entity, is_in)| if is_in { Some(entity) } else { None })
+        .collect())
 }
 
 async fn get_pair_handler(
     State(state): State<AppState>,
+    AuthenticatedUser(user): AuthenticatedUser,
     Query(params): Query<PairQueryParams>,
 ) -> Result<Json<PairResponse>, Error> {
     // Get left pool
     let left_entities = get_filtered_children(
         &state,
-        params.ns.clone(),
-        params.pk.clone(),
-        params.left_pin_ns.clone(),
-        params.left_pin_pk.clone(),
+        user.id,
+        &params.ns,
+        &params.pk,
+        params.left_pin_ns.as_deref(),
+        params.left_pin_pk.as_deref(),
     )
     .await?;
 
     // Get right pool
     let right_entities = get_filtered_children(
         &state,
-        params.ns.clone(),
-        params.pk.clone(),
-        params.right_pin_ns.clone(),
-        params.right_pin_pk.clone(),
+        user.id,
+        &params.ns,
+        &params.pk,
+        params.right_pin_ns.as_deref(),
+        params.right_pin_pk.as_deref(),
     )
     .await?;
 
-    // Get all children for ranking
-    let all_children = get_filtered_children(
-        &state,
-        params.ns.clone(),
-        params.pk.clone(),
-        None,
-        None,
-    )
-    .await?;
+
+    let all_children =
+        get_filtered_children(&state, user.id, &params.ns, &params.pk, None, None).await?;
+
 
     // Convert to identifiers for ranking
     let entity_identifiers: Vec<crate::pagerank::EntityIdentifier> =
