@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use axum::{
     extract::{Query, State},
     http::StatusCode,
@@ -8,6 +8,7 @@ use chrono::Utc;
 use log::{debug, info, warn};
 use reqwest;
 use serde::{Deserialize, Serialize};
+
 use sqlx::PgPool;
 use url::Url;
 use uuid::Uuid;
@@ -83,17 +84,17 @@ pub struct SpotifyExternalUrls {
     pub spotify: String,
 }
 
-pub fn get_spotify_login_url(client_id: &str, redirect_uri: &str, state: &str) -> Result<String> {
+pub fn get_spotify_login_url(
+    client_id: &str,
+    redirect_uri: &str,
+    state: &str,
+) -> Result<String> {
     let mut url = Url::parse(&format!("{}/authorize", SPOTIFY_ACCOUNTS_URL))?;
-
+    
     url.query_pairs_mut()
         .append_pair("response_type", "code")
         .append_pair("client_id", client_id)
-        .append_pair(
-            "scope",
-            "user-read-private user-read-email user-read-recently-played streaming \
-             user-read-playback-state user-modify-playback-state",
-        )
+        .append_pair("scope", "user-read-private user-read-email user-read-recently-played streaming user-read-playback-state user-modify-playback-state")
         .append_pair("redirect_uri", redirect_uri)
         .append_pair("state", state);
 
@@ -101,8 +102,10 @@ pub fn get_spotify_login_url(client_id: &str, redirect_uri: &str, state: &str) -
 }
 
 fn generate_suggested_handle(display_name: Option<&String>, spotify_id: &str) -> String {
-    let base_name = display_name.map(|name| name.as_str()).unwrap_or("user");
-
+    let base_name = display_name
+        .map(|name| name.as_str())
+        .unwrap_or("user");
+    
     let cleaned = base_name
         .chars()
         .filter(|c| c.is_alphanumeric() || *c == '_' || *c == '-')
@@ -111,9 +114,9 @@ fn generate_suggested_handle(display_name: Option<&String>, spotify_id: &str) ->
         .chars()
         .take(15)
         .collect::<String>();
-
+    
     if cleaned.is_empty() {
-        format!("user{}", &spotify_id[spotify_id.len() - 4..])
+        format!("user{}", &spotify_id[spotify_id.len()-4..])
     } else {
         cleaned
     }
@@ -245,7 +248,7 @@ pub async fn fetch_recent_tracks(
     limit: Option<i32>,
 ) -> Result<SpotifyRecentTracksResponse> {
     let limit = limit.unwrap_or(20).min(50); // Spotify API allows max 50
-
+    
     let response = client
         .get(&format!("{}/me/player/recently-played", SPOTIFY_API_BASE))
         .bearer_auth(access_token)
@@ -304,8 +307,7 @@ async fn check_existing_spotify_user(
 ) -> Result<Option<User>, Error> {
     let existing_provider = sqlx::query_as!(
         UserProvider,
-        "SELECT user_id, provider_id, external_id, external_username, profile_data, linked_at, \
-         last_sync_at 
+        "SELECT user_id, provider_id, external_id, external_username, profile_data, linked_at, last_sync_at 
          FROM user_providers WHERE provider_id = 'spotify' AND external_id = $1",
         spotify_id
     )
@@ -316,15 +318,14 @@ async fn check_existing_spotify_user(
     if let Some(provider) = existing_provider {
         let user = sqlx::query_as!(
             User,
-            "SELECT id, handle, display_name, username, primary_provider, avatar_url, bio, \
-             created_at 
+            "SELECT id, handle, display_name, username, primary_provider, avatar_url, bio, created_at 
              FROM users WHERE id = $1",
             provider.user_id
         )
         .fetch_one(pool)
         .await
         .map_error("user")?;
-
+        
         Ok(Some(user))
     } else {
         Ok(None)
@@ -334,30 +335,21 @@ async fn check_existing_spotify_user(
 pub async fn spotify_login(State(state): State<AppState>) -> impl IntoResponse {
     let redirect_uri = format!("{}/api/auth/spotify/callback", state.base_url);
     let csrf_state = Uuid::new_v4().to_string();
-
+    
     match get_spotify_login_url(&state.spotify_client_id, &redirect_uri, &csrf_state) {
         Ok(login_url) => {
             debug!("Redirecting to Spotify login: {}", login_url);
-
+            
             // Store CSRF state in session/cookie for validation
             let mut response = Redirect::to(&login_url).into_response();
-            let cookie = format!(
-                "spotify_state={}; HttpOnly; SameSite=Lax; Path=/; Max-Age=600",
-                csrf_state
-            );
-            response
-                .headers_mut()
-                .insert("Set-Cookie", cookie.parse().unwrap());
-
+            let cookie = format!("spotify_state={}; HttpOnly; SameSite=Lax; Path=/; Max-Age=600", csrf_state);
+            response.headers_mut().insert("Set-Cookie", cookie.parse().unwrap());
+            
             response
         }
         Err(e) => {
             warn!("Failed to generate Spotify login URL: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to generate login URL",
-            )
-                .into_response()
+            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to generate login URL").into_response()
         }
     }
 }
@@ -371,10 +363,7 @@ pub async fn spotify_callback(
     // Check for authorization errors
     if let Some(error) = &params.error {
         warn!("Spotify authorization error: {}", error);
-        let redirect_url = format!(
-            "{}/auth/error?reason=spotify_auth_failed",
-            state.frontend_url
-        );
+        let redirect_url = format!("{}/auth/error?reason=spotify_auth_failed", state.frontend_url);
         return Redirect::to(&redirect_url).into_response();
     }
 
@@ -400,16 +389,11 @@ pub async fn spotify_callback(
         &state.spotify_client_id,
         &state.spotify_client_secret,
         &redirect_uri,
-    )
-    .await
-    {
+    ).await {
         Ok(response) => response,
         Err(e) => {
             warn!("Failed to exchange code for token: {}", e);
-            let redirect_url = format!(
-                "{}/auth/error?reason=token_exchange_failed",
-                state.frontend_url
-            );
+            let redirect_url = format!("{}/auth/error?reason=token_exchange_failed", state.frontend_url);
             return Redirect::to(&redirect_url).into_response();
         }
     };
@@ -419,10 +403,7 @@ pub async fn spotify_callback(
         Ok(user) => user,
         Err(e) => {
             warn!("Failed to fetch Spotify user data: {}", e);
-            let redirect_url = format!(
-                "{}/auth/error?reason=spotify_data_error",
-                state.frontend_url
-            );
+            let redirect_url = format!("{}/auth/error?reason=spotify_data_error", state.frontend_url);
             return Redirect::to(&redirect_url).into_response();
         }
     };
@@ -434,7 +415,7 @@ pub async fn spotify_callback(
         Ok(Some(user)) => {
             // Existing user - update tokens and create full session
             debug!("Existing user found: {}, updating tokens", user.handle);
-
+            
             // Update stored tokens in user_providers
             let updated_profile_data = serde_json::json!({
                 "spotify_id": spotify_user.id,
@@ -445,7 +426,7 @@ pub async fn spotify_callback(
                 "expires_in": token_response.expires_in,
                 "token_obtained_at": Utc::now().timestamp()
             });
-
+            
             if let Err(e) = sqlx::query!(
                 "UPDATE user_providers SET profile_data = $1, last_sync_at = NOW() 
                  WHERE provider_id = 'spotify' AND external_id = $2",
@@ -453,32 +434,23 @@ pub async fn spotify_callback(
                 spotify_user.id
             )
             .execute(&state.db)
-            .await
-            {
+            .await {
                 warn!("Failed to update user tokens: {}", e);
             }
-
+            
             match sessions::create_full_session(&state.db, user.id).await {
                 Ok(session_id) => {
-                    let mut response =
-                        Redirect::to(&format!("{}/auth/success", state.frontend_url))
-                            .into_response();
-
+                    let mut response = Redirect::to(&format!("{}/auth/success", state.frontend_url)).into_response();
+                    
                     // Set session cookie
-                    let cookie = format!(
-                        "session_id={}; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000",
-                        session_id
-                    );
-                    response
-                        .headers_mut()
-                        .insert("Set-Cookie", cookie.parse().unwrap());
-
+                    let cookie = format!("session_id={}; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000", session_id);
+                    response.headers_mut().insert("Set-Cookie", cookie.parse().unwrap());
+                    
                     response
                 }
                 Err(e) => {
                     warn!("Failed to create session: {}", e);
-                    let redirect_url =
-                        format!("{}/auth/error?reason=session_error", state.frontend_url);
+                    let redirect_url = format!("{}/auth/error?reason=session_error", state.frontend_url);
                     Redirect::to(&redirect_url).into_response()
                 }
             }
@@ -486,18 +458,13 @@ pub async fn spotify_callback(
         Ok(None) => {
             // New user - create temp session with Spotify data
             debug!("New user, creating temp session with Spotify data");
-
-            let avatar_url = spotify_user
-                .images
+            
+            let avatar_url = spotify_user.images
                 .first()
                 .map(|img| img.url.clone())
-                .unwrap_or_else(|| {
-                    "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp"
-                        .to_string()
-                });
-
-            let display_name = spotify_user
-                .display_name
+                .unwrap_or_else(|| "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp".to_string());
+            
+            let display_name = spotify_user.display_name
                 .as_ref()
                 .unwrap_or(&spotify_user.id);
 
@@ -505,10 +472,7 @@ pub async fn spotify_callback(
                 spotify_id: spotify_user.id.clone(),
                 spotify_username: display_name.clone(),
                 spotify_avatar: avatar_url,
-                suggested_handle: generate_suggested_handle(
-                    spotify_user.display_name.as_ref(),
-                    &spotify_user.id,
-                ),
+                suggested_handle: generate_suggested_handle(spotify_user.display_name.as_ref(), &spotify_user.id),
                 access_token: Some(token_response.access_token.clone()),
                 refresh_token: token_response.refresh_token.clone(),
                 expires_in: Some(token_response.expires_in),
@@ -517,25 +481,17 @@ pub async fn spotify_callback(
 
             match sessions::create_temp_session(&state.db, "spotify", &temp_data).await {
                 Ok(session_id) => {
-                    let mut response =
-                        Redirect::to(&format!("{}/auth/choose-username", state.frontend_url))
-                            .into_response();
-
+                    let mut response = Redirect::to(&format!("{}/auth/choose-username", state.frontend_url)).into_response();
+                    
                     // Set session cookie
-                    let cookie = format!(
-                        "session_id={}; HttpOnly; SameSite=Lax; Path=/; Max-Age=900",
-                        session_id
-                    );
-                    response
-                        .headers_mut()
-                        .insert("Set-Cookie", cookie.parse().unwrap());
-
+                    let cookie = format!("session_id={}; HttpOnly; SameSite=Lax; Path=/; Max-Age=900", session_id);
+                    response.headers_mut().insert("Set-Cookie", cookie.parse().unwrap());
+                    
                     response
                 }
                 Err(e) => {
                     warn!("Failed to create temp session: {}", e);
-                    let redirect_url =
-                        format!("{}/auth/error?reason=session_error", state.frontend_url);
+                    let redirect_url = format!("{}/auth/error?reason=session_error", state.frontend_url);
                     Redirect::to(&redirect_url).into_response()
                 }
             }

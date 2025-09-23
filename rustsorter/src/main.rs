@@ -108,16 +108,17 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let spotify_client_id = env::var("SPOTIFY_CLIENT_ID")
         .unwrap_or_else(|_| "dummy_client_id_for_development".to_string());
-
+    
     let spotify_client_secret = env::var("SPOTIFY_CLIENT_SECRET")
         .unwrap_or_else(|_| "dummy_client_secret_for_development".to_string());
+    
+    let base_url = env::var("BASE_URL")
+        .unwrap_or_else(|_| format!("http://localhost:{}", port));
+    
+    let frontend_url = env::var("FRONTEND_URL")
+        .unwrap_or_else(|_| "http://localhost:5173".to_string());
 
-    let base_url = env::var("BASE_URL").unwrap_or_else(|_| format!("http://localhost:{}", port));
-
-    let frontend_url =
-        env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:5173".to_string());
-
-    let app_state = AppState {
+    let app_state = AppState { 
         db: pool.clone(),
         spotify_client_id,
         spotify_client_secret,

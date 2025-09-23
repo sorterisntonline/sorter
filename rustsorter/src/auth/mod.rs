@@ -1,11 +1,7 @@
 pub mod endpoints;
 pub mod spotify;
 
-use axum::{
-    Router,
-    routing::{get, post},
-};
-
+use axum::{routing::{get, post}, Router};
 use crate::app_state::AppState;
 
 pub fn routes() -> Router<AppState> {
