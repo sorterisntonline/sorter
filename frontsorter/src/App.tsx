@@ -18,7 +18,7 @@ import ChooseUsernamePage from "./pages/ChooseUsernamePage";
 import AuthSuccessPage from "./pages/AuthSuccessPage";
 import AuthErrorPage from "./pages/AuthErrorPage";
 
-function App() {
+function App(): JSX.Element {
   return (
     <Routes>
       {/* Auth routes (no layout) */}
