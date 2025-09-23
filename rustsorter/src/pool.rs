@@ -309,6 +309,22 @@ async fn batch_pool_handler(
 
 /// Check if entities are in a user's pool
 /// Used by pair selection logic to filter eligible entities
+/// Set pool membership status for an entity
+pub async fn set_pool_membership(
+    db: &sqlx::PgPool,
+    user_id: Uuid,
+    entity_ns: &str,
+    entity_pk: &str,
+    in_pool: bool,
+) -> Result<(), Error> {
+    sqlx::query_file!("../database/sql/pool/upsert_membership.sql", user_id, entity_ns, entity_pk, in_pool)
+        .fetch_one(db)
+        .await
+        .map_error("set_pool_membership")?;
+    
+    Ok(())
+}
+
 pub async fn filter_entities_by_pool(
     state: &AppState,
     user_id: Uuid,
