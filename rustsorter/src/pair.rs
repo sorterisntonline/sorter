@@ -76,6 +76,7 @@ pub struct PairResponse {
 pub enum PairSelectionError {
     InsufficientEntities,
     PinNotFound,
+    EmptyPool,
 }
 
 fn entities_are_same(a: &crate::entity::Entity, b: &crate::entity::Entity) -> bool {
@@ -126,7 +127,7 @@ fn select_ranked_entity_pair(
 ) -> Result<(crate::entity::Entity, crate::entity::Entity), PairSelectionError> {
     // Check if we have entities in both pools
     if left_entities.is_empty() || right_entities.is_empty() {
-        return Err(PairSelectionError::PinNotFound);
+        return Err(PairSelectionError::EmptyPool);
     }
 
     let mut rng = rand::thread_rng();
@@ -331,7 +332,7 @@ pub fn select_entity_pair(
 
     // Check if we have entities in both pools
     if left_entities.is_empty() || right_entities.is_empty() {
-        return Err(PairSelectionError::PinNotFound);
+        return Err(PairSelectionError::EmptyPool);
     }
 
     let mut left_pool = left_entities.to_vec();
@@ -466,7 +467,11 @@ async fn get_pair_handler(
         select_ranked_entity_pair(&left_entities, &right_entities, &unsorted, &sorted, &votes)
     }
     .map_err(|e| Error::BadRequest {
-        message: format!("Unable to select valid entity pair: {:?}", e).into(),
+        message: match e {
+            PairSelectionError::EmptyPool => "No entities in your pool for comparison. Import some items and add them to your pool first.".into(),
+            PairSelectionError::InsufficientEntities => "Not enough entities available for pairing.".into(),
+            PairSelectionError::PinNotFound => "Requested pinned entity not found.".into(),
+        }
     })?;
 
     Ok(Json(PairResponse {
