@@ -92,7 +92,10 @@ fn build_rank_graph(
 
     for vote in votes {
         let left_key = format!("{}:{}", vote.left_entity_ns, vote.left_entity_pk);
-        let right_key = format!("{}:{}", vote.right_entity_ns, vote.right_entity_pk);
+        let right_key = format!(
+            "{}:{}",
+            vote.right_entity_ns, vote.right_entity_pk
+        );
 
         let Some(&left_idx) = entity_key_to_index.get(&left_key) else {
             continue;

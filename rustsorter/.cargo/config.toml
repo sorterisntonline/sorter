@@ -1,6 +1,2 @@
 [build]
 rustflags = ["-C", "target-cpu=native"]
-
-[env]
-# Export TypeScript bindings into the checked-in frontend directory
-TS_RS_EXPORT_DIR = { value = "../frontsorter/src/types/generated", relative = true }

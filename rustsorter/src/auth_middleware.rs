@@ -1,6 +1,6 @@
 use axum::{
     extract::{Request, State},
-    http::{HeaderMap, header},
+    http::{header, HeaderMap},
     middleware::Next,
     response::Response,
 };
@@ -19,7 +19,7 @@ const ADMIN_USERNAME: &str = "admin";
 
 pub fn extract_session_id_from_cookie(headers: &HeaderMap) -> Option<Uuid> {
     let cookie_header = headers.get(header::COOKIE)?.to_str().ok()?;
-
+    
     for cookie in cookie_header.split(';') {
         let cookie = cookie.trim();
         if let Some(session_value) = cookie.strip_prefix("session_id=") {
@@ -32,8 +32,7 @@ pub fn extract_session_id_from_cookie(headers: &HeaderMap) -> Option<Uuid> {
 }
 
 // Middleware that attempts authentication but allows requests without a token.
-// Tries session cookie first, then API key. Rejects ONLY if auth is provided
-// but invalid.
+// Tries session cookie first, then API key. Rejects ONLY if auth is provided but invalid.
 pub async fn try_auth(
     State(app_state): State<AppState>,
     mut request: Request,
@@ -45,7 +44,7 @@ pub async fn try_auth(
     // Try session cookie first
     if let Some(session_id) = extract_session_id_from_cookie(headers) {
         log::debug!("Found session cookie, verifying session: {}", session_id);
-
+        
         match sessions::get_session_with_user(&db_pool, session_id).await {
             Ok(Some((session, Some(user)))) if session.session_type == "full" => {
                 log::debug!("Valid full session found for user: {}", user.handle);
@@ -57,7 +56,7 @@ pub async fn try_auth(
                 // Temp sessions don't authenticate a user, but we don't fail the request
                 return Ok(next.run(request).await);
             }
-            Ok(Some((..))) => {
+            Ok(Some((_, _))) => {
                 log::debug!("Session found but doesn't match expected patterns");
                 // Continue to try API key auth
             }

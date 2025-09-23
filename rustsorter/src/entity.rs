@@ -27,7 +27,7 @@ pub struct Entity {
     pub title: Option<String>,
     pub profile_picture_url: Option<String>,
     #[sqlx(json)]
-    #[ts(type = "Record<string, unknown>")]
+    #[ts(type = "any")]
     pub metadata: Option<JsonValue>,
     pub created_at: Option<NaiveDateTime>,
 }
@@ -38,18 +38,20 @@ pub struct EntityPayload {
     pub ns: String,
     pub pk: String,
     pub title: Option<String>,
-    #[ts(type = "Record<string, unknown>")]
+    #[ts(type = "any")]
     pub metadata: Option<JsonValue>,
     pub profile_picture_url: Option<String>,
 }
 
-#[derive(Deserialize, Debug, JsonSchema)]
+#[derive(Deserialize, Debug, JsonSchema, TS)]
+#[ts(export)]
 pub struct EntityQueryParams {
     parents: Option<bool>,
     children: Option<bool>,
 }
 
-#[derive(Deserialize, Debug, JsonSchema)]
+#[derive(Deserialize, Debug, JsonSchema, TS)]
+#[ts(export)]
 pub struct EntityCreateQueryParams {
     upsert: Option<bool>,
 }
@@ -108,16 +110,26 @@ pub async fn get_entity<'a, A: PgAcquire<'a>>(
 ) -> Result<EntityWithParentsAndChildren, Error> {
     let mut tx = acquire.begin().await.map_internal()?;
 
-    let entity = query_file_as!(Entity, "../database/sql/entity/select.sql", ns, pk)
-        .fetch_one(&mut *tx)
-        .await
-        .map_error("entity")?;
+    let entity = query_file_as!(
+        Entity,
+        "../database/sql/entity/select.sql",
+        ns,
+        pk
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .map_error("entity")?;
 
     let parents = if include_parents {
-        let parents = query_file_as!(Entity, "../database/sql/entity/select_parents.sql", ns, pk)
-            .fetch_all(&mut *tx)
-            .await
-            .map_error(&format!("entity parents for {}/{}", ns, pk))?;
+        let parents = query_file_as!(
+            Entity,
+            "../database/sql/entity/select_parents.sql",
+            ns,
+            pk
+        )
+        .fetch_all(&mut *tx)
+        .await
+        .map_error(&format!("entity parents for {}/{}", ns, pk))?;
 
         Some(parents)
     } else {
@@ -125,10 +137,15 @@ pub async fn get_entity<'a, A: PgAcquire<'a>>(
     };
 
     let children = if include_children {
-        let children = query_file_as!(Entity, "../database/sql/entity/select_children.sql", ns, pk)
-            .fetch_all(&mut *tx)
-            .await
-            .map_error(&format!("entity children for {}/{}", ns, pk))?;
+        let children = query_file_as!(
+            Entity,
+            "../database/sql/entity/select_children.sql",
+            ns,
+            pk
+        )
+        .fetch_all(&mut *tx)
+        .await
+        .map_error(&format!("entity children for {}/{}", ns, pk))?;
 
         Some(children)
     } else {
@@ -348,11 +365,15 @@ async fn delete_entity(
     Path(path): Path<EntityPath>,
 ) -> Result<StatusCode, Error> {
     // TODO only delete entity if user is the owner
-    sqlx::query_file!("../database/sql/entity/delete.sql", path.ns, path.pk)
-        .execute(&state.db)
-        .await
-        .map_internal()?
-        .catch_not_found("entity")?;
+    sqlx::query_file!(
+        "../database/sql/entity/delete.sql",
+        path.ns,
+        path.pk
+    )
+    .execute(&state.db)
+    .await
+    .map_internal()?
+    .catch_not_found("entity")?;
 
     Ok(StatusCode::NO_CONTENT)
 }

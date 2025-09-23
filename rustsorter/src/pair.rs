@@ -253,12 +253,18 @@ fn select_ranked_entity_pair(
         // Create entity lookup maps for both pools
         let mut left_entity_map = std::collections::HashMap::new();
         for entity in left_entities {
-            left_entity_map.insert((entity.ns.clone(), entity.pk.clone()), entity);
+            left_entity_map.insert(
+                (entity.ns.clone(), entity.pk.clone()),
+                entity,
+            );
         }
 
         let mut right_entity_map = std::collections::HashMap::new();
         for entity in right_entities {
-            right_entity_map.insert((entity.ns.clone(), entity.pk.clone()), entity);
+            right_entity_map.insert(
+                (entity.ns.clone(), entity.pk.clone()),
+                entity,
+            );
         }
 
         // Try adjacent pairs in ranking order
@@ -277,23 +283,17 @@ fn select_ranked_entity_pair(
 
             // Check if we can form a pair with these adjacent entities
             if let (Some(&first_entity), Some(&second_entity)) = (
-                left_entity_map
-                    .get(&first_key)
-                    .or_else(|| right_entity_map.get(&first_key)),
-                left_entity_map
-                    .get(&second_key)
-                    .or_else(|| right_entity_map.get(&second_key)),
+                left_entity_map.get(&first_key).or_else(|| right_entity_map.get(&first_key)),
+                left_entity_map.get(&second_key).or_else(|| right_entity_map.get(&second_key)),
             ) {
-                // Check if both entities are in different pools (or same pool if no
-                // restrictions)
+                // Check if both entities are in different pools (or same pool if no restrictions)
                 let first_in_left = left_entity_map.contains_key(&first_key);
                 let second_in_left = left_entity_map.contains_key(&second_key);
                 let first_in_right = right_entity_map.contains_key(&first_key);
                 let second_in_right = right_entity_map.contains_key(&second_key);
 
                 // Must have one entity available in each pool
-                let can_pair =
-                    (first_in_left && second_in_right) || (first_in_right && second_in_left);
+                let can_pair = (first_in_left && second_in_right) || (first_in_right && second_in_left);
 
                 if can_pair && !pair_already_voted(first_entity, second_entity, existing_votes) {
                     // Return the pair with the left pool entity first if possible
@@ -421,9 +421,10 @@ async fn get_pair_handler(
     )
     .await?;
 
-    // Get all children for ranking
+
     let all_children =
         get_filtered_children(&state, user.id, &params.ns, &params.pk, None, None).await?;
+
 
     // Convert to identifiers for ranking
     let entity_identifiers: Vec<crate::pagerank::EntityIdentifier> =

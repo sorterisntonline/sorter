@@ -97,6 +97,10 @@ jobs:
         working-directory: .
         run: uv run main.py build-rust
 
+      - name: Generate TypeScript types
+        working-directory: .
+        run: uv run main.py generate-ts
+
       - name: Run Rust tests (nextest)
         working-directory: .
         run: uv run main.py test-rust --ci

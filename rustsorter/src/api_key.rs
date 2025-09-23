@@ -16,7 +16,7 @@ use sqlx::{FromRow, PgExecutor, PgPool};
 
 use crate::{
     app_state::AppState,
-    models::{ApiKeyDbInternal, Error, IntoNotFound, Json, MapErrorAnyhow, MapErrorSqlx, User},
+    models::{Error, IntoNotFound, Json, MapErrorAnyhow, MapErrorSqlx, User, ApiKeyDbInternal},
 };
 
 const API_KEY_PREFIX: &str = "sort";
@@ -225,21 +225,18 @@ pub async fn verify_api_key(
     if is_valid {
         debug!(key_id; "API key verification successful");
 
-        let user_id = key_internal
-            .user_id
-            .ok_or_else(|| Error::Internal(anyhow::anyhow!("API key has no associated user")))?;
-
+        let user_id = key_internal.user_id.ok_or_else(|| Error::Internal(anyhow::anyhow!("API key has no associated user")))?;
+        
         let user = sqlx::query_as!(
             User,
-            "SELECT id, handle, display_name, username, primary_provider, avatar_url, bio, \
-             created_at 
+            "SELECT id, handle, display_name, username, primary_provider, avatar_url, bio, created_at 
              FROM users WHERE id = $1",
             user_id
         )
         .fetch_one(pool)
         .await
         .map_error("user")?;
-
+        
         debug!(
             user_id:% = user.id, handle = user.handle; "found user"
         );
@@ -327,17 +324,16 @@ async fn list_keys(
     .await
     .map_error("key")?;
 
-    let response_keys: Vec<ApiKeyResponse> = keys_internal
-        .into_iter()
-        .map(|k| ApiKeyResponse {
+    let response_keys: Vec<ApiKeyResponse> = keys_internal.into_iter().map(|k| {
+        ApiKeyResponse {
             id: k.id,
             auth0_sub: k.user_id.map(|id| id.to_string()).unwrap_or_default(),
             name: k.name,
             created_at: k.created_at,
             last_used_at: k.last_used_at,
             active: k.active,
-        })
-        .collect();
+        }
+    }).collect();
     debug!(
         handle = user.handle, key_count = response_keys.len(); "found keys for user"
     );

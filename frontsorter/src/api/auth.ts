@@ -1,43 +1,19 @@
-import type {
-  CompleteSignupRequest,
-  CompleteSignupResponse,
-  HandleAvailabilityResponse,
-  ImportRecentSongsResponse,
-  LogoutResponse,
-  RankingHistoryResponse,
-  RankingResponse,
-  SessionStatusResponse,
-  SpotifySong,
-  User,
-} from '../types/generated/index.js'
-
-const API_BASE = '/api' as const
-
-async function ensureOk(response: Response): Promise<void> {
-  if (!response.ok) {
-    let message = `HTTP ${response.status}`
-    try {
-      const payload = (await response.json()) as { error?: string }
-      if (payload?.error) {
-        message = payload.error
-      }
-    } catch {
-      // ignore JSON parse errors, fall back to generic message
-    }
-    throw new Error(message)
-  }
-}
+const API_BASE = '/api';
 
 export class AuthAPI {
-  static async getSessionStatus(): Promise<SessionStatusResponse> {
+  static async getSessionStatus() {
     const response = await fetch(`${API_BASE}/auth/status`, {
-      credentials: 'include',
-    })
-    await ensureOk(response)
-    return response.json() as Promise<SessionStatusResponse>
+      credentials: 'include', // Include cookies
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    return response.json();
   }
 
-  static async completeSignup(handle: CompleteSignupRequest['handle']): Promise<CompleteSignupResponse> {
+  static async completeSignup(handle) {
     const response = await fetch(`${API_BASE}/auth/complete-signup`, {
       method: 'POST',
       headers: {
@@ -45,81 +21,116 @@ export class AuthAPI {
       },
       credentials: 'include',
       body: JSON.stringify({ handle }),
-    })
-
-    await ensureOk(response)
-    return response.json() as Promise<CompleteSignupResponse>
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+    
+    return response.json();
   }
 
-  static async logout(): Promise<LogoutResponse> {
+  static async logout() {
     const response = await fetch(`${API_BASE}/auth/logout`, {
       method: 'POST',
       credentials: 'include',
-    })
-
-    await ensureOk(response)
-    return response.json() as Promise<LogoutResponse>
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    return response.json();
   }
 
-  static async getMe(): Promise<User> {
+  static async getMe() {
     const response = await fetch(`${API_BASE}/auth/me`, {
       credentials: 'include',
-    })
-
-    await ensureOk(response)
-    return response.json() as Promise<User>
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    return response.json();
   }
 
-  static async checkHandleAvailability(handle: string): Promise<HandleAvailabilityResponse> {
-    const params = new URLSearchParams({ handle })
-    const response = await fetch(`${API_BASE}/auth/check-handle?${params.toString()}`, {
+  static async checkHandleAvailability(handle) {
+    const params = new URLSearchParams({ handle });
+    const response = await fetch(`${API_BASE}/auth/check-handle?${params}`, {
       credentials: 'include',
-    })
-
-    await ensureOk(response)
-    return response.json() as Promise<HandleAvailabilityResponse>
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    return response.json();
   }
 
-  static getSpotifyLoginUrl(): string {
-    return `${API_BASE}/auth/spotify`
+  static getSpotifyLoginUrl() {
+    return `${API_BASE}/auth/spotify`;
   }
 
-  static async importRecentSongs(): Promise<ImportRecentSongsResponse> {
+  static async importRecentSongs() {
     const response = await fetch(`${API_BASE}/auth/import-recent-songs`, {
       method: 'POST',
       credentials: 'include',
-    })
-
-    await ensureOk(response)
-    return response.json() as Promise<ImportRecentSongsResponse>
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+    
+    return response.json();
   }
 
-  static async getSpotifySongs(): Promise<SpotifySong[]> {
+  static async getSpotifySongs() {
     const response = await fetch(`${API_BASE}/auth/spotify-songs`, {
       credentials: 'include',
-    })
-
-    await ensureOk(response)
-    return response.json() as Promise<SpotifySong[]>
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+    
+    return response.json();
   }
 
-  static async getSpotifyRanking(userNs: string, userPk: string): Promise<RankingResponse> {
-    const params = new URLSearchParams({ ns: userNs, pk: userPk })
-    const response = await fetch(`${API_BASE}/rank/rank?${params.toString()}`, {
-      credentials: 'include',
-    })
+  static async getSpotifyRanking(userNs, userPk) {
+  const params = new URLSearchParams({
+  ns: userNs,
+  pk: userPk
+  });
+  const response = await fetch(`${API_BASE}/rank/rank?${params}`, {
+  credentials: 'include',
+  });
 
-    await ensureOk(response)
-    return response.json() as Promise<RankingResponse>
+  if (!response.ok) {
+  const error = await response.json();
+  throw new Error(error.error || `HTTP ${response.status}`);
   }
 
-  static async getRankingHistory(userNs: string, userPk: string): Promise<RankingHistoryResponse> {
-    const params = new URLSearchParams({ ns: userNs, pk: userPk })
-    const response = await fetch(`${API_BASE}/rank/history?${params.toString()}`, {
-      credentials: 'include',
-    })
+  return response.json();
+  }
 
-    await ensureOk(response)
-    return response.json() as Promise<RankingHistoryResponse>
+  static async getRankingHistory(userNs, userPk) {
+    const params = new URLSearchParams({
+      ns: userNs,
+      pk: userPk
+    });
+    const response = await fetch(`${API_BASE}/rank/history?${params}`, {
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+
+    return response.json();
   }
 }
