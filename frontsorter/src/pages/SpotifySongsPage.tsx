@@ -294,7 +294,12 @@ function SpotifySongsPage() {
       const newPair = await response.json();
       
       // Update the query data directly without triggering a full refetch
-      queryClient.setQueryData(pairQuery.queryKey, {
+      const queryKey = buildVoteQueryKey();
+      console.log('Updating query cache with key:', queryKey);
+      console.log('New left entity:', newPair.left_entity.title);
+      console.log('Keeping right entity:', rightEntity.title);
+      
+      queryClient.setQueryData(queryKey, {
         left_entity: newPair.left_entity,
         right_entity: rightEntity // Keep the current right entity
       });
@@ -323,7 +328,12 @@ function SpotifySongsPage() {
       const newPair = await response.json();
       
       // Update the query data directly without triggering a full refetch
-      queryClient.setQueryData(pairQuery.queryKey, {
+      const queryKey = buildVoteQueryKey();
+      console.log('Updating query cache with key:', queryKey);
+      console.log('Keeping left entity:', leftEntity.title);
+      console.log('New right entity:', newPair.right_entity.title);
+      
+      queryClient.setQueryData(queryKey, {
         left_entity: leftEntity, // Keep the current left entity
         right_entity: newPair.right_entity
       });
