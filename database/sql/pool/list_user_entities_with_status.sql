@@ -11,7 +11,10 @@ SELECT
         WHEN epm.in_pool = true THEN 'in_pool' 
         WHEN epm.in_pool = false THEN 'blocked'
     END as pool_status,
-    epm.created_at as status_updated_at
+    CASE 
+        WHEN epm.created_at IS NULL THEN NULL::timestamptz
+        ELSE epm.created_at 
+    END as status_updated_at
 FROM entities e
 INNER JOIN entity_relationships r ON r.child_ns = e.ns AND r.child_pk = e.pk
 LEFT JOIN entity_pool_membership epm 

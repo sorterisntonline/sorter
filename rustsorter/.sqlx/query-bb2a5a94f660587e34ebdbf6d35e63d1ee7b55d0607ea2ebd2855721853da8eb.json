@@ -1,0 +1,59 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- List user's entities with their pool membership status\n-- Only returns entities that have a relationship with the user\nSELECT \n    e.ns,\n    e.pk, \n    e.title,\n    e.profile_picture_url,\n    e.metadata,\n    CASE \n        WHEN epm.in_pool IS NULL THEN 'unclassified'\n        WHEN epm.in_pool = true THEN 'in_pool' \n        WHEN epm.in_pool = false THEN 'blocked'\n    END as pool_status,\n    CASE \n        WHEN epm.created_at IS NULL THEN NULL::timestamptz\n        ELSE epm.created_at \n    END as status_updated_at\nFROM entities e\nINNER JOIN entity_relationships r ON r.child_ns = e.ns AND r.child_pk = e.pk\nLEFT JOIN entity_pool_membership epm \n    ON epm.user_id = $1 \n    AND epm.entity_ns = e.ns \n    AND epm.entity_pk = e.pk\nWHERE r.parent_ns = 'sorter.user' \n  AND r.parent_pk = (SELECT handle FROM users WHERE id = $1)\n  AND ($2::text IS NULL OR e.ns = $2) -- Optional namespace filter\nORDER BY \n    CASE \n        WHEN epm.in_pool = true THEN 1\n        WHEN epm.in_pool IS NULL THEN 2  \n        WHEN epm.in_pool = false THEN 3\n    END,\n    e.title;\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ns",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "pk",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "profile_picture_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "metadata",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 5,
+        "name": "pool_status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "status_updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "bb2a5a94f660587e34ebdbf6d35e63d1ee7b55d0607ea2ebd2855721853da8eb"
+}

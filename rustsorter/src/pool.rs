@@ -210,7 +210,7 @@ async fn list_pool_handler(
                 profile_picture_url: row.profile_picture_url,
                 metadata: row.metadata,
                 pool_status,
-                status_updated_at: Some(row.status_updated_at),
+                status_updated_at: row.status_updated_at,
             }
         })
         .filter(|entity| {
