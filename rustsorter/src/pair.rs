@@ -319,6 +319,21 @@ fn select_ranked_entity_pair(
             }
         }
 
+        // Final fallback: If all pairs have been voted on (graph is fully saturated),
+        // pick two random different entities to allow re-voting
+        use rand::seq::SliceRandom;
+        let mut rng = rand::thread_rng();
+        
+        let left_entity = left_entities.choose(&mut rng);
+        if let Some(left_entity) = left_entity {
+            let mut right_pool = right_entities.to_vec();
+            right_pool.retain(|e| !entities_are_same(e, left_entity));
+            
+            if let Some(right_entity) = right_pool.choose(&mut rng) {
+                return Ok((left_entity.clone(), right_entity.clone()));
+            }
+        }
+
         Err(PairSelectionError::InsufficientEntities)
     }
 }
