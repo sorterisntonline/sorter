@@ -44,35 +44,32 @@ export function PoolPage() {
     refetchOnWindowFocus: false,
   });
 
-  // Get the PKs of the user's Spotify tracks to filter on
-  const userSpotifyPks = songs ? songs.map(song => song.id) : [];
-
-  // Fetch entities for each pool status (only for user's tracks)
+  // Fetch entities for each pool status (all user's tracks)
   const {
     data: inPoolEntities = [],
     isLoading: loadingInPool,
   } = useQuery({
-    queryKey: ['poolEntities', { ns: 'spotify.track', pks: userSpotifyPks, status: 'in_pool' as const }],
+    queryKey: ['poolEntities', { ns: 'spotify.track', status: 'in_pool' as const }],
     queryFn: fetchPoolEntities,
-    enabled: !!user && userSpotifyPks.length > 0,
+    enabled: !!user,
   });
 
   const {
     data: blockedEntities = [],
     isLoading: loadingBlocked,
   } = useQuery({
-    queryKey: ['poolEntities', { ns: 'spotify.track', pks: userSpotifyPks, status: 'blocked' as const }],
+    queryKey: ['poolEntities', { ns: 'spotify.track', status: 'blocked' as const }],
     queryFn: fetchPoolEntities,
-    enabled: !!user && userSpotifyPks.length > 0,
+    enabled: !!user,
   });
 
   const {
     data: unclassifiedEntities = [],
     isLoading: loadingUnclassified,
   } = useQuery({
-    queryKey: ['poolEntities', { ns: 'spotify.track', pks: userSpotifyPks, status: 'unclassified' as const }],
+    queryKey: ['poolEntities', { ns: 'spotify.track', status: 'unclassified' as const }],
     queryFn: fetchPoolEntities,
-    enabled: !!user && userSpotifyPks.length > 0,
+    enabled: !!user,
   });
 
   // Combine blocked and unclassified for the "NOT IN POOL" panel

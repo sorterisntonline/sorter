@@ -49,7 +49,6 @@ pub struct EntityWithPoolStatus {
 #[ts(export)]
 pub struct ListPoolQuery {
     pub ns: Option<String>,
-    pub pks: Option<Vec<String>>,
     pub status: Option<PoolMembershipStatus>,
 }
 
@@ -189,9 +188,8 @@ async fn list_pool_handler(
     Query(query): Query<ListPoolQuery>,
 ) -> Result<Json<Vec<EntityWithPoolStatus>>, Error> {
     let ns = query.ns.as_deref();
-    let pks = query.pks.as_deref();
 
-    let rows = sqlx::query_file!("../database/sql/pool/list_with_status.sql", user.id, ns, pks)
+    let rows = sqlx::query_file!("../database/sql/pool/list_user_entities_with_status.sql", user.id, ns)
         .fetch_all(&state.db)
         .await
         .map_error("list_pool")?;

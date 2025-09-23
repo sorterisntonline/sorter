@@ -42,7 +42,6 @@ export interface BatchPoolResult {
 
 export interface ListPoolQuery {
   ns?: string;
-  pks?: string[];
   status?: PoolMembershipStatus;
 }
 
@@ -53,7 +52,6 @@ export const fetchPoolEntities: QueryFunction<EntityWithPoolStatus[], [string, L
   const params = new URLSearchParams();
   
   if (query.ns) params.append('ns', query.ns);
-  if (query.pks) query.pks.forEach(pk => params.append('pks', pk));
   if (query.status) params.append('status', query.status);
 
   const response = await fetch(`/api/pool/list?${params.toString()}`, {
