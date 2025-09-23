@@ -423,21 +423,28 @@ def test_python(
 def build():
     """Build the entire project"""
     console.print("🔨 Building project...", style="blue")
-    
+
     # Build Rust backend
     console.print("🦀 Building Rust backend...", style="blue")
     rust_result = orchestrator.run_command(["cargo", "build"], cwd=orchestrator.project_root / "rustsorter")
-    
+
+    # Generate TypeScript types from Rust models (after building Rust)
+    console.print("📝 Generating TypeScript types...", style="blue")
+    ts_result = orchestrator.run_command(
+        ["cargo", "test", "generate_typescript_bindings", "--", "--nocapture"],
+        cwd=orchestrator.project_root / "rustsorter"
+    )
+
     # Build frontend
     console.print("⚛️ Building React frontend...", style="blue")
     frontend_result = orchestrator.run_command(["npm", "run", "build"], cwd=orchestrator.project_root / "frontsorter")
-    
-    result = max(rust_result, frontend_result)
+
+    result = max(rust_result, ts_result, frontend_result)
     if result == 0:
         console.print("✅ Build successful", style="green")
     else:
         console.print("❌ Build failed", style="red")
-    
+
     raise typer.Exit(result)
 
 @app.command(name="build-rust")
@@ -446,19 +453,37 @@ def build_rust(
 ):
     """Build Rust backend only"""
     console.print("🦀 Building Rust backend...", style="blue")
-    
+
     cmd = ["cargo", "build"]
     if release:
         cmd.append("--release")
         console.print("Building in release mode...", style="dim")
-    
+
     result = orchestrator.run_command(cmd, cwd=orchestrator.project_root / "rustsorter")
-    
+
     if result == 0:
         console.print("✅ Rust build successful", style="green")
     else:
         console.print("❌ Rust build failed", style="red")
-    
+
+    raise typer.Exit(result)
+
+@app.command(name="generate-ts")
+def generate_ts():
+    """Generate TypeScript types from Rust models"""
+    console.print("📝 Generating TypeScript types from Rust models...", style="blue")
+
+    result = orchestrator.run_command(
+        ["cargo", "test", "generate_typescript_bindings", "--", "--nocapture"],
+        cwd=orchestrator.project_root / "rustsorter"
+    )
+
+    if result == 0:
+        console.print("✅ TypeScript types generated successfully", style="green")
+        console.print("  Types saved to: frontsorter/src/types/generated/", style="dim")
+    else:
+        console.print("❌ TypeScript generation failed", style="red")
+
     raise typer.Exit(result)
 
 # Development Commands
