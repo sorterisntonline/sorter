@@ -1,0 +1,59 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Select children entities that are eligible for ranking\n-- Only returns entities that are in_pool=true or unclassified (NULL)\n-- Excludes blocked entities (in_pool=false)\nSELECT\n    e.*\nFROM\n    entities e\n    JOIN entity_relationships er ON e.ns = er.child_ns\n        AND e.pk = er.child_pk\n    LEFT JOIN entity_pool_membership epm \n        ON epm.entity_ns = e.ns \n        AND epm.entity_pk = e.pk\n        AND epm.user_id = (SELECT id FROM users WHERE handle = $2)\nWHERE\n    er.parent_ns = $1\n    AND er.parent_pk = $2\n    AND (epm.in_pool IS NULL OR epm.in_pool = true)  -- Include unclassified and in_pool, exclude blocked\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ns",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "pk",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "profile_picture_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "metadata",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "07169e2d1bc0049ec6bc7140ae8e16a5ef10f11d3dc29bd48bcb909a6dd2dc8e"
+}

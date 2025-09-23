@@ -371,10 +371,10 @@ async fn get_ranking_handler(
     State(state): State<AppState>,
     Query(params): Query<RankQueryParams>,
 ) -> Result<Json<RankingResponse>, Error> {
-    // Fetch children entities
+    // Fetch children entities that are eligible for ranking (not blocked)
     let children = sqlx::query_file_as!(
         crate::entity::Entity,
-        "../database/sql/entity/select_children.sql",
+        "../database/sql/entity/select_children_for_ranking.sql",
         params.ns,
         params.pk
     )

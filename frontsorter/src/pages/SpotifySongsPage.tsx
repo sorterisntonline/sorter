@@ -9,6 +9,7 @@ import RankingHistoryGraph from '../components/RankingHistoryGraph';
 import { useSpotifyPlayer } from '../contexts/SpotifyPlayerContext';
 import { useDynamicTheme } from '../contexts/DynamicThemeContext';
 import { fetchPairFn, submitVoteFn } from '../fetchers/voteEndpoints';
+import { blockFromPool } from '../fetchers/poolEndpoints';
 import usePinnedSongStore from '../stores/pinnedSongStore';
 import '../styles/spotify.css';
 import '../styles/vote.css';
@@ -285,6 +286,10 @@ function SpotifySongsPage() {
     if (!rightEntity || !leftEntity || !user) return;
     
     try {
+      // First, block the left entity from the pool
+      await blockFromPool(leftEntity.ns, leftEntity.pk);
+      console.log('Blocked left entity from pool:', leftEntity.title);
+      
       // Make API call to get a new pair with the right item pinned and random left selection
       const response = await fetch(`/api/pair?ns=sorter.user&pk=${user.handle}&right_pin_ns=${rightEntity.ns}&right_pin_pk=${rightEntity.pk}&random=true`, {
         credentials: 'include'
@@ -304,6 +309,10 @@ function SpotifySongsPage() {
         right_entity: rightEntity // Keep the current right entity
       });
       
+      // Invalidate queries to update the ranking and remove blocked song
+      queryClient.invalidateQueries(['spotify-ranking', user.handle]);
+      queryClient.invalidateQueries(['pool-list']);
+      
     } catch (error) {
       console.error('Failed to skip left song:', error);
     }
@@ -319,6 +328,10 @@ function SpotifySongsPage() {
     if (!rightEntity || !leftEntity || !user) return;
     
     try {
+      // First, block the right entity from the pool
+      await blockFromPool(rightEntity.ns, rightEntity.pk);
+      console.log('Blocked right entity from pool:', rightEntity.title);
+      
       // Make API call to get a new pair with the left item pinned and random right selection
       const response = await fetch(`/api/pair?ns=sorter.user&pk=${user.handle}&left_pin_ns=${leftEntity.ns}&left_pin_pk=${leftEntity.pk}&random=true`, {
         credentials: 'include'
@@ -337,6 +350,10 @@ function SpotifySongsPage() {
         left_entity: leftEntity, // Keep the current left entity
         right_entity: newPair.right_entity
       });
+      
+      // Invalidate queries to update the ranking and remove blocked song
+      queryClient.invalidateQueries(['spotify-ranking', user.handle]);
+      queryClient.invalidateQueries(['pool-list']);
       
     } catch (error) {
       console.error('Failed to skip right song:', error);
