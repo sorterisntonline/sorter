@@ -1,6 +1,6 @@
 use aide::axum::{
     ApiRouter,
-    routing::{delete_with, get_with, post_with},
+    routing::{get_with, post_with},
 };
 use axum::{
     extract::{Path, Query, State},

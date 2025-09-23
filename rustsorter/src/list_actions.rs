@@ -2,11 +2,12 @@ use std::collections::HashMap;
 
 use aide::axum::{
     ApiRouter,
-    routing::{get_with, post_with, put_with},
+    routing::post_with,
 };
 use axum::{
     extract::{Path, State},
     http::StatusCode,
+    routing::get,
 };
 use chrono::NaiveDateTime;
 use schemars::JsonSchema;
@@ -158,24 +159,8 @@ pub fn routes() -> ApiRouter<AppState> {
                     .response::<201, Json<ListActionRecord>>()
             }),
         )
-        .api_route(
-            "/{list_ns}/{list_pk}",
-            get_with(get_list_state, |op| {
-                op.description("Fetch the resolved list state for the authenticated user.")
-                    .response::<200, Json<ListStateResponse>>()
-            }),
-        )
-        .api_route(
-            "/{list_ns}/{list_pk}/behavior",
-            get_with(get_list_behavior, |op| {
-                op.description("Fetch list behavior configuration.")
-                    .response::<200, Json<ListBehaviorRecord>>()
-            })
-            .put_with(upsert_list_behavior_route, |op| {
-                op.description("Set list behavior configuration.")
-                    .response::<200, Json<ListBehaviorRecord>>()
-            }),
-        )
+        .route("/{list_ns}/{list_pk}", get(get_list_state))
+        .route("/{list_ns}/{list_pk}/behavior", get(get_list_behavior).put(upsert_list_behavior_route))
 }
 
 async fn create_action(
