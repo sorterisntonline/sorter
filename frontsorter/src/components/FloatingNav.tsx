@@ -25,7 +25,7 @@ function FloatingNav() {
   const navItems = [
     { to: '/', icon: FaHome, label: 'Entities', end: true },
     { to: '/spotify', icon: FaSpotify, label: 'Spotify' },
-    { to: '/pool', icon: FaCog, label: 'Pool Manager' },
+    { to: '/spotify/pool', icon: FaCog, label: 'Pool Manager' },
     { to: generateTo('/vote'), icon: FaVoteYea, label: 'Vote' },
     { to: '/todos', icon: FaTasks, label: 'Todos' },
     { to: generateTo('/profile'), icon: FaUser, label: 'Profile' },

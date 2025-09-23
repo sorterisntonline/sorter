@@ -32,7 +32,7 @@ function App(): JSX.Element {
       <Route path="/" element={<Layout />}>
         <Route index element={<EntitiesIndex />} />
         <Route path="spotify" element={<SpotifySongsPage />} />
-        <Route path="pool" element={<PoolPage />} />
+        <Route path="spotify/pool" element={<PoolPage />} />
         <Route path="entity/new" element={<CreateEntityPage />} />
         <Route path="entity/:ns/:pk" element={<EntityDetail />} />
 
