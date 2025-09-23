@@ -129,10 +129,26 @@ export function PoolPage() {
   const handleSelectAll = (isInPool: boolean) => {
     if (isInPool) {
       const allKeys = new Set(inPoolEntities.map(e => e.pk));
-      setSelectedInPool(allKeys);
+      const currentSelection = selectedInPool;
+      
+      // If all items are already selected, deselect all. Otherwise, select all.
+      if (currentSelection.size === allKeys.size && 
+          Array.from(allKeys).every(key => currentSelection.has(key))) {
+        setSelectedInPool(new Set());
+      } else {
+        setSelectedInPool(allKeys);
+      }
     } else {
       const allKeys = new Set(notInPoolEntities.map(e => e.pk));
-      setSelectedNotInPool(allKeys);
+      const currentSelection = selectedNotInPool;
+      
+      // If all items are already selected, deselect all. Otherwise, select all.
+      if (currentSelection.size === allKeys.size && 
+          Array.from(allKeys).every(key => currentSelection.has(key))) {
+        setSelectedNotInPool(new Set());
+      } else {
+        setSelectedNotInPool(allKeys);
+      }
     }
   };
 
@@ -224,7 +240,9 @@ export function PoolPage() {
               disabled={inPoolEntities.length === 0}
               className="select-all-btn"
             >
-              Select All
+              {selectedInPool.size === inPoolEntities.length && inPoolEntities.length > 0
+                ? 'Deselect All'
+                : 'Select All'}
             </button>
           </div>
 
@@ -344,7 +362,9 @@ export function PoolPage() {
               disabled={notInPoolEntities.length === 0}
               className="select-all-btn"
             >
-              Select All
+              {selectedNotInPool.size === notInPoolEntities.length && notInPoolEntities.length > 0
+                ? 'Deselect All'
+                : 'Select All'}
             </button>
           </div>
 
