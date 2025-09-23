@@ -11,6 +11,7 @@ import EntityDetail from "./pages/EntityDetail";
 import CreateEntityPage from "./pages/CreateEntityPage";
 import TodoPage from "./pages/TodoPage";
 import SpotifySongsPage from "./pages/SpotifySongsPage";
+import { PoolPage } from "./pages/PoolPage";
 
 // Auth pages (outside main layout)
 import LoginPage from "./pages/LoginPage";
@@ -31,6 +32,7 @@ function App(): JSX.Element {
       <Route path="/" element={<Layout />}>
         <Route index element={<EntitiesIndex />} />
         <Route path="spotify" element={<SpotifySongsPage />} />
+        <Route path="pool" element={<PoolPage />} />
         <Route path="entity/new" element={<CreateEntityPage />} />
         <Route path="entity/:ns/:pk" element={<EntityDetail />} />
 

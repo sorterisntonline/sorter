@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { NavLink, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { FaHome, FaVoteYea, FaUser, FaTasks, FaSignOutAlt, FaSpotify, FaBars, FaTimes } from 'react-icons/fa';
+import { FaHome, FaVoteYea, FaUser, FaTasks, FaSignOutAlt, FaSpotify, FaBars, FaTimes, FaCog } from 'react-icons/fa';
 
 function FloatingNav() {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -25,6 +25,7 @@ function FloatingNav() {
   const navItems = [
     { to: '/', icon: FaHome, label: 'Entities', end: true },
     { to: '/spotify', icon: FaSpotify, label: 'Spotify' },
+    { to: '/pool', icon: FaCog, label: 'Pool Manager' },
     { to: generateTo('/vote'), icon: FaVoteYea, label: 'Vote' },
     { to: '/todos', icon: FaTasks, label: 'Todos' },
     { to: generateTo('/profile'), icon: FaUser, label: 'Profile' },
