@@ -4,7 +4,7 @@ import "./App.css";
 import "./styles/spotify-player.css";
 
 import Layout from "./Layout";
-import VotePage from "./pages/VotePage";
+
 import ProfilePage from "./pages/ProfilePage";
 import EntitiesIndex from "./pages/EntitiesIndex";
 import EntityDetail from "./pages/EntityDetail";
@@ -33,9 +33,7 @@ function App(): JSX.Element {
         <Route path="spotify" element={<SpotifySongsPage />} />
         <Route path="entity/new" element={<CreateEntityPage />} />
         <Route path="entity/:ns/:pk" element={<EntityDetail />} />
-        <Route path="vote" element={<VotePage />} />
-        <Route path="vote" element={<VotePage />} />{" "}
-        {/* Keep existing vote page */}
+
         <Route path="todos" element={<TodoPage />} />
 
         <Route path="profile" element={<ProfilePage />} />

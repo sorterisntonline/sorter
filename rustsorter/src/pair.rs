@@ -63,6 +63,7 @@ pub struct PairQueryParams {
     left_pin_pk: Option<String>,
     right_pin_ns: Option<String>,
     right_pin_pk: Option<String>,
+    random: Option<bool>,
 }
 
 #[derive(Serialize, Debug, JsonSchema, TS)]
@@ -459,7 +460,10 @@ async fn get_pair_handler(
     let (unsorted, sorted) = crate::pagerank::rank_entities(&entity_identifiers, &votes)?;
 
     // Select pair using ranking if available, otherwise fall back to random
-    let (left_entity, right_entity) = if sorted.is_empty() && unsorted.is_empty() {
+    let (left_entity, right_entity) = if params.random.unwrap_or(false) {
+        // User requested random selection - useful for skip functionality
+        select_entity_pair(&left_entities, &right_entities)
+    } else if sorted.is_empty() && unsorted.is_empty() {
         // No ranking info available, use random selection
         select_entity_pair(&left_entities, &right_entities)
     } else {

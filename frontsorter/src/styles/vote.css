@@ -290,6 +290,42 @@
   color: #ef4444;
 }
 
+/* Vote buttons container */
+.vote-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Skip button */
+.skip-button {
+  background: #f3f4f6;
+  color: #6b7280;
+  border: 1px solid #d1d5db;
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 100px;
+}
+
+.skip-button:hover {
+  background: #e5e7eb;
+  border-color: #9ca3af;
+  color: #374151;
+  transform: translateY(-1px);
+}
+
+.skip-button:disabled {
+  background: #f9fafb;
+  color: #d1d5db;
+  border-color: #e5e7eb;
+  cursor: not-allowed;
+  transform: none;
+}
+
 /* Submit button */
 .submit-button {
   background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);

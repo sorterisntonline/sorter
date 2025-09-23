@@ -22,7 +22,7 @@ const getLargestImageUrl = (images) => {
 };
 
 // Vote Item Display Component
-function VoteItemDisplay({ item, isDisabled }) {
+function VoteItemDisplay({ item, isDisabled, onSkip }) {
   const { playTrack, queueTrack, isReady, accessToken } = useSpotifyPlayer();
   
   if (!item) return null;
@@ -78,6 +78,16 @@ function VoteItemDisplay({ item, isDisabled }) {
           >
             ➕
           </button>
+          {onSkip && (
+            <button 
+              className="skip-btn" 
+              onClick={onSkip}
+              disabled={isDisabled}
+              title="Skip this song"
+            >
+              ⏭️
+            </button>
+          )}
         </div>
       </div>
     );
@@ -265,6 +275,64 @@ function SpotifySongsPage() {
     } catch (error) {
       console.error('Vote submission failed:', error);
     }
+  };
+
+  const handleSkipLeft = async () => {
+    // Get a new left item by pinning the right item temporarily for the API call
+    const rightEntity = pairQuery.data?.right_entity;
+    const leftEntity = pairQuery.data?.left_entity;
+    
+    if (!rightEntity || !leftEntity || !user) return;
+    
+    try {
+      // Make API call to get a new pair with the right item pinned and random left selection
+      const response = await fetch(`/api/pair?ns=sorter.user&pk=${user.handle}&right_pin_ns=${rightEntity.ns}&right_pin_pk=${rightEntity.pk}&random=true`, {
+        credentials: 'include'
+      });
+      
+      if (!response.ok) throw new Error('Failed to fetch new pair');
+      const newPair = await response.json();
+      
+      // Update the query data directly without triggering a full refetch
+      queryClient.setQueryData(pairQuery.queryKey, {
+        left_entity: newPair.left_entity,
+        right_entity: rightEntity // Keep the current right entity
+      });
+      
+    } catch (error) {
+      console.error('Failed to skip left song:', error);
+    }
+    
+    setSliderValue(0);
+  };
+
+  const handleSkipRight = async () => {
+    // Get a new right item by pinning the left item temporarily for the API call  
+    const rightEntity = pairQuery.data?.right_entity;
+    const leftEntity = pairQuery.data?.left_entity;
+    
+    if (!rightEntity || !leftEntity || !user) return;
+    
+    try {
+      // Make API call to get a new pair with the left item pinned and random right selection
+      const response = await fetch(`/api/pair?ns=sorter.user&pk=${user.handle}&left_pin_ns=${leftEntity.ns}&left_pin_pk=${leftEntity.pk}&random=true`, {
+        credentials: 'include'
+      });
+      
+      if (!response.ok) throw new Error('Failed to fetch new pair');
+      const newPair = await response.json();
+      
+      // Update the query data directly without triggering a full refetch
+      queryClient.setQueryData(pairQuery.queryKey, {
+        left_entity: leftEntity, // Keep the current left entity
+        right_entity: newPair.right_entity
+      });
+      
+    } catch (error) {
+      console.error('Failed to skip right song:', error);
+    }
+    
+    setSliderValue(0);
   };
 
   const handleImportSongs = async () => {
@@ -477,10 +545,12 @@ function SpotifySongsPage() {
                     <VoteItemDisplay 
                       item={pairQuery.data.left_entity} 
                       isDisabled={voteMutation.isPending || pairQuery.isPending}
+                      onSkip={handleSkipLeft}
                     />
                     <VoteItemDisplay 
                       item={pairQuery.data.right_entity} 
                       isDisabled={voteMutation.isPending || pairQuery.isPending}
+                      onSkip={handleSkipRight}
                     />
                   </div>
 

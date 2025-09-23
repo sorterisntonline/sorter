@@ -249,6 +249,43 @@
   align-items: center;
 }
 
+.vote-item-controls {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.play-btn, .queue-btn, .skip-btn {
+  background: transparent;
+  border: 1px solid #e2e8f0;
+  padding: 4px 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+}
+
+.play-btn:hover, .queue-btn:hover {
+  background: #1db954;
+  border-color: #1db954;
+  color: white;
+}
+
+.skip-btn:hover {
+  background: #f59e0b;
+  border-color: #f59e0b;
+  color: white;
+}
+
+.play-btn:disabled, .queue-btn:disabled, .skip-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .vote-comparison {
   color: #475569;
   font-weight: 500;
