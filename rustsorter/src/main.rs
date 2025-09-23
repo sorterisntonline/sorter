@@ -31,6 +31,7 @@ use rustsorter::{
     models::{Error, Json},
     pagerank,
     pair,
+    pool,
     vote,
 };
 use schemars::JsonSchema;
@@ -174,6 +175,7 @@ fn router(app_state: AppState) -> Router {
         .nest("/entity_relationships", entity_relationships::routes())
         .nest("/list-actions", list_actions::routes())
         .nest("/pair", pair::routes())
+        .nest("/pool", pool::routes())
         .nest("/vote", vote::routes())
         .nest("/rank", pagerank::routes())
         .layer(middleware::from_fn_with_state(

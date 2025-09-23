@@ -1,0 +1,36 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT entity_ns, entity_pk, in_pool\n        FROM entity_pool_membership\n        WHERE user_id = $1\n          AND entity_ns = ANY($2)\n          AND entity_pk = ANY($3)\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "entity_ns",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "entity_pk",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "in_pool",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "TextArray",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "cc2933b64d3d1a5675e8ed25a94ac46a653401046f15333268268aa6261572b2"
+}

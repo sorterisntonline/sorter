@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Get pool membership status for a specific entity\nSELECT in_pool, created_at\nFROM entity_pool_membership\nWHERE user_id = $1 \n  AND entity_ns = $2 \n  AND entity_pk = $3;\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "in_pool",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "ebdd71ff7d472c003a9864f50a153db79cd0c643b017a6632c547151d2633a0e"
+}

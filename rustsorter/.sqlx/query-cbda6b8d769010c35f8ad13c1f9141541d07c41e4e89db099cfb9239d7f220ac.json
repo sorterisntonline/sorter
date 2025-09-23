@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "-- Remove entity from pool (delete the record - returns to NULL state)\nDELETE FROM entity_pool_membership\nWHERE user_id = $1 \n  AND entity_ns = $2 \n  AND entity_pk = $3\nRETURNING id;\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "cbda6b8d769010c35f8ad13c1f9141541d07c41e4e89db099cfb9239d7f220ac"
+}

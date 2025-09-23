@@ -388,10 +388,18 @@ async fn get_filtered_children(
         list_actions::resolve_children_membership(state, user_id, parent_ns, parent_pk, children)
             .await?;
 
-    Ok(membership
+    let list_filtered: Vec<crate::entity::Entity> = membership
         .into_iter()
         .filter_map(|(entity, is_in)| if is_in { Some(entity) } else { None })
-        .collect())
+        .collect();
+    
+    // Apply pool filtering - only include entities that are explicitly in the user's pool
+    crate::pool::filter_entities_by_pool(
+        state, 
+        user_id, 
+        &list_filtered, 
+        crate::pool::PoolMembershipStatus::InPool
+    ).await
 }
 
 async fn get_pair_handler(
