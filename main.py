@@ -45,17 +45,21 @@ def validate_config(ctx: typer.Context):
     """Validate configuration before running any command."""
     if ctx.invoked_subcommand is None:
         return
-    
+
     # Skip validation for setup command (it creates the config)
     if ctx.invoked_subcommand == "setup":
         return
-        
+
+    # Sync env files on every command
+    orchestrator_temp = SorterOrchestrator()
+    orchestrator_temp.sync_env_to_rustsorter()
+
     database_url = os.getenv("DATABASE_URL")
     if not database_url:
         console.print("❌ DATABASE_URL not found in environment", style="red")
         console.print("Run: uv run main.py setup", style="dim")
         raise typer.Exit(1)
-    
+
     if not (database_url.startswith("postgres://") or database_url.startswith("postgresql://")):
         console.print(f"❌ Invalid DATABASE_URL format: {database_url}", style="red")
         raise typer.Exit(1)
@@ -88,7 +92,7 @@ class SorterOrchestrator:
             return 127
 
     def ensure_env_file(self):
-        """Create .env file if it doesn't exist."""
+        """Create .env file if it doesn't exist and sync with rustsorter."""
         env_file = self.project_root / ".env"
         if not env_file.exists():
             console.print("📝 Creating .env file...", style="blue")
@@ -96,6 +100,17 @@ class SorterOrchestrator:
 SPOTIFY_CLIENT_ID=dummy_spotify_client_id_for_development
 SPOTIFY_CLIENT_SECRET=dummy_spotify_client_secret_for_development
 """)
+        # Sync env files after ensuring main exists
+        self.sync_env_to_rustsorter()
+
+    def sync_env_to_rustsorter(self):
+        """Copy .env file to rustsorter directory."""
+        main_env = self.project_root / ".env"
+        rust_env = self.project_root / "rustsorter" / ".env"
+
+        if main_env.exists():
+            # Simply copy the main .env to rustsorter
+            rust_env.write_text(main_env.read_text())
 
     def ensure_logs_dir(self):
         """Create logs directory if it doesn't exist."""
