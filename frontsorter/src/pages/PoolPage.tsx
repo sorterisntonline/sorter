@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { AuthAPI } from '../api/auth';
 import { useDynamicTheme } from '../contexts/DynamicThemeContext';
 import { useSpotifyPlayer } from '../contexts/SpotifyPlayerContext';
@@ -229,6 +230,13 @@ export function PoolPage() {
           <div className="songs-header">
             <span className="songs-title">IN POOL</span>
             <span className="count">({inPoolEntities.length})</span>
+            <Link 
+              to="/spotify" 
+              className="nav-link songs-link"
+              title="Go back to songs and ranking"
+            >
+              ← Songs
+            </Link>
           </div>
           
           <div className="pool-controls">

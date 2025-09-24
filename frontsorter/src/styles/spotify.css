@@ -624,6 +624,44 @@
   z-index: 10;
 }
 
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-link {
+  text-decoration: none;
+  color: #1db954;
+  font-weight: 500;
+  font-size: 12px;
+  padding: 4px 8px;
+  border: 1px solid #1db954;
+  border-radius: 3px;
+  background: transparent;
+  transition: all 0.2s ease;
+}
+
+.nav-link:hover {
+  background: #1db954;
+  color: white;
+}
+
+.pool-link {
+  /* Green theme for pool link */
+}
+
+.songs-link {
+  /* Blue theme for back to songs */
+  color: #2563eb;
+  border-color: #2563eb;
+}
+
+.songs-link:hover {
+  background: #2563eb;
+  color: white;
+}
+
 .songs-title {
   font-weight: 600;
   color: #374151;

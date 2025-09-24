@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import chroma from 'chroma-js';
 import { AuthAPI } from '../api/auth';
 import SelectedSongPanel from '../components/SelectedSongPanel';
@@ -412,9 +412,17 @@ function SpotifySongsPage() {
           {/* Header Panel */}
           <div className="songs-header">
             <span className="songs-title">sorter</span>
-            <button 
-              className={`refresh-button ${isRefreshing ? 'refreshing' : ''}`}
-              onClick={async () => {
+            <div className="header-controls">
+              <Link 
+                to="/spotify/pool" 
+                className="nav-link pool-link"
+                title="Manage song pool"
+              >
+                Pool
+              </Link>
+              <button 
+                className={`refresh-button ${isRefreshing ? 'refreshing' : ''}`}
+                onClick={async () => {
                 setIsRefreshing(true);
                 try {
                   const response = await fetch('/api/auth/import-recent-songs', {
@@ -443,6 +451,7 @@ function SpotifySongsPage() {
             >
               {isRefreshing ? '⟳' : '↻'}
             </button>
+            </div>
           </div>
           
           {!rankingLoading && ranking && rankedSongs.length > 0 && (
