@@ -14,7 +14,7 @@ permissions:
 jobs:
   test:
     name: Build and Test (Rust)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, texas, jason]
     defaults:
       run:
         working-directory: rustsorter
