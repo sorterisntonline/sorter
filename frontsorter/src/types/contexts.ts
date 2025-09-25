@@ -97,7 +97,7 @@ export interface Song {
   title: string;
   artist: string;
   album?: string;
-  image_url?: string;
+  album_art?: string | null;
   spotify_url?: string;
   spotify_uri?: string;
   preview_url?: string;

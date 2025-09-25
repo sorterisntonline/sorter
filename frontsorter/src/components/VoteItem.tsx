@@ -19,11 +19,14 @@ function VoteItem({ vote, showDelete = false, onDelete, isDeleting, compact = fa
     if (namespace?.includes('spotify.track') && getSongById) {
       const song = getSongById(pk);
       if (song) {
+        console.log('VoteItem: Found song in store:', song.title, 'album_art:', song.album_art);
         return {
           title: song.title,
           artist: song.artist,
-          image: song.image_url
+          image: song.album_art
         };
+      } else {
+        console.log('VoteItem: Song not found in store for ID:', pk);
       }
     }
     
