@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { AuthAPI } from '../api/auth';
 import { useDynamicTheme } from '../contexts/DynamicThemeContext';
 import { useSpotifyPlayer } from '../contexts/SpotifyPlayerContext';
+import ThreePanelLayout from '../components/ThreePanelLayout';
 import {
   fetchPoolEntities,
   addToPool,
@@ -222,218 +223,227 @@ export function PoolPage() {
     );
   }
 
+  // Left Panel - IN POOL
+  const leftPanel = (
+    <>
+      <div className="songs-header">
+        <span className="songs-title">IN POOL</span>
+        <span className="count">({inPoolEntities.length})</span>
+        <Link 
+          to="/spotify" 
+          className="nav-link songs-link"
+          title="Go back to songs and ranking"
+        >
+          ← Songs
+        </Link>
+      </div>
+      
+      <div className="pool-controls">
+        <button
+          onClick={() => handleSelectAll(true)}
+          disabled={inPoolEntities.length === 0}
+          className="select-all-btn"
+        >
+          {selectedInPool.size === inPoolEntities.length && inPoolEntities.length > 0
+            ? 'Deselect All'
+            : 'Select All'}
+        </button>
+      </div>
+
+      <div className="songs-container">
+        {inPoolEntities.map((entity) => (
+          <div
+            key={entity.pk}
+            className={`song-item pool-entity ${selectedInPool.has(entity.pk) ? 'selected' : ''}`}
+            onClick={() => handleToggleSelection(entity.pk, true)}
+          >
+            <div className="pool-status">✓</div>
+            {entity.metadata?.album?.images?.[0]?.url && (
+              <img 
+                src={entity.metadata.album.images[0].url} 
+                alt="Album art"
+                className="album-art"
+              />
+            )}
+            <div className="song-info">
+              <div className="song-title">{entity.title || entity.pk}</div>
+              {entity.metadata && (
+                <>
+                  <div className="song-artist">{entity.metadata.artist || entity.metadata.artists?.[0]?.name}</div>
+                  <div className="song-album">{entity.metadata.album?.name}</div>
+                </>
+              )}
+            </div>
+            <div className="pool-actions">
+              {isReady && (
+                <>
+                  <button
+                    className="play-btn"
+                    onClick={(e) => { e.stopPropagation(); handlePlaySong(entity); }}
+                    title="Play"
+                  >
+                    ▶
+                  </button>
+                  <button
+                    className="queue-btn"
+                    onClick={(e) => { e.stopPropagation(); handleQueueSong(entity); }}
+                    title="Add to queue"
+                  >
+                    +
+                  </button>
+                </>
+              )}
+              <button
+                className="action-btn block-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleMoveEntity(entity, 'block');
+                }}
+                title="Block this song"
+              >
+                ✗
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+
+  // Center Panel - CONTROLS
+  const centerPanel = (
+    <div className="pool-control-buttons">
+      <h3>CONTROLS</h3>
+      
+      <button
+        onClick={handleMoveToPool}
+        disabled={selectedNotInPool.size === 0 || batchMutation.isPending}
+        className="control-btn move-to-pool"
+        title="Move selected items to pool"
+      >
+        ← Add ({selectedNotInPool.size})
+      </button>
+
+      <button
+        onClick={handleBlockSelected}
+        disabled={selectedInPool.size === 0 || batchMutation.isPending}
+        className="control-btn block-from-pool"
+        title="Block selected items from pool"
+      >
+        → Block ({selectedInPool.size})
+      </button>
+
+      <button
+        onClick={handleRemoveSelected}
+        disabled={(selectedInPool.size + selectedNotInPool.size) === 0 || batchMutation.isPending}
+        className="control-btn remove-all"
+        title="Remove selected items (return to unclassified)"
+      >
+        Remove ({selectedInPool.size + selectedNotInPool.size})
+      </button>
+
+      {batchMutation.isPending && (
+        <div className="loading-indicator">Processing...</div>
+      )}
+
+      {batchMutation.error && (
+        <div className="error-message">
+          Error: {batchMutation.error.message}
+        </div>
+      )}
+    </div>
+  );
+
+  // Right Panel - NOT IN POOL
+  const rightPanel = (
+    <>
+      <div className="songs-header">
+        <span className="songs-title">NOT IN POOL</span>
+        <span className="count">({notInPoolEntities.length})</span>
+      </div>
+
+      <div className="pool-controls">
+        <button
+          onClick={() => handleSelectAll(false)}
+          disabled={notInPoolEntities.length === 0}
+          className="select-all-btn"
+        >
+          {selectedNotInPool.size === notInPoolEntities.length && notInPoolEntities.length > 0
+            ? 'Deselect All'
+            : 'Select All'}
+        </button>
+      </div>
+
+      <div className="songs-container">
+        {notInPoolEntities.map((entity) => (
+          <div
+            key={entity.pk}
+            className={`song-item pool-entity ${selectedNotInPool.has(entity.pk) ? 'selected' : ''}`}
+            onClick={() => handleToggleSelection(entity.pk, false)}
+          >
+            <div className="pool-status">
+              {entity.pool_status === 'blocked' ? '✗' : ''}
+            </div>
+            {entity.metadata?.album?.images?.[0]?.url && (
+              <img 
+                src={entity.metadata.album.images[0].url} 
+                alt="Album art"
+                className="album-art"
+              />
+            )}
+            <div className="song-info">
+              <div className="song-title">{entity.title || entity.pk}</div>
+              {entity.metadata && (
+                <>
+                  <div className="song-artist">{entity.metadata.artist || entity.metadata.artists?.[0]?.name}</div>
+                  <div className="song-album">{entity.metadata.album?.name}</div>
+                </>
+              )}
+            </div>
+            <div className="pool-actions">
+              {isReady && (
+                <>
+                  <button
+                    className="play-btn"
+                    onClick={(e) => { e.stopPropagation(); handlePlaySong(entity); }}
+                    title="Play"
+                  >
+                    ▶
+                  </button>
+                  <button
+                    className="queue-btn"
+                    onClick={(e) => { e.stopPropagation(); handleQueueSong(entity); }}
+                    title="Add to queue"
+                  >
+                    +
+                  </button>
+                </>
+              )}
+              <button
+                className="action-btn add-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleMoveEntity(entity, 'add');
+                }}
+                title="Add this song to pool"
+              >
+                ✓
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+
   return (
     <div className="pool-page">
-      <div className="pool-layout">
-        {/* Left Panel - IN POOL */}
-        <div className="pool-panel-left">
-          <div className="songs-header">
-            <span className="songs-title">IN POOL</span>
-            <span className="count">({inPoolEntities.length})</span>
-            <Link 
-              to="/spotify" 
-              className="nav-link songs-link"
-              title="Go back to songs and ranking"
-            >
-              ← Songs
-            </Link>
-          </div>
-          
-          <div className="pool-controls">
-            <button
-              onClick={() => handleSelectAll(true)}
-              disabled={inPoolEntities.length === 0}
-              className="select-all-btn"
-            >
-              {selectedInPool.size === inPoolEntities.length && inPoolEntities.length > 0
-                ? 'Deselect All'
-                : 'Select All'}
-            </button>
-          </div>
-
-          <div className="songs-container">
-            {inPoolEntities.map((entity) => (
-              <div
-                key={entity.pk}
-                className={`song-item pool-entity ${selectedInPool.has(entity.pk) ? 'selected' : ''}`}
-                onClick={() => handleToggleSelection(entity.pk, true)}
-              >
-                <div className="pool-status">✓</div>
-                {entity.metadata?.album?.images?.[0]?.url && (
-                  <img 
-                    src={entity.metadata.album.images[0].url} 
-                    alt="Album art"
-                    className="album-art"
-                  />
-                )}
-                <div className="song-info">
-                  <div className="song-title">{entity.title || entity.pk}</div>
-                  {entity.metadata && (
-                    <>
-                      <div className="song-artist">{entity.metadata.artist || entity.metadata.artists?.[0]?.name}</div>
-                      <div className="song-album">{entity.metadata.album?.name}</div>
-                    </>
-                  )}
-                </div>
-                <div className="pool-actions">
-                  {isReady && (
-                    <>
-                      <button
-                        className="play-btn"
-                        onClick={(e) => { e.stopPropagation(); handlePlaySong(entity); }}
-                        title="Play"
-                      >
-                        ▶
-                      </button>
-                      <button
-                        className="queue-btn"
-                        onClick={(e) => { e.stopPropagation(); handleQueueSong(entity); }}
-                        title="Add to queue"
-                      >
-                        +
-                      </button>
-                    </>
-                  )}
-                  <button
-                    className="action-btn block-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleMoveEntity(entity, 'block');
-                    }}
-                    title="Block this song"
-                  >
-                    ✗
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Center Panel - CONTROLS */}
-        <div className="pool-controls-panel">
-          <div className="pool-control-buttons">
-            <h3>CONTROLS</h3>
-            
-            <button
-              onClick={handleMoveToPool}
-              disabled={selectedNotInPool.size === 0 || batchMutation.isPending}
-              className="control-btn move-to-pool"
-              title="Move selected items to pool"
-            >
-              ← Add ({selectedNotInPool.size})
-            </button>
-
-            <button
-              onClick={handleBlockSelected}
-              disabled={selectedInPool.size === 0 || batchMutation.isPending}
-              className="control-btn block-from-pool"
-              title="Block selected items from pool"
-            >
-              → Block ({selectedInPool.size})
-            </button>
-
-            <button
-              onClick={handleRemoveSelected}
-              disabled={(selectedInPool.size + selectedNotInPool.size) === 0 || batchMutation.isPending}
-              className="control-btn remove-all"
-              title="Remove selected items (return to unclassified)"
-            >
-              Remove ({selectedInPool.size + selectedNotInPool.size})
-            </button>
-
-            {batchMutation.isPending && (
-              <div className="loading-indicator">Processing...</div>
-            )}
-
-            {batchMutation.error && (
-              <div className="error-message">
-                Error: {batchMutation.error.message}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right Panel - NOT IN POOL */}
-        <div className="pool-panel-right">
-          <div className="songs-header">
-            <span className="songs-title">NOT IN POOL</span>
-            <span className="count">({notInPoolEntities.length})</span>
-          </div>
-
-          <div className="pool-controls">
-            <button
-              onClick={() => handleSelectAll(false)}
-              disabled={notInPoolEntities.length === 0}
-              className="select-all-btn"
-            >
-              {selectedNotInPool.size === notInPoolEntities.length && notInPoolEntities.length > 0
-                ? 'Deselect All'
-                : 'Select All'}
-            </button>
-          </div>
-
-          <div className="songs-container">
-            {notInPoolEntities.map((entity) => (
-              <div
-                key={entity.pk}
-                className={`song-item pool-entity ${selectedNotInPool.has(entity.pk) ? 'selected' : ''}`}
-                onClick={() => handleToggleSelection(entity.pk, false)}
-              >
-                <div className="pool-status">
-                  {entity.pool_status === 'blocked' ? '✗' : ''}
-                </div>
-                {entity.metadata?.album?.images?.[0]?.url && (
-                  <img 
-                    src={entity.metadata.album.images[0].url} 
-                    alt="Album art"
-                    className="album-art"
-                  />
-                )}
-                <div className="song-info">
-                  <div className="song-title">{entity.title || entity.pk}</div>
-                  {entity.metadata && (
-                    <>
-                      <div className="song-artist">{entity.metadata.artist || entity.metadata.artists?.[0]?.name}</div>
-                      <div className="song-album">{entity.metadata.album?.name}</div>
-                    </>
-                  )}
-                </div>
-                <div className="pool-actions">
-                  {isReady && (
-                    <>
-                      <button
-                        className="play-btn"
-                        onClick={(e) => { e.stopPropagation(); handlePlaySong(entity); }}
-                        title="Play"
-                      >
-                        ▶
-                      </button>
-                      <button
-                        className="queue-btn"
-                        onClick={(e) => { e.stopPropagation(); handleQueueSong(entity); }}
-                        title="Add to queue"
-                      >
-                        +
-                      </button>
-                    </>
-                  )}
-                  <button
-                    className="action-btn add-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleMoveEntity(entity, 'add');
-                    }}
-                    title="Add this song to pool"
-                  >
-                    ✓
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      <ThreePanelLayout
+        leftPanel={leftPanel}
+        centerPanel={centerPanel}
+        rightPanel={rightPanel}
+        className="pool-layout"
+      />
     </div>
   );
 }

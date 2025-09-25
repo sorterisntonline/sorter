@@ -6,6 +6,7 @@ import { AuthAPI } from '../api/auth';
 import SelectedSongPanel from '../components/SelectedSongPanel';
 import VoteHistoryPanel from '../components/VoteHistoryPanel';
 import RankingHistoryGraph from '../components/RankingHistoryGraph';
+import ThreePanelLayout from '../components/ThreePanelLayout';
 import { useSpotifyPlayer } from '../contexts/SpotifyPlayerContext';
 import { useDynamicTheme } from '../contexts/DynamicThemeContext';
 import { fetchPairFn, submitVoteFn } from '../fetchers/voteEndpoints';
@@ -401,246 +402,256 @@ function SpotifySongsPage() {
     );
   }
 
-  return (
-    <div className="spotify-page" style={getCSSVariables()}>
-      <div className="combined-layout" style={{
-        background: `linear-gradient(145deg, var(--theme-primary) 0%, var(--theme-secondary) 50%, var(--theme-primary) 100%)`,
-        minHeight: '100vh'
-      }}>
-        {/* Left Panel - Songs List */}
-        <div className="songs-panel">
-          {/* Header Panel */}
-          <div className="songs-header">
-            <span className="songs-title">sorter</span>
-            <div className="header-controls">
-              <Link 
-                to="/spotify/pool" 
-                className="nav-link pool-link"
-                title="Manage song pool"
-              >
-                Pool
-              </Link>
-              <button 
-                className={`refresh-button ${isRefreshing ? 'refreshing' : ''}`}
-                onClick={async () => {
-                setIsRefreshing(true);
-                try {
-                  const response = await fetch('/api/auth/import-recent-songs', {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                    },
-                    credentials: 'include'
-                  });
-                  
-                  if (response.ok) {
-                    const result = await response.json();
-                    console.log('Imported songs:', result);
-                    // Invalidate queries after successful import
-                    queryClient.invalidateQueries(['spotify-songs']);
-                    queryClient.invalidateQueries(['spotify-ranking', user?.handle]);
-                  }
-                } catch (error) {
-                  console.error('Failed to import songs:', error);
-                } finally {
-                  setIsRefreshing(false);
-                }
-              }}
-              disabled={isLoading || rankingLoading || isRefreshing}
-              title="Import fresh songs from Spotify"
-            >
-              {isRefreshing ? '⟳' : '↻'}
-            </button>
-            </div>
-          </div>
-          
-          {!rankingLoading && ranking && rankedSongs.length > 0 && (
-            <div className="songs-container" style={{ marginBottom: '16px' }}>
-              <div>
-                {rankedSongs.map((song, index) => {
-                  const { backgroundColor, textColor } = getScoreColors(song.score, scoreRange);
-                  return (
-                    <div 
-                      key={song.id} 
-                      className={`song-item ${selectedSong?.id === song.id ? 'selected' : ''}`}
-                      onClick={() => setSelectedSong(selectedSong?.id === song.id ? null : song)}
-                      style={{ 
-                        backgroundColor, 
-                        color: textColor,
-                        '--text-color': textColor 
-                      }}
-                    >
-                      <span className="rank-number">{index + 1}</span>
-                      {song.album_art && (
-                        <img 
-                          src={song.album_art} 
-                          alt={`${song.title} album art`}
-                          className="album-art"
-                        />
-                      )}
-                      <div className="song-info">
-                        <div className="song-title">{song.title}</div>
-                        <div className="song-artist">{song.artist}</div>
-                        {song.album && (
-                          <div className="song-album">{song.album}</div>
-                        )}
-                      </div>
-                      <div className="score-display">
-                        {song.score.toFixed(4)}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {!rankingLoading && ranking && unrankedSongs.length > 0 && (
-            <div className="songs-container">
-              <div>
-                {unrankedSongs.map((song) => (
-                  <div 
-                    key={song.id} 
-                    className={`song-item ${selectedSong?.id === song.id ? 'selected' : ''}`}
-                    onClick={() => setSelectedSong(selectedSong?.id === song.id ? null : song)}
-                  >
-                    {song.album_art && (
-                      <img 
-                        src={song.album_art} 
-                        alt={`${song.title} album art`}
-                        className="album-art"
-                      />
-                    )}
-                    <div className="song-info">
-                      <div className="song-title">{song.title}</div>
-                      <div className="song-artist">{song.artist}</div>
-                      {song.album && (
-                        <div className="song-album">{song.album}</div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {songs && songs.length === 0 && (
-            <div className="songs-container">
-              <div className="empty-state">
-                <svg className="empty-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-                </svg>
-                <div className="empty-title">No songs imported yet</div>
-                <p className="empty-description">
-                  Import your recently played Spotify tracks to start sorting them.
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Center Panel - Voting Interface */}
-        <div className="vote-panel">
-          {pinnedSong && (
-            <div className="pinned-song-indicator">
-              <div className="pinned-song-info">
-                <span className="pin-icon">📌</span>
-                <span>Comparing: <strong>{pinnedSong.title}</strong> by {pinnedSong.artist}</span>
-                <button 
-                  className="unpin-button"
-                  onClick={clearPinnedSong}
-                  title="Stop comparing"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-          )}
-          
-          {user && songs && songs.length > 0 && (
-            <div className="vote-section">
+  // Left Panel - Songs List
+  const leftPanel = (
+    <>
+      {/* Header Panel */}
+      <div className="songs-header">
+        <span className="songs-title">sorter</span>
+        <div className="header-controls">
+          <Link 
+            to="/spotify/pool" 
+            className="nav-link pool-link"
+            title="Manage song pool"
+          >
+            Pool
+          </Link>
+          <button 
+            className={`refresh-button ${isRefreshing ? 'refreshing' : ''}`}
+            onClick={async () => {
+            setIsRefreshing(true);
+            try {
+              const response = await fetch('/api/auth/import-recent-songs', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                credentials: 'include'
+              });
               
-              {pairQuery.isPending && (
-                <div className="loading-container">
-                  <div className="loading-spinner"></div>
-                  <p>Loading pair...</p>
-                </div>
-              )}
-
-              {pairQuery.error && (
-                <div className="error-container">
-                  <p>Error loading voting pair: {pairQuery.error?.message}</p>
-                </div>
-              )}
-
-              {pairQuery.data && pairQuery.data.left_entity && pairQuery.data.right_entity && (
-                <div className="vote-container" style={{
-                    width: '100%',
-                }}>
-                  <div className="vote-items-container">
-                    <VoteItemDisplay 
-                      item={pairQuery.data.left_entity} 
-                      isDisabled={voteMutation.isPending || pairQuery.isPending}
-                      onSkip={handleSkipLeft}
-                    />
-                    <VoteItemDisplay 
-                      item={pairQuery.data.right_entity} 
-                      isDisabled={voteMutation.isPending || pairQuery.isPending}
-                      onSkip={handleSkipRight}
-                    />
-                  </div>
-
-                  <div className="slider-container">
-                    <div className="slider-labels">
-                      <span>Strongly Left</span>
-                      <span>Neutral</span>
-                      <span>Strongly Right</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="-50"
-                      max="50"
-                      step="1"
-                      value={sliderValue}
-                      onChange={handleSliderChange}
-                      className="vote-slider"
-                      disabled={voteMutation.isPending || pairQuery.isPending}
-                      style={{
-                        '--slider-thumb-color': theme.colors?.vibrant || 'var(--theme-accent)',
-                        background: `linear-gradient(to right, var(--theme-accent) 0%, var(--theme-accent-light) 50%, var(--theme-accent) 100%)`
-                      }}
-                    />
-                  </div>
-
-                  <button
-                    onClick={handleVoteSubmit}
-                    disabled={voteMutation.isPending || pairQuery.isPending}
-                    className="submit-button"
-                  >
-                    {voteMutation.isPending ? 'Submitting...' : 'Submit Vote'}
-                  </button>
-                </div>
-              )}
-
-              {pairQuery.isSuccess && !pairQuery.data?.left_entity && !pairQuery.data?.right_entity && (
-                <div style={{ textAlign: 'center', color: '#6b7280', padding: '40px 0' }}>
-                  No pairs available for voting at the moment.
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Right Panel - Song Details and Vote History */}
-        <div className="spotify-right-panel">
-          <div className="panel-content-wrapper">
-            {selectedSong && (
-              <SelectedSongPanel selectedSong={selectedSong} user={user} onSongSelect={setSelectedSong} />
-            )}
-            <VoteHistoryPanel user={user} selectedSong={selectedSong} />
-          </div>
+              if (response.ok) {
+                const result = await response.json();
+                console.log('Imported songs:', result);
+                // Invalidate queries after successful import
+                queryClient.invalidateQueries(['spotify-songs']);
+                queryClient.invalidateQueries(['spotify-ranking', user?.handle]);
+              }
+            } catch (error) {
+              console.error('Failed to import songs:', error);
+            } finally {
+              setIsRefreshing(false);
+            }
+          }}
+          disabled={isLoading || rankingLoading || isRefreshing}
+          title="Import fresh songs from Spotify"
+        >
+          {isRefreshing ? '⟳' : '↻'}
+        </button>
         </div>
       </div>
+      
+      {!rankingLoading && ranking && rankedSongs.length > 0 && (
+        <div className="songs-container" style={{ marginBottom: '16px' }}>
+          <div>
+            {rankedSongs.map((song, index) => {
+              const { backgroundColor, textColor } = getScoreColors(song.score, scoreRange);
+              return (
+                <div 
+                  key={song.id} 
+                  className={`song-item ${selectedSong?.id === song.id ? 'selected' : ''}`}
+                  onClick={() => setSelectedSong(selectedSong?.id === song.id ? null : song)}
+                  style={{ 
+                    backgroundColor, 
+                    color: textColor,
+                    '--text-color': textColor 
+                  }}
+                >
+                  <span className="rank-number">{index + 1}</span>
+                  {song.album_art && (
+                    <img 
+                      src={song.album_art} 
+                      alt={`${song.title} album art`}
+                      className="album-art"
+                    />
+                  )}
+                  <div className="song-info">
+                    <div className="song-title">{song.title}</div>
+                    <div className="song-artist">{song.artist}</div>
+                    {song.album && (
+                      <div className="song-album">{song.album}</div>
+                    )}
+                  </div>
+                  <div className="score-display">
+                    {song.score.toFixed(4)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {!rankingLoading && ranking && unrankedSongs.length > 0 && (
+        <div className="songs-container">
+          <div>
+            {unrankedSongs.map((song) => (
+              <div 
+                key={song.id} 
+                className={`song-item ${selectedSong?.id === song.id ? 'selected' : ''}`}
+                onClick={() => setSelectedSong(selectedSong?.id === song.id ? null : song)}
+              >
+                {song.album_art && (
+                  <img 
+                    src={song.album_art} 
+                    alt={`${song.title} album art`}
+                    className="album-art"
+                  />
+                )}
+                <div className="song-info">
+                  <div className="song-title">{song.title}</div>
+                  <div className="song-artist">{song.artist}</div>
+                  {song.album && (
+                    <div className="song-album">{song.album}</div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {songs && songs.length === 0 && (
+        <div className="songs-container">
+          <div className="empty-state">
+            <svg className="empty-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+            </svg>
+            <div className="empty-title">No songs imported yet</div>
+            <p className="empty-description">
+              Import your recently played Spotify tracks to start sorting them.
+            </p>
+          </div>
+        </div>
+      )}
+    </>
+  );
+
+  // Center Panel - Voting Interface
+  const centerPanel = (
+    <>
+      {pinnedSong && (
+        <div className="pinned-song-indicator">
+          <div className="pinned-song-info">
+            <span className="pin-icon">📌</span>
+            <span>Comparing: <strong>{pinnedSong.title}</strong> by {pinnedSong.artist}</span>
+            <button 
+              className="unpin-button"
+              onClick={clearPinnedSong}
+              title="Stop comparing"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+      
+      {user && songs && songs.length > 0 && (
+        <div className="vote-section">
+          
+          {pairQuery.isPending && (
+            <div className="loading-container">
+              <div className="loading-spinner"></div>
+              <p>Loading pair...</p>
+            </div>
+          )}
+
+          {pairQuery.error && (
+            <div className="error-container">
+              <p>Error loading voting pair: {pairQuery.error?.message}</p>
+            </div>
+          )}
+
+          {pairQuery.data && pairQuery.data.left_entity && pairQuery.data.right_entity && (
+            <div className="vote-container" style={{
+                width: '100%',
+            }}>
+              <div className="vote-items-container">
+                <VoteItemDisplay 
+                  item={pairQuery.data.left_entity} 
+                  isDisabled={voteMutation.isPending || pairQuery.isPending}
+                  onSkip={handleSkipLeft}
+                />
+                <VoteItemDisplay 
+                  item={pairQuery.data.right_entity} 
+                  isDisabled={voteMutation.isPending || pairQuery.isPending}
+                  onSkip={handleSkipRight}
+                />
+              </div>
+
+              <div className="slider-container">
+                <div className="slider-labels">
+                  <span>Strongly Left</span>
+                  <span>Neutral</span>
+                  <span>Strongly Right</span>
+                </div>
+                <input
+                  type="range"
+                  min="-50"
+                  max="50"
+                  step="1"
+                  value={sliderValue}
+                  onChange={handleSliderChange}
+                  className="vote-slider"
+                  disabled={voteMutation.isPending || pairQuery.isPending}
+                  style={{
+                    '--slider-thumb-color': theme.colors?.vibrant || 'var(--theme-accent)',
+                    background: `linear-gradient(to right, var(--theme-accent) 0%, var(--theme-accent-light) 50%, var(--theme-accent) 100%)`
+                  }}
+                />
+              </div>
+
+              <button
+                onClick={handleVoteSubmit}
+                disabled={voteMutation.isPending || pairQuery.isPending}
+                className="submit-button"
+              >
+                {voteMutation.isPending ? 'Submitting...' : 'Submit Vote'}
+              </button>
+            </div>
+          )}
+
+          {pairQuery.isSuccess && !pairQuery.data?.left_entity && !pairQuery.data?.right_entity && (
+            <div style={{ textAlign: 'center', color: '#6b7280', padding: '40px 0' }}>
+              No pairs available for voting at the moment.
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+
+  // Right Panel - Song Details and Vote History
+  const rightPanel = (
+    <div className="panel-content-wrapper">
+      {selectedSong && (
+        <SelectedSongPanel selectedSong={selectedSong} user={user} onSongSelect={setSelectedSong} />
+      )}
+      <VoteHistoryPanel user={user} selectedSong={selectedSong} />
+    </div>
+  );
+
+  return (
+    <div className="spotify-page" style={getCSSVariables()}>
+      <ThreePanelLayout
+        leftPanel={leftPanel}
+        centerPanel={centerPanel}
+        rightPanel={rightPanel}
+        className="spotify-layout"
+        style={{
+          background: `linear-gradient(145deg, var(--theme-primary) 0%, var(--theme-secondary) 50%, var(--theme-primary) 100%)`,
+          minHeight: '100vh'
+        }}
+      />
     </div>
   );
 }
