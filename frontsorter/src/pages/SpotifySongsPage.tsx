@@ -637,12 +637,12 @@ function SpotifySongsPage() {
 
   // Right Panel - Song Details and Vote History
   const rightPanel = (
-    <div className="panel-content-wrapper">
+    <>
       {selectedSong && (
         <SelectedSongPanel selectedSong={selectedSong} user={user} onSongSelect={setSelectedSong} />
       )}
       <VoteHistoryPanel user={user} selectedSong={selectedSong} />
-    </div>
+    </>
   );
 
   return (
