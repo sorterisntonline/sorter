@@ -3,11 +3,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AuthAPI } from '../api/auth';
 import VoteItem from './VoteItem';
 import { DeleteVoteParams } from '../types/api';
+import usePinnedSongStore from '../stores/pinnedSongStore';
 
 
 
 function VoteHistoryPanel({ user, selectedSong }) {
   const queryClient = useQueryClient();
+  const { getSongById } = usePinnedSongStore();
 
   // Query for user's vote history
   const { data: votes = [], isLoading, error } = useQuery({
@@ -119,6 +121,7 @@ function VoteHistoryPanel({ user, selectedSong }) {
                 onDelete={deleteMutation.mutate}
                 isDeleting={deleteMutation.isPending}
                 compact={false}
+                getSongById={getSongById}
               />
             ))}
           </div>

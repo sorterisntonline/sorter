@@ -122,7 +122,7 @@ function SpotifySongsPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { updateThemeFromImage, getScoreColors, getCSSVariables, theme } = useDynamicTheme();
-  const { pinnedSong, setPinnedSong, clearPinnedSong } = usePinnedSongStore();
+  const { pinnedSong, setPinnedSong, clearPinnedSong, setSongs } = usePinnedSongStore();
   
   // Query for current user info
   const { data: user } = useQuery({
@@ -230,6 +230,13 @@ function SpotifySongsPage() {
 
     return { rankedSongs, unrankedSongs, scoreRange };
   }, [songs, ranking]);
+
+  // Populate songs store when songs data changes
+  useEffect(() => {
+    if (songs) {
+      setSongs(songs);
+    }
+  }, [songs, setSongs]);
 
   // Update theme when voting pair changes (use left song for theming)
   useEffect(() => {

@@ -114,6 +114,12 @@ export interface PinnedSongStore {
   clearPinnedSong: () => void;
   isSongPinned: (songId: string) => boolean;
   togglePinnedSong: (song: Song) => void;
+  
+  // Songs data for lookups
+  songsMap: Record<string, Song>;
+  setSongs: (songs: Song[]) => void;
+  getSongById: (songId: string) => Song | null;
+  clearSongs: () => void;
 }
 
 // Provider Props

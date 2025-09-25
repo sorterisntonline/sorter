@@ -3,6 +3,7 @@ import { PinnedSongStore, Song } from '../types/contexts';
 
 const usePinnedSongStore = create<PinnedSongStore>((set, get) => ({
   pinnedSong: null,
+  songsMap: {},
   
   // Set the pinned song
   setPinnedSong: (song: Song) => set({ pinnedSong: song }),
@@ -25,6 +26,22 @@ const usePinnedSongStore = create<PinnedSongStore>((set, get) => ({
     const pinnedSong = get().pinnedSong;
     return pinnedSong && pinnedSong.id === songId;
   },
+  
+  // Songs data management
+  setSongs: (songs: Song[]) => {
+    const songsMap: Record<string, Song> = {};
+    songs.forEach(song => {
+      songsMap[song.id] = song;
+    });
+    set({ songsMap });
+  },
+  
+  getSongById: (songId: string) => {
+    const songsMap = get().songsMap;
+    return songsMap[songId] || null;
+  },
+  
+  clearSongs: () => set({ songsMap: {} }),
 }));
 
 export default usePinnedSongStore;

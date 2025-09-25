@@ -1,7 +1,7 @@
 import React from 'react';
 
 // Reusable component to display individual vote items
-function VoteItem({ vote, showDelete = false, onDelete, isDeleting, compact = false }) {
+function VoteItem({ vote, showDelete = false, onDelete, isDeleting, compact = false, getSongById }) {
   // Handle different vote data structures
   const leftEntity = vote.left_entity_pk || vote.left_pk;
   const rightEntity = vote.right_entity_pk || vote.right_pk;
@@ -14,6 +14,15 @@ function VoteItem({ vote, showDelete = false, onDelete, isDeleting, compact = fa
   // Format entity display
   const getEntityDisplay = (namespace: string, pk: string, title?: string) => {
     if (title) return title;
+    
+    // Try to get song title from store if it's a Spotify track
+    if (namespace?.includes('spotify.track') && getSongById) {
+      const song = getSongById(pk);
+      if (song) {
+        return song.title;
+      }
+    }
+    
     return `${namespace?.split('.')[1] || 'item'}: ${pk}`;
   };
 
