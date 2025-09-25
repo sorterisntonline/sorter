@@ -19,6 +19,8 @@
   border-right: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(0, 0, 0, 0.2);
   backdrop-filter: blur(10px);
+  height: 100vh;
+  overflow-y: auto;
 }
 
 /* Center panel - typically for main content/actions */
@@ -27,6 +29,7 @@
   border-right: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(0, 0, 0, 0.1);
   backdrop-filter: blur(5px);
+  height: 100vh;
 }
 
 /* Right panel - typically for details/secondary content */
@@ -34,6 +37,8 @@
   flex: 1;
   background: rgba(0, 0, 0, 0.15);
   backdrop-filter: blur(10px);
+  height: 100vh;
+  overflow-y: auto;
 }
 
 /* Responsive breakpoints */
@@ -75,28 +80,17 @@
   overflow-y: auto;
 }
 
-/* Custom scrollbar styling for consistency */
+/* Hide scrollbars */
 .three-panel-left::-webkit-scrollbar,
 .three-panel-center::-webkit-scrollbar,
 .three-panel-right::-webkit-scrollbar {
-  width: 6px;
+  width: 0px;
+  background: transparent;
 }
 
-.three-panel-left::-webkit-scrollbar-track,
-.three-panel-center::-webkit-scrollbar-track,
-.three-panel-right::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.three-panel-left::-webkit-scrollbar-thumb,
-.three-panel-center::-webkit-scrollbar-thumb,
-.three-panel-right::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.3);
-  border-radius: 3px;
-}
-
-.three-panel-left::-webkit-scrollbar-thumb:hover,
-.three-panel-center::-webkit-scrollbar-thumb:hover,
-.three-panel-right::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.5);
+/* For Firefox */
+.three-panel-left,
+.three-panel-center,
+.three-panel-right {
+  scrollbar-width: none;
 }

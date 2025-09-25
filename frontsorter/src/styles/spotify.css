@@ -508,6 +508,7 @@
 
 .songs-container {
   background: black;
+  overflow: visible; /* Remove individual scrollbars */
 }
 
 .section-header {

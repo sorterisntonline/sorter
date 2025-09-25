@@ -5,11 +5,9 @@
   background: #000;
 }
 
+/* Remove grid layout - now using ThreePanelLayout component */
 .pool-layout {
-  display: grid;
-  grid-template-columns: 1fr 300px 1fr;
-  width: 100%;
-  height: 100%;
+  /* Grid layout removed - ThreePanelLayout handles the layout now */
 }
 
 .pool-panel-left,
@@ -62,7 +60,7 @@
 
 .songs-container {
   flex: 1;
-  overflow-y: auto;
+  overflow: visible; /* Remove individual scrollbars */
   padding: 10px;
 }
 
