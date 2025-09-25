@@ -26,7 +26,6 @@
 /* Center panel - typically for main content/actions */
 .three-panel-center {
   flex: 1;
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(0, 0, 0, 0.1);
   backdrop-filter: blur(5px);
   height: 100vh;
@@ -35,8 +34,8 @@
 /* Right panel - typically for details/secondary content */
 .three-panel-right {
   flex: 1;
-  background: rgba(0, 0, 0, 0.15);
-  backdrop-filter: blur(10px);
+  background: #1a1a1a;
+  border-left: 1px solid #333;
   height: 100vh;
   overflow-y: auto;
 }

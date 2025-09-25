@@ -4,6 +4,7 @@ import { AuthAPI } from '../api/auth';
 import VoteItem from './VoteItem';
 import { DeleteVoteParams } from '../types/api';
 import usePinnedSongStore from '../stores/pinnedSongStore';
+import '../styles/vote-modern.css';
 
 
 

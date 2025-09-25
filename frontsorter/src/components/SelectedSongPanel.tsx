@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSpotifyPlayer } from '../contexts/SpotifyPlayerContext';
 import usePinnedSongStore from '../stores/pinnedSongStore';
+import '../styles/vote-modern.css';
 
 function SelectedSongPanel({ selectedSong, user, onSongSelect }) {
   const navigate = useNavigate();

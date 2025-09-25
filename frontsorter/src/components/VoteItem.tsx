@@ -11,23 +11,33 @@ function VoteItem({ vote, showDelete = false, onDelete, isDeleting, compact = fa
   // For selected song votes, we have opponent_title
   const opponentTitle = vote.opponent_title;
   
-  // Format entity display
-  const getEntityDisplay = (namespace: string, pk: string, title?: string) => {
-    if (title) return title;
+  // Get song data from store
+  const getSongData = (namespace: string, pk: string, title?: string) => {
+    if (title) return { title, artist: null, image: null };
     
-    // Try to get song title from store if it's a Spotify track
+    // Try to get song data from store if it's a Spotify track
     if (namespace?.includes('spotify.track') && getSongById) {
       const song = getSongById(pk);
       if (song) {
-        return song.title;
+        return {
+          title: song.title,
+          artist: song.artist,
+          image: song.image_url
+        };
       }
     }
     
-    return `${namespace?.split('.')[1] || 'item'}: ${pk}`;
+    return {
+      title: `${namespace?.split('.')[1] || 'item'}: ${pk}`,
+      artist: null,
+      image: null
+    };
   };
 
-  const leftDisplay = getEntityDisplay(leftNamespace, leftEntity, vote.left_title);
-  const rightDisplay = opponentTitle || getEntityDisplay(rightNamespace, rightEntity, vote.right_title);
+  const leftSong = getSongData(leftNamespace, leftEntity, vote.left_title);
+  const rightSong = opponentTitle 
+    ? { title: opponentTitle, artist: null, image: null }
+    : getSongData(rightNamespace, rightEntity, vote.right_title);
   
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -52,41 +62,90 @@ function VoteItem({ vote, showDelete = false, onDelete, isDeleting, compact = fa
     return '#95a5a6';
   };
 
+  // Visual magnitude slider component
+  const MagnitudeSlider = ({ magnitude }) => {
+    const normalizedPosition = ((magnitude + 50) / 100) * 100; // Convert -50 to 50 range to 0-100%
+    const color = getMagnitudeColor(magnitude);
+    
+    return (
+      <div className="magnitude-slider-container">
+        <div className="magnitude-slider-track">
+          <div 
+            className="magnitude-slider-fill"
+            style={{
+              width: `${normalizedPosition}%`,
+              backgroundColor: color
+            }}
+          />
+          <div 
+            className="magnitude-slider-thumb"
+            style={{
+              left: `${normalizedPosition}%`,
+              backgroundColor: color
+            }}
+          />
+        </div>
+        <div className="magnitude-value">{magnitude > 0 ? '+' : ''}{magnitude}</div>
+      </div>
+    );
+  };
+
   if (compact) {
     // Compact version for selected song panel
     return (
       <div className="vote-item-compact">
-        <span className="vote-comparison">vs {rightDisplay}</span>
-        <span 
-          className="vote-result-compact" 
-          style={{ color: getMagnitudeColor(vote.magnitude) }}
-        >
-          {vote.magnitude > 0 ? '+' : ''}{vote.magnitude}
-        </span>
+        <div className="compact-song-info">
+          {rightSong.image && (
+            <img src={rightSong.image} alt="" className="compact-album-art" />
+          )}
+          <div className="compact-text">
+            <span className="vote-comparison">vs {rightSong.title}</span>
+            {rightSong.artist && <span className="compact-artist">{rightSong.artist}</span>}
+          </div>
+        </div>
+        <MagnitudeSlider magnitude={vote.magnitude} />
       </div>
     );
   }
 
   // Full version for vote history panel
   return (
-    <div className="vote-history-item">
-      <div className="vote-entities">
-        <span className="vote-entity left">{leftDisplay}</span>
-        <span className="vote-vs">vs</span>
-        <span className="vote-entity right">{rightDisplay}</span>
+    <div className="vote-history-item-modern">
+      <div className="vote-matchup">
+        <div className="vote-song">
+          {leftSong.image && (
+            <img src={leftSong.image} alt="" className="vote-album-art" />
+          )}
+          <div className="vote-song-info">
+            <div className="vote-song-title">{leftSong.title}</div>
+            {leftSong.artist && <div className="vote-song-artist">{leftSong.artist}</div>}
+          </div>
+        </div>
+        
+        <div className="vote-vs-section">
+          <span className="vote-vs-text">VS</span>
+          <div className="vote-date-modern">{formatDate(vote.created_at)}</div>
+        </div>
+        
+        <div className="vote-song">
+          {rightSong.image && (
+            <img src={rightSong.image} alt="" className="vote-album-art" />
+          )}
+          <div className="vote-song-info">
+            <div className="vote-song-title">{rightSong.title}</div>
+            {rightSong.artist && <div className="vote-song-artist">{rightSong.artist}</div>}
+          </div>
+        </div>
       </div>
-      <div className="vote-details">
-        <span 
-          className="vote-magnitude" 
-          style={{ color: getMagnitudeColor(vote.magnitude) }}
-        >
-          {getMagnitudeLabel(vote.magnitude)} ({vote.magnitude > 0 ? '+' : ''}{vote.magnitude})
-        </span>
-        <span className="vote-date">{formatDate(vote.created_at)}</span>
+      
+      <div className="vote-result-section">
+        <div className="vote-magnitude-label">{getMagnitudeLabel(vote.magnitude)}</div>
+        <MagnitudeSlider magnitude={vote.magnitude} />
       </div>
+      
       {showDelete && (
         <button
-          className="delete-vote-btn"
+          className="delete-vote-btn-modern"
           onClick={() => onDelete(vote)}
           disabled={isDeleting}
           title="Delete this vote"
