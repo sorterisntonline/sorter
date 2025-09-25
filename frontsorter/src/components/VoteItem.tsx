@@ -12,13 +12,13 @@ function VoteItem({ vote, showDelete = false, onDelete, isDeleting, compact = fa
   const opponentTitle = vote.opponent_title;
   
   // Format entity display
-  const getEntityDisplay = (namespace, pk, title) => {
+  const getEntityDisplay = (namespace: string, pk: string, title?: string) => {
     if (title) return title;
     return `${namespace?.split('.')[1] || 'item'}: ${pk}`;
   };
 
-  const leftDisplay = getEntityDisplay(leftNamespace, leftEntity);
-  const rightDisplay = opponentTitle || getEntityDisplay(rightNamespace, rightEntity);
+  const leftDisplay = getEntityDisplay(leftNamespace, leftEntity, vote.left_title);
+  const rightDisplay = opponentTitle || getEntityDisplay(rightNamespace, rightEntity, vote.right_title);
   
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', {

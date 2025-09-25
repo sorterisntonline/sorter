@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import AddTodoForm from '../components/AddTodoForm';
 import TodoItem from '../components/TodoItem';
 import '../styles/retrofuturist.css';
+import { UpdateTodoParams, CreateSubtaskParams } from '../types/api';
 import { 
   fetchAllTodos, 
   createTodo, 
@@ -24,15 +25,15 @@ const TodoPage = () => {
   const createTodoMutation = useMutation({
     mutationFn: createTodo,
     onSuccess: () => {
-      queryClient.invalidateQueries(['todos']);
+      queryClient.invalidateQueries({ queryKey: ['todos'] });
     },
   });
 
   // Update todo mutation
   const updateTodoMutation = useMutation({
-    mutationFn: ({ pk, updates }) => updateTodo(pk, updates),
+    mutationFn: ({ pk, updates }: UpdateTodoParams) => updateTodo(pk, updates),
     onSuccess: () => {
-      queryClient.invalidateQueries(['todos']);
+      queryClient.invalidateQueries({ queryKey: ['todos'] });
     },
   });
 
@@ -40,15 +41,15 @@ const TodoPage = () => {
   const deleteTodoMutation = useMutation({
     mutationFn: deleteTodo,
     onSuccess: () => {
-      queryClient.invalidateQueries(['todos']);
+      queryClient.invalidateQueries({ queryKey: ['todos'] });
     },
   });
 
   // Create subtask mutation
   const createSubtaskMutation = useMutation({
-    mutationFn: ({ parentPk, subtaskData }) => createSubtask(parentPk, subtaskData),
+    mutationFn: ({ parentPk, subtaskData }: CreateSubtaskParams) => createSubtask(parentPk, subtaskData),
     onSuccess: () => {
-      queryClient.invalidateQueries(['todos']);
+      queryClient.invalidateQueries({ queryKey: ['todos'] });
     },
   });
 

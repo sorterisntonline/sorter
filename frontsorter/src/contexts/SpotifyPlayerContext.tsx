@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { SpotifyPlayerContextType, SpotifyPlayerProviderProps } from '../types/contexts';
+import { User } from '../types/contexts';
 
-const SpotifyPlayerContext = createContext();
+const SpotifyPlayerContext = createContext<SpotifyPlayerContextType | undefined>(undefined);
 
 export const useSpotifyPlayer = () => {
   const context = useContext(SpotifyPlayerContext);
@@ -10,7 +12,7 @@ export const useSpotifyPlayer = () => {
   return context;
 };
 
-export const SpotifyPlayerProvider = ({ children, user }) => {
+export const SpotifyPlayerProvider = ({ children, user }: SpotifyPlayerProviderProps & { user: User | null }) => {
   const [player, setPlayer] = useState(null);
   const [deviceId, setDeviceId] = useState(null);
   const [isReady, setIsReady] = useState(false);

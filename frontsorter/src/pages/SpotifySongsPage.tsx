@@ -172,10 +172,10 @@ function SpotifySongsPage() {
       console.log("Vote submission successful:", data);
       // Invalidate queries to refresh data
       if (user) {
-        queryClient.invalidateQueries(['pair', 'children', 'sorter.user', user.handle]);
-        queryClient.invalidateQueries(['spotify-ranking', user.handle]);
-        queryClient.invalidateQueries(['ranking-history', user.handle]);
-        queryClient.invalidateQueries(['vote-history', user.id]);
+        queryClient.invalidateQueries({ queryKey: ['pair', 'children', 'sorter.user', user.handle] });
+        queryClient.invalidateQueries({ queryKey: ['spotify-ranking', user.handle] });
+        queryClient.invalidateQueries({ queryKey: ['ranking-history', user.handle] });
+        queryClient.invalidateQueries({ queryKey: ['vote-history', user.id] });
       }
       setSliderValue(0);
     },
@@ -311,8 +311,8 @@ function SpotifySongsPage() {
       });
       
       // Invalidate queries to update the ranking and remove blocked song
-      queryClient.invalidateQueries(['spotify-ranking', user.handle]);
-      queryClient.invalidateQueries(['pool-list']);
+      queryClient.invalidateQueries({ queryKey: ['spotify-ranking', user.handle] });
+      queryClient.invalidateQueries({ queryKey: ['pool-list'] });
       
     } catch (error) {
       console.error('Failed to skip left song:', error);
@@ -353,8 +353,8 @@ function SpotifySongsPage() {
       });
       
       // Invalidate queries to update the ranking and remove blocked song
-      queryClient.invalidateQueries(['spotify-ranking', user.handle]);
-      queryClient.invalidateQueries(['pool-list']);
+      queryClient.invalidateQueries({ queryKey: ['spotify-ranking', user.handle] });
+      queryClient.invalidateQueries({ queryKey: ['pool-list'] });
       
     } catch (error) {
       console.error('Failed to skip right song:', error);
@@ -372,8 +372,8 @@ function SpotifySongsPage() {
       setImportMessage(result.message);
       
       // Refresh songs data and ranking
-      queryClient.invalidateQueries(['spotify-songs']);
-      queryClient.invalidateQueries(['spotify-ranking', user?.handle]);
+      queryClient.invalidateQueries({ queryKey: ['spotify-songs'] });
+      queryClient.invalidateQueries({ queryKey: ['spotify-ranking', user?.handle] });
     } catch (error) {
       setImportMessage(`Error: ${error.message}`);
     } finally {
@@ -433,8 +433,8 @@ function SpotifySongsPage() {
                 const result = await response.json();
                 console.log('Imported songs:', result);
                 // Invalidate queries after successful import
-                queryClient.invalidateQueries(['spotify-songs']);
-                queryClient.invalidateQueries(['spotify-ranking', user?.handle]);
+                queryClient.invalidateQueries({ queryKey: ['spotify-songs'] });
+                queryClient.invalidateQueries({ queryKey: ['spotify-ranking', user?.handle] });
               }
             } catch (error) {
               console.error('Failed to import songs:', error);
@@ -454,7 +454,7 @@ function SpotifySongsPage() {
         <div className="songs-container" style={{ marginBottom: '16px' }}>
           <div>
             {rankedSongs.map((song, index) => {
-              const { backgroundColor, textColor } = getScoreColors(song.score, scoreRange);
+              const { backgroundColor, color } = getScoreColors(song.score);
               return (
                 <div 
                   key={song.id} 
@@ -462,9 +462,8 @@ function SpotifySongsPage() {
                   onClick={() => setSelectedSong(selectedSong?.id === song.id ? null : song)}
                   style={{ 
                     backgroundColor, 
-                    color: textColor,
-                    '--text-color': textColor 
-                  }}
+                    color,
+                  } as any}
                 >
                   <span className="rank-number">{index + 1}</span>
                   {song.album_art && (
@@ -604,9 +603,8 @@ function SpotifySongsPage() {
                   className="vote-slider"
                   disabled={voteMutation.isPending || pairQuery.isPending}
                   style={{
-                    '--slider-thumb-color': theme.colors?.vibrant || 'var(--theme-accent)',
                     background: `linear-gradient(to right, var(--theme-accent) 0%, var(--theme-accent-light) 50%, var(--theme-accent) 100%)`
-                  }}
+                  } as any}
                 />
               </div>
 

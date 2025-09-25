@@ -2,6 +2,7 @@ import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AuthAPI } from '../api/auth';
 import VoteItem from './VoteItem';
+import { DeleteVoteParams } from '../types/api';
 
 
 
@@ -27,7 +28,7 @@ function VoteHistoryPanel({ user, selectedSong }) {
 
   // Mutation for deleting votes
   const deleteMutation = useMutation({
-    mutationFn: async (vote) => {
+    mutationFn: async (vote: DeleteVoteParams) => {
       const response = await fetch(
         `/api/vote/${encodeURIComponent(vote.left_entity_ns)}/${encodeURIComponent(vote.left_entity_pk)}/${encodeURIComponent(vote.right_entity_ns)}/${encodeURIComponent(vote.right_entity_pk)}/${vote.user_id}/${vote.attribute_id}`,
         {
@@ -42,9 +43,9 @@ function VoteHistoryPanel({ user, selectedSong }) {
     },
     onSuccess: () => {
       // Refresh vote history
-      queryClient.invalidateQueries(['vote-history', user?.id]);
+      queryClient.invalidateQueries({ queryKey: ['vote-history', user?.id] });
       // Also refresh any ranking data that might be affected
-      queryClient.invalidateQueries(['spotify-ranking']);
+      queryClient.invalidateQueries({ queryKey: ['spotify-ranking'] });
     },
     onError: (error) => {
       console.error('Error deleting vote:', error);

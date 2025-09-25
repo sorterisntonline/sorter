@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AuthAPI } from '../api/auth';
+import { AuthContextType, AuthProviderProps, SessionData } from '../types/contexts';
 
-const AuthContext = createContext();
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function useAuth() {
   const context = useContext(AuthContext);
@@ -12,7 +13,7 @@ export function useAuth() {
   return context;
 }
 
-export function AuthProvider({ children }) {
+export function AuthProvider({ children }: AuthProviderProps) {
   const queryClient = useQueryClient();
   
   // Query session status
@@ -39,7 +40,7 @@ export function AuthProvider({ children }) {
         user: null,
         temp_data: null,
       });
-      queryClient.invalidateQueries(['auth']);
+      queryClient.invalidateQueries({ queryKey: ['auth'] });
     },
   });
 

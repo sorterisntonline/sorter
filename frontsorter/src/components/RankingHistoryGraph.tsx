@@ -36,7 +36,7 @@ const RankingHistoryGraph = ({ user, songs }) => {
   // Create a map of songs by identifier for quick lookup
   const songsMap = React.useMemo(() => {
     if (!songs) return {};
-    const map = {};
+    const map: { [key: string]: any } = {};
     songs.forEach(song => {
       const key = `${song.id}`;
       map[key] = song;
@@ -72,7 +72,7 @@ const RankingHistoryGraph = ({ user, songs }) => {
 
     // Create datasets for each song
     const datasets = songIds.map((songId, index) => {
-      const song = songsMap[songId];
+      const song = songsMap[songId as string];
       const songName = song ? song.title : songId;
       
       // Calculate ranking position for each snapshot
@@ -122,9 +122,9 @@ const RankingHistoryGraph = ({ user, songs }) => {
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
-    animation: false,
+    animation: { duration: 0 },
     interaction: {
-      mode: 'point',
+      mode: 'point' as const,
       intersect: false,
     },
     plugins: {
@@ -136,7 +136,7 @@ const RankingHistoryGraph = ({ user, songs }) => {
         text: 'Song Rankings Over Time',
         font: {
           size: 16,
-          weight: 'bold',
+          weight: 'bold' as const,
         },
       },
       tooltip: {
@@ -228,7 +228,7 @@ const RankingHistoryGraph = ({ user, songs }) => {
       {/* Chart Container */}
       <div className="chart-timeline-container">
         <div className="chart-wrapper">
-          <Line data={fullChartData} options={chartOptions} />
+          <Line data={fullChartData} options={chartOptions as any} />
         </div>
 
         {/* Final Rankings Legend */}

@@ -37,7 +37,7 @@ export const fetchPairFn = async ({ queryKey }) => {
 
     if (!response.ok) {
         const errorText = await response.text();
-        const error = new Error(`HTTP error! status: ${response.status} for ${apiUrl}. ${errorText}`);
+        const error = new Error(`HTTP error! status: ${response.status} for ${apiUrl}. ${errorText}`) as any;
         error.status = response.status; // Attach status code
         throw error;
     }
@@ -103,7 +103,7 @@ export const submitVoteFn = async ({
     // Handle other errors
     const errorText = await response.text();
     console.error(`Failed to submit vote. Status: ${response.status}. Body: ${errorText}`);
-    const error = new Error(`Failed to submit vote. Status: ${response.status}.`);
+    const error = new Error(`Failed to submit vote. Status: ${response.status}.`) as any;
     error.status = response.status;
     throw error;
 };
