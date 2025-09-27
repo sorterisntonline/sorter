@@ -9,6 +9,7 @@ repomix-output.txt
 !.clj-kondo/config.edn
 all.txt
 rustsorter/.idea
+rustsorter/bindings
 
 db/schema.sql
 server.log
