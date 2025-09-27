@@ -92,48 +92,47 @@ function VoteHistoryPanel({ user, selectedSong }) {
   return (
     <div className="vote-history-panel">
       <h3 className="panel-title">{panelTitle}</h3>
-      <div className="panel-content">
-        {isLoading && (
-          <div className="loading-state">
-            <div className="loading-spinner"></div>
-            <span>Loading votes...</span>
-          </div>
-        )}
+      
+      {isLoading && (
+        <div className="loading-state">
+          <div className="loading-spinner"></div>
+          <span>Loading votes...</span>
+        </div>
+      )}
 
-        {error && (
-          <div className="error-state">
-            Error loading votes: {error.message}
-          </div>
-        )}
+      {error && (
+        <div className="error-state">
+          Error loading votes: {error.message}
+        </div>
+      )}
 
-        {filteredVotes && filteredVotes.length === 0 && !isLoading && (
-          <div className="empty-state">
-            {emptyMessage}
-          </div>
-        )}
+      {filteredVotes && filteredVotes.length === 0 && !isLoading && (
+        <div className="empty-state">
+          {emptyMessage}
+        </div>
+      )}
 
-        {filteredVotes && filteredVotes.length > 0 && (
-          <div className="vote-history-list">
-            {filteredVotes.map((vote, index) => (
-              <VoteItem
-                key={`${vote.left_entity_ns}-${vote.left_entity_pk}-${vote.right_entity_ns}-${vote.right_entity_pk}-${vote.created_at}-${index}`}
-                vote={vote}
-                showDelete={true}
-                onDelete={deleteMutation.mutate}
-                isDeleting={deleteMutation.isPending}
-                compact={false}
-                getSongById={getSongById}
-              />
-            ))}
-          </div>
-        )}
+      {filteredVotes && filteredVotes.length > 0 && (
+        <div className="vote-history-list">
+          {filteredVotes.map((vote, index) => (
+            <VoteItem
+              key={`${vote.left_entity_ns}-${vote.left_entity_pk}-${vote.right_entity_ns}-${vote.right_entity_pk}-${vote.created_at}-${index}`}
+              vote={vote}
+              showDelete={true}
+              onDelete={deleteMutation.mutate}
+              isDeleting={deleteMutation.isPending}
+              compact={false}
+              getSongById={getSongById}
+            />
+          ))}
+        </div>
+      )}
 
-        {deleteMutation.isError && (
-          <div className="error-state">
-            Error deleting vote: {deleteMutation.error.message}
-          </div>
-        )}
-      </div>
+      {deleteMutation.isError && (
+        <div className="error-state">
+          Error deleting vote: {deleteMutation.error.message}
+        </div>
+      )}
     </div>
   );
 }
