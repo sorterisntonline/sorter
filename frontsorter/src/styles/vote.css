@@ -156,7 +156,6 @@
 /* Vote History Panel Styles */
 .vote-history-panel {
   background: white;
-  border: 1px solid #e5e7eb;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   overflow: hidden;
 }
@@ -180,7 +179,11 @@
 .vote-history-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
+  /* dark theme */
+  background: #1a1a1a;
+  border: 0;
+
 }
 
 .vote-history-item {
