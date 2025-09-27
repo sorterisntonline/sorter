@@ -121,7 +121,7 @@ function SpotifySongsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { updateThemeFromImage, getScoreColors, getCSSVariables, theme } = useDynamicTheme();
+  const { updateThemeFromImage, updateRightThemeFromImage, getScoreColors, getCSSVariables, theme } = useDynamicTheme();
   const { pinnedSong, setPinnedSong, clearPinnedSong, setSongs } = usePinnedSongStore();
   
   // Query for current user info
@@ -262,6 +262,31 @@ function SpotifySongsPage() {
       }
     }
   }, [pairQuery.data, updateThemeFromImage]);
+
+  // Update right theme when voting pair changes (use right song for right panel theming)
+  useEffect(() => {
+    if (pairQuery.data?.right_entity) {
+      const rightEntity = pairQuery.data.right_entity;
+      // Try to get album art from metadata or profile picture
+      let imageUrl = null;
+      
+      if (rightEntity.metadata?.album?.images?.[0]?.url) {
+        imageUrl = rightEntity.metadata.album.images[0].url;
+      } else if (rightEntity.metadata?.images?.[0]?.url) {
+        imageUrl = rightEntity.metadata.images[0].url;
+      } else if (rightEntity.profile_picture_url) {
+        imageUrl = rightEntity.profile_picture_url;
+      }
+      
+      console.log('🎨 New voting pair - extracting colors from RIGHT song:', imageUrl, 'for song:', rightEntity.title);
+      
+      if (imageUrl) {
+        updateRightThemeFromImage(imageUrl);
+      } else {
+        console.log('⚠️ No image URL found for RIGHT entity:', rightEntity);
+      }
+    }
+  }, [pairQuery.data, updateRightThemeFromImage]);
 
   const handleSliderChange = (e) => {
     setSliderValue(parseInt(e.target.value));

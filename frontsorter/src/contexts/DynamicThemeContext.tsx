@@ -14,6 +14,7 @@ export const useDynamicTheme = () => {
 
 export const DynamicThemeProvider = ({ children }: DynamicThemeProviderProps) => {
   const [currentImageUrl, setCurrentImageUrl] = useState(null);
+  const [rightImageUrl, setRightImageUrl] = useState(null);
   const [theme, setTheme] = useState<ThemeColors>({
     primary: '#1a1a1a',
     secondary: '#2a2a2a',
@@ -28,6 +29,7 @@ export const DynamicThemeProvider = ({ children }: DynamicThemeProviderProps) =>
   });
 
   const { colors: extractedColors, isLoading } = useColorExtraction(currentImageUrl);
+  const { colors: rightExtractedColors, isLoading: isLoadingRight } = useColorExtraction(rightImageUrl);
 
   useEffect(() => {
     if (extractedColors) {
@@ -46,6 +48,11 @@ export const DynamicThemeProvider = ({ children }: DynamicThemeProviderProps) =>
   const updateThemeFromImage = async (imageUrl: string) => {
     console.log('🎨 updateThemeFromImage called with:', imageUrl);
     setCurrentImageUrl(imageUrl);
+  };
+
+  const updateRightThemeFromImage = async (imageUrl: string) => {
+    console.log('🎨 updateRightThemeFromImage called with:', imageUrl);
+    setRightImageUrl(imageUrl);
   };
 
   const getScoreColors = (score: number, scoreRange = { min: 0, max: 1 }) => {
@@ -67,7 +74,27 @@ export const DynamicThemeProvider = ({ children }: DynamicThemeProviderProps) =>
     return { color, backgroundColor };
   };
 
+  const getRightScoreColors = (score: number, scoreRange = { min: 0, max: 1 }) => {
+    if (!rightExtractedColors || !rightExtractedColors.gradientScale) {
+      // Fallback to orange scale for right side
+      const normalizedScore = (score - scoreRange.min) / (scoreRange.max - scoreRange.min);
+      const orangeScale = ['#92400e', '#f59e0b', '#fbbf24', '#fed7aa', '#ffffff'];
+      const color = orangeScale[Math.floor(normalizedScore * (orangeScale.length - 1))] || orangeScale[0];
+      return {
+        color: normalizedScore > 0.5 ? '#000000' : '#ffffff',
+        backgroundColor: color
+      };
+    }
+
+    const normalizedScore = Math.max(0, Math.min(1, (score - scoreRange.min) / (scoreRange.max - scoreRange.min)));
+    const backgroundColor = rightExtractedColors.gradientScale(normalizedScore).hex();
+    const color = rightExtractedColors.gradientScale(normalizedScore).luminance() > 0.5 ? '#000000' : '#ffffff';
+
+    return { color, backgroundColor };
+  };
+
   const getCSSVariables = () => {
+    const rightTheme = rightExtractedColors?.css || {};
     return {
       '--theme-primary': theme.primary,
       '--theme-secondary': theme.secondary,
@@ -78,17 +105,28 @@ export const DynamicThemeProvider = ({ children }: DynamicThemeProviderProps) =>
       '--theme-text-secondary': theme.textSecondary,
       '--theme-border': theme.border,
       '--theme-gradient': theme.gradient || `linear-gradient(135deg, ${theme.accent}, ${theme.primary})`,
-      '--theme-radial-gradient': theme.radialGradient || `radial-gradient(circle at center, ${theme.accent}, ${theme.primary})`
+      '--theme-radial-gradient': theme.radialGradient || `radial-gradient(circle at center, ${theme.accent}, ${theme.primary})`,
+      
+      // Right panel theme variables
+      '--right-theme-accent': rightTheme.accent || '#f59e0b',
+      '--right-theme-accent-dark': rightTheme.darkVibrant || '#d97706',
+      '--right-theme-accent-light': rightTheme.lightAccent || '#fbbf24',
+      '--right-theme-gradient': rightTheme.gradient || `linear-gradient(135deg, #f59e0b, #1a1a1a)`,
+      '--right-theme-radial-gradient': rightTheme.radialGradient || `radial-gradient(circle at center, #f59e0b, #1a1a1a)`
     };
   };
 
   const value = {
     theme,
     updateThemeFromImage,
+    updateRightThemeFromImage,
     getScoreColors,
+    getRightScoreColors,
     getCSSVariables,
     isExtractingColors: isLoading,
-    extractedColors
+    isExtractingRightColors: isLoadingRight,
+    extractedColors,
+    rightExtractedColors
   };
 
   return (

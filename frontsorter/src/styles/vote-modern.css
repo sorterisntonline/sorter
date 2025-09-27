@@ -282,6 +282,7 @@
   border-radius: 50%;
   border: 2px solid currentColor;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
 }
 
 .magnitude-value {
@@ -290,6 +291,26 @@
   font-size: 12px;
   min-width: 30px;
   text-align: center;
+  transition: color 0.3s ease;
+}
+
+/* Right Panel Theme - use right song colors for vote items */
+.three-panel-right .magnitude-slider-fill {
+  background: var(--right-theme-gradient, #666) !important;
+}
+
+.three-panel-right .magnitude-slider-thumb {
+  background: var(--right-theme-accent, #fff) !important;
+  border-color: var(--right-theme-accent-dark, currentColor) !important;
+}
+
+.three-panel-right .magnitude-value {
+  color: var(--right-theme-accent, #ffffff) !important;
+}
+
+.three-panel-right .vote-history-item-modern:hover {
+  border-color: var(--right-theme-accent-light, #555);
+  box-shadow: 0 4px 12px var(--right-theme-accent, rgba(0, 0, 0, 0.4));
 }
 
 /* Modern Delete Button */

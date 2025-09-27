@@ -1,7 +1,10 @@
 import React from 'react';
+import { useDynamicTheme } from '../contexts/DynamicThemeContext';
 
 // Reusable component to display individual vote items
 function VoteItem({ vote, showDelete = false, onDelete, isDeleting, compact = false, getSongById }) {
+  const { getRightScoreColors } = useDynamicTheme();
+  
   // Handle different vote data structures
   const leftEntity = vote.left_entity_pk || vote.left_pk;
   const rightEntity = vote.right_entity_pk || vote.right_pk;
@@ -60,9 +63,10 @@ function VoteItem({ vote, showDelete = false, onDelete, isDeleting, compact = fa
   };
 
   const getMagnitudeColor = (magnitude) => {
-    if (Math.abs(magnitude) > 25) return '#e74c3c';
-    if (Math.abs(magnitude) > 0) return '#f39c12';
-    return '#95a5a6';
+    // Use right theme colors instead of hardcoded colors
+    const normalizedMagnitude = (Math.abs(magnitude) + 50) / 100; // 0 to 1 scale
+    const rightColors = getRightScoreColors(normalizedMagnitude, { min: 0, max: 1 });
+    return rightColors.backgroundColor;
   };
 
   // Visual magnitude slider component
@@ -77,18 +81,22 @@ function VoteItem({ vote, showDelete = false, onDelete, isDeleting, compact = fa
             className="magnitude-slider-fill"
             style={{
               width: `${normalizedPosition}%`,
-              backgroundColor: color
+              backgroundColor: color,
+              background: `var(--right-theme-gradient)`
             }}
           />
           <div 
             className="magnitude-slider-thumb"
             style={{
               left: `${normalizedPosition}%`,
-              backgroundColor: color
+              backgroundColor: `var(--right-theme-accent)`,
+              borderColor: `var(--right-theme-accent-dark)`
             }}
           />
         </div>
-        <div className="magnitude-value">{magnitude > 0 ? '+' : ''}{magnitude}</div>
+        <div className="magnitude-value" style={{ color: `var(--right-theme-accent)` }}>
+          {magnitude > 0 ? '+' : ''}{magnitude}
+        </div>
       </div>
     );
   };

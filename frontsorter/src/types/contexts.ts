@@ -87,8 +87,14 @@ export interface ThemeColors {
 export interface DynamicThemeContextType {
   theme: ThemeColors;
   updateThemeFromImage: (imageUrl: string) => Promise<void>;
+  updateRightThemeFromImage: (imageUrl: string) => Promise<void>;
   getScoreColors: (score: number) => { color: string; backgroundColor: string };
+  getRightScoreColors: (score: number) => { color: string; backgroundColor: string };
   getCSSVariables: () => Record<string, string>;
+  isExtractingColors: boolean;
+  isExtractingRightColors: boolean;
+  extractedColors: any;
+  rightExtractedColors: any;
 }
 
 // Pinned Song Store Types
