@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, createRef } from 'react';
 import { CSSTransition, SwitchTransition } from 'react-transition-group';
 import { MapProvider } from './MapContext';
 import { useRoomMap } from './useRoomMap';
@@ -27,6 +27,7 @@ const renderPanels = (panels: PanelDefinition[]) => {
 const RoomView: React.FC = () => {
   const { currentRoom, move, teleport, lastDirection, progress, progressLoading } = useRoomMap();
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const transitionNodeRef = useMemo(() => createRef<HTMLDivElement>(), [currentRoom?.coord]);
   const [announce, setAnnounce] = useState('');
 
   const directionClass = lastDirection ? directionClassMap[lastDirection] : 'slide-in-place';
@@ -111,8 +112,13 @@ const RoomView: React.FC = () => {
       </div>
       <div className="room-shell__content" ref={containerRef} tabIndex={-1}>
         <SwitchTransition mode="out-in">
-          <CSSTransition key={currentRoom.coord} addEndListener={(node, done) => node.addEventListener('transitionend', done, false)} classNames={directionClass}>
-            <div className="room-panels">
+          <CSSTransition
+            key={currentRoom.coord}
+            nodeRef={transitionNodeRef}
+            classNames={directionClass}
+            timeout={250}
+          >
+            <div ref={transitionNodeRef} className="room-panels">
               {renderPanels(currentRoom.panels)}
             </div>
           </CSSTransition>
