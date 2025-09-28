@@ -95,11 +95,8 @@ class SorterOrchestrator:
         """Create .env file if it doesn't exist and sync with rustsorter."""
         env_file = self.project_root / ".env"
         if not env_file.exists():
-            console.print("📝 Creating .env file...", style="blue")
-            env_file.write_text("""DATABASE_URL=postgres://postgres:password@localhost:5438/postgres?sslmode=disable
-SPOTIFY_CLIENT_ID=dummy_spotify_client_id_for_development
-SPOTIFY_CLIENT_SECRET=dummy_spotify_client_secret_for_development
-""")
+            console.print("📝 no env file found, please run 'uv run main.py setup' to create it...", style="blue")
+            raise typer.Exit(1)
         # Sync env files after ensuring main exists
         self.sync_env_to_rustsorter()
 
@@ -503,10 +500,6 @@ def sqlx_prepare():
             if "=" in line and not line.startswith("#"):
                 key, value = line.split("=", 1)
                 env[key] = value
-    
-    # Ensure DATABASE_URL is explicitly set with correct port
-    if "DATABASE_URL" not in env or "5432" in env.get("DATABASE_URL", ""):
-        env["DATABASE_URL"] = "postgres://postgres:password@localhost:5438/postgres?sslmode=disable"
     
     result = orchestrator.run_command(["cargo", "sqlx", "prepare"], cwd=orchestrator.project_root / "rustsorter", env=env)
     
