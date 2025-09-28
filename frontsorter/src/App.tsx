@@ -1,17 +1,10 @@
 import React from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import "./App.css";
 import "./styles/spotify-player.css";
 
 import Layout from "./Layout";
-
-import ProfilePage from "./pages/ProfilePage";
-import EntitiesIndex from "./pages/EntitiesIndex";
-import EntityDetail from "./pages/EntityDetail";
-import CreateEntityPage from "./pages/CreateEntityPage";
-import TodoPage from "./pages/TodoPage";
-import SpotifySongsPage from "./pages/SpotifySongsPage";
-import { PoolPage } from "./pages/PoolPage";
+import { RoomExperience } from "./map/RoomExperience";
 
 // Auth pages (outside main layout)
 import LoginPage from "./pages/LoginPage";
@@ -29,17 +22,10 @@ function App() {
       <Route path="/auth/error" element={<AuthErrorPage />} />
 
       {/* Main app routes (with layout) */}
-      <Route path="/" element={<Layout />}>
-        <Route index element={<EntitiesIndex />} />
-        <Route path="spotify" element={<SpotifySongsPage />} />
-        <Route path="spotify/pool" element={<PoolPage />} />
-        <Route path="entity/new" element={<CreateEntityPage />} />
-        <Route path="entity/:ns/:pk" element={<EntityDetail />} />
-
-        <Route path="todos" element={<TodoPage />} />
-
-        <Route path="profile" element={<ProfilePage />} />
-        <Route path="*" element={<div className="p-4">Page Not Found</div>} />
+      <Route element={<Layout />}>
+        <Route index element={<Navigate to="/map/spotify/0,0" replace />} />
+        <Route path="/map/spotify/:coord" element={<RoomExperience />} />
+        <Route path="*" element={<Navigate to="/map/spotify/0,0" replace />} />
       </Route>
     </Routes>
   );
