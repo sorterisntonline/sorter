@@ -33,12 +33,12 @@ jobs:
           --health-timeout 5s
           --health-retries 5
         ports:
-          - 5432:5432
+          - 5439:5432
 
     env:
       # Speed up builds (incremental off is usually faster/cleaner in CI)
       CARGO_INCREMENTAL: "0"
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db?sslmode=disable
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5439/test_db?sslmode=disable
       DBMATE_NO_DUMP_SCHEMA: "1"
       STEAM_API_KEY: ${{ secrets.STEAM_API_KEY }}
 
@@ -91,7 +91,7 @@ jobs:
         working-directory: .
         run: uv run main.py migrate
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db?sslmode=disable
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5439/test_db?sslmode=disable
 
       - name: Build Rust backend
         working-directory: .
