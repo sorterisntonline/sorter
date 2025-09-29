@@ -123,6 +123,7 @@ function VoteHistoryPanel({ user, selectedSong }) {
               isDeleting={deleteMutation.isPending}
               compact={false}
               getSongById={getSongById}
+              themeSide="right"
             />
           ))}
         </div>

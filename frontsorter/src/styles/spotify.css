@@ -722,8 +722,8 @@
 }
 
 .song-item.selected {
-  background: #e3f2fd;
-  border-left: 2px solid #2196f3;
+  background: var(--theme-accent-bg, rgba(33, 150, 243, 0.1));
+  border-left: 2px solid var(--theme-accent, #2196f3);
   padding-left: 6px;
   padding-top: 0;
   padding-bottom: 0;

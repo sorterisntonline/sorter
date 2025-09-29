@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, CSSProperties } from 'react';
+import chroma from 'chroma-js';
 import useColorExtraction from '../hooks/useColorExtraction';
 import { DynamicThemeContextType, DynamicThemeProviderProps, ThemeColors } from '../types/contexts';
 
@@ -15,7 +16,9 @@ export const useDynamicTheme = () => {
 export const DynamicThemeProvider = ({ children }: DynamicThemeProviderProps) => {
   const [currentImageUrl, setCurrentImageUrl] = useState(null);
   const [rightImageUrl, setRightImageUrl] = useState(null);
-  const [theme, setTheme] = useState<ThemeColors>({
+  
+  // Separate theme states for left and right panels
+  const [leftTheme, setLeftTheme] = useState<ThemeColors>({
     primary: '#1a1a1a',
     secondary: '#2a2a2a',
     accent: '#3b82f6',
@@ -28,13 +31,27 @@ export const DynamicThemeProvider = ({ children }: DynamicThemeProviderProps) =>
     radialGradient: 'radial-gradient(circle at center, #3b82f6, #1a1a1a)'
   });
 
+  const [rightTheme, setRightTheme] = useState<ThemeColors>({
+    primary: '#1a1a1a',
+    secondary: '#2a2a2a',
+    accent: '#f59e0b',
+    accentDark: '#d97706',
+    accentLight: '#fbbf24',
+    text: '#ffffff',
+    textSecondary: '#a1a1aa',
+    border: '#404040',
+    gradient: 'linear-gradient(135deg, #f59e0b, #1a1a1a)',
+    radialGradient: 'radial-gradient(circle at center, #f59e0b, #1a1a1a)'
+  });
+
   const { colors: extractedColors, isLoading } = useColorExtraction(currentImageUrl);
   const { colors: rightExtractedColors, isLoading: isLoadingRight } = useColorExtraction(rightImageUrl);
 
+  // Update left theme when left image colors are extracted
   useEffect(() => {
     if (extractedColors) {
-      console.log('🎨 DynamicThemeContext: Updating theme with new colors', extractedColors.css);
-      setTheme(prevTheme => ({
+      console.log('🎨 DynamicThemeContext: Updating left theme with new colors', extractedColors.css);
+      setLeftTheme(prevTheme => ({
         ...prevTheme,
         accent: extractedColors.css.accent,
         accentDark: extractedColors.css.darkVibrant,
@@ -44,6 +61,21 @@ export const DynamicThemeProvider = ({ children }: DynamicThemeProviderProps) =>
       }));
     }
   }, [extractedColors]);
+
+  // Update right theme when right image colors are extracted
+  useEffect(() => {
+    if (rightExtractedColors) {
+      console.log('🎨 DynamicThemeContext: Updating right theme with new colors', rightExtractedColors.css);
+      setRightTheme(prevTheme => ({
+        ...prevTheme,
+        accent: rightExtractedColors.css.accent,
+        accentDark: rightExtractedColors.css.darkVibrant,
+        accentLight: rightExtractedColors.css.lightAccent,
+        gradient: rightExtractedColors.css.gradient,
+        radialGradient: rightExtractedColors.css.radialGradient
+      }));
+    }
+  }, [rightExtractedColors]);
 
   const updateThemeFromImage = async (imageUrl: string) => {
     console.log('🎨 updateThemeFromImage called with:', imageUrl);
@@ -56,10 +88,13 @@ export const DynamicThemeProvider = ({ children }: DynamicThemeProviderProps) =>
   };
 
   const getScoreColors = (score: number, scoreRange = { min: 0, max: 1 }) => {
+    console.log('🎨 getScoreColors called with score:', score, 'extractedColors:', !!extractedColors, 'gradientScale:', !!extractedColors?.gradientScale);
+    
     if (!extractedColors || !extractedColors.gradientScale) {
-      // Fallback to blue scale
+      // Fallback to blue scale - but make it more vibrant
+      console.log('🎨 Using fallback colors (no extraction available)');
       const normalizedScore = (score - scoreRange.min) / (scoreRange.max - scoreRange.min);
-      const blueScale = ['#1e3a8a', '#3b82f6', '#93c5fd', '#dbeafe', '#ffffff'];
+      const blueScale = ['#1e40af', '#3b82f6', '#60a5fa', '#93c5fd', '#dbeafe'];
       const color = blueScale[Math.floor(normalizedScore * (blueScale.length - 1))] || blueScale[0];
       return {
         color: normalizedScore > 0.5 ? '#000000' : '#ffffff',
@@ -70,7 +105,8 @@ export const DynamicThemeProvider = ({ children }: DynamicThemeProviderProps) =>
     const normalizedScore = Math.max(0, Math.min(1, (score - scoreRange.min) / (scoreRange.max - scoreRange.min)));
     const backgroundColor = extractedColors.gradientScale(normalizedScore).hex();
     const color = extractedColors.gradientScale(normalizedScore).luminance() > 0.5 ? '#000000' : '#ffffff';
-
+    
+    console.log('🎨 Using extracted colors - backgroundColor:', backgroundColor, 'textColor:', color);
     return { color, backgroundColor };
   };
 
@@ -94,30 +130,48 @@ export const DynamicThemeProvider = ({ children }: DynamicThemeProviderProps) =>
   };
 
   const getCSSVariables = () => {
-    const rightTheme = rightExtractedColors?.css || {};
+    // Create semi-transparent background colors from the accents
+    const leftAccentBg = leftTheme.accent 
+      ? chroma(leftTheme.accent).alpha(0.15).css()
+      : 'rgba(33, 150, 243, 0.1)';
+    
+    const rightAccentBg = rightTheme.accent 
+      ? chroma(rightTheme.accent).alpha(0.15).css()
+      : 'rgba(245, 158, 11, 0.1)';
+    
     return {
-      '--theme-primary': theme.primary,
-      '--theme-secondary': theme.secondary,
-      '--theme-accent': theme.accent,
-      '--theme-accent-dark': theme.accentDark || theme.accent,
-      '--theme-accent-light': theme.accentLight || theme.accent,
-      '--theme-text': theme.text,
-      '--theme-text-secondary': theme.textSecondary,
-      '--theme-border': theme.border,
-      '--theme-gradient': theme.gradient || `linear-gradient(135deg, ${theme.accent}, ${theme.primary})`,
-      '--theme-radial-gradient': theme.radialGradient || `radial-gradient(circle at center, ${theme.accent}, ${theme.primary})`,
+      // Left panel theme variables (from leftTheme state)
+      '--theme-primary': leftTheme.primary,
+      '--theme-secondary': leftTheme.secondary,
+      '--theme-accent': leftTheme.accent,
+      '--theme-accent-dark': leftTheme.accentDark || leftTheme.accent,
+      '--theme-accent-light': leftTheme.accentLight || leftTheme.accent,
+      '--theme-accent-bg': leftAccentBg,
+      '--theme-text': leftTheme.text,
+      '--theme-text-secondary': leftTheme.textSecondary,
+      '--theme-border': leftTheme.border,
+      '--theme-gradient': leftTheme.gradient || `linear-gradient(135deg, ${leftTheme.accent}, ${leftTheme.primary})`,
+      '--theme-radial-gradient': leftTheme.radialGradient || `radial-gradient(circle at center, ${leftTheme.accent}, ${leftTheme.primary})`,
       
-      // Right panel theme variables
-      '--right-theme-accent': rightTheme.accent || '#f59e0b',
-      '--right-theme-accent-dark': rightTheme.darkVibrant || '#d97706',
-      '--right-theme-accent-light': rightTheme.lightAccent || '#fbbf24',
-      '--right-theme-gradient': rightTheme.gradient || `linear-gradient(135deg, #f59e0b, #1a1a1a)`,
-      '--right-theme-radial-gradient': rightTheme.radialGradient || `radial-gradient(circle at center, #f59e0b, #1a1a1a)`
+      // Right panel theme variables (from rightTheme state)
+      '--right-theme-primary': rightTheme.primary,
+      '--right-theme-secondary': rightTheme.secondary,
+      '--right-theme-accent': rightTheme.accent,
+      '--right-theme-accent-dark': rightTheme.accentDark || rightTheme.accent,
+      '--right-theme-accent-light': rightTheme.accentLight || rightTheme.accent,
+      '--right-theme-accent-bg': rightAccentBg,
+      '--right-theme-text': rightTheme.text,
+      '--right-theme-text-secondary': rightTheme.textSecondary,
+      '--right-theme-border': rightTheme.border,
+      '--right-theme-gradient': rightTheme.gradient || `linear-gradient(135deg, ${rightTheme.accent}, ${rightTheme.primary})`,
+      '--right-theme-radial-gradient': rightTheme.radialGradient || `radial-gradient(circle at center, ${rightTheme.accent}, ${rightTheme.primary})`
     };
   };
 
   const value = {
-    theme,
+    theme: leftTheme, // Keep backward compatibility
+    leftTheme,
+    rightTheme,
     updateThemeFromImage,
     updateRightThemeFromImage,
     getScoreColors,

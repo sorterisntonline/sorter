@@ -2,8 +2,8 @@ import React from 'react';
 import { useDynamicTheme } from '../contexts/DynamicThemeContext';
 
 // Reusable component to display individual vote items
-function VoteItem({ vote, showDelete = false, onDelete, isDeleting, compact = false, getSongById }) {
-  const { getRightScoreColors } = useDynamicTheme();
+function VoteItem({ vote, showDelete = false, onDelete, isDeleting, compact = false, getSongById, themeSide = 'left' }) {
+  const { getRightScoreColors, getScoreColors } = useDynamicTheme();
   
   // Handle different vote data structures
   const leftEntity = vote.left_entity_pk || vote.left_pk;
@@ -63,10 +63,11 @@ function VoteItem({ vote, showDelete = false, onDelete, isDeleting, compact = fa
   };
 
   const getMagnitudeColor = (magnitude) => {
-    // Use right theme colors instead of hardcoded colors
+    // Choose the correct color function based on themeSide prop
+    const colorFunction = themeSide === 'right' ? getRightScoreColors : getScoreColors;
     const normalizedMagnitude = (Math.abs(magnitude) + 50) / 100; // 0 to 1 scale
-    const rightColors = getRightScoreColors(normalizedMagnitude, { min: 0, max: 1 });
-    return rightColors.backgroundColor;
+    const colors = colorFunction(normalizedMagnitude, { min: 0, max: 1 });
+    return colors.backgroundColor;
   };
 
   // Visual magnitude slider component
@@ -81,20 +82,18 @@ function VoteItem({ vote, showDelete = false, onDelete, isDeleting, compact = fa
             className="magnitude-slider-fill"
             style={{
               width: `${normalizedPosition}%`,
-              backgroundColor: color,
-              background: `var(--right-theme-gradient)`
+              backgroundColor: color
             }}
           />
           <div 
             className="magnitude-slider-thumb"
             style={{
               left: `${normalizedPosition}%`,
-              backgroundColor: `var(--right-theme-accent)`,
-              borderColor: `var(--right-theme-accent-dark)`
+              backgroundColor: color
             }}
           />
         </div>
-        <div className="magnitude-value" style={{ color: `var(--right-theme-accent)` }}>
+        <div className="magnitude-value">
           {magnitude > 0 ? '+' : ''}{magnitude}
         </div>
       </div>

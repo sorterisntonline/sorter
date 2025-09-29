@@ -34,18 +34,18 @@ const useColorExtraction = (imageUrl) => {
               return color.get('hsl.s') > most.get('hsl.s') ? color : most;
             }, chromaColors[0]);
 
-            // Create dark mode compatible colors
-            const darkVibrant = vibrantColor.set('hsl.l', 0.3); // Darker version
-            const accent = vibrantColor.set('hsl.l', 0.6); // Medium lightness for accents
-            const lightAccent = vibrantColor.set('hsl.l', 0.8); // Light version
+            // Create dark mode compatible colors - make them much brighter and more visible
+            const darkVibrant = vibrantColor.set('hsl.l', 0.45).set('hsl.s', 0.8); // Brighter darker version
+            const accent = vibrantColor.set('hsl.l', 0.65).set('hsl.s', 0.9); // Bright and saturated for accents  
+            const lightAccent = vibrantColor.set('hsl.l', 0.75).set('hsl.s', 0.7); // Light version
 
-            // Create gradient scale: low scores = black (fade to background), high scores = vibrant
+            // Create gradient scale: low scores = darker but visible, high scores = vibrant
             const gradientScale = chroma.scale([
-              chroma('#000000'),  // Low scores = pure black (disappears into background)
-              chroma('#1a1a1a'),  // Very low = almost black
+              chroma('#2a2a2a'),  // Low scores = visible dark gray instead of black
+              chroma('#404040'),  // Very low = medium dark
               darkVibrant,        // Medium-high scores = dark vibrant
               accent,             // High scores = vibrant accent
-              vibrantColor        // Highest scores = most vibrant
+              lightAccent         // Highest scores = brightest
             ]).mode('lch');
 
             const colorResult = {
