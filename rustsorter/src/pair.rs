@@ -410,13 +410,20 @@ async fn get_filtered_children(
         .filter_map(|(entity, is_in)| if is_in { Some(entity) } else { None })
         .collect();
     
-    // Apply pool filtering - only include entities that are explicitly in the user's pool
-    crate::pool::filter_entities_by_pool(
-        state, 
-        user_id, 
-        &list_filtered, 
-        crate::pool::PoolMembershipStatus::InPool
-    ).await
+    // If we have a pin (specific entity requested), allow it regardless of pool status
+    // since the user explicitly wants this entity
+    if pin_ns.is_some() && pin_pk.is_some() {
+        // For pinned entities, skip pool filtering - user explicitly requested this entity
+        Ok(list_filtered)
+    } else {
+        // Apply pool filtering - only include entities that are explicitly in the user's pool
+        crate::pool::filter_entities_by_pool(
+            state, 
+            user_id, 
+            &list_filtered, 
+            crate::pool::PoolMembershipStatus::InPool
+        ).await
+    }
 }
 
 async fn get_pair_handler(
