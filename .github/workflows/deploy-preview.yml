@@ -13,7 +13,7 @@ concurrency:
 jobs:
   deploy_preview_app:
     name: Deploy Preview App
-    runs-on: ubuntu-latest
+    runs-on: ['homelab', 'texas']
 
     environment:
         name: pr-${{ github.event.number }}

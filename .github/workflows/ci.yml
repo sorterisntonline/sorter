@@ -14,7 +14,7 @@ permissions:
 jobs:
   test:
     name: Build and Test (Rust)
-    runs-on: ubuntu-latest
+    runs-on: ['homelab', 'texas']
     defaults:
       run:
         working-directory: rustsorter
