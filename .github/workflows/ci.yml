@@ -83,8 +83,11 @@ jobs:
 
       - name: Install dbmate
         run: |
-          curl -fsSL -o /usr/local/bin/dbmate https://github.com/amacneil/dbmate/releases/latest/download/dbmate-linux-amd64
-          chmod +x /usr/local/bin/dbmate
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL https://github.com/amacneil/dbmate/releases/latest/download/dbmate-linux-amd64 \
+            -o "$HOME/.local/bin/dbmate"
+          chmod +x "$HOME/.local/bin/dbmate"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           dbmate --version
 
       - name: Prepare database (create + migrate)
