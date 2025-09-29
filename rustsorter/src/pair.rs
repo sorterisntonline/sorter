@@ -553,7 +553,7 @@ mod tests {
         let entities = vec![];
 
         let result = select_entity_pair(&entities, &entities);
-        assert_eq!(result.err(), Some(PairSelectionError::PinNotFound));
+        assert_eq!(result.err(), Some(PairSelectionError::EmptyPool));
     }
 
     #[test]
