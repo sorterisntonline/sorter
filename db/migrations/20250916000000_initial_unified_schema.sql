@@ -197,23 +197,6 @@ CREATE TABLE votes(
   PRIMARY KEY (left_entity_ns, left_entity_pk, right_entity_ns, right_entity_pk, user_id, attribute_id, created_at)
 );
 
--- Slug system for entity discovery
-CREATE TABLE global_slugs(
-  slug text PRIMARY KEY,
-  ns text NOT NULL,
-  pk text NOT NULL,
-  FOREIGN KEY (ns, pk) REFERENCES entities(ns, pk)
-);
-
-CREATE TABLE scoped_slugs(
-  namespace text NOT NULL,
-  slug text NOT NULL,
-  ns text NOT NULL,
-  pk text NOT NULL,
-  PRIMARY KEY (namespace, slug),
-  FOREIGN KEY (ns, pk) REFERENCES entities(ns, pk)
-);
-
 -- Performance indexes
 CREATE INDEX idx_users_handle ON users(handle);
 CREATE INDEX idx_user_providers_external_id ON user_providers(provider_id, external_id);
@@ -236,8 +219,6 @@ CREATE INDEX ON entity_relationships(child_ns, child_pk);
 -- migrate:down
 DROP TABLE votes;
 DROP TABLE attributes;
-DROP TABLE global_slugs;
-DROP TABLE scoped_slugs;
 DROP TABLE entity_relationships;
 DROP TABLE entities;
 DROP TABLE api_keys;
