@@ -16,16 +16,23 @@ async def test_pool_status_unclassified_by_default():
         "title": "Test Entity for Pool"
     }
     
-    await make_request("POST", "/entity", json_payload=entity_data, is_authenticated=True)
-    
-    # Check pool status - should be unclassified by default
-    response = await make_request("GET", "/pool/test/pool_test_entity", is_authenticated=True)
-    data = response.json()
-    
-    assert data["entity_ns"] == "test"
-    assert data["entity_pk"] == "pool_test_entity"
-    assert data["status"] == "unclassified"
-    assert data["status_updated_at"] is None
+    try:
+        # Clean up any existing entity first
+        await make_request("DELETE", "/entity/test/pool_test_entity", is_authenticated=True, assert_status_code=[204, 404])
+        
+        await make_request("POST", "/entity", json_payload=entity_data, is_authenticated=True, assert_status_code=201)
+        
+        # Check pool status - should be unclassified by default
+        response = await make_request("GET", "/pool/test/pool_test_entity", is_authenticated=True)
+        data = response.json()
+        
+        assert data["entity_ns"] == "test"
+        assert data["entity_pk"] == "pool_test_entity"
+        assert data["status"] == "unclassified"
+        assert data["status_updated_at"] is None
+    finally:
+        # Clean up
+        await make_request("DELETE", "/entity/test/pool_test_entity", is_authenticated=True, assert_status_code=[204, 404])
 
 
 @pytest.mark.asyncio
@@ -33,12 +40,12 @@ async def test_add_entity_to_pool():
     """Test adding an entity to the pool (in_pool = true)."""
     # Create a test entity
     entity_data = {
-        "ns": "test",
-        "pk": "pool_add_test", 
-        "title": "Test Entity for Adding"
+    "ns": "test",
+    "pk": "pool_add_test",
+    "title": "Test Entity for Adding"
     }
     
-    await make_request("POST", "/entity", json_payload=entity_data, is_authenticated=True)
+    await make_request("POST", "/entity", json_payload=entity_data, is_authenticated=True, assert_status_code=201)
     
     # Add to pool
     response = await make_request("POST", "/pool/test/pool_add_test/add", is_authenticated=True)
@@ -65,7 +72,7 @@ async def test_block_entity_from_pool():
         "title": "Test Entity for Blocking"
     }
     
-    await make_request("POST", "/entity", json_payload=entity_data, is_authenticated=True)
+    await make_request("POST", "/entity", json_payload=entity_data, is_authenticated=True, assert_status_code=201)
     
     # Block from pool
     response = await make_request("POST", "/pool/test/pool_block_test/block", is_authenticated=True)
@@ -87,7 +94,7 @@ async def test_remove_entity_from_pool():
         "title": "Test Entity for Removing"
     }
     
-    await make_request("POST", "/entity", json_payload=entity_data, is_authenticated=True)
+    await make_request("POST", "/entity", json_payload=entity_data, is_authenticated=True, assert_status_code=201)
     
     # First add to pool
     await make_request("POST", "/pool/test/pool_remove_test/add", is_authenticated=True)
@@ -112,7 +119,7 @@ async def test_pool_status_transitions():
         "title": "Test Entity for Transitions"
     }
     
-    await make_request("POST", "/entity", json_payload=entity_data, is_authenticated=True)
+    await make_request("POST", "/entity", json_payload=entity_data, is_authenticated=True, assert_status_code=201)
     
     # Start: unclassified
     response = await make_request("GET", "/pool/test/pool_transition_test", is_authenticated=True)
@@ -155,7 +162,7 @@ async def test_batch_pool_operations():
             "pk": f"batch_test_{i}",
             "title": f"Batch Test Entity {i}"
         }
-        await make_request("POST", "/entity", json_payload=entity_data, is_authenticated=True)
+        await make_request("POST", "/entity", json_payload=entity_data, is_authenticated=True, assert_status_code=201)
         test_entities.append((entity_data["ns"], entity_data["pk"]))
     
     # Prepare batch operations
@@ -198,7 +205,7 @@ async def test_list_pool_entities():
     
     for ns, pk, status in entities:
         entity_data = {"ns": ns, "pk": pk, "title": f"List Test Entity {pk}"}
-        await make_request("POST", "/entity", json_payload=entity_data, is_authenticated=True)
+        await make_request("POST", "/entity", json_payload=entity_data, is_authenticated=True, assert_status_code=201)
         
         if status == "in_pool":
             await make_request("POST", f"/pool/{ns}/{pk}/add", is_authenticated=True)
