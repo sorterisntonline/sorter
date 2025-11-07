@@ -6,4 +6,8 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "supervisord-mcp>=1.0.0",
+    "httpx>=0.23.0",
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-dependency>=0.5.1",
 ]
