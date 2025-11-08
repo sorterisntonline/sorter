@@ -44,22 +44,29 @@ async def test_add_entity_to_pool():
     "pk": "pool_add_test",
     "title": "Test Entity for Adding"
     }
-    
-    await make_request("POST", "/entity", json_payload=entity_data, is_authenticated=True, assert_status_code=201)
-    
-    # Add to pool
-    response = await make_request("POST", "/pool/test/pool_add_test/add", is_authenticated=True)
-    data = response.json()
-    
-    assert data["entity_ns"] == "test"
-    assert data["entity_pk"] == "pool_add_test"
-    assert data["status"] == "in_pool"
-    assert data["status_updated_at"] is not None
-    
-    # Verify status persists
-    response = await make_request("GET", "/pool/test/pool_add_test", is_authenticated=True)
-    data = response.json()
-    assert data["status"] == "in_pool"
+
+    try:
+        # Clean up any existing entity first
+        await make_request("DELETE", "/entity/test/pool_add_test", is_authenticated=True, assert_status_code=[204, 404])
+
+        await make_request("POST", "/entity", json_payload=entity_data, is_authenticated=True, assert_status_code=201)
+
+        # Add to pool
+        response = await make_request("POST", "/pool/test/pool_add_test/add", is_authenticated=True)
+        data = response.json()
+
+        assert data["entity_ns"] == "test"
+        assert data["entity_pk"] == "pool_add_test"
+        assert data["status"] == "in_pool"
+        assert data["status_updated_at"] is not None
+
+        # Verify status persists
+        response = await make_request("GET", "/pool/test/pool_add_test", is_authenticated=True)
+        data = response.json()
+        assert data["status"] == "in_pool"
+    finally:
+        # Clean up
+        await make_request("DELETE", "/entity/test/pool_add_test", is_authenticated=True, assert_status_code=[204, 404])
 
 
 @pytest.mark.asyncio
