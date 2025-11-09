@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { FaVoteYea, FaHistory, FaList, FaArrowLeft, FaArrowRight, FaTrash } from 'react-icons/fa';
+import { FaVoteYea, FaHistory, FaList, FaArrowLeft, FaArrowRight } from 'react-icons/fa';
 import { AuthAPI } from '../api/auth';
+import { RankingAPI } from '../api/ranking';
 import { fetchPairFn, submitVoteFn } from '../fetchers/voteEndpoints';
 import VoteHistoryPanel from '../components/VoteHistoryPanel';
 import '../styles/vote.css';
@@ -48,7 +49,7 @@ function VotePage() {
     queryKey: ['ranking', ns, pk],
     queryFn: () => {
       if (!ns || !pk) return null;
-      return AuthAPI.getSpotifyRanking(ns, pk);
+      return RankingAPI.getRanking(ns, pk);
     },
     enabled: !!(ns && pk),
     refetchOnWindowFocus: false,

@@ -11,7 +11,7 @@ import {
   Legend,
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
-import { AuthAPI } from '../api/auth';
+import { RankingAPI } from '../api/ranking';
 
 ChartJS.register(
   CategoryScale,
@@ -28,7 +28,7 @@ const RankingHistoryGraph = ({ user, songs }) => {
   // Query for ranking history
   const { data: historyData, isLoading, error } = useQuery({
     queryKey: ['ranking-history', user?.handle],
-    queryFn: () => AuthAPI.getRankingHistory('sorter.user', user.handle),
+    queryFn: () => RankingAPI.getRankingHistory('sorter.user', user.handle),
     enabled: !!user,
     refetchOnWindowFocus: false,
   });

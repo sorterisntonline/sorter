@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AuthAPI } from '../api/auth';
+import { RankingAPI } from '../api/ranking';
 
 const RankingHistoryPanel = ({ user, songs }) => {
   const [expandedSnapshots, setExpandedSnapshots] = useState(new Set());
@@ -8,7 +8,7 @@ const RankingHistoryPanel = ({ user, songs }) => {
   // Query for ranking history
   const { data: historyData, isLoading, error } = useQuery({
     queryKey: ['ranking-history', user?.handle],
-    queryFn: () => AuthAPI.getRankingHistory('sorter.user', user.handle),
+    queryFn: () => RankingAPI.getRankingHistory('sorter.user', user.handle),
     enabled: !!user,
     refetchOnWindowFocus: false,
   });

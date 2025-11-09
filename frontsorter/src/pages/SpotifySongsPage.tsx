@@ -3,6 +3,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import chroma from 'chroma-js';
 import { AuthAPI } from '../api/auth';
+import { RankingAPI } from '../api/ranking';
 import SelectedSongPanel from '../components/SelectedSongPanel';
 import VoteHistoryPanel from '../components/VoteHistoryPanel';
 import RankingHistoryGraph from '../components/RankingHistoryGraph';
@@ -141,7 +142,7 @@ function SpotifySongsPage() {
   // Query for ranking data
   const { data: ranking, isLoading: rankingLoading } = useQuery({
     queryKey: ['spotify-ranking', user?.handle],
-    queryFn: () => AuthAPI.getSpotifyRanking('sorter.user', user.handle),
+    queryFn: () => RankingAPI.getRanking('sorter.user', user.handle),
     enabled: !!user && !!songs,
     refetchOnWindowFocus: false,
   });

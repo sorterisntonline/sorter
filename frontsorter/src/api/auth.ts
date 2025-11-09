@@ -1,5 +1,7 @@
 const API_BASE = '/api';
 
+import { RankingAPI } from './ranking';
+
 export class AuthAPI {
   static async getSessionStatus() {
     const response = await fetch(`${API_BASE}/auth/status`, {
@@ -100,37 +102,17 @@ export class AuthAPI {
     return response.json();
   }
 
+  /**
+   * @deprecated Use RankingAPI.getRanking() instead. This method is kept for backward compatibility.
+   */
   static async getSpotifyRanking(userNs, userPk) {
-  const params = new URLSearchParams({
-  ns: userNs,
-  pk: userPk
-  });
-  const response = await fetch(`${API_BASE}/rank/rank?${params}`, {
-  credentials: 'include',
-  });
-
-  if (!response.ok) {
-  const error = await response.json();
-  throw new Error(error.error || `HTTP ${response.status}`);
+    return RankingAPI.getRanking(userNs, userPk);
   }
 
-  return response.json();
-  }
-
+  /**
+   * @deprecated Use RankingAPI.getRankingHistory() instead. This method is kept for backward compatibility.
+   */
   static async getRankingHistory(userNs, userPk) {
-    const params = new URLSearchParams({
-      ns: userNs,
-      pk: userPk
-    });
-    const response = await fetch(`${API_BASE}/rank/history?${params}`, {
-      credentials: 'include',
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || `HTTP ${response.status}`);
-    }
-
-    return response.json();
+    return RankingAPI.getRankingHistory(userNs, userPk);
   }
 }
