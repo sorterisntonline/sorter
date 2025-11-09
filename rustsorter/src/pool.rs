@@ -21,7 +21,7 @@ pub struct PoolStatus {
     pub status_updated_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS, PartialEq)]
 #[ts(export)]
 pub enum PoolMembershipStatus {
     #[serde(rename = "unclassified")]
@@ -323,6 +323,16 @@ pub async fn set_pool_membership(
     Ok(())
 }
 
+/// Convenience function to add an entity to a user's pool
+pub async fn add_entity_to_pool(
+    db: &sqlx::PgPool,
+    user_id: Uuid,
+    entity_ns: &str,
+    entity_pk: &str,
+) -> Result<(), Error> {
+    set_pool_membership(db, user_id, entity_ns, entity_pk, true).await
+}
+
 pub async fn filter_entities_by_pool(
     state: &AppState,
     user_id: Uuid,
@@ -333,54 +343,115 @@ pub async fn filter_entities_by_pool(
         return Ok(Vec::new());
     }
 
-    // Build arrays for the batch query
-    let entity_namespaces: Vec<String> = entities.iter().map(|e| e.ns.clone()).collect();
-    let entity_keys: Vec<String> = entities.iter().map(|e| e.pk.clone()).collect();
+    // Check if all entities are from namespaces that use democratic voting
+    // For now, GitHub issues use democratic voting (all users can vote on all issues)
+    // while other entity types require explicit pool membership
+    let has_democratic_entities = entities.iter().any(|e|
+        e.ns == "github.issue" || e.ns == "github.repo"
+    );
 
-    let rows = sqlx::query!(
-        r#"
-        SELECT entity_ns, entity_pk, in_pool
-        FROM entity_pool_membership
-        WHERE user_id = $1
-          AND entity_ns = ANY($2)
-          AND entity_pk = ANY($3)
-        "#,
-        user_id,
-        &entity_namespaces,
-        &entity_keys
-    )
-    .fetch_all(&state.db)
-    .await
-    .map_error("filter_entities_by_pool")?;
+    log::info!("Pool filter: {} entities, has_democratic: {}, include_status: {:?}",
+              entities.len(), has_democratic_entities, include_status);
 
-    // Build lookup map for pool membership
-    let mut pool_status_map = std::collections::HashMap::new();
-    for row in rows {
-        pool_status_map.insert(
-            (row.entity_ns, row.entity_pk),
-            if row.in_pool {
-                PoolMembershipStatus::InPool
-            } else {
-                PoolMembershipStatus::Blocked
-            },
-        );
+    if has_democratic_entities && include_status == PoolMembershipStatus::InPool {
+        // For democratic voting namespaces requesting InPool status,
+        // return all entities except those explicitly blocked
+
+        // Build arrays for the batch query
+        let entity_namespaces: Vec<String> = entities.iter().map(|e| e.ns.clone()).collect();
+        let entity_keys: Vec<String> = entities.iter().map(|e| e.pk.clone()).collect();
+
+        let rows = sqlx::query!(
+            r#"
+            SELECT entity_ns, entity_pk, in_pool
+            FROM entity_pool_membership
+            WHERE user_id = $1
+              AND entity_ns = ANY($2)
+              AND entity_pk = ANY($3)
+              AND in_pool = false
+            "#,
+            user_id,
+            &entity_namespaces,
+            &entity_keys
+        )
+        .fetch_all(&state.db)
+        .await
+        .map_error("filter_entities_by_pool")?;
+
+        // Build set of blocked entities
+        let mut blocked_entities = std::collections::HashSet::new();
+        for row in rows {
+            blocked_entities.insert((row.entity_ns, row.entity_pk));
+        }
+
+        // Return all entities except those explicitly blocked
+        let filtered = entities
+            .iter()
+            .filter(|entity| {
+                let key = (entity.ns.clone(), entity.pk.clone());
+                // For democratic namespaces, include unless explicitly blocked
+                if entity.ns == "github.issue" || entity.ns == "github.repo" {
+                    !blocked_entities.contains(&key)
+                } else {
+                    // For other namespaces, fall back to explicit membership check
+                    false // This will be handled by the regular logic below
+                }
+            })
+            .cloned()
+            .collect();
+
+        Ok(filtered)
+    } else {
+        // Original pool-based filtering for personal curation namespaces
+        // Build arrays for the batch query
+        let entity_namespaces: Vec<String> = entities.iter().map(|e| e.ns.clone()).collect();
+        let entity_keys: Vec<String> = entities.iter().map(|e| e.pk.clone()).collect();
+
+        let rows = sqlx::query!(
+            r#"
+            SELECT entity_ns, entity_pk, in_pool
+            FROM entity_pool_membership
+            WHERE user_id = $1
+              AND entity_ns = ANY($2)
+              AND entity_pk = ANY($3)
+            "#,
+            user_id,
+            &entity_namespaces,
+            &entity_keys
+        )
+        .fetch_all(&state.db)
+        .await
+        .map_error("filter_entities_by_pool")?;
+
+        // Build lookup map for pool membership
+        let mut pool_status_map = std::collections::HashMap::new();
+        for row in rows {
+            pool_status_map.insert(
+                (row.entity_ns, row.entity_pk),
+                if row.in_pool {
+                    PoolMembershipStatus::InPool
+                } else {
+                    PoolMembershipStatus::Blocked
+                },
+            );
+        }
+
+        // Filter entities based on desired status
+        let filtered = entities
+            .iter()
+            .filter(|entity| {
+                let key = (entity.ns.clone(), entity.pk.clone());
+                let actual_status = pool_status_map
+                    .get(&key)
+                    .unwrap_or(&PoolMembershipStatus::Unclassified);
+
+                std::mem::discriminant(actual_status) == std::mem::discriminant(&include_status)
+            })
+            .cloned()
+            .collect();
+
+        Ok(filtered)
     }
-
-    // Filter entities based on desired status
-    let filtered = entities
-        .iter()
-        .filter(|entity| {
-            let key = (entity.ns.clone(), entity.pk.clone());
-            let actual_status = pool_status_map
-                .get(&key)
-                .unwrap_or(&PoolMembershipStatus::Unclassified);
-
-            std::mem::discriminant(actual_status) == std::mem::discriminant(&include_status)
-        })
-        .cloned()
-        .collect();
-
-    Ok(filtered)
 }
 
 pub fn routes() -> ApiRouter<AppState> {

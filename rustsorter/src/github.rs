@@ -201,7 +201,7 @@ impl GitHubClient {
 /// Ingest a GitHub repository and its issues into our entity system
 async fn ingest_repository(
     State(state): State<AppState>,
-    AuthenticatedUser(_user): AuthenticatedUser,
+    AuthenticatedUser(user): AuthenticatedUser,
     Json(payload): Json<IngestRepoRequest>,
 ) -> Result<(StatusCode, Json<IngestRepoResponse>), Error> {
     info!("Ingesting GitHub repo: {}/{}", payload.owner, payload.repo);
@@ -225,7 +225,7 @@ async fn ingest_repository(
         Some(&format!("{} - {}", repo_data.full_name, repo_data.description.as_deref().unwrap_or("GitHub Repository"))),
         Some(&repo_data.owner.avatar_url),
         Some(&serde_json::to_value(&repo_data).unwrap()),
-        state.admin_user_id,
+        user.id,
     )
     .await
     .map_err(|e| Error::BadRequest {
@@ -252,7 +252,7 @@ async fn ingest_repository(
             Some(&issue.title),
             Some(&issue.user.avatar_url),
             Some(&serde_json::to_value(&issue).unwrap()),
-            state.admin_user_id,
+            user.id,
         ).await {
             Ok(_) => {
                 issues_ingested += 1;
@@ -283,7 +283,7 @@ async fn ingest_repository(
 /// Resync (update) a GitHub repository and its issues
 async fn resync_repository(
     State(state): State<AppState>,
-    AuthenticatedUser(_user): AuthenticatedUser,
+    AuthenticatedUser(user): AuthenticatedUser,
     Json(payload): Json<IngestRepoRequest>,
 ) -> Result<(StatusCode, Json<IngestRepoResponse>), Error> {
     info!("Resyncing GitHub repo: {}/{}", payload.owner, payload.repo);
@@ -307,7 +307,7 @@ async fn resync_repository(
         Some(&format!("{} - {}", repo_data.full_name, repo_data.description.as_deref().unwrap_or("GitHub Repository"))),
         Some(&repo_data.owner.avatar_url),
         Some(&serde_json::to_value(&repo_data).unwrap()),
-        state.admin_user_id,
+        user.id,
     )
     .await
     .map_err(|e| Error::BadRequest {
@@ -334,7 +334,7 @@ async fn resync_repository(
             Some(&issue.title),
             Some(&issue.user.avatar_url),
             Some(&serde_json::to_value(&issue).unwrap()),
-            state.admin_user_id,
+            user.id,
         ).await {
             Ok(_) => {
                 issues_synced += 1;
