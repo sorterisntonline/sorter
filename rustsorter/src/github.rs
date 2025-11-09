@@ -232,6 +232,19 @@ async fn ingest_repository(
         message: format!("Failed to create repository entity: {}", e).into(),
     })?;
 
+    // Set list behavior to exclude by default (we'll allow open issues explicitly)
+    sqlx::query_file!(
+        "../database/sql/list_action/upsert_list_behavior.sql",
+        repo_entity.ns,
+        repo_entity.pk,
+        false // include_by_default = false
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| Error::BadRequest {
+        message: format!("Failed to set list behavior: {}", e).into(),
+    })?;
+
     // Fetch and ingest issues
     let issues = github_client
         .get_repository_issues(&payload.owner, &payload.repo, "all")
@@ -245,6 +258,8 @@ async fn ingest_repository(
     for issue in issues {
         // Create issue entity
         let issue_pk = format!("{}#{}", repo_data.full_name, issue.number);
+        let is_open = issue.state == "open";
+
         match entity::create_entity(
             &state.db,
             "github.issue",
@@ -268,7 +283,23 @@ async fn ingest_repository(
                 ).await {
                     Ok(_) => {
                         issues_ingested += 1;
-                        debug!("Ingested issue #{}: {}", issue.number, issue.title);
+                        debug!("Ingested issue #{}: {} ({})", issue.number, issue.title, issue.state);
+
+                        // If issue is open, create an Allow action so it appears in the voting list
+                        if is_open {
+                            if let Err(e) = crate::list_actions::create_list_action(
+                                &state.db,
+                                user.id,
+                                &repo_entity.ns,
+                                &repo_entity.pk,
+                                "github.issue",
+                                &issue_pk,
+                                crate::list_actions::ListActionKind::Allow,
+                                None,
+                            ).await {
+                                warn!("Failed to create allow action for open issue #{}: {}", issue.number, e);
+                            }
+                        }
                     }
                     Err(e) => {
                         warn!("Failed to create relationship for issue #{}: {}", issue.number, e);
@@ -331,6 +362,19 @@ async fn resync_repository(
         message: format!("Failed to upsert repository entity: {}", e).into(),
     })?;
 
+    // Ensure list behavior is set to exclude by default (idempotent)
+    sqlx::query_file!(
+        "../database/sql/list_action/upsert_list_behavior.sql",
+        repo_entity.ns,
+        repo_entity.pk,
+        false // include_by_default = false
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| Error::BadRequest {
+        message: format!("Failed to set list behavior: {}", e).into(),
+    })?;
+
     // Fetch and ingest issues
     let issues = github_client
         .get_repository_issues(&payload.owner, &payload.repo, "all")
@@ -344,6 +388,8 @@ async fn resync_repository(
     for issue in issues {
         // Upsert issue entity (create if not exists, update if exists)
         let issue_pk = format!("{}#{}", repo_data.full_name, issue.number);
+        let is_open = issue.state == "open";
+
         match entity::upsert_entity(
             &state.db,
             "github.issue",
@@ -367,7 +413,28 @@ async fn resync_repository(
                 ).await {
                     Ok(_) => {
                         issues_synced += 1;
-                        debug!("Synced issue #{}: {}", issue.number, issue.title);
+                        debug!("Synced issue #{}: {} ({})", issue.number, issue.title, issue.state);
+
+                        // Update list action based on issue state
+                        let action = if is_open {
+                            crate::list_actions::ListActionKind::Allow
+                        } else {
+                            // Reset removes any Allow action and returns to default (excluded)
+                            crate::list_actions::ListActionKind::Reset
+                        };
+
+                        if let Err(e) = crate::list_actions::create_list_action(
+                            &state.db,
+                            user.id,
+                            &repo_entity.ns,
+                            &repo_entity.pk,
+                            "github.issue",
+                            &issue_pk,
+                            action,
+                            None,
+                        ).await {
+                            warn!("Failed to update list action for issue #{}: {}", issue.number, e);
+                        }
                     }
                     Err(e) => {
                         warn!("Failed to create/update relationship for issue #{}: {}", issue.number, e);
