@@ -65,6 +65,7 @@ export function FinderColumnComponent({
         style={{
           flex: 1,
           overflowY: 'auto',
+          backgroundColor: '#fff',
         }}
       >
         {column.isLoading && (

@@ -15,21 +15,15 @@ export function VoteWorkspace({ parentEntity, user }: VoteWorkspaceProps) {
   const [sliderValue, setSliderValue] = useState(0);
   const queryClient = useQueryClient();
 
-  if (!parentEntity) {
-    return (
-      <div style={{ padding: '40px', textAlign: 'center', color: '#666' }}>
-        Select an entity to start voting on its children
-      </div>
-    );
-  }
+  const ns = parentEntity?.ns;
+  const pk = parentEntity?.pk;
 
-  const { ns, pk } = parentEntity;
-
+  // Always call hooks unconditionally - use enabled flag to control execution
   // Get ranking data
   const { data: ranking, isLoading: rankingLoading } = useQuery({
     queryKey: ['ranking', ns, pk],
-    queryFn: () => RankingAPI.getRanking(ns, pk),
-    enabled: !!ns && !!pk,
+    queryFn: () => RankingAPI.getRanking(ns!, pk!),
+    enabled: !!(ns && pk),
     refetchOnWindowFocus: false,
   });
 
@@ -37,7 +31,7 @@ export function VoteWorkspace({ parentEntity, user }: VoteWorkspaceProps) {
   const { data: entities } = useQuery({
     queryKey: ['entities', ns],
     queryFn: async () => {
-      const response = await fetch(`/api/entity?ns=${encodeURIComponent(ns)}`, {
+      const response = await fetch(`/api/entity?ns=${encodeURIComponent(ns!)}`, {
         credentials: 'include',
       });
       if (!response.ok) throw new Error('Failed to fetch entities');
@@ -59,12 +53,23 @@ export function VoteWorkspace({ parentEntity, user }: VoteWorkspaceProps) {
   const voteMutation = useMutation({
     mutationFn: submitVoteFn,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['ranking', ns, pk] });
+      if (ns && pk) {
+        queryClient.invalidateQueries({ queryKey: ['ranking', ns, pk] });
+      }
       queryClient.invalidateQueries({ queryKey: ['vote-history', user?.id] });
       refetchPair();
       setSliderValue(0);
     },
   });
+
+  // Early return AFTER all hooks are called
+  if (!parentEntity) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center', color: '#666' }}>
+        Select an entity to start voting on its children
+      </div>
+    );
+  }
 
   const handleVote = () => {
     if (!pairData || sliderValue === 0) return;
