@@ -273,7 +273,7 @@ async def test_list_pool_entities():
                 "child_ns": ns,
                 "child_pk": pk
             }
-            await make_request("POST", "/entity_relationships/", json_payload=relationship_data, is_authenticated=True, assert_status_code=[201, 200])
+            await make_request("POST", "/entity_relationships", json_payload=relationship_data, is_authenticated=True, assert_status_code=[201, 200])
 
             if status == "in_pool":
                 await make_request("POST", f"/pool/{ns}/{pk}/add", is_authenticated=True)
