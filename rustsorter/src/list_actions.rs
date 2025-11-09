@@ -366,3 +366,33 @@ pub async fn resolve_children_membership(
 
     Ok((include_by_default, result))
 }
+
+/// Helper function to create a list action programmatically
+/// Used for automatic list management (e.g., adding imported songs)
+pub async fn create_list_action(
+    db: &sqlx::PgPool,
+    user_id: Uuid,
+    list_ns: &str,
+    list_pk: &str,
+    entity_ns: &str,
+    entity_pk: &str,
+    action: ListActionKind,
+    expires_at: Option<chrono::NaiveDateTime>,
+) -> Result<(), Error> {
+    query_file_as!(
+        ListActionRow,
+        "../database/sql/list_action/insert.sql",
+        user_id,
+        list_ns,
+        list_pk,
+        entity_ns,
+        entity_pk,
+        action.as_str(),
+        expires_at
+    )
+    .fetch_one(db)
+    .await
+    .map_error("create list action")?;
+
+    Ok(())
+}

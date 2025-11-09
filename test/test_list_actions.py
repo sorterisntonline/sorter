@@ -56,15 +56,7 @@ async def list_context():
             is_authenticated=True,
             assert_status_code=201,
         )
-        
-        # Add item to pool so it's available for pairing/voting
-        await make_request(
-            "POST",
-            f"/pool/{child_ns}/{child_pk}/add",
-            is_authenticated=True,
-            assert_status_code=200,
-        )
-        
+
         items.append({"ns": child_ns, "pk": child_pk})
 
     try:

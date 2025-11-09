@@ -455,16 +455,19 @@ pub async fn import_recent_songs(
             user.id,
         ).await?;
 
-        // Automatically add the imported track to the user's pool
-        if let Err(e) = crate::pool::set_pool_membership(
+        // Automatically allow the imported track in the user's list (opt-in by default)
+        if let Err(e) = crate::list_actions::create_list_action(
             &state.db,
             user.id,
+            "sorter.user",
+            &user.handle,
             "spotify.track",
             &track.id,
-            true, // in_pool = true
+            crate::list_actions::ListActionKind::Allow,
+            None,
         ).await {
-            warn!("Failed to add imported track to pool: {}", e);
-            // Don't fail the import if pool addition fails
+            warn!("Failed to add imported track to list: {}", e);
+            // Don't fail the import if list action creation fails
         }
 
         imported_count += 1;

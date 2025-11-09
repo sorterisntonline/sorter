@@ -6,14 +6,11 @@ import { useDynamicTheme } from '../contexts/DynamicThemeContext';
 import { useSpotifyPlayer } from '../contexts/SpotifyPlayerContext';
 import ThreePanelLayout from '../components/ThreePanelLayout';
 import {
-  fetchPoolEntities,
-  addToPool,
-  blockFromPool,
-  removeFromPool,
-  batchPoolOperations,
-  EntityWithPoolStatus,
-  PoolOperation,
-} from '../fetchers/poolEndpoints';
+  fetchListState,
+  createListAction,
+  batchListActions,
+  ListActionPayload,
+} from '../fetchers/listActionsEndpoints';
 import '../styles/pool.css';
 import '../styles/spotify.css';
 import '../styles/dynamic-theme.css';
@@ -24,10 +21,18 @@ const getLargestImageUrl = (images) => {
   return images[0].url;
 };
 
+interface Entity {
+  ns: string;
+  pk: string;
+  title?: string;
+  profile_picture_url?: string;
+  metadata?: any;
+}
+
 export function PoolPage() {
   const queryClient = useQueryClient();
-  const [selectedInPool, setSelectedInPool] = useState<Set<string>>(new Set());
-  const [selectedNotInPool, setSelectedNotInPool] = useState<Set<string>>(new Set());
+  const [selectedIncluded, setSelectedIncluded] = useState<Set<string>>(new Set());
+  const [selectedExcluded, setSelectedExcluded] = useState<Set<string>>(new Set());
   const [selectedSong, setSelectedSong] = useState(null);
   const { getCSSVariables } = useDynamicTheme();
   const { playTrack, queueTrack, isReady } = useSpotifyPlayer();
@@ -39,156 +44,141 @@ export function PoolPage() {
     refetchOnWindowFocus: false,
   });
 
-  // Query for user's recent songs (to get all available entities)
-  const { data: songs, isLoading: songsLoading } = useQuery({
-    queryKey: ['spotify-songs'],
-    queryFn: AuthAPI.getSpotifySongs,
-    refetchOnWindowFocus: false,
-  });
-
-  // Fetch entities for each pool status (all user's tracks)
+  // Fetch list state (included/excluded entities) for the user's Spotify tracks
   const {
-    data: inPoolEntities = [],
-    isLoading: loadingInPool,
+    data: listState,
+    isLoading,
   } = useQuery({
-    queryKey: ['poolEntities', { ns: 'spotify.track', status: 'in_pool' as const }],
-    queryFn: fetchPoolEntities,
+    queryKey: ['listState', 'sorter.user', user?.handle],
+    queryFn: () => fetchListState('sorter.user', user!.handle),
     enabled: !!user,
   });
-
-  const {
-    data: blockedEntities = [],
-    isLoading: loadingBlocked,
-  } = useQuery({
-    queryKey: ['poolEntities', { ns: 'spotify.track', status: 'blocked' as const }],
-    queryFn: fetchPoolEntities,
-    enabled: !!user,
-  });
-
-  const {
-    data: unclassifiedEntities = [],
-    isLoading: loadingUnclassified,
-  } = useQuery({
-    queryKey: ['poolEntities', { ns: 'spotify.track', status: 'unclassified' as const }],
-    queryFn: fetchPoolEntities,
-    enabled: !!user,
-  });
-
-  // Combine blocked and unclassified for the "NOT IN POOL" panel
-  const notInPoolEntities = [...blockedEntities, ...unclassifiedEntities];
 
   // Mutation for batch operations
   const batchMutation = useMutation({
-    mutationFn: (operations: PoolOperation[]) => batchPoolOperations(operations),
+    mutationFn: (actions: ListActionPayload[]) => batchListActions(actions),
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ['poolEntities'],
+        queryKey: ['listState'],
       });
-      setSelectedInPool(new Set());
-      setSelectedNotInPool(new Set());
+      setSelectedIncluded(new Set());
+      setSelectedExcluded(new Set());
     },
   });
 
   // Individual entity mutation
   const entityMutation = useMutation({
-    mutationFn: async ({ ns, pk, action }: { ns: string; pk: string; action: 'add' | 'block' | 'remove' }) => {
-      switch (action) {
-        case 'add':
-          return addToPool(ns, pk);
-        case 'block':
-          return blockFromPool(ns, pk);
-        case 'remove':
-          return removeFromPool(ns, pk);
-      }
+    mutationFn: async ({ ns, pk, action }: { ns: string; pk: string; action: 'allow' | 'deny' | 'reset' }) => {
+      if (!user) throw new Error('User not logged in');
+      return createListAction({
+        list_ns: 'sorter.user',
+        list_pk: user.handle,
+        entity_ns: ns,
+        entity_pk: pk,
+        action,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ['poolEntities'],
+        queryKey: ['listState'],
       });
     },
   });
 
-  const handleToggleSelection = (entityKey: string, isInPool: boolean) => {
-    if (isInPool) {
-      const newSelection = new Set(selectedInPool);
+  const handleToggleSelection = (entityKey: string, isIncluded: boolean) => {
+    if (isIncluded) {
+      const newSelection = new Set(selectedIncluded);
       if (newSelection.has(entityKey)) {
         newSelection.delete(entityKey);
       } else {
         newSelection.add(entityKey);
       }
-      setSelectedInPool(newSelection);
+      setSelectedIncluded(newSelection);
     } else {
-      const newSelection = new Set(selectedNotInPool);
+      const newSelection = new Set(selectedExcluded);
       if (newSelection.has(entityKey)) {
         newSelection.delete(entityKey);
       } else {
         newSelection.add(entityKey);
       }
-      setSelectedNotInPool(newSelection);
+      setSelectedExcluded(newSelection);
     }
   };
 
-  const handleSelectAll = (isInPool: boolean) => {
-    if (isInPool) {
-      const allKeys = new Set(inPoolEntities.map(e => e.pk));
-      const currentSelection = selectedInPool;
-      
+  const handleSelectAll = (isIncluded: boolean) => {
+    if (!listState) return;
+
+    if (isIncluded) {
+      const allKeys = new Set(listState.included.map(e => e.pk));
+      const currentSelection = selectedIncluded;
+
       // If all items are already selected, deselect all. Otherwise, select all.
-      if (currentSelection.size === allKeys.size && 
+      if (currentSelection.size === allKeys.size &&
           Array.from(allKeys).every(key => currentSelection.has(key))) {
-        setSelectedInPool(new Set());
+        setSelectedIncluded(new Set());
       } else {
-        setSelectedInPool(allKeys);
+        setSelectedIncluded(allKeys);
       }
     } else {
-      const allKeys = new Set(notInPoolEntities.map(e => e.pk));
-      const currentSelection = selectedNotInPool;
-      
+      const allKeys = new Set(listState.excluded.map(e => e.pk));
+      const currentSelection = selectedExcluded;
+
       // If all items are already selected, deselect all. Otherwise, select all.
-      if (currentSelection.size === allKeys.size && 
+      if (currentSelection.size === allKeys.size &&
           Array.from(allKeys).every(key => currentSelection.has(key))) {
-        setSelectedNotInPool(new Set());
+        setSelectedExcluded(new Set());
       } else {
-        setSelectedNotInPool(allKeys);
+        setSelectedExcluded(allKeys);
       }
     }
   };
 
-  const handleMoveToPool = () => {
-    const operations: PoolOperation[] = Array.from(selectedNotInPool).map(pk => ({
+  const handleIncludeSelected = () => {
+    if (!user) return;
+    const actions: ListActionPayload[] = Array.from(selectedExcluded).map(pk => ({
+      list_ns: 'sorter.user',
+      list_pk: user.handle,
       entity_ns: 'spotify.track',
       entity_pk: pk,
-      action: 'add' as const,
+      action: 'allow' as const,
     }));
-    batchMutation.mutate(operations);
+    batchMutation.mutate(actions);
   };
 
-  const handleBlockSelected = () => {
-    const operations: PoolOperation[] = Array.from(selectedInPool).map(pk => ({
+  const handleExcludeSelected = () => {
+    if (!user) return;
+    const actions: ListActionPayload[] = Array.from(selectedIncluded).map(pk => ({
+      list_ns: 'sorter.user',
+      list_pk: user.handle,
       entity_ns: 'spotify.track',
       entity_pk: pk,
-      action: 'block' as const,
+      action: 'deny' as const,
     }));
-    batchMutation.mutate(operations);
+    batchMutation.mutate(actions);
   };
 
-  const handleRemoveSelected = () => {
-    const operations: PoolOperation[] = [
-      ...Array.from(selectedInPool).map(pk => ({
+  const handleResetSelected = () => {
+    if (!user) return;
+    const actions: ListActionPayload[] = [
+      ...Array.from(selectedIncluded).map(pk => ({
+        list_ns: 'sorter.user',
+        list_pk: user.handle,
         entity_ns: 'spotify.track',
         entity_pk: pk,
-        action: 'remove' as const,
+        action: 'reset' as const,
       })),
-      ...Array.from(selectedNotInPool).map(pk => ({
+      ...Array.from(selectedExcluded).map(pk => ({
+        list_ns: 'sorter.user',
+        list_pk: user.handle,
         entity_ns: 'spotify.track',
         entity_pk: pk,
-        action: 'remove' as const,
+        action: 'reset' as const,
       })),
     ];
-    batchMutation.mutate(operations);
+    batchMutation.mutate(actions);
   };
 
-  const handleMoveEntity = (entity: EntityWithPoolStatus, action: 'add' | 'block' | 'remove') => {
+  const handleMoveEntity = (entity: Entity, action: 'allow' | 'deny' | 'reset') => {
     entityMutation.mutate({
       ns: entity.ns,
       pk: entity.pk,
@@ -196,71 +186,72 @@ export function PoolPage() {
     });
   };
 
-  const handlePlaySong = (entity: EntityWithPoolStatus) => {
+  const handlePlaySong = (entity: Entity) => {
     if (entity.ns?.includes('spotify.track')) {
       const uri = `spotify:track:${entity.pk}`;
       playTrack(uri);
     }
   };
 
-  const handleQueueSong = (entity: EntityWithPoolStatus) => {
+  const handleQueueSong = (entity: Entity) => {
     if (entity.ns?.includes('spotify.track')) {
       const uri = `spotify:track:${entity.pk}`;
       queueTrack(uri);
     }
   };
 
-  const isLoading = songsLoading || loadingInPool || loadingBlocked || loadingUnclassified;
-
   if (isLoading) {
     return (
       <div className="loading-container">
         <div className="loading-content">
           <div className="loading-spinner"></div>
-          <p>Loading pool data...</p>
+          <p>Loading selection data...</p>
         </div>
       </div>
     );
   }
 
-  // Left Panel - IN POOL
+  const includedEntities = listState?.included || [];
+  const excludedEntities = listState?.excluded || [];
+
+  // Left Panel - INCLUDED
   const leftPanel = (
     <>
       <div className="songs-header">
-        <span className="songs-title">IN POOL</span>
-        <span className="count">({inPoolEntities.length})</span>
-        <Link 
-          to="/spotify" 
+        <span className="songs-title">INCLUDED</span>
+        <span className="count">({includedEntities.length})</span>
+        <Link
+          to="/spotify"
           className="nav-link songs-link"
           title="Go back to songs and ranking"
         >
           ← Songs
         </Link>
       </div>
-      
+
       <div className="pool-controls">
         <button
           onClick={() => handleSelectAll(true)}
-          disabled={inPoolEntities.length === 0}
+          disabled={includedEntities.length === 0}
           className="select-all-btn"
         >
-          {selectedInPool.size === inPoolEntities.length && inPoolEntities.length > 0
+          {selectedIncluded.size === includedEntities.length && includedEntities.length > 0
             ? 'Deselect All'
             : 'Select All'}
         </button>
       </div>
 
       <div className="songs-container">
-        {inPoolEntities.map((entity) => (
+        {includedEntities.map((entity) => (
           <div
             key={entity.pk}
-            className={`song-item pool-entity ${selectedInPool.has(entity.pk) ? 'selected' : ''}`}
+            className={`song-item pool-entity ${selectedIncluded.has(entity.pk) ? 'selected' : ''}`}
             onClick={() => handleToggleSelection(entity.pk, true)}
           >
             <div className="pool-status">✓</div>
             {entity.metadata?.album?.images?.[0]?.url && (
-              <img 
-                src={entity.metadata.album.images[0].url} 
+              <img
+                src={entity.metadata.album.images[0].url}
                 alt="Album art"
                 className="album-art"
               />
@@ -297,9 +288,9 @@ export function PoolPage() {
                 className="action-btn block-btn"
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleMoveEntity(entity, 'block');
+                  handleMoveEntity(entity, 'deny');
                 }}
-                title="Block this song"
+                title="Exclude this song"
               >
                 ✗
               </button>
@@ -314,32 +305,32 @@ export function PoolPage() {
   const centerPanel = (
     <div className="pool-control-buttons">
       <h3>CONTROLS</h3>
-      
+
       <button
-        onClick={handleMoveToPool}
-        disabled={selectedNotInPool.size === 0 || batchMutation.isPending}
+        onClick={handleIncludeSelected}
+        disabled={selectedExcluded.size === 0 || batchMutation.isPending}
         className="control-btn move-to-pool"
-        title="Move selected items to pool"
+        title="Include selected items"
       >
-        ← Add ({selectedNotInPool.size})
+        ← Include ({selectedExcluded.size})
       </button>
 
       <button
-        onClick={handleBlockSelected}
-        disabled={selectedInPool.size === 0 || batchMutation.isPending}
+        onClick={handleExcludeSelected}
+        disabled={selectedIncluded.size === 0 || batchMutation.isPending}
         className="control-btn block-from-pool"
-        title="Block selected items from pool"
+        title="Exclude selected items"
       >
-        → Block ({selectedInPool.size})
+        → Exclude ({selectedIncluded.size})
       </button>
 
       <button
-        onClick={handleRemoveSelected}
-        disabled={(selectedInPool.size + selectedNotInPool.size) === 0 || batchMutation.isPending}
+        onClick={handleResetSelected}
+        disabled={(selectedIncluded.size + selectedExcluded.size) === 0 || batchMutation.isPending}
         className="control-btn remove-all"
-        title="Remove selected items (return to unclassified)"
+        title="Reset selected items (return to default behavior)"
       >
-        Remove ({selectedInPool.size + selectedNotInPool.size})
+        Reset ({selectedIncluded.size + selectedExcluded.size})
       </button>
 
       {batchMutation.isPending && (
@@ -348,45 +339,43 @@ export function PoolPage() {
 
       {batchMutation.error && (
         <div className="error-message">
-          Error: {batchMutation.error.message}
+          Error: {(batchMutation.error as Error).message}
         </div>
       )}
     </div>
   );
 
-  // Right Panel - NOT IN POOL
+  // Right Panel - EXCLUDED
   const rightPanel = (
     <>
       <div className="songs-header">
-        <span className="songs-title">NOT IN POOL</span>
-        <span className="count">({notInPoolEntities.length})</span>
+        <span className="songs-title">EXCLUDED</span>
+        <span className="count">({excludedEntities.length})</span>
       </div>
 
       <div className="pool-controls">
         <button
           onClick={() => handleSelectAll(false)}
-          disabled={notInPoolEntities.length === 0}
+          disabled={excludedEntities.length === 0}
           className="select-all-btn"
         >
-          {selectedNotInPool.size === notInPoolEntities.length && notInPoolEntities.length > 0
+          {selectedExcluded.size === excludedEntities.length && excludedEntities.length > 0
             ? 'Deselect All'
             : 'Select All'}
         </button>
       </div>
 
       <div className="songs-container">
-        {notInPoolEntities.map((entity) => (
+        {excludedEntities.map((entity) => (
           <div
             key={entity.pk}
-            className={`song-item pool-entity ${selectedNotInPool.has(entity.pk) ? 'selected' : ''}`}
+            className={`song-item pool-entity ${selectedExcluded.has(entity.pk) ? 'selected' : ''}`}
             onClick={() => handleToggleSelection(entity.pk, false)}
           >
-            <div className="pool-status">
-              {entity.pool_status === 'blocked' ? '✗' : ''}
-            </div>
+            <div className="pool-status">✗</div>
             {entity.metadata?.album?.images?.[0]?.url && (
-              <img 
-                src={entity.metadata.album.images[0].url} 
+              <img
+                src={entity.metadata.album.images[0].url}
                 alt="Album art"
                 className="album-art"
               />
@@ -423,9 +412,9 @@ export function PoolPage() {
                 className="action-btn add-btn"
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleMoveEntity(entity, 'add');
+                  handleMoveEntity(entity, 'allow');
                 }}
-                title="Add this song to pool"
+                title="Include this song"
               >
                 ✓
               </button>

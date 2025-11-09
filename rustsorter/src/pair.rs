@@ -389,6 +389,7 @@ async fn get_filtered_children(
     pin_ns: Option<&str>,
     pin_pk: Option<&str>,
 ) -> Result<Vec<crate::entity::Entity>, Error> {
+    // Step 1: Fetch all potential child entities (with optional pin filtering)
     let children = sqlx::query_file_as!(
         crate::entity::Entity,
         "../database/sql/entity/select_children_filtered.sql",
@@ -401,22 +402,18 @@ async fn get_filtered_children(
     .await
     .map_error("entity")?;
 
+    // Step 2: Use the list_actions system to determine final eligibility
     let (_, membership) =
         list_actions::resolve_children_membership(state, user_id, parent_ns, parent_pk, children)
             .await?;
 
-    let list_filtered: Vec<crate::entity::Entity> = membership
+    // Step 3: Filter the list based on the resolved membership
+    let eligible_entities: Vec<crate::entity::Entity> = membership
         .into_iter()
-        .filter_map(|(entity, is_in)| if is_in { Some(entity) } else { None })
+        .filter_map(|(entity, is_included)| if is_included { Some(entity) } else { None })
         .collect();
-    
-    // Apply pool filtering - only include entities that are explicitly in the user's pool
-    crate::pool::filter_entities_by_pool(
-        state, 
-        user_id, 
-        &list_filtered, 
-        crate::pool::PoolMembershipStatus::InPool
-    ).await
+
+    Ok(eligible_entities)
 }
 
 async fn get_pair_handler(
@@ -487,7 +484,7 @@ async fn get_pair_handler(
     }
     .map_err(|e| Error::BadRequest {
         message: match e {
-            PairSelectionError::EmptyPool => "No entities in your pool for comparison. Import some items and add them to your pool first.".into(),
+            PairSelectionError::EmptyPool => "No entities available for comparison. Import some items first.".into(),
             PairSelectionError::InsufficientEntities => "Not enough entities available for pairing.".into(),
             PairSelectionError::PinNotFound => "Requested pinned entity not found.".into(),
         }
