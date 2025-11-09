@@ -27,6 +27,7 @@ use rustsorter::{
     entity,
     entity_relationships,
     extractors::maybe_user::MaybeUser,
+    github,
     list_actions,
     models::{Error, Json},
     pagerank,
@@ -120,12 +121,23 @@ async fn main() -> Result<(), anyhow::Error> {
     let frontend_url = env::var("FRONTEND_URL")
         .unwrap_or_else(|_| "http://localhost:5173".to_string());
 
-    let app_state = AppState { 
+    // Look up admin user ID for GitHub ingestion
+    let admin_user_id = match api_key::get_user_by_handle(&pool, "admin").await {
+        Ok(user) => user.id,
+        Err(e) => {
+            eprintln!("[rustsorter] ERROR: Could not find admin user: {}", e);
+            eprintln!("[rustsorter] Make sure the admin user exists in the database");
+            std::process::exit(1);
+        }
+    };
+
+    let app_state = AppState {
         db: pool.clone(),
         spotify_client_id,
         spotify_client_secret,
         base_url,
         frontend_url,
+        admin_user_id,
     };
 
     let router = router(app_state);
@@ -173,6 +185,7 @@ fn router(app_state: AppState) -> Router {
         .nest("/keys", api_key::routes())
         .nest("/entity", entity::routes())
         .nest("/entity_relationships", entity_relationships::routes())
+        .nest("/github", github::routes())
         .nest("/list-actions", list_actions::routes())
         .nest("/pair", pair::routes())
         .nest("/pool", pool::routes())

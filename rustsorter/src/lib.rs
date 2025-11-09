@@ -5,6 +5,7 @@ pub mod auth_middleware;
 pub mod entity;
 pub mod entity_relationships;
 pub mod extractors;
+pub mod github;
 pub mod list_actions;
 pub mod models;
 pub mod pagerank;
