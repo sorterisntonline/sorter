@@ -242,11 +242,64 @@ async def test_batch_pool_operations():
 @pytest.mark.asyncio
 async def test_list_pool_entities():
     """Test listing entities with their pool status."""
-    # SKIP: This test requires complex entity relationships setup
-    # The /pool/list endpoint requires entities to have relationships with the user
-    # which involves creating entities in sorter.user namespace and linking them
-    # This is a complex integration that goes beyond pool functionality testing
-    pytest.skip("Requires complex entity relationship setup - pool list endpoint needs user relationships")
+    # Create test entities with different statuses
+    entities = [
+        ("test", "pool_list_1", "in_pool"),
+        ("test", "pool_list_2", "blocked"),
+        ("test", "pool_list_3", "unclassified"),
+        ("test", "pool_list_4", "in_pool"),
+    ]
+
+    try:
+        # Clean up any existing entities first
+        for ns, pk, status in entities:
+            await make_request("DELETE", f"/entity/{ns}/{pk}", is_authenticated=True, assert_status_code=[204, 404])
+
+        # Use admin user handle for relationships
+        user_handle = "admin"
+
+        # Create the admin user entity in sorter.user namespace (required for relationships)
+        admin_user_data = {"ns": "sorter.user", "pk": user_handle, "title": "Admin User"}
+        await make_request("POST", "/entity", json_payload=admin_user_data, is_authenticated=True, assert_status_code=[201, 409])
+
+        for ns, pk, status in entities:
+            entity_data = {"ns": ns, "pk": pk, "title": f"List Test Entity {pk}"}
+            await make_request("POST", "/entity", json_payload=entity_data, is_authenticated=True, assert_status_code=201)
+
+            # Create relationship required for pool list query
+            relationship_data = {
+                "parent_ns": "sorter.user",
+                "parent_pk": user_handle,
+                "child_ns": ns,
+                "child_pk": pk
+            }
+            await make_request("POST", "/entity_relationships/", json_payload=relationship_data, is_authenticated=True, assert_status_code=[201, 200])
+
+            if status == "in_pool":
+                await make_request("POST", f"/pool/{ns}/{pk}/add", is_authenticated=True)
+            elif status == "blocked":
+                await make_request("POST", f"/pool/{ns}/{pk}/block", is_authenticated=True)
+            # unclassified entities need no action
+
+        # List entities with test namespace
+        response = await make_request("GET", "/pool/list", params={"ns": "test"}, is_authenticated=True)
+        entities_data = response.json()
+
+        assert len(entities_data) >= 4
+
+        # Check that our test entities have the correct status
+        entity_statuses = {e["pk"]: e["pool_status"] for e in entities_data if e["pk"].startswith("pool_list_")}
+
+        assert entity_statuses.get("pool_list_1") == "in_pool"
+        assert entity_statuses.get("pool_list_2") == "blocked"
+        assert entity_statuses.get("pool_list_3") == "unclassified"
+        assert entity_statuses.get("pool_list_4") == "in_pool"
+    finally:
+        # Clean up
+        for ns, pk, status in entities:
+            await make_request("DELETE", f"/entity/{ns}/{pk}", is_authenticated=True, assert_status_code=[204, 404])
+        # Also cleanup admin user entity
+        await make_request("DELETE", "/entity/sorter.user/admin", is_authenticated=True, assert_status_code=[204, 404])
 
 
 @pytest.mark.asyncio
