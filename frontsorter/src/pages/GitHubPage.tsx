@@ -290,7 +290,7 @@ function GitHubPage() {
                   <span className="issue-count">{issues?.length || 0} open issues</span>
                   {issues && issues.length > 1 && (
                     <Link
-                      to={`/vote?ns=github.issue&pk=${encodeURIComponent(selectedRepo.pk)}`}
+                      to={`/vote?ns=github.repo&pk=${encodeURIComponent(selectedRepo.pk)}`}
                       className="btn-vote"
                     >
                       <FaVoteYea /> Start Voting
