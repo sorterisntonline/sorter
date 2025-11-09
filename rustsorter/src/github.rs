@@ -150,22 +150,51 @@ impl GitHubClient {
         owner: &str,
         repo: &str,
         state: &str, // "open", "closed", "all"
-        per_page: u32,
     ) -> Result<Vec<GitHubIssue>> {
-        let url = format!(
-            "{}/repos/{}/{}/issues?state={}&per_page={}&sort=created&direction=desc",
-            GITHUB_API_BASE, owner, repo, state, per_page
-        );
-        debug!("Fetching issues: {}", url);
+        self.get_repository_issues_with_limit(owner, repo, state, 2).await
+    }
 
-        let response = self.client.get(&url).send().await?;
+    pub async fn get_repository_issues_with_limit(
+        &self,
+        owner: &str,
+        repo: &str,
+        state: &str, // "open", "closed", "all"
+        max_pages: usize,
+    ) -> Result<Vec<GitHubIssue>> {
+        let mut all_issues = Vec::new();
+        let mut page = 1;
+        let per_page = 100; // GitHub's max per page
 
-        if !response.status().is_success() {
-            return Err(anyhow!("GitHub API error: {}", response.status()));
+        loop {
+            let url = format!(
+                "{}/repos/{}/{}/issues?state={}&per_page={}&page={}&sort=updated&direction=desc",
+                GITHUB_API_BASE, owner, repo, state, per_page, page
+            );
+            debug!("Fetching issues page {}: {}", page, url);
+
+            let response = self.client.get(&url).send().await?;
+
+            if !response.status().is_success() {
+                return Err(anyhow!("GitHub API error: {}", response.status()));
+            }
+
+            let issues: Vec<GitHubIssue> = response.json().await?;
+            let issues_count = issues.len();
+            all_issues.extend(issues);
+
+            // Break if we got less than per_page issues or hit max pages limit
+            if issues_count < per_page as usize || page >= max_pages {
+                if page >= max_pages {
+                    debug!("Reached max pages limit ({}), stopping pagination", max_pages);
+                }
+                break;
+            }
+
+            page += 1;
         }
 
-        let issues: Vec<GitHubIssue> = response.json().await?;
-        Ok(issues)
+        debug!("Fetched {} total issues from {} pages", all_issues.len(), page);
+        Ok(all_issues)
     }
 }
 
@@ -205,7 +234,7 @@ async fn ingest_repository(
 
     // Fetch and ingest issues
     let issues = github_client
-        .get_repository_issues(&payload.owner, &payload.repo, "all", 100)
+        .get_repository_issues(&payload.owner, &payload.repo, "all")
         .await
         .map_err(|e| Error::BadRequest {
             message: format!("Failed to fetch issues: {}", e).into(),
@@ -251,7 +280,90 @@ async fn ingest_repository(
     })))
 }
 
+/// Resync (update) a GitHub repository and its issues
+async fn resync_repository(
+    State(state): State<AppState>,
+    AuthenticatedUser(_user): AuthenticatedUser,
+    Json(payload): Json<IngestRepoRequest>,
+) -> Result<(StatusCode, Json<IngestRepoResponse>), Error> {
+    info!("Resyncing GitHub repo: {}/{}", payload.owner, payload.repo);
+
+    // TODO: Get GitHub token from env vars
+    let github_client = GitHubClient::new(None);
+
+    // Fetch repository data
+    let repo_data = github_client
+        .get_repository(&payload.owner, &payload.repo)
+        .await
+        .map_err(|e| Error::BadRequest {
+            message: format!("Failed to fetch repository: {}", e).into(),
+        })?;
+
+    // Upsert repository entity (create if not exists, update if exists)
+    let repo_entity = entity::upsert_entity(
+        &state.db,
+        "github.repo",
+        &repo_data.full_name,
+        Some(&format!("{} - {}", repo_data.full_name, repo_data.description.as_deref().unwrap_or("GitHub Repository"))),
+        Some(&repo_data.owner.avatar_url),
+        Some(&serde_json::to_value(&repo_data).unwrap()),
+        state.admin_user_id,
+    )
+    .await
+    .map_err(|e| Error::BadRequest {
+        message: format!("Failed to upsert repository entity: {}", e).into(),
+    })?;
+
+    // Fetch and ingest issues
+    let issues = github_client
+        .get_repository_issues(&payload.owner, &payload.repo, "all")
+        .await
+        .map_err(|e| Error::BadRequest {
+            message: format!("Failed to fetch issues: {}", e).into(),
+        })?;
+
+    let mut issues_synced = 0;
+
+    for issue in issues {
+        // Upsert issue entity (create if not exists, update if exists)
+        let issue_pk = format!("{}#{}", repo_data.full_name, issue.number);
+        match entity::upsert_entity(
+            &state.db,
+            "github.issue",
+            &issue_pk,
+            Some(&issue.title),
+            Some(&issue.user.avatar_url),
+            Some(&serde_json::to_value(&issue).unwrap()),
+            state.admin_user_id,
+        ).await {
+            Ok(_) => {
+                issues_synced += 1;
+                debug!("Synced issue #{}: {}", issue.number, issue.title);
+            }
+            Err(e) => {
+                warn!("Failed to sync issue #{}: {}", issue.number, e);
+            }
+        }
+    }
+
+    info!(
+        "Resync complete: {} with {} issues synced",
+        repo_data.full_name, issues_synced
+    );
+
+    Ok((StatusCode::OK, Json(IngestRepoResponse {
+        repo_ns: repo_entity.ns,
+        repo_pk: repo_entity.pk,
+        issues_ingested: issues_synced,
+        message: format!(
+            "Successfully resynced {} with {} issues",
+            repo_data.full_name, issues_synced
+        ),
+    })))
+}
+
 pub fn routes() -> ApiRouter<AppState> {
     ApiRouter::new()
         .route("/ingest", post(ingest_repository))
+        .route("/resync", post(resync_repository))
 }

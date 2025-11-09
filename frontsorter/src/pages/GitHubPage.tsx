@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { FaGithub, FaPlus, FaEye, FaExternalLinkAlt, FaClock, FaComment, FaTag, FaVoteYea } from 'react-icons/fa';
+import { FaGithub, FaPlus, FaEye, FaExternalLinkAlt, FaClock, FaComment, FaTag, FaVoteYea, FaSync } from 'react-icons/fa';
 import { Link } from 'react-router-dom';
 import { AuthAPI } from '../api/auth';
 import {
   ingestRepository,
+  resyncRepository,
   fetchGitHubRepos,
   fetchGitHubIssues,
   IngestRepoRequest
@@ -117,6 +118,15 @@ function GitHubPage() {
     },
   });
 
+  // Mutation for resyncing existing repositories
+  const resyncMutation = useMutation({
+    mutationFn: (data: IngestRepoRequest) => resyncRepository(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['github-repos'] });
+      queryClient.invalidateQueries({ queryKey: ['github-issues'] });
+    },
+  });
+
   const handleIngestRepo = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newRepoOwner.trim() || !newRepoName.trim()) return;
@@ -124,6 +134,14 @@ function GitHubPage() {
     ingestMutation.mutate({
       owner: newRepoOwner.trim(),
       repo: newRepoName.trim()
+    });
+  };
+
+  const handleResyncRepo = (repo: Repository) => {
+    const [owner, repoName] = repo.metadata.full_name.split('/');
+    resyncMutation.mutate({
+      owner,
+      repo: repoName
     });
   };
 
@@ -213,15 +231,28 @@ function GitHubPage() {
                           <p className="repo-description">{repo.metadata.description}</p>
                         )}
                       </div>
-                      <a
-                        href={repo.metadata.html_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="external-link"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <FaExternalLinkAlt />
-                      </a>
+                      <div className="repo-actions">
+                        <button
+                          className={`resync-btn ${resyncMutation.isPending ? 'spinning' : ''}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleResyncRepo(repo);
+                          }}
+                          disabled={resyncMutation.isPending}
+                          title="Resync repository"
+                        >
+                          <FaSync />
+                        </button>
+                        <a
+                          href={repo.metadata.html_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="external-link"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <FaExternalLinkAlt />
+                        </a>
+                      </div>
                     </div>
 
                     <div className="repo-stats">
@@ -254,9 +285,9 @@ function GitHubPage() {
           {selectedRepo ? (
             <>
               <div className="panel-header">
-                <h2>Issues in {selectedRepo.metadata.name}</h2>
+                <h2>Open Issues in {selectedRepo.metadata.name}</h2>
                 <div className="panel-actions">
-                  <span className="issue-count">{issues?.length || 0} issues</span>
+                  <span className="issue-count">{issues?.length || 0} open issues</span>
                   {issues && issues.length > 1 && (
                     <Link
                       to={`/vote?ns=github.issue&pk=${encodeURIComponent(selectedRepo.pk)}`}
@@ -273,7 +304,7 @@ function GitHubPage() {
               ) : issues?.length === 0 ? (
                 <div className="empty-state">
                   <FaComment size={32} />
-                  <p>No issues found</p>
+                  <p>No open issues found</p>
                 </div>
               ) : (
                 <div className="issues-list">
@@ -292,7 +323,7 @@ function GitHubPage() {
                             by {issue.metadata.user.login}
                           </span>
                           <span className="issue-date">
-                            <FaClock /> {formatRelativeTime(issue.metadata.created_at)}
+                            <FaClock /> {formatRelativeTime(issue.metadata.updated_at)}
                           </span>
                         </div>
                       </div>
