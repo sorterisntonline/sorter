@@ -56,6 +56,12 @@ pub struct EntityCreateQueryParams {
     upsert: Option<bool>,
 }
 
+#[derive(Deserialize, Debug, JsonSchema, TS)]
+#[ts(export)]
+pub struct EntityListQueryParams {
+    ns: Option<String>,
+}
+
 #[derive(Serialize, JsonSchema, TS)]
 #[ts(export)]
 pub struct EntityWithParentsAndChildren {
@@ -333,11 +339,25 @@ async fn get_route(
 
 async fn list_entities(
     State(state): State<AppState>,
+    Query(params): Query<EntityListQueryParams>,
 ) -> Result<(StatusCode, Json<Vec<Entity>>), Error> {
-    let entities = query_file_as!(Entity, "../database/sql/entity/list.sql")
+    let entities = if let Some(namespace) = params.ns {
+        // Filter by namespace
+        query_file_as!(
+            Entity,
+            "../database/sql/entity/list_by_namespace.sql",
+            namespace
+        )
         .fetch_all(&state.db)
         .await
-        .map_error("entities")?;
+        .map_error("entities")?
+    } else {
+        // Get all entities
+        query_file_as!(Entity, "../database/sql/entity/list.sql")
+            .fetch_all(&state.db)
+            .await
+            .map_error("entities")?
+    };
 
     Ok((StatusCode::OK, Json(entities)))
 }

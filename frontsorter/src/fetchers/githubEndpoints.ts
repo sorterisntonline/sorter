@@ -35,10 +35,8 @@ export const fetchGitHubRepos = async () => {
     credentials: 'include',
   });
   if (!res.ok) throw new Error(`Failed to fetch GitHub repositories: ${res.status}`);
-  const allEntities = await res.json();
 
-  // Filter to only github.repo entities (in case the backend filter isn't working)
-  return allEntities.filter(entity => entity.ns === 'github.repo');
+  return res.json();
 };
 
 export const fetchGitHubIssues = async (repoFullName?: string) => {
@@ -46,12 +44,9 @@ export const fetchGitHubIssues = async (repoFullName?: string) => {
     credentials: 'include',
   });
   if (!res.ok) throw new Error(`Failed to fetch GitHub issues: ${res.status}`);
-  const allEntities = await res.json();
+  const githubIssues = await res.json();
 
-  // Filter to only github.issue entities first
-  const githubIssues = allEntities.filter(entity => entity.ns === 'github.issue');
-
-  // Then filter by repository if specified
+  // Filter by repository if specified
   if (repoFullName) {
     return githubIssues.filter(issue => issue.pk.startsWith(repoFullName + '#'));
   }
