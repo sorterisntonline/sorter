@@ -12,6 +12,7 @@ import CreateEntityPage from "./pages/CreateEntityPage";
 import TodoPage from "./pages/TodoPage";
 import SpotifySongsPage from "./pages/SpotifySongsPage";
 import { PoolPage } from "./pages/PoolPage";
+import GitHubPage from "./pages/GitHubPage";
 
 // Auth pages (outside main layout)
 import LoginPage from "./pages/LoginPage";
@@ -33,6 +34,7 @@ function App() {
         <Route index element={<EntitiesIndex />} />
         <Route path="spotify" element={<SpotifySongsPage />} />
         <Route path="spotify/pool" element={<PoolPage />} />
+        <Route path="github" element={<GitHubPage />} />
         <Route path="entity/new" element={<CreateEntityPage />} />
         <Route path="entity/:ns/:pk" element={<EntityDetail />} />
 
