@@ -59,16 +59,17 @@ export function FinderColumnComponent({
 
     // Separate ranked and unranked
     const ranked: Array<{ entity: Entity; rankIndex: number; score: number }> = [];
-    const unranked: Entity[] = [];
+    const unranked: Array<{ entity: Entity; rankIndex: number; score: number }> = [];
 
     column.entities.forEach((entity) => {
       const key = `${entity.ns}:${entity.pk}`;
       const rankData = rankedMap.get(key);
       if (rankData) {
+        // Entity is ranked
         ranked.push({ entity, ...rankData });
-      } else if (!unrankedSet.has(key)) {
-        // Only add if not explicitly in unsorted (means it might not have votes yet)
-        unranked.push(entity);
+      } else {
+        // Entity is unranked (either explicitly in unsorted or not ranked yet)
+        unranked.push({ entity, rankIndex: -1, score: 0 });
       }
     });
 
@@ -76,7 +77,7 @@ export function FinderColumnComponent({
     ranked.sort((a, b) => a.rankIndex - b.rankIndex);
 
     // Combine: ranked first, then unranked
-    return [...ranked, ...unranked.map(e => ({ entity: e, rankIndex: -1, score: 0 }))];
+    return [...ranked, ...unranked];
   }, [column.entities, ranking]);
 
   return (

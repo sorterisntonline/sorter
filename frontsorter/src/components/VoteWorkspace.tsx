@@ -127,7 +127,7 @@ export function VoteWorkspace({ parentEntity, user }: VoteWorkspaceProps) {
     >
       {/* Header */}
       <div style={{ marginBottom: '20px' }}>
-        <h2 style={{ color: '#fff' }}>Voting on children of: {parentEntity.title || `${parentEntity.ns}/${parentEntity.pk}`}</h2>
+        {/* Removed redundant header - breadcrumb shows context */}
       </div>
 
       {/* Voting Interface */}

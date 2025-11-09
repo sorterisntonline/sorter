@@ -1,14 +1,12 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AuthAPI } from '../api/auth';
-import { useFinderNavigation } from '../hooks/useFinderNavigation';
-import { FinderColumns } from '../components/FinderColumns';
+import { useStackNavigation } from '../hooks/useStackNavigation';
+import { StackNavigation } from '../components/StackNavigation';
 import { VoteWorkspace } from '../components/VoteWorkspace';
-import { Entity } from '../api/entity';
 
 export default function FinderVotePage() {
-  const finder = useFinderNavigation();
-  const [selectedEntity, setSelectedEntity] = useState<Entity | null>(null);
+  const stack = useStackNavigation();
 
   // Get current user
   const { data: user } = useQuery({
@@ -17,22 +15,30 @@ export default function FinderVotePage() {
     refetchOnWindowFocus: false,
   });
 
-  // Determine active entity (rightmost column's parent, or null for root)
-  const activeEntity =
-    finder.columns.length > 0 && finder.columns[finder.activeColumnIndex]?.parent
-      ? finder.columns[finder.activeColumnIndex].parent
-      : null;
+  const handleBreadcrumbClick = (index: number) => {
+    stack.navigateToBreadcrumb(index);
+  };
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', backgroundColor: '#000' }}>
-      {/* Left: Finder Columns */}
+      {/* Left: Stack Navigation */}
       <div style={{ flexShrink: 0 }}>
-        <FinderColumns finder={finder} selectedEntity={selectedEntity} />
+        <StackNavigation
+          breadcrumbs={stack.breadcrumbs}
+          currentParent={stack.currentParent}
+          children={stack.children}
+          isLoading={stack.isLoading}
+          error={stack.error}
+          onEntityClick={stack.navigateToEntity}
+          onNavigateUp={stack.navigateUp}
+          onNavigateToRoot={stack.navigateToRoot}
+          onBreadcrumbClick={handleBreadcrumbClick}
+        />
       </div>
 
       {/* Right: Voting Workspace */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', backgroundColor: '#000' }}>
-        <VoteWorkspace parentEntity={activeEntity} user={user} />
+        <VoteWorkspace parentEntity={stack.currentParent} user={user} />
       </div>
     </div>
   );
