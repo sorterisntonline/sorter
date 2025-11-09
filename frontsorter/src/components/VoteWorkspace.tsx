@@ -92,7 +92,7 @@ export function VoteWorkspace({ parentEntity, user }: VoteWorkspaceProps) {
   // Early return AFTER all hooks are called
   if (!parentEntity) {
     return (
-      <div style={{ padding: '40px', textAlign: 'center', color: '#666' }}>
+      <div style={{ padding: '40px', textAlign: 'center', color: '#999', backgroundColor: '#000', height: '100vh' }}>
         Select an entity to start voting on its children
       </div>
     );
@@ -139,16 +139,18 @@ export function VoteWorkspace({ parentEntity, user }: VoteWorkspaceProps) {
         height: '100vh',
         overflowY: 'auto',
         padding: '20px',
+        backgroundColor: '#000',
+        color: '#fff',
       }}
     >
       {/* Header */}
       <div style={{ marginBottom: '20px' }}>
-        <h2>Voting on children of: {parentEntity.title || `${parentEntity.ns}/${parentEntity.pk}`}</h2>
+        <h2 style={{ color: '#fff' }}>Voting on children of: {parentEntity.title || `${parentEntity.ns}/${parentEntity.pk}`}</h2>
       </div>
 
       {/* Voting Interface */}
       {pairLoading ? (
-        <div style={{ textAlign: 'center', padding: '40px' }}>Loading pair...</div>
+        <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>Loading pair...</div>
       ) : pairData ? (
         <div
           style={{
@@ -181,11 +183,11 @@ export function VoteWorkspace({ parentEntity, user }: VoteWorkspaceProps) {
                 gap: '20px',
               }}
             >
-              <div style={{ fontSize: '24px', fontWeight: 'bold' }}>VS</div>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#fff' }}>VS</div>
 
               {/* Slider */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', minWidth: '300px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#fff' }}>
                   <span>Left</span>
                   <span>Neutral</span>
                   <span>Right</span>
@@ -198,7 +200,7 @@ export function VoteWorkspace({ parentEntity, user }: VoteWorkspaceProps) {
                   onChange={(e) => setSliderValue(Number(e.target.value))}
                   style={{ width: '100%' }}
                 />
-                <div style={{ textAlign: 'center', fontSize: '14px' }}>
+                <div style={{ textAlign: 'center', fontSize: '14px', color: '#fff' }}>
                   Strength: {Math.abs(sliderValue)} {sliderValue === 0 ? '(No vote)' : ''}
                 </div>
               </div>
@@ -227,21 +229,21 @@ export function VoteWorkspace({ parentEntity, user }: VoteWorkspaceProps) {
           </div>
         </div>
       ) : (
-        <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+        <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
           No pairs available for voting
         </div>
       )}
 
       {/* Rankings Section */}
       <div style={{ marginTop: '40px' }}>
-        <h3>Current Rankings</h3>
+        <h3 style={{ color: '#fff' }}>Current Rankings</h3>
         {rankingLoading ? (
-          <div>Loading rankings...</div>
+          <div style={{ color: '#999' }}>Loading rankings...</div>
         ) : (
           <>
             {processedRanking.ranked.length > 0 && (
               <div style={{ marginBottom: '20px' }}>
-                <h4>Ranked ({processedRanking.ranked.length})</h4>
+                <h4 style={{ color: '#fff' }}>Ranked ({processedRanking.ranked.length})</h4>
                 <div>
                   {processedRanking.ranked.map((item: any, index: number) => {
                     const renderer = item.entity ? getEntityRenderer(item.entity) : null;
@@ -250,19 +252,19 @@ export function VoteWorkspace({ parentEntity, user }: VoteWorkspaceProps) {
                         key={`${item.identifier.ns}:${item.identifier.pk}`}
                         style={{
                           padding: '8px',
-                          borderBottom: '1px solid #eee',
+                          borderBottom: '1px solid #333',
                           display: 'flex',
                           alignItems: 'center',
                           gap: '12px',
                         }}
                       >
-                        <span style={{ fontWeight: 'bold', minWidth: '30px' }}>#{index + 1}</span>
+                        <span style={{ fontWeight: 'bold', minWidth: '30px', color: '#fff' }}>#{index + 1}</span>
                         {renderer?.renderRow(
                           item.entity,
                           false,
                           () => {}
                         )}
-                        <span style={{ marginLeft: 'auto', color: '#666' }}>
+                        <span style={{ marginLeft: 'auto', color: '#999' }}>
                           {item.score.toFixed(3)}
                         </span>
                       </div>
@@ -274,7 +276,7 @@ export function VoteWorkspace({ parentEntity, user }: VoteWorkspaceProps) {
 
             {processedRanking.unranked.length > 0 && (
               <div>
-                <h4>Unranked ({processedRanking.unranked.length})</h4>
+                <h4 style={{ color: '#fff' }}>Unranked ({processedRanking.unranked.length})</h4>
                 <div>
                   {processedRanking.unranked.map((entity: Entity) => {
                     const renderer = getEntityRenderer(entity);

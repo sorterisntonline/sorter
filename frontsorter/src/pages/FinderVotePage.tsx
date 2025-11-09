@@ -24,14 +24,14 @@ export default function FinderVotePage() {
       : null;
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', backgroundColor: '#000' }}>
       {/* Left: Finder Columns */}
       <div style={{ flexShrink: 0 }}>
         <FinderColumns finder={finder} selectedEntity={selectedEntity} />
       </div>
 
       {/* Right: Voting Workspace */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', backgroundColor: '#000' }}>
         <VoteWorkspace parentEntity={activeEntity} user={user} />
       </div>
     </div>

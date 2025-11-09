@@ -15,7 +15,7 @@ export function FinderColumns({ finder, selectedEntity }: FinderColumnsProps) {
         display: 'flex',
         height: '100vh',
         overflowX: 'auto',
-        backgroundColor: '#f5f5f5',
+        backgroundColor: '#000',
       }}
     >
       {finder.columns.map((column, index) => (

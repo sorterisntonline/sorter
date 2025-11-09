@@ -29,20 +29,21 @@ export function FinderColumnComponent({
     <div
       style={{
         width: '250px',
-        borderRight: '1px solid #ddd',
+        borderRight: '1px solid #333',
         display: 'flex',
         flexDirection: 'column',
         height: '100vh',
-        backgroundColor: '#f5f5f5',
+        backgroundColor: '#1a1a1a',
       }}
     >
       {/* Column Header */}
       <div
         style={{
           padding: '12px',
-          borderBottom: '1px solid #ddd',
-          backgroundColor: '#fff',
+          borderBottom: '1px solid #333',
+          backgroundColor: '#2a2a2a',
           fontWeight: 'bold',
+          color: '#fff',
         }}
       >
         {columnIndex > 0 && onBackClick && (
@@ -52,6 +53,10 @@ export function FinderColumnComponent({
               marginRight: '8px',
               padding: '4px 8px',
               cursor: 'pointer',
+              backgroundColor: '#3a3a3a',
+              color: '#fff',
+              border: '1px solid #444',
+              borderRadius: '4px',
             }}
           >
             ←
@@ -65,23 +70,23 @@ export function FinderColumnComponent({
         style={{
           flex: 1,
           overflowY: 'auto',
-          backgroundColor: '#fff',
+          backgroundColor: '#1a1a1a',
         }}
       >
         {column.isLoading && (
-          <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+          <div style={{ padding: '20px', textAlign: 'center', color: '#999' }}>
             Loading...
           </div>
         )}
 
         {column.error && (
-          <div style={{ padding: '20px', color: '#d32f2f' }}>
+          <div style={{ padding: '20px', color: '#ff4444' }}>
             Error: {column.error.message}
           </div>
         )}
 
         {!column.isLoading && !column.error && column.entities.length === 0 && (
-          <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+          <div style={{ padding: '20px', textAlign: 'center', color: '#999' }}>
             No items
           </div>
         )}
@@ -101,7 +106,7 @@ export function FinderColumnComponent({
                   <div
                     style={{
                       fontSize: '10px',
-                      color: '#999',
+                      color: '#666',
                       paddingLeft: '12px',
                       paddingBottom: '4px',
                     }}

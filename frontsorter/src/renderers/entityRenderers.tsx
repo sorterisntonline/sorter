@@ -27,31 +27,32 @@ const defaultRenderer: EntityRenderer = {
       style={{
         padding: '8px 12px',
         cursor: 'pointer',
-        backgroundColor: isSelected ? '#e0e0e0' : 'transparent',
-        borderBottom: '1px solid #eee',
+        backgroundColor: isSelected ? '#333' : 'transparent',
+        borderBottom: '1px solid #333',
+        color: '#fff',
       }}
     >
-      <div style={{ fontWeight: isSelected ? 'bold' : 'normal' }}>
+      <div style={{ fontWeight: isSelected ? 'bold' : 'normal', color: '#fff' }}>
         {entity.title || entity.pk}
       </div>
-      <div style={{ fontSize: '12px', color: '#666' }}>
+      <div style={{ fontSize: '12px', color: '#999' }}>
         {entity.ns} / {entity.pk}
       </div>
     </div>
   ),
   
   renderDetails: (entity) => (
-    <div>
-      <h3>{entity.title || entity.pk}</h3>
-      <p>{entity.ns} / {entity.pk}</p>
+    <div style={{ color: '#fff' }}>
+      <h3 style={{ color: '#fff' }}>{entity.title || entity.pk}</h3>
+      <p style={{ color: '#999' }}>{entity.ns} / {entity.pk}</p>
       {entity.metadata && (
-        <pre>{JSON.stringify(entity.metadata, null, 2)}</pre>
+        <pre style={{ color: '#fff', backgroundColor: '#1a1a1a', padding: '10px', borderRadius: '4px' }}>{JSON.stringify(entity.metadata, null, 2)}</pre>
       )}
     </div>
   ),
   
   renderVoteCard: (entity) => (
-    <div style={{ padding: '20px', textAlign: 'center' }}>
+    <div style={{ padding: '20px', textAlign: 'center', color: '#fff' }}>
       {entity.profile_picture_url && (
         <img
           src={entity.profile_picture_url}
@@ -59,8 +60,8 @@ const defaultRenderer: EntityRenderer = {
           style={{ maxWidth: '200px', marginBottom: '10px' }}
         />
       )}
-      <h3>{entity.title || entity.pk}</h3>
-      <p>{entity.ns} / {entity.pk}</p>
+      <h3 style={{ color: '#fff' }}>{entity.title || entity.pk}</h3>
+      <p style={{ color: '#999' }}>{entity.ns} / {entity.pk}</p>
     </div>
   ),
   
@@ -80,8 +81,8 @@ const spotifyRenderer: EntityRenderer = {
         style={{
           padding: '8px 12px',
           cursor: 'pointer',
-          backgroundColor: isSelected ? '#e0e0e0' : 'transparent',
-          borderBottom: '1px solid #eee',
+          backgroundColor: isSelected ? '#333' : 'transparent',
+          borderBottom: '1px solid #333',
           display: 'flex',
           alignItems: 'center',
           gap: '12px',
@@ -95,10 +96,10 @@ const spotifyRenderer: EntityRenderer = {
           />
         )}
         <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: isSelected ? 'bold' : 'normal' }}>
+          <div style={{ fontWeight: isSelected ? 'bold' : 'normal', color: '#fff' }}>
             {entity.title || entity.pk}
           </div>
-          <div style={{ fontSize: '12px', color: '#666' }}>{artist}</div>
+          <div style={{ fontSize: '12px', color: '#999' }}>{artist}</div>
         </div>
       </div>
     );
@@ -109,7 +110,7 @@ const spotifyRenderer: EntityRenderer = {
     const albumArt = entity.metadata?.album?.images?.[0]?.url || entity.metadata?.images?.[0]?.url || entity.profile_picture_url;
     
     return (
-      <div>
+      <div style={{ color: '#fff' }}>
         {albumArt && (
           <img
             src={albumArt}
@@ -117,10 +118,10 @@ const spotifyRenderer: EntityRenderer = {
             style={{ maxWidth: '300px', marginBottom: '20px' }}
           />
         )}
-        <h3>{entity.title || entity.pk}</h3>
-        <p>{artist}</p>
+        <h3 style={{ color: '#fff' }}>{entity.title || entity.pk}</h3>
+        <p style={{ color: '#999' }}>{artist}</p>
         {entity.metadata?.album && (
-          <p>Album: {entity.metadata.album.name}</p>
+          <p style={{ color: '#999' }}>Album: {entity.metadata.album.name}</p>
         )}
       </div>
     );
@@ -131,7 +132,7 @@ const spotifyRenderer: EntityRenderer = {
     const albumArt = entity.metadata?.album?.images?.[0]?.url || entity.metadata?.images?.[0]?.url || entity.profile_picture_url;
     
     return (
-      <div style={{ padding: '20px', textAlign: 'center' }}>
+      <div style={{ padding: '20px', textAlign: 'center', color: '#fff' }}>
         {albumArt && (
           <img
             src={albumArt}
@@ -139,8 +140,8 @@ const spotifyRenderer: EntityRenderer = {
             style={{ maxWidth: '200px', marginBottom: '10px', borderRadius: '8px' }}
           />
         )}
-        <h3>{entity.title || entity.pk}</h3>
-        <p>{artist}</p>
+        <h3 style={{ color: '#fff' }}>{entity.title || entity.pk}</h3>
+        <p style={{ color: '#999' }}>{artist}</p>
       </div>
     );
   },
