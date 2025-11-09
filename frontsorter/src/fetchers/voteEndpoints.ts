@@ -33,7 +33,9 @@ export const fetchPairFn = async ({ queryKey }) => {
     }
 
     console.log(`Fetching pair (${type}) from:`, apiUrl);
-    const response = await fetch(apiUrl);
+    const response = await fetch(apiUrl, {
+        credentials: 'include',
+    });
 
     if (!response.ok) {
         const errorText = await response.text();
@@ -79,6 +81,7 @@ export const submitVoteFn = async ({
     const response = await fetch(createUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(createPayload),
     });
 
