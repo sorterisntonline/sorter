@@ -60,6 +60,7 @@ pub struct EntityCreateQueryParams {
 #[ts(export)]
 pub struct EntityListQueryParams {
     ns: Option<String>,
+    roots: Option<bool>,
 }
 
 #[derive(Serialize, JsonSchema, TS)]
@@ -341,7 +342,13 @@ async fn list_entities(
     State(state): State<AppState>,
     Query(params): Query<EntityListQueryParams>,
 ) -> Result<(StatusCode, Json<Vec<Entity>>), Error> {
-    let entities = if let Some(namespace) = params.ns {
+    let entities = if params.roots.unwrap_or(false) {
+        // Get root entities (entities with no parents)
+        query_file_as!(Entity, "../database/sql/entity/select_roots.sql")
+            .fetch_all(&state.db)
+            .await
+            .map_error("root entities")?
+    } else if let Some(namespace) = params.ns {
         // Filter by namespace
         query_file_as!(
             Entity,

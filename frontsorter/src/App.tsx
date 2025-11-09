@@ -13,7 +13,7 @@ import TodoPage from "./pages/TodoPage";
 import SpotifySongsPage from "./pages/SpotifySongsPage";
 import { PoolPage } from "./pages/PoolPage";
 import GitHubPage from "./pages/GitHubPage";
-import VotePage from "./pages/VotePage";
+import FinderVotePage from "./pages/FinderVotePage";
 
 // Auth pages (outside main layout)
 import LoginPage from "./pages/LoginPage";
@@ -36,7 +36,7 @@ function App() {
         <Route path="spotify" element={<SpotifySongsPage />} />
         <Route path="spotify/pool" element={<PoolPage />} />
         <Route path="github" element={<GitHubPage />} />
-        <Route path="vote" element={<VotePage />} />
+        <Route path="vote" element={<FinderVotePage />} />
         <Route path="entity/new" element={<CreateEntityPage />} />
         <Route path="entity/:ns/:pk" element={<EntityDetail />} />
 
