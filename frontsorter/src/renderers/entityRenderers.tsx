@@ -153,12 +153,16 @@ const spotifyRenderer: EntityRenderer = {
 const githubRenderer: EntityRenderer = {
   renderRow: (entity, isSelected, onClick) => {
     const metadata = entity.metadata || {};
-    const owner = metadata.owner || {};
+    const isIssue = entity.ns.includes('issue');
+    
+    // Issues have different structure than repos
+    const owner = isIssue ? metadata.user : (metadata.owner || {});
     const ownerAvatar = owner.avatar_url || entity.profile_picture_url;
-    const fullName = metadata.full_name || entity.title || entity.pk;
-    const description = metadata.description || '';
+    const fullName = isIssue ? (metadata.title || entity.title || entity.pk) : (metadata.full_name || entity.title || entity.pk);
+    const description = metadata.description || metadata.body || '';
     const stars = metadata.stargazers_count || 0;
     const language = metadata.language || '';
+    const issueState = metadata.state; // 'open' or 'closed'
     
     return (
       <div
@@ -182,8 +186,25 @@ const githubRenderer: EntityRenderer = {
           />
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: isSelected ? 'bold' : 'normal', color: '#fff', fontSize: '14px' }}>
-            {fullName}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <div style={{ fontWeight: isSelected ? 'bold' : 'normal', color: '#fff', fontSize: '14px' }}>
+              {fullName}
+            </div>
+            {isIssue && issueState && (
+              <span
+                style={{
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                  fontSize: '11px',
+                  fontWeight: 'bold',
+                  backgroundColor: issueState === 'open' ? '#238636' : '#da3633',
+                  color: '#fff',
+                  textTransform: 'uppercase',
+                }}
+              >
+                {issueState}
+              </span>
+            )}
           </div>
           {description && (
             <div style={{ fontSize: '11px', color: '#999', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -193,6 +214,9 @@ const githubRenderer: EntityRenderer = {
           <div style={{ fontSize: '11px', color: '#666', marginTop: '2px', display: 'flex', gap: '8px' }}>
             {stars > 0 && <span>⭐ {stars}</span>}
             {language && <span>• {language}</span>}
+            {isIssue && metadata.comments !== undefined && (
+              <span>💬 {metadata.comments}</span>
+            )}
           </div>
         </div>
       </div>
@@ -201,12 +225,15 @@ const githubRenderer: EntityRenderer = {
   
   renderDetails: (entity) => {
     const metadata = entity.metadata || {};
-    const owner = metadata.owner || {};
+    const isIssue = entity.ns.includes('issue');
+    
+    // Issues have different structure than repos
+    const owner = isIssue ? metadata.user : (metadata.owner || {});
     const ownerAvatar = owner.avatar_url || entity.profile_picture_url;
     const ownerLogin = owner.login || '';
     const ownerUrl = owner.html_url || '';
-    const fullName = metadata.full_name || entity.title || entity.pk;
-    const description = metadata.description || '';
+    const fullName = isIssue ? (metadata.title || entity.title || entity.pk) : (metadata.full_name || entity.title || entity.pk);
+    const description = metadata.description || metadata.body || '';
     const stars = metadata.stargazers_count || 0;
     const forks = metadata.forks_count || 0;
     const openIssues = metadata.open_issues_count || 0;
@@ -216,6 +243,9 @@ const githubRenderer: EntityRenderer = {
     const createdAt = metadata.created_at || '';
     const updatedAt = metadata.updated_at || '';
     const pushedAt = metadata.pushed_at || '';
+    const issueState = metadata.state; // 'open' or 'closed'
+    const issueComments = metadata.comments || 0;
+    const issueNumber = metadata.number;
     
     return (
       <div style={{ color: '#fff' }}>
@@ -229,9 +259,27 @@ const githubRenderer: EntityRenderer = {
             />
           )}
           <div style={{ flex: 1 }}>
-            <h2 style={{ color: '#fff', margin: '0 0 8px 0', fontSize: '24px' }}>
-              {fullName}
-            </h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px', flexWrap: 'wrap' }}>
+              <h2 style={{ color: '#fff', margin: 0, fontSize: '24px' }}>
+                {isIssue && issueNumber && `#${issueNumber} `}
+                {fullName}
+              </h2>
+              {isIssue && issueState && (
+                <span
+                  style={{
+                    padding: '4px 12px',
+                    borderRadius: '16px',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    backgroundColor: issueState === 'open' ? '#238636' : '#da3633',
+                    color: '#fff',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {issueState}
+                </span>
+              )}
+            </div>
             {ownerLogin && (
               <div style={{ marginBottom: '8px' }}>
                 <a
@@ -266,33 +314,47 @@ const githubRenderer: EntityRenderer = {
 
         {/* Stats */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', marginBottom: '20px' }}>
-          {stars > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#c9d1d9' }}>
-              <span>⭐</span>
-              <span style={{ fontWeight: 'bold' }}>{stars.toLocaleString()}</span>
-              <span style={{ fontSize: '12px', color: '#8b949e' }}>stars</span>
-            </div>
-          )}
-          {forks > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#c9d1d9' }}>
-              <span>🍴</span>
-              <span style={{ fontWeight: 'bold' }}>{forks.toLocaleString()}</span>
-              <span style={{ fontSize: '12px', color: '#8b949e' }}>forks</span>
-            </div>
-          )}
-          {openIssues > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#c9d1d9' }}>
-              <span>⚠️</span>
-              <span style={{ fontWeight: 'bold' }}>{openIssues.toLocaleString()}</span>
-              <span style={{ fontSize: '12px', color: '#8b949e' }}>open issues</span>
-            </div>
-          )}
-          {watchers > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#c9d1d9' }}>
-              <span>👁️</span>
-              <span style={{ fontWeight: 'bold' }}>{watchers.toLocaleString()}</span>
-              <span style={{ fontSize: '12px', color: '#8b949e' }}>watchers</span>
-            </div>
+          {isIssue ? (
+            <>
+              {issueComments > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#c9d1d9' }}>
+                  <span>💬</span>
+                  <span style={{ fontWeight: 'bold' }}>{issueComments.toLocaleString()}</span>
+                  <span style={{ fontSize: '12px', color: '#8b949e' }}>comments</span>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              {stars > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#c9d1d9' }}>
+                  <span>⭐</span>
+                  <span style={{ fontWeight: 'bold' }}>{stars.toLocaleString()}</span>
+                  <span style={{ fontSize: '12px', color: '#8b949e' }}>stars</span>
+                </div>
+              )}
+              {forks > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#c9d1d9' }}>
+                  <span>🍴</span>
+                  <span style={{ fontWeight: 'bold' }}>{forks.toLocaleString()}</span>
+                  <span style={{ fontSize: '12px', color: '#8b949e' }}>forks</span>
+                </div>
+              )}
+              {openIssues > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#c9d1d9' }}>
+                  <span>⚠️</span>
+                  <span style={{ fontWeight: 'bold' }}>{openIssues.toLocaleString()}</span>
+                  <span style={{ fontSize: '12px', color: '#8b949e' }}>open issues</span>
+                </div>
+              )}
+              {watchers > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#c9d1d9' }}>
+                  <span>👁️</span>
+                  <span style={{ fontWeight: 'bold' }}>{watchers.toLocaleString()}</span>
+                  <span style={{ fontSize: '12px', color: '#8b949e' }}>watchers</span>
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -325,12 +387,17 @@ const githubRenderer: EntityRenderer = {
   
   renderVoteCard: (entity) => {
     const metadata = entity.metadata || {};
-    const owner = metadata.owner || {};
+    const isIssue = entity.ns.includes('issue');
+    
+    // Issues have different structure than repos
+    const owner = isIssue ? metadata.user : (metadata.owner || {});
     const ownerAvatar = owner.avatar_url || entity.profile_picture_url;
-    const fullName = metadata.full_name || entity.title || entity.pk;
-    const description = metadata.description || '';
+    const fullName = isIssue ? (metadata.title || entity.title || entity.pk) : (metadata.full_name || entity.title || entity.pk);
+    const description = metadata.description || metadata.body || '';
     const stars = metadata.stargazers_count || 0;
     const language = metadata.language || '';
+    const issueState = metadata.state; // 'open' or 'closed'
+    const issueComments = metadata.comments || 0;
     
     return (
       <div style={{ padding: '20px', textAlign: 'center', color: '#fff' }}>
@@ -341,7 +408,24 @@ const githubRenderer: EntityRenderer = {
             style={{ width: '80px', height: '80px', borderRadius: '8px', marginBottom: '12px' }}
           />
         )}
-        <h3 style={{ color: '#fff', marginBottom: '8px', fontSize: '18px' }}>{fullName}</h3>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
+          <h3 style={{ color: '#fff', margin: 0, fontSize: '18px' }}>{fullName}</h3>
+          {isIssue && issueState && (
+            <span
+              style={{
+                padding: '3px 10px',
+                borderRadius: '14px',
+                fontSize: '11px',
+                fontWeight: 'bold',
+                backgroundColor: issueState === 'open' ? '#238636' : '#da3633',
+                color: '#fff',
+                textTransform: 'uppercase',
+              }}
+            >
+              {issueState}
+            </span>
+          )}
+        </div>
         {description && (
           <p style={{ color: '#999', fontSize: '12px', marginBottom: '8px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
             {description}
@@ -350,6 +434,7 @@ const githubRenderer: EntityRenderer = {
         <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', fontSize: '12px', color: '#666' }}>
           {stars > 0 && <span>⭐ {stars}</span>}
           {language && <span>• {language}</span>}
+          {isIssue && issueComments > 0 && <span>💬 {issueComments}</span>}
         </div>
       </div>
     );
