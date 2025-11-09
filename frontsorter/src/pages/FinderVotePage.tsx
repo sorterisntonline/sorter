@@ -38,7 +38,7 @@ export default function FinderVotePage() {
 
       {/* Right: Voting Workspace */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', backgroundColor: '#000' }}>
-        <VoteWorkspace parentEntity={stack.currentParent} user={user} />
+        <VoteWorkspace parentEntity={stack.currentParent} user={user} children={stack.children} />
       </div>
     </div>
   );
