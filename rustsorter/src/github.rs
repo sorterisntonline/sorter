@@ -255,8 +255,25 @@ async fn ingest_repository(
             user.id,
         ).await {
             Ok(_) => {
-                issues_ingested += 1;
-                debug!("Ingested issue #{}: {}", issue.number, issue.title);
+                // Create parent-child relationship between repo and issue
+                match crate::entity_relationships::upsert_relationship(
+                    &state.db,
+                    crate::entity_relationships::CreateRelationshipPayload {
+                        parent_ns: repo_entity.ns.clone(),
+                        parent_pk: repo_entity.pk.clone(),
+                        child_ns: "github.issue".to_string(),
+                        child_pk: issue_pk.clone(),
+                    },
+                    user.id,
+                ).await {
+                    Ok(_) => {
+                        issues_ingested += 1;
+                        debug!("Ingested issue #{}: {}", issue.number, issue.title);
+                    }
+                    Err(e) => {
+                        warn!("Failed to create relationship for issue #{}: {}", issue.number, e);
+                    }
+                }
             }
             Err(e) => {
                 warn!("Failed to ingest issue #{}: {}", issue.number, e);
@@ -337,8 +354,25 @@ async fn resync_repository(
             user.id,
         ).await {
             Ok(_) => {
-                issues_synced += 1;
-                debug!("Synced issue #{}: {}", issue.number, issue.title);
+                // Upsert parent-child relationship between repo and issue
+                match crate::entity_relationships::upsert_relationship(
+                    &state.db,
+                    crate::entity_relationships::CreateRelationshipPayload {
+                        parent_ns: repo_entity.ns.clone(),
+                        parent_pk: repo_entity.pk.clone(),
+                        child_ns: "github.issue".to_string(),
+                        child_pk: issue_pk.clone(),
+                    },
+                    user.id,
+                ).await {
+                    Ok(_) => {
+                        issues_synced += 1;
+                        debug!("Synced issue #{}: {}", issue.number, issue.title);
+                    }
+                    Err(e) => {
+                        warn!("Failed to create/update relationship for issue #{}: {}", issue.number, e);
+                    }
+                }
             }
             Err(e) => {
                 warn!("Failed to sync issue #{}: {}", issue.number, e);
