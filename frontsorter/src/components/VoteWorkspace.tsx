@@ -62,6 +62,33 @@ export function VoteWorkspace({ parentEntity, user }: VoteWorkspaceProps) {
     },
   });
 
+  // Process ranking data - MUST be called before early return
+  const processedRanking = React.useMemo(() => {
+    if (!ranking || !entities) return { ranked: [], unranked: [] };
+
+    const entityMap = new Map();
+    entities.forEach((entity: Entity) => {
+      entityMap.set(`${entity.ns}:${entity.pk}`, entity);
+    });
+
+    const ranked = ranking.sorted
+      .map((rankedEntity: any) => {
+        const key = `${rankedEntity.identifier.ns}:${rankedEntity.identifier.pk}`;
+        const entity = entityMap.get(key);
+        return entity ? { ...rankedEntity, entity } : null;
+      })
+      .filter(Boolean);
+
+    const unranked = ranking.unsorted
+      .map((identifier: any) => {
+        const key = `${identifier.ns}:${identifier.pk}`;
+        return entityMap.get(key);
+      })
+      .filter(Boolean);
+
+    return { ranked, unranked };
+  }, [ranking, entities]);
+
   // Early return AFTER all hooks are called
   if (!parentEntity) {
     return (
@@ -99,33 +126,6 @@ export function VoteWorkspace({ parentEntity, user }: VoteWorkspaceProps) {
 
     voteMutation.mutate(voteData);
   };
-
-  // Process ranking data
-  const processedRanking = React.useMemo(() => {
-    if (!ranking || !entities) return { ranked: [], unranked: [] };
-
-    const entityMap = new Map();
-    entities.forEach((entity: Entity) => {
-      entityMap.set(`${entity.ns}:${entity.pk}`, entity);
-    });
-
-    const ranked = ranking.sorted
-      .map((rankedEntity: any) => {
-        const key = `${rankedEntity.identifier.ns}:${rankedEntity.identifier.pk}`;
-        const entity = entityMap.get(key);
-        return entity ? { ...rankedEntity, entity } : null;
-      })
-      .filter(Boolean);
-
-    const unranked = ranking.unsorted
-      .map((identifier: any) => {
-        const key = `${identifier.ns}:${identifier.pk}`;
-        return entityMap.get(key);
-      })
-      .filter(Boolean);
-
-    return { ranked, unranked };
-  }, [ranking, entities]);
 
   const leftRenderer = pairData?.left_entity ? getEntityRenderer(pairData.left_entity) : null;
   const rightRenderer = pairData?.right_entity ? getEntityRenderer(pairData.right_entity) : null;
