@@ -20,24 +20,33 @@ export function VoteWorkspace({ parentEntity, user }: VoteWorkspaceProps) {
 
   // Always call hooks unconditionally - use enabled flag to control execution
   // Get ranking data
-  const { data: ranking, isLoading: rankingLoading } = useQuery({
+  const { data: ranking, isLoading: rankingLoading, error: rankingError } = useQuery({
     queryKey: ['ranking', ns, pk],
-    queryFn: () => RankingAPI.getRanking(ns!, pk!),
+    queryFn: async () => {
+      const result = await RankingAPI.getRanking(ns!, pk!);
+      return result;
+    },
     enabled: !!(ns && pk),
     refetchOnWindowFocus: false,
   });
 
-  // Get entities for metadata
+  // Get entities for metadata - fetch children entities, not entities in parent namespace
+  // Note: This is kept for potential future use, but ranking is now handled in FinderColumn
   const { data: entities } = useQuery({
-    queryKey: ['entities', ns],
+    queryKey: ['entity-children', ns, pk],
     queryFn: async () => {
-      const response = await fetch(`/api/entity?ns=${encodeURIComponent(ns!)}`, {
-        credentials: 'include',
-      });
-      if (!response.ok) throw new Error('Failed to fetch entities');
-      return response.json();
+      if (!ns || !pk) return [];
+      const response = await fetch(
+        `/api/entity/${encodeURIComponent(ns)}/${encodeURIComponent(pk)}?children=true`,
+        {
+          credentials: 'include',
+        }
+      );
+      if (!response.ok) throw new Error('Failed to fetch children entities');
+      const data = await response.json();
+      return data.children || [];
     },
-    enabled: !!ns,
+    enabled: false, // Disabled - ranking now handled in FinderColumn
     refetchOnWindowFocus: false,
   });
 
@@ -61,33 +70,6 @@ export function VoteWorkspace({ parentEntity, user }: VoteWorkspaceProps) {
       setSliderValue(0);
     },
   });
-
-  // Process ranking data - MUST be called before early return
-  const processedRanking = React.useMemo(() => {
-    if (!ranking || !entities) return { ranked: [], unranked: [] };
-
-    const entityMap = new Map();
-    entities.forEach((entity: Entity) => {
-      entityMap.set(`${entity.ns}:${entity.pk}`, entity);
-    });
-
-    const ranked = ranking.sorted
-      .map((rankedEntity: any) => {
-        const key = `${rankedEntity.identifier.ns}:${rankedEntity.identifier.pk}`;
-        const entity = entityMap.get(key);
-        return entity ? { ...rankedEntity, entity } : null;
-      })
-      .filter(Boolean);
-
-    const unranked = ranking.unsorted
-      .map((identifier: any) => {
-        const key = `${identifier.ns}:${identifier.pk}`;
-        return entityMap.get(key);
-      })
-      .filter(Boolean);
-
-    return { ranked, unranked };
-  }, [ranking, entities]);
 
   // Early return AFTER all hooks are called
   if (!parentEntity) {
@@ -233,65 +215,6 @@ export function VoteWorkspace({ parentEntity, user }: VoteWorkspaceProps) {
           No pairs available for voting
         </div>
       )}
-
-      {/* Rankings Section */}
-      <div style={{ marginTop: '40px' }}>
-        <h3 style={{ color: '#fff' }}>Current Rankings</h3>
-        {rankingLoading ? (
-          <div style={{ color: '#999' }}>Loading rankings...</div>
-        ) : (
-          <>
-            {processedRanking.ranked.length > 0 && (
-              <div style={{ marginBottom: '20px' }}>
-                <h4 style={{ color: '#fff' }}>Ranked ({processedRanking.ranked.length})</h4>
-                <div>
-                  {processedRanking.ranked.map((item: any, index: number) => {
-                    const renderer = item.entity ? getEntityRenderer(item.entity) : null;
-                    return (
-                      <div
-                        key={`${item.identifier.ns}:${item.identifier.pk}`}
-                        style={{
-                          padding: '8px',
-                          borderBottom: '1px solid #333',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '12px',
-                        }}
-                      >
-                        <span style={{ fontWeight: 'bold', minWidth: '30px', color: '#fff' }}>#{index + 1}</span>
-                        {renderer?.renderRow(
-                          item.entity,
-                          false,
-                          () => {}
-                        )}
-                        <span style={{ marginLeft: 'auto', color: '#999' }}>
-                          {item.score.toFixed(3)}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {processedRanking.unranked.length > 0 && (
-              <div>
-                <h4 style={{ color: '#fff' }}>Unranked ({processedRanking.unranked.length})</h4>
-                <div>
-                  {processedRanking.unranked.map((entity: Entity) => {
-                    const renderer = getEntityRenderer(entity);
-                    return (
-                      <div key={`${entity.ns}:${entity.pk}`}>
-                        {renderer.renderRow(entity, false, () => {})}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </div>
     </div>
   );
 }
