@@ -154,52 +154,24 @@ cargo sqlx prepare
 
 ## Claude Code Integration
 
-Claude Code can manage these processes natively - no need for supervisord or process orchestration tools!
+Claude Code can manage these processes natively with background execution - no need for supervisord!
 
 ### Start servers in background
 
 **Backend:**
 ```bash
 cd rustsorter && RUST_LOG=debug DATABASE_URL=postgres://postgres:password@localhost:5439/postgres?sslmode=disable cargo run
-# Use run_in_background: true
-# Returns a process ID like: 748762
 ```
 
 **Frontend:**
 ```bash
 cd frontsorter && npm run dev
-# Use run_in_background: true
-# Returns a process ID like: 7681cc
 ```
 
-### Monitor logs
-
-Check output from background processes using their process ID:
+**Check running servers:**
 ```bash
-# View frontend logs
-BashOutput 7681cc
-
-# View backend logs
-BashOutput 748762
-```
-
-### Stop servers
-
-Kill background processes using their process ID:
-```bash
-# Stop frontend
-KillShell 7681cc
-
-# Stop backend
-KillShell 748762
-```
-
-### Check running servers
-
-```bash
-# Check if ports are in use
 lsof -i :5173 -i :8081
-
-# Frontend runs on: http://localhost:5173/
-# Backend runs on:  http://localhost:8081/api/
 ```
+
+- Frontend: http://localhost:5173/
+- Backend: http://localhost:8081/api/
