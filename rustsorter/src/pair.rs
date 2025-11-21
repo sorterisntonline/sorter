@@ -4,7 +4,7 @@ use rand::seq::SliceRandom;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
-use ts_rs::TS;
+
 
 use crate::{
     app_state::AppState,
@@ -53,8 +53,7 @@ struct _Vote {
     _magnitude: i32,
 }
 
-#[derive(Deserialize, Debug, JsonSchema, TS)]
-#[ts(export)]
+#[derive(Deserialize, Debug, JsonSchema)]
 pub struct PairQueryParams {
     ns: String,
     pk: String,
@@ -65,8 +64,7 @@ pub struct PairQueryParams {
     random: Option<bool>,
 }
 
-#[derive(Serialize, Debug, JsonSchema, TS)]
-#[ts(export)]
+#[derive(Serialize, Debug, JsonSchema)]
 pub struct PairResponse {
     left_entity: crate::entity::Entity,
     right_entity: crate::entity::Entity,

@@ -5,7 +5,7 @@ use axum::{
 };
 use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
-use ts_rs::TS;
+
 use uuid::Uuid;
 
 use crate::{
@@ -16,8 +16,7 @@ use crate::{
     sessions,
 };
 
-#[derive(Serialize, TS)]
-#[ts(export)]
+#[derive(Serialize)]
 pub struct SessionStatusResponse {
     pub authenticated: bool,
     pub session_type: Option<String>, // "temp" | "full"
@@ -25,21 +24,18 @@ pub struct SessionStatusResponse {
     pub temp_data: Option<TempSessionData>,
 }
 
-#[derive(Deserialize, TS)]
-#[ts(export)]
+#[derive(Deserialize)]
 pub struct CompleteSignupRequest {
     pub handle: String,
 }
 
-#[derive(Serialize, TS)]
-#[ts(export)]
+#[derive(Serialize)]
 pub struct CompleteSignupResponse {
     pub user: User,
     pub message: String,
 }
 
-#[derive(Serialize, TS)]
-#[ts(export)]
+#[derive(Serialize)]
 pub struct LogoutResponse {
     pub message: String,
 }
@@ -253,8 +249,7 @@ pub struct HandleAvailabilityQuery {
     pub handle: String,
 }
 
-#[derive(Serialize, TS)]
-#[ts(export)]
+#[derive(Serialize)]
 pub struct HandleAvailabilityResponse {
     pub available: bool,
     pub valid: bool,
@@ -288,8 +283,7 @@ pub async fn check_handle(
     }))
 }
 
-#[derive(Serialize, TS)]
-#[ts(export)]
+#[derive(Serialize)]
 pub struct ImportRecentSongsResponse {
     pub imported_count: i32,
     pub message: String,
@@ -464,8 +458,7 @@ pub async fn import_recent_songs(
     }))
 }
 
-#[derive(Serialize, TS)]
-#[ts(export)]
+#[derive(Serialize)]
 pub struct SpotifySong {
     pub id: String,
     pub title: String,

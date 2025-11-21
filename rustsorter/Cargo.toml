@@ -46,7 +46,6 @@ tower-http = { version = "0.5", features = ["trace", "cors", "fs"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 async-trait = "0.1.88"
 sea-query = "0.32.4"
-ts-rs = { version = "10.0", features = ["serde-compat", "chrono-impl", "uuid-impl"] }
 
 [dev-dependencies]
 criterion = "0.5"
