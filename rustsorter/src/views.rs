@@ -99,7 +99,7 @@ pub async fn landing_page(
     page(content)
 }
 
-// GET /view/:ns/:pk - View a single entity
+// GET /e/:ns/:pk - View a single entity
 pub async fn view_entity(
     State(state): State<AppState>,
     Path((ns, pk)): Path<(String, String)>,
@@ -170,7 +170,7 @@ pub async fn view_entity(
                         ul {
                             @for parent in &parents {
                                 li {
-                                    a href=(format!("/view/{}/{}?as_user={}", parent.ns, parent.pk, user_handle)) {
+                                    a href=(format!("/e/{}/{}?as_user={}", parent.ns, parent.pk, user_handle)) {
                                         (parent.title.as_deref().unwrap_or("Untitled"))
                                     }
                                     " (" (parent.ns) ")"
@@ -186,7 +186,7 @@ pub async fn view_entity(
                         ul {
                             @for child in &children {
                                 li {
-                                    a href=(format!("/view/{}/{}?as_user={}", child.ns, child.pk, user_handle)) {
+                                    a href=(format!("/e/{}/{}?as_user={}", child.ns, child.pk, user_handle)) {
                                         (child.title.as_deref().unwrap_or("Untitled"))
                                     }
                                     " (" (child.ns) ")"
@@ -324,7 +324,7 @@ pub async fn pair_page(
                     img src=(img) alt="Left entity";
                 }
                 p {
-                    a href=(format!("/view/{}/{}?as_user={}", left.ns, left.pk, user_handle)) { "View details" }
+                    a href=(format!("/e/{}/{}?as_user={}", left.ns, left.pk, user_handle)) { "View details" }
                 }
             }
 
@@ -334,7 +334,7 @@ pub async fn pair_page(
                     img src=(img) alt="Right entity";
                 }
                 p {
-                    a href=(format!("/view/{}/{}?as_user={}", right.ns, right.pk, user_handle)) { "View details" }
+                    a href=(format!("/e/{}/{}?as_user={}", right.ns, right.pk, user_handle)) { "View details" }
                 }
             }
 
@@ -501,7 +501,7 @@ pub async fn explore_recent(
             ul {
                 @for entity in &entities {
                     li {
-                        a href=(format!("/view/{}/{}?as_user={}", entity.ns, entity.pk, user_handle)) {
+                        a href=(format!("/e/{}/{}?as_user={}", entity.ns, entity.pk, user_handle)) {
                             (entity.title.as_deref().unwrap_or("Untitled"))
                         }
                         " (" (entity.ns) ":" (entity.pk) ")"
@@ -544,7 +544,7 @@ pub async fn explore_lists(
             ul {
                 @for list in &lists {
                     li {
-                        a href=(format!("/view/{}/{}?as_user={}", list.ns, list.pk, user_handle)) {
+                        a href=(format!("/e/{}/{}?as_user={}", list.ns, list.pk, user_handle)) {
                             (list.title.as_deref().unwrap_or("Untitled"))
                         }
                         " - "
@@ -627,7 +627,7 @@ pub async fn my_profile(
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/", axum::routing::get(landing_page))
-        .route("/view/{ns}/{pk}", axum::routing::get(view_entity))
+        .route("/e/{ns}/{pk}", axum::routing::get(view_entity))
         .route("/pair", axum::routing::get(pair_page))
         .route("/vote/commit", axum::routing::get(vote_commit))
         .route("/explore/recent", axum::routing::get(explore_recent))
