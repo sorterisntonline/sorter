@@ -199,24 +199,17 @@ fn router(app_state: AppState) -> Router {
         .layer(TraceLayer::new_for_http())
         .layer(Extension(Arc::new(api)));
 
-    // Static file serving for the built React app.
+    // Static file serving
     let static_dir_env = env::var("STATIC_DIR").ok();
-
-    // for dev, use vite's dev server. these routes are only for production
 
     if let Some(dir) = static_dir_env {
         let index_path = format!("{}/index.html", dir);
-        let assets_path = format!("{}/assets", dir);
 
         let router = router
-            // Serve built asset files under /assets
-            .nest_service("/assets", ServeDir::new(assets_path))
-            // Serve common top-level static files
-            .route_service("/vite.svg", ServeFile::new(format!("{}/vite.svg", dir)))
+            // Serve static files from the static directory
+            .nest_service("/static", ServeDir::new(dir.clone()))
             // Serve index.html at the root
-            .route_service("/", ServeFile::new(index_path.clone()))
-            // SPA fallback: serve index.html for all other routes
-            .fallback_service(ServeFile::new(index_path));
+            .route_service("/", ServeFile::new(index_path));
 
         router
     } else {
