@@ -5,11 +5,9 @@ pub mod auth_middleware;
 pub mod entity;
 pub mod entity_relationships;
 pub mod extractors;
-pub mod list_actions;
 pub mod models;
 pub mod pagerank;
 pub mod pair;
-pub mod pool;
 pub mod sessions;
 pub mod vote;
 

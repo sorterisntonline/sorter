@@ -9,7 +9,6 @@ use ts_rs::TS;
 use crate::{
     app_state::AppState,
     extractors::maybe_user::AuthenticatedUser,
-    list_actions,
     models::{Error, Json, MapErrorSqlx},
 };
 
@@ -383,7 +382,7 @@ pub fn select_entity_pair(
 
 async fn get_filtered_children(
     state: &AppState,
-    user_id: Uuid,
+    _user_id: Uuid,
     parent_ns: &str,
     parent_pk: &str,
     pin_ns: Option<&str>,
@@ -401,22 +400,7 @@ async fn get_filtered_children(
     .await
     .map_error("entity")?;
 
-    let (_, membership) =
-        list_actions::resolve_children_membership(state, user_id, parent_ns, parent_pk, children)
-            .await?;
-
-    let list_filtered: Vec<crate::entity::Entity> = membership
-        .into_iter()
-        .filter_map(|(entity, is_in)| if is_in { Some(entity) } else { None })
-        .collect();
-    
-    // Apply pool filtering - only include entities that are explicitly in the user's pool
-    crate::pool::filter_entities_by_pool(
-        state, 
-        user_id, 
-        &list_filtered, 
-        crate::pool::PoolMembershipStatus::InPool
-    ).await
+    Ok(children)
 }
 
 async fn get_pair_handler(
@@ -487,7 +471,7 @@ async fn get_pair_handler(
     }
     .map_err(|e| Error::BadRequest {
         message: match e {
-            PairSelectionError::EmptyPool => "No entities in your pool for comparison. Import some items and add them to your pool first.".into(),
+            PairSelectionError::EmptyPool => "No entities available for comparison.".into(),
             PairSelectionError::InsufficientEntities => "Not enough entities available for pairing.".into(),
             PairSelectionError::PinNotFound => "Requested pinned entity not found.".into(),
         }
