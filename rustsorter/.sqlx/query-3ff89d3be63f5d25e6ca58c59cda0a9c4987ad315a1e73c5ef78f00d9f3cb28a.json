@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO votes (left_entity_ns, left_entity_pk, right_entity_ns, right_entity_pk, user_id, attribute_id, magnitude)\n        VALUES ($1, $2, $3, $4, $5, 1, $6)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3ff89d3be63f5d25e6ca58c59cda0a9c4987ad315a1e73c5ef78f00d9f3cb28a"
+}

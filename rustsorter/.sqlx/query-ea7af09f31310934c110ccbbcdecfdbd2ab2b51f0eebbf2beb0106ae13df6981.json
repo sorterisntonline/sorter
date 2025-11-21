@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, handle, display_name, username, primary_provider, avatar_url, bio, created_at FROM users WHERE handle = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "handle",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "display_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "username",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "primary_provider",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "avatar_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "bio",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "ea7af09f31310934c110ccbbcdecfdbd2ab2b51f0eebbf2beb0106ae13df6981"
+}

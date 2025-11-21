@@ -1,0 +1,59 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT user_id, ns, pk, title, profile_picture_url, metadata, created_at FROM entities WHERE ns = $1 AND pk = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "ns",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "pk",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "profile_picture_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "metadata",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "ee94b330d27ee08fab7c67d0b6c35ded4dce0deef69ef20a3383e2192fe197b6"
+}

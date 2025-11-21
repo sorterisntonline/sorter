@@ -1,0 +1,56 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT user_id, ns, pk, title, profile_picture_url, metadata, created_at FROM entities ORDER BY created_at DESC LIMIT 50",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "ns",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "pk",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "profile_picture_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "metadata",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "d841ab4d406fa728e015e58db7b61c8372eb824b24e59ee94fab993adaf2531c"
+}

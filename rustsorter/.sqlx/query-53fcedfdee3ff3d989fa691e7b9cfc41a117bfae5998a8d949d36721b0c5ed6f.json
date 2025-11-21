@@ -1,0 +1,59 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT e.user_id, e.ns, e.pk, e.title, e.profile_picture_url, e.metadata, e.created_at\n            FROM entities e\n            JOIN entity_relationships er ON e.ns = er.child_ns AND e.pk = er.child_pk\n            WHERE er.parent_ns = $1 AND er.parent_pk = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "ns",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "pk",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "profile_picture_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "metadata",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "53fcedfdee3ff3d989fa691e7b9cfc41a117bfae5998a8d949d36721b0c5ed6f"
+}
