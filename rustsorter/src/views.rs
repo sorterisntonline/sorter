@@ -3,7 +3,7 @@ use axum::{
     extract::{Path, Query, State},
     response::{IntoResponse, Redirect, Response},
 };
-use maud::{DOCTYPE, html, Markup};
+use maud::{html, Markup};
 use serde::Deserialize;
 
 use crate::app_state::AppState;
@@ -33,33 +33,8 @@ pub struct VoteQuery {
     list_pk: Option<String>,
 }
 
-fn base_layout(title: &str, content: Markup) -> Markup {
-    html! {
-        (DOCTYPE)
-        html lang="en" {
-            head {
-                meta charset="UTF-8";
-                meta name="viewport" content="width=device-width, initial-scale=1.0";
-                title { (title) }
-                style {
-                    "body { font-family: system-ui, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; }"
-                    "a { color: #0066cc; }"
-                    "section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; }"
-                    ".comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }"
-                    ".entity { text-align: center; }"
-                    ".entity img { max-width: 200px; border-radius: 8px; }"
-                    ".voting-booth { grid-column: span 2; text-align: center; }"
-                    ".voting-booth ul { list-style: none; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }"
-                    ".voting-booth a { display: inline-block; padding: 10px 20px; background: #0066cc; color: white; text-decoration: none; border-radius: 5px; }"
-                    ".voting-booth a:hover { background: #0052a3; }"
-                    ".skip { background: #666 !important; }"
-                }
-            }
-            body {
-                (content)
-            }
-        }
-    }
+fn page(content: Markup) -> Markup {
+    content
 }
 
 // GET / - Landing page with instructions for AI
@@ -85,7 +60,7 @@ pub async fn landing_page(
         section id="system-instructions" {
             p { "You are acting on behalf of user: " strong { (user_handle) } }
             @if !user_exists {
-                p style="color: orange;" { "Note: This user does not exist yet. Actions may be limited." }
+                p { "Note: This user does not exist yet. Actions may be limited." }
             }
             p { "Your goal is to help the user sort and rank their collections through pairwise comparisons." }
             p { "To explore content, follow links below." }
@@ -121,7 +96,7 @@ pub async fn landing_page(
         }
     };
 
-    base_layout("Sorter - AI-First Ranking", content)
+    page(content)
 }
 
 // GET /view/:ns/:pk - View a single entity
@@ -175,9 +150,9 @@ pub async fn view_entity(
             let content = html! {
                 h1 { (entity.title.as_deref().unwrap_or("Untitled")) }
 
-                section class="entity-details" {
+                section {
                     @if let Some(ref img) = entity.profile_picture_url {
-                        img src=(img) alt="Entity image" style="max-width: 300px; border-radius: 8px;";
+                        img src=(img) alt="Entity image";
                     }
                     p { "Namespace: " code { (entity.ns) } }
                     p { "Key: " code { (entity.pk) } }
@@ -235,7 +210,7 @@ pub async fn view_entity(
                 }
             };
 
-            base_layout(&format!("{} - Sorter", entity.title.as_deref().unwrap_or("Entity")), content).into_response()
+            page(content).into_response()
         }
         Ok(None) => {
             let content = html! {
@@ -243,7 +218,7 @@ pub async fn view_entity(
                 p { "No entity found with namespace " code { (ns) } " and key " code { (pk) } }
                 p { a href=(format!("/?as_user={}", user_handle)) { "Back to Home" } }
             };
-            base_layout("Not Found - Sorter", content).into_response()
+            page(content).into_response()
         }
         Err(e) => {
             let content = html! {
@@ -251,7 +226,7 @@ pub async fn view_entity(
                 p { "Database error: " (e.to_string()) }
                 p { a href=(format!("/?as_user={}", user_handle)) { "Back to Home" } }
             };
-            base_layout("Error - Sorter", content).into_response()
+            page(content).into_response()
         }
     }
 }
@@ -315,7 +290,7 @@ pub async fn pair_page(
             p { "Need at least 2 items to compare. Found: " (entities.len()) }
             p { a href=(format!("/?as_user={}", user_handle)) { "Back to Home" } }
         };
-        return base_layout("Not Enough Items - Sorter", content).into_response();
+        return page(content).into_response();
     }
 
     // Select a pair (simplified - just pick first two for now, could use ranking logic)
@@ -329,7 +304,7 @@ pub async fn pair_page(
                 p { "Unable to find a valid pair to compare." }
                 p { a href=(format!("/?as_user={}", user_handle)) { "Back to Home" } }
             };
-            return base_layout("Error - Sorter", content).into_response();
+            return page(content).into_response();
         }
     };
 
@@ -342,8 +317,8 @@ pub async fn pair_page(
     let content = html! {
         h1 { "Compare" }
 
-        article class="comparison" {
-            section class="entity" id="left" {
+        article {
+            section id="left" {
                 h2 { (left.title.as_deref().unwrap_or("Untitled")) }
                 @if let Some(ref img) = left.profile_picture_url {
                     img src=(img) alt="Left entity";
@@ -353,7 +328,7 @@ pub async fn pair_page(
                 }
             }
 
-            section class="entity" id="right" {
+            section id="right" {
                 h2 { (right.title.as_deref().unwrap_or("Untitled")) }
                 @if let Some(ref img) = right.profile_picture_url {
                     img src=(img) alt="Right entity";
@@ -363,7 +338,7 @@ pub async fn pair_page(
                 }
             }
 
-            section class="voting-booth" {
+            section {
                 h3 { "Cast Your Vote" }
                 @if user.is_some() {
                     p { "Which do you prefer?" }
@@ -381,7 +356,7 @@ pub async fn pair_page(
                             }
                         }
                         li {
-                            a class="skip" href=(format!("/pair?as_user={}{}", user_handle,
+                            a href=(format!("/pair?as_user={}{}", user_handle,
                                 if let (Some(ns), Some(pk)) = (&params.ns, &params.pk) {
                                     format!("&ns={}&pk={}", ns, pk)
                                 } else {
@@ -404,9 +379,9 @@ pub async fn pair_page(
                         }
                     }
                 } @else {
-                    p style="color: orange;" { "Sign in to vote. Browsing as anonymous." }
+                    p { "Sign in to vote. Browsing as anonymous." }
                     p {
-                        a class="skip" href=(format!("/pair?as_user={}{}", user_handle,
+                        a href=(format!("/pair?as_user={}{}", user_handle,
                             if let (Some(ns), Some(pk)) = (&params.ns, &params.pk) {
                                 format!("&ns={}&pk={}", ns, pk)
                             } else {
@@ -419,12 +394,12 @@ pub async fn pair_page(
             }
         }
 
-        p style="text-align: center; margin-top: 20px;" {
+        p {
             a href=(format!("/?as_user={}", user_handle)) { "Back to Home" }
         }
     };
 
-    base_layout("Compare - Sorter", content).into_response()
+    page(content).into_response()
 }
 
 // GET /vote/commit - Commit a vote and redirect to next pair
@@ -448,7 +423,7 @@ pub async fn vote_commit(
                 h1 { "User Not Found" }
                 p { "Cannot vote: user '" (params.as_user) "' does not exist." }
             };
-            return base_layout("Error - Sorter", content).into_response();
+            return page(content).into_response();
         }
     };
 
@@ -497,7 +472,7 @@ pub async fn vote_commit(
                 p { "Error recording vote: " (e.to_string()) }
                 p { a href=(format!("/?as_user={}", params.as_user)) { "Back to Home" } }
             };
-            base_layout("Error - Sorter", content).into_response()
+            page(content).into_response()
         }
     }
 }
@@ -538,7 +513,7 @@ pub async fn explore_recent(
         p { a href=(format!("/?as_user={}", user_handle)) { "Back to Home" } }
     };
 
-    base_layout("Recent - Sorter", content)
+    page(content)
 }
 
 // GET /explore/lists - Show available lists/collections
@@ -584,7 +559,7 @@ pub async fn explore_lists(
         p { a href=(format!("/?as_user={}", user_handle)) { "Back to Home" } }
     };
 
-    base_layout("Collections - Sorter", content)
+    page(content)
 }
 
 // GET /me - User profile
@@ -618,7 +593,7 @@ pub async fn my_profile(
 
                 section {
                     @if let Some(ref avatar) = user.avatar_url {
-                        img src=(avatar) alt="Avatar" style="max-width: 100px; border-radius: 50%;";
+                        img src=(avatar) alt="Avatar";
                     }
                     p { "Handle: " strong { (user.handle) } }
                     @if let Some(ref name) = user.display_name {
@@ -646,7 +621,7 @@ pub async fn my_profile(
         }
     };
 
-    base_layout(&format!("{} - Sorter", user_handle), content)
+    page(content)
 }
 
 pub fn routes() -> Router<AppState> {
