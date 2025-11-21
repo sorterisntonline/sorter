@@ -30,14 +30,12 @@ use rustsorter::{
     models::{Error, Json},
     pagerank,
     pair,
+    views,
     vote,
 };
 use schemars::JsonSchema;
 use serde::Serialize;
-use tower_http::{
-    services::{ServeDir, ServeFile},
-    trace::TraceLayer,
-};
+use tower_http::trace::TraceLayer;
 
 #[derive(Serialize, JsonSchema)]
 struct HealthResponse {
@@ -191,27 +189,13 @@ fn router(app_state: AppState) -> Router {
             app_state.clone(),
             auth_middleware::try_auth,
         ))) // Auth routes with auth middleware
+        // Mount HTML views for AI-browsable interface
+        .merge(views::routes())
         .with_state(app_state)
         .layer(TraceLayer::new_for_http())
         .layer(Extension(Arc::new(api)));
 
-    // Static file serving
-    let static_dir_env = env::var("STATIC_DIR").ok();
-
-    if let Some(dir) = static_dir_env {
-        let index_path = format!("{}/index.html", dir);
-
-        let router = router
-            // Serve static files from the static directory
-            .nest_service("/static", ServeDir::new(dir.clone()))
-            // Serve index.html at the root
-            .route_service("/", ServeFile::new(index_path));
-
-        router
-    } else {
-        // If no static directory is present, just return the API router.
-        router
-    }
+    router
 }
 
 fn api_transform(api: TransformOpenApi) -> TransformOpenApi {
