@@ -263,26 +263,16 @@ pub async fn pair_page(
 ) -> Response {
     let user_handle = params.as_user.unwrap_or_else(|| "anonymous".to_string());
 
-    // Get user
+    // Get user (optional - anonymous can still browse)
     let user = sqlx::query_as!(
         crate::models::User,
         "SELECT id, handle, display_name, username, primary_provider, avatar_url, bio, created_at FROM users WHERE handle = $1",
         &user_handle
     )
     .fetch_optional(&state.db)
-    .await;
-
-    let user = match user {
-        Ok(Some(u)) => u,
-        _ => {
-            let content = html! {
-                h1 { "User Not Found" }
-                p { "User '" (user_handle) "' does not exist. Please use a valid user handle." }
-                p { a href="/" { "Back to Home" } }
-            };
-            return base_layout("User Not Found - Sorter", content).into_response();
-        }
-    };
+    .await
+    .ok()
+    .flatten();
 
     // If ns/pk provided, get children of that list
     let entities: Vec<crate::entity::Entity> = if let (Some(ns), Some(pk)) = (&params.ns, &params.pk) {
@@ -298,12 +288,21 @@ pub async fn pair_page(
         .fetch_all(&state.db)
         .await
         .unwrap_or_default()
-    } else {
-        // Get user's entities
+    } else if let Some(ref u) = user {
+        // Get user's entities if logged in
         sqlx::query_as!(
             crate::entity::Entity,
             "SELECT user_id, ns, pk, title, profile_picture_url, metadata, created_at FROM entities WHERE user_id = $1 LIMIT 100",
-            user.id
+            u.id
+        )
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default()
+    } else {
+        // Anonymous: get recent entities
+        sqlx::query_as!(
+            crate::entity::Entity,
+            "SELECT user_id, ns, pk, title, profile_picture_url, metadata, created_at FROM entities ORDER BY created_at DESC LIMIT 100"
         )
         .fetch_all(&state.db)
         .await
@@ -366,40 +365,54 @@ pub async fn pair_page(
 
             section class="voting-booth" {
                 h3 { "Cast Your Vote" }
-                p { "Which do you prefer?" }
-                ul {
-                    li {
-                        a href=(format!("/vote/commit?as_user={}&left_ns={}&left_pk={}&right_ns={}&right_pk={}&winner=left&mag=50{}",
-                            user_handle, left.ns, left.pk, right.ns, right.pk, list_params)) {
-                            "Much Better (Left)"
+                @if user.is_some() {
+                    p { "Which do you prefer?" }
+                    ul {
+                        li {
+                            a href=(format!("/vote/commit?as_user={}&left_ns={}&left_pk={}&right_ns={}&right_pk={}&winner=left&mag=50{}",
+                                user_handle, left.ns, left.pk, right.ns, right.pk, list_params)) {
+                                "Much Better (Left)"
+                            }
+                        }
+                        li {
+                            a href=(format!("/vote/commit?as_user={}&left_ns={}&left_pk={}&right_ns={}&right_pk={}&winner=left&mag=10{}",
+                                user_handle, left.ns, left.pk, right.ns, right.pk, list_params)) {
+                                "Slightly Better (Left)"
+                            }
+                        }
+                        li {
+                            a class="skip" href=(format!("/pair?as_user={}{}", user_handle,
+                                if let (Some(ns), Some(pk)) = (&params.ns, &params.pk) {
+                                    format!("&ns={}&pk={}", ns, pk)
+                                } else {
+                                    String::new()
+                                })) {
+                                "Skip"
+                            }
+                        }
+                        li {
+                            a href=(format!("/vote/commit?as_user={}&left_ns={}&left_pk={}&right_ns={}&right_pk={}&winner=right&mag=10{}",
+                                user_handle, left.ns, left.pk, right.ns, right.pk, list_params)) {
+                                "Slightly Better (Right)"
+                            }
+                        }
+                        li {
+                            a href=(format!("/vote/commit?as_user={}&left_ns={}&left_pk={}&right_ns={}&right_pk={}&winner=right&mag=50{}",
+                                user_handle, left.ns, left.pk, right.ns, right.pk, list_params)) {
+                                "Much Better (Right)"
+                            }
                         }
                     }
-                    li {
-                        a href=(format!("/vote/commit?as_user={}&left_ns={}&left_pk={}&right_ns={}&right_pk={}&winner=left&mag=10{}",
-                            user_handle, left.ns, left.pk, right.ns, right.pk, list_params)) {
-                            "Slightly Better (Left)"
-                        }
-                    }
-                    li {
+                } @else {
+                    p style="color: orange;" { "Sign in to vote. Browsing as anonymous." }
+                    p {
                         a class="skip" href=(format!("/pair?as_user={}{}", user_handle,
                             if let (Some(ns), Some(pk)) = (&params.ns, &params.pk) {
                                 format!("&ns={}&pk={}", ns, pk)
                             } else {
                                 String::new()
                             })) {
-                            "Skip"
-                        }
-                    }
-                    li {
-                        a href=(format!("/vote/commit?as_user={}&left_ns={}&left_pk={}&right_ns={}&right_pk={}&winner=right&mag=10{}",
-                            user_handle, left.ns, left.pk, right.ns, right.pk, list_params)) {
-                            "Slightly Better (Right)"
-                        }
-                    }
-                    li {
-                        a href=(format!("/vote/commit?as_user={}&left_ns={}&left_pk={}&right_ns={}&right_pk={}&winner=right&mag=50{}",
-                            user_handle, left.ns, left.pk, right.ns, right.pk, list_params)) {
-                            "Much Better (Right)"
+                            "Next Pair"
                         }
                     }
                 }
@@ -454,12 +467,10 @@ pub async fn vote_commit(
             (&params.right_ns, &params.right_pk, &params.left_ns, &params.left_pk, -magnitude)
         };
 
-    // Insert or update vote
+    // Insert vote (each vote is a new row - history is preserved)
     let result = sqlx::query!(
         r#"INSERT INTO votes (left_entity_ns, left_entity_pk, right_entity_ns, right_entity_pk, user_id, attribute_id, magnitude)
-        VALUES ($1, $2, $3, $4, $5, 1, $6)
-        ON CONFLICT (left_entity_ns, left_entity_pk, right_entity_ns, right_entity_pk, user_id, attribute_id)
-        DO UPDATE SET magnitude = $6, deleted_at = NULL"#,
+        VALUES ($1, $2, $3, $4, $5, 1, $6)"#,
         left_ns,
         left_pk,
         right_ns,
