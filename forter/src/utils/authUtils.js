@@ -5,8 +5,11 @@ import { current_session, fetchSession } from "../session";
 let lastSyncTime = 0;
 const SYNC_THROTTLE_MS = 5000; // Only sync once every 5 seconds
 
-// Get base URL based on Vite's mode
+// Get base URL based on current origin, with build-mode fallbacks for SSR/build
 const getBaseUrl = () => {
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin;
+  }
   switch (import.meta.env.MODE) {
     case 'production':
       return 'https://sorter.social';

@@ -1,5 +1,6 @@
 (ns app.spotify
   (:require [app.oauth :as oauth]
+            [app.util :as util]
             [hato.client :as hc]
             [clojure.data.json :as json]
             [ring.util.codec :as codec]
@@ -47,10 +48,7 @@
 
 
 (defn get-hostname []
-  (case (System/getenv "ENVIRONMENT")
-    "production" "https://sorter.social"
-    "staging" "https://staging.sorter.social"
-    "http://localhost:3000"))
+  (util/get-base-url))
 
 (defn create-spotify-tag
   "Creates a tag for a Spotify entity (artist, album, track) if it doesn't exist"

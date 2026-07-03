@@ -3,6 +3,7 @@
             [clojure.data.json :as json]
             [hato.client :as hc]
             [app.database :as db]
+            [app.util :as util]
             [honey.sql.helpers :as h]
             [ring.util.codec :as codec])
   (:import [java.util Base64]))
@@ -13,12 +14,7 @@
     encoded-bytes))
 
 (defn get-hostname []
-  (let [env (System/getenv "ENVIRONMENT")]
-    (println "Current environment:" env)
-    (case env
-      "production" "https://sorter.social"
-      "staging" "https://staging.sorter.social"
-      "http://localhost:3000")))
+  (util/get-base-url))
 
 (defn get-origin-hostname [req]
   (let [origin (get-in req [:headers "origin"])

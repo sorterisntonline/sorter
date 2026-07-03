@@ -6,6 +6,7 @@
             [ring.util.response :as response]
             [app.database :as db]
             [app.permissions :as perms]
+            [app.util :as util]
             [honey.sql.helpers :as h]
             [sluj.core :refer [sluj]]))
 
@@ -13,9 +14,7 @@
 (def client-secret (System/getenv "BORTER_LINEAR_CLIENT_SECRET"))
 
 (defn get-hostname []
-  (case (.getCanonicalHostName (java.net.InetAddress/getLocalHost))
-    "sorter.social" "https://sorter.social/api/linear/callback"
-    "http://localhost:3000/api/linear/callback"))
+  (str (util/get-base-url) "/api/linear/callback"))
 
 (defn code->token [code]
   (def code code)

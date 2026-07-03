@@ -1,6 +1,7 @@
 (ns app.twitter
   (:require [app.database :as db]
             [app.permissions :as perms]
+            [app.util :as util]
             [honey.sql.helpers :as h]
             [hato.client :as hc]
             [clojure.data.json :as json]
@@ -37,9 +38,7 @@
   (clojure.string/join "&" (map (fn [[k v]] (str (name k) "=" v)) params)))
 
 (defn get-hostname []
-  (case (.getCanonicalHostName (java.net.InetAddress/getLocalHost))
-    "sorter.isnt.online" "https://sorter.isnt.online/api/twitter/callback"
-    "http://localhost:3000/api/twitter/callback"))
+  (str (util/get-base-url) "/api/twitter/callback"))
 
 (defn encode-b64 [s]
   (.encodeToString (java.util.Base64/getEncoder) (.getBytes s)))

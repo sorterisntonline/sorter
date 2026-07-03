@@ -1,6 +1,7 @@
 (ns app.login
   (:require [crypto.password.bcrypt :as password]
             [app.database :as db]
+            [app.util :as util]
             [honey.sql.helpers :as h]
             [hato.client :as hc]
             [clojure.data.json :as json]
@@ -12,10 +13,7 @@
 (def environment (or (System/getenv "ENVIRONMENT") "development"))
 
 (defn get-base-url []
-  (case environment
-    "production" "https://sorter.social"
-    "staging" "https://staging.sorter.social"
-    "development" "http://localhost:3000"))  ; fallback for development
+  (util/get-base-url))
 
 (defn create-email-content
   "Creates a standardized email structure with customizable content"

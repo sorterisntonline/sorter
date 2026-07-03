@@ -3,11 +3,11 @@ name: deploy to fly.io
 on:
   push:
     branches:
-      - main
+      - staging
   workflow_dispatch:
 
 concurrency:
-  group: fly-deploy-main
+  group: fly-deploy-staging
   cancel-in-progress: true
 
 jobs:

@@ -6,6 +6,7 @@
             [ring.util.response :as response]
             [app.database :as db]
             [app.permissions :as perms]
+            [app.util :as util]
             [honey.sql.helpers :as h]
             [sluj.core :refer [sluj]]))
 
@@ -32,9 +33,7 @@
       :body (json/read-str {:key-fn keyword})))
 
 (defn get-hostname []
-  (case (.getCanonicalHostName (java.net.InetAddress/getLocalHost))
-    "localhost" "http://localhost:3000/api/youtube/callback"
-    "https://sorter.isnt.online/api/youtube/callback"))
+  (str (util/get-base-url) "/api/youtube/callback"))
 
 
 
