@@ -10,7 +10,7 @@ export const Leaderboard = () => {
     const sortedData = data.sort((a, b) => b.count - a.count);
 
     return (
-        <div className="page-padding-top mt-5 w-full max-w-full overflow-x-hidden">
+        <div className="page mt-5 w-full max-w-full overflow-x-hidden">
             <table className="w-full">
                 {data.map((user) => {
                     console.log('user', user);

@@ -154,7 +154,7 @@ export const FrontpageFeed = () => {
     const addDay = () => setDays(prev => [...prev, prev.length]);
 
     return (
-        <div className="page-padding-top w-full max-w-full overflow-x-hidden">
+        <div className="page w-full max-w-full overflow-x-hidden">
             {days.map((day) => (
                 <FrontpageFeedDay
                     key={day}

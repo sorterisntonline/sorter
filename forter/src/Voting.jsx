@@ -1,172 +1,107 @@
-import { useLocation, useParams } from "wouter";
-import { VotesPanel } from "./VotesPanel";
-import { UserPanel } from "./UserPanel";
-import { VotePanel } from "./VotePanel";
-import { AttributePanel, selected_attribute } from "./AttributePanel";
-import { namespace } from "./main";
-import { showAllSorted, showAllUnsorted } from "./App";
+import { useLocation } from 'wouter';
+import { VotesPanel } from './VotesPanel';
+import { UserPanel } from './UserPanel';
+import { VotePanel } from './VotePanel';
+import { AttributePanel } from './AttributePanel';
+import { namespace } from './main';
 import { ItemsLists } from './ItemsLists';
-import { tag, toggle, selected_item, drawer_open, current_attribute } from "./App";
-import { Tag } from "./Tag";
-import { useEffect, useState, useRef } from "react";
-import { ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/24/solid";
-import { ItemPanel } from "./ItemPanel";
-import { Drawer } from "./components/Drawer";
+import { tag, current_attribute } from './App';
+import { useState } from 'react';
+import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/solid';
+import { Button } from './components/ui/Button';
+import { isMobileViewport } from './utils/layout';
 
-const MobileHeader = ({ can_vote, can_add, isVoting }) => {
-  const [_, setLocation] = useLocation();
-  let namespace = useParams().namespace;
-
-  return (
-    <div className="flex flex-col text-xl justify-self-start p-2">
-      <div className="flex flex-wrap items-center justify-center lg:justify-start">
-        <div
-          className="bg-purple-200 text-black dark:text-white dark:bg-purple-950 p-1 cursor-pointer"
-        >
-          #{tag.value.tag.ns}{tag.value.tag.ns ? '/' : ''}{tag.value.tag.slug}
-        </div>
-        <div className="px-2">by</div>
-        <AttributePanel />
-        
-        <div className="w-full lg:w-auto text-center lg:text-left lg:px-2">according to</div>
-        <UserPanel users={tag.value.users_who_voted} />
-      </div>
+const MobileVotesHeader = () => (
+  <section className="page border-b border-zinc-200 pb-4 dark:border-zinc-800">
+    <div className="mb-3 rounded-lg bg-accent-soft px-3 py-2 text-sm font-medium text-accent-strong dark:text-accent">
+      #{tag.value.tag.ns ? `${tag.value.tag.ns}/` : ''}{tag.value.tag.slug}
     </div>
-  );
-};
+    <div className="grid gap-3">
+      <AttributePanel compact />
+      <UserPanel users={tag.value.users_who_voted} compact />
+    </div>
+  </section>
+);
 
-export const Voting = ({ handleError, onSelectItem, onCloseItem }) => {
+export const Voting = ({ handleError, onSelectItem }) => {
   const [location, setLocation] = useLocation();
-  const isMobileDevice = () => window.innerWidth < 1024;
   const [showVotesPanel, setShowVotesPanel] = useState(false);
-  const votesPanelRef = useRef(null);
 
-  const filteredVotes = tag.value?.votes?.filter(v => v.attribute === current_attribute.value?.id) || [];
-  const sorteditems = tag.value?.["sorted"] || [];
-  const unsorteditems = tag.value?.["unsorted"] || [];
+  const filteredVotes =
+    tag.value?.votes?.filter((v) => v.attribute === current_attribute.value?.id) || [];
+  const sorteditems = tag.value?.sorted || [];
+  const unsorteditems = tag.value?.unsorted || [];
 
-  const scrollToVotesPanel = () => {
-    setShowVotesPanel(true);
+  const exitVoting = () => {
+    if (namespace.value) {
+      setLocation(`/namespace/${namespace.value}`);
+    } else {
+      setLocation(`/${tag.value.tag.id}/${tag.value.tag.slug}`);
+    }
   };
 
-  const scrollToVoting = () => {
-    setShowVotesPanel(false);
-  };
-
-  if (isMobileDevice()) {
+  if (isMobileViewport()) {
     return (
-      <div className="h-screen">
-        {/* Vote Motion Pane */}
-        <div className={`h-screen ${showVotesPanel ? 'hidden' : 'block'}`}>
-          <VotePanel handleError={handleError} isMobile={true} />
-          
-          {/* Navigation Controls */}
-          <div className="fixed bottom-4 left-0 right-0 flex justify-center items-center gap-2">
-            <button
-              className="px-4 py-2 border-2 border-red-500 rounded-lg 
-                       bg-white dark:bg-gray-800 shadow-lg
-                       text-sm font-normal lowercase"
-              onClick={() => {
-                const ns = namespace.value;
-                if (ns) {
-                  setLocation('/namespace/' + ns);
-                } else {
-                  setLocation('/' + tag.value.tag.id + '/' + tag.value.tag.slug);
-                }
-              }}
-            >
+      <div className="min-h-[100dvh] bg-surface">
+        <div className={showVotesPanel ? 'hidden' : 'block'}>
+          <VotePanel handleError={handleError} isMobile />
+          <div className="fixed inset-x-0 bottom-[calc(6.5rem+env(safe-area-inset-bottom,0px))] z-fab flex justify-center gap-2 px-4">
+            <Button variant="danger" size="sm" onClick={exitVoting}>
               stop voting
-            </button>
-            <button
-              className="p-1.5 rounded-lg bg-white dark:bg-gray-800 shadow-lg"
-              onClick={scrollToVotesPanel}
-            >
-              <ChevronDownIcon className="w-5 h-5 text-gray-600 dark:text-gray-300" />
-            </button>
+            </Button>
+            <Button variant="outline" size="icon" onClick={() => setShowVotesPanel(true)} aria-label="show votes">
+              <ChevronDownIcon className="h-5 w-5" />
+            </Button>
           </div>
         </div>
 
-        {/* Votes Panel View */}
-        <div 
-          ref={votesPanelRef}
-          className={`min-h-screen ${showVotesPanel ? 'block' : 'hidden'}`}
-        >
-          <button
-            className="fixed top-4 left-4 z-50 p-1.5 rounded-lg bg-white dark:bg-gray-800 shadow-lg"
-            onClick={scrollToVoting}
-          >
-            <ChevronUpIcon className="w-5 h-5 text-gray-600 dark:text-gray-300" />
-          </button>
-
-          <div className="pt-16">
-            <MobileHeader />
-            <div className="pt-4 pb-16">
-              <VotesPanel 
-                votes={filteredVotes} 
-                onSelectItem={onSelectItem}
-              />
-              <div className="flex justify-center w-full">
-                <ItemsLists 
-                  sorteditems={sorteditems}
-                  unsorteditems={unsorteditems}
-                  skippedItems={tag.value.skipped}
-                  onSelectItem={onSelectItem}
-                />
-              </div>
+        <div className={showVotesPanel ? 'block' : 'hidden'}>
+          <div className="sticky top-0 z-nav border-b border-zinc-200 bg-surface/95 backdrop-blur dark:border-zinc-800">
+            <div className="flex items-center gap-2 px-4 py-3">
+              <Button variant="outline" size="icon" onClick={() => setShowVotesPanel(false)} aria-label="back to voting">
+                <ChevronUpIcon className="h-5 w-5" />
+              </Button>
+              <span className="text-sm text-ink-muted">votes & rankings</span>
             </div>
           </div>
+          <MobileVotesHeader />
+          <VotesPanel votes={filteredVotes} onSelectItem={onSelectItem} />
+          <ItemsLists
+            sorteditems={sorteditems}
+            unsorteditems={unsorteditems}
+            skippedItems={tag.value.skipped}
+            onSelectItem={onSelectItem}
+          />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="dark:text-white flex flex-col py-3">
-      <div className="items-center">
-        <div className="text-xl flex flex-row page-padding-top">
-          <div className="px-2">
-            voting on
-          </div>
-          <AttributePanel />
-          <div className="px-2">
-            according to
-          </div>
-          <UserPanel users={tag.value.users_who_voted} />
-        </div>
-      </div>
+    <div className="flex flex-col gap-4">
+      <section className="page flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-ink-muted">voting on</span>
+        <AttributePanel />
+        <span className="text-ink-muted">according to</span>
+        <UserPanel users={tag.value.users_who_voted} />
+      </section>
 
-      <div className="flex lg:flex-row flex-col">
-        <button
-          className="border-2 border-red-500 lg:w-14 lg:h-56 w-full bigbutton"
-          onClick={() => {
-            const ns = namespace.value;
-            if (ns) {
-              setLocation('/namespace/' + ns);
-            } else {
-              setLocation('/' + tag.value.tag.id + '/' + tag.value.tag.slug);
-            }
-          }}
-        >
+      <div className="page flex gap-4">
+        <Button variant="danger" size="sm" className="h-fit shrink-0" onClick={exitVoting}>
           stop voting
-        </button>
-        <div className="w-full flex justify-center flex-col">
+        </Button>
+        <div className="min-w-0 flex-1">
           <VotePanel handleError={handleError} />
-          <br />
-          <VotesPanel 
-            votes={filteredVotes} 
-            onSelectItem={onSelectItem}
-          />
+          <VotesPanel votes={filteredVotes} onSelectItem={onSelectItem} />
         </div>
       </div>
 
-      <div className="flex justify-center w-full pb-16">
-        <ItemsLists 
-          sorteditems={sorteditems}
-          unsorteditems={unsorteditems}
-          skippedItems={tag.value.skipped}
-          onSelectItem={onSelectItem}
-        />
-      </div>
+      <ItemsLists
+        sorteditems={sorteditems}
+        unsorteditems={unsorteditems}
+        skippedItems={tag.value.skipped}
+        onSelectItem={onSelectItem}
+      />
     </div>
   );
-}; 
+};

@@ -80,7 +80,7 @@ export const ItemFull = ({ item, right, skipped, mutate }) => {
   }
 
   return (
-    <div className={"page-padding-top flex flex-col w-full " + (right ? "text-right" : "text-left")}>
+    <div className={`flex flex-col w-full ${right ? 'text-right' : 'text-left'}`}>
       <a className="cursor-pointer" href={"/" + tag.value.tag.id + '/' + tag.value.tag.slug + '?item=' + item.id} target="_blank">
         {
           item["title"] && (
@@ -153,7 +153,7 @@ export const ItemFull = ({ item, right, skipped, mutate }) => {
         <div>
           <div>
             {!skipped &&
-              <button onClick={toggleSkip} className="border-2 bigbutton w-fit">
+              <button onClick={toggleSkip} className="rounded-lg border border-zinc-300 px-3 py-1 text-sm dark:border-zinc-700">
                 skip
               </button>}
           </div>
@@ -320,8 +320,8 @@ export const ItemPanel = () => {
           {showMoreActions &&
             <tr>
               <td className="flex flex-row">
-                {isOwnedByUser && <div className="cursor-pointer border-2 bigbutton" onClick={editItem}>edit item</div>}
-                {skips?.length > 0 && <div className="cursor-pointer border-2 bigbutton" onClick={unskip}>unskip</div>}
+                {isOwnedByUser && <button type="button" className="rounded-lg border border-zinc-300 px-3 py-1 text-sm dark:border-zinc-700" onClick={editItem}>edit item</button>}
+                {skips?.length > 0 && <button type="button" className="rounded-lg border border-zinc-300 px-3 py-1 text-sm dark:border-zinc-700" onClick={unskip}>unskip</button>}
               </td>
             </tr>}
           <tr>
@@ -337,7 +337,7 @@ export const ItemPanel = () => {
                   {isOwnedByUser && (
                     <td>
                       <button
-                        className="border-2 bigbutton text-red-600 border-red-600"
+                        className="rounded-lg border border-red-400 px-3 py-1 text-sm text-red-600"
                         onClick={(e) => {
                           e.stopPropagation();
                           onRemoveTag(tag["tag_id"])
@@ -351,7 +351,7 @@ export const ItemPanel = () => {
             </td>
           </tr>
           <div className="cursor-pointer" onClick={() => setIsAddingToAnotherTag(true)}>
-            {!isAddingToAnotherTag && <div className="border-2 bigbutton">add to another tag</div>}
+            {!isAddingToAnotherTag && <button type="button" className="rounded-lg border border-zinc-300 px-3 py-1 text-sm dark:border-zinc-700">add to another tag</button>}
             {isAddingToAnotherTag && <OtherTagInput mutate={mutate} close={() => setIsAddingToAnotherTag(false)} />}
           </div>
         </tbody>

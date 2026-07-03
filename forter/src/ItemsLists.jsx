@@ -1,87 +1,40 @@
-import { Item } from "./Item";
-import { showAllSorted, showAllUnsorted, toggle } from "./App";
-import { selected_item, drawer_open } from "./App";
-import { useState } from "react";
+import { Item } from './Item';
+import { showAllSorted, showAllUnsorted } from './App';
+import { selected_item, drawer_open } from './App';
 
-const SortedList = ({ items, showAll, setShowAll, onSelectItem }) => {
+const ListBlock = ({ title, items, ordered = true, showAll, setShowAll, onSelectItem }) => {
   const displayCount = 25;
   const hasMore = items?.length > displayCount;
-  const displayItems = !showAll && hasMore ? items?.slice(0, displayCount) : items;
-
-  const handleItemClick = (item) => {
-    selected_item.value = item;
-    drawer_open.value = true;
-    onSelectItem?.(item);
-  };
+  const displayItems = !showAll && hasMore ? items.slice(0, displayCount) : items;
+  const ListTag = ordered ? 'ol' : 'ul';
+  const listClass = ordered ? 'list-none' : 'list-none';
 
   return (
-    <div>
-      <div>
-        <div>
-          <div colSpan="2">sorted items</div>
-        </div>
-      </div>
-      <ol className="list-decimal">
-        {displayItems?.map((item) => (
-          <Item 
-            key={item["id"]} 
-            item={item} 
-            onClick={() => handleItemClick(item)}
+    <section>
+      <h3 className="mb-2 text-sm font-medium uppercase tracking-wide text-ink-muted">{title}</h3>
+      <ListTag className={listClass}>
+        {displayItems?.map((item, index) => (
+          <Item
+            key={item.id}
+            item={item}
+            rank={ordered ? index + 1 : null}
+            onClick={() => {
+              selected_item.value = item;
+              drawer_open.value = true;
+              onSelectItem?.(item);
+            }}
           />
-        )) ?? [
-          <div key="2">
-            <div>no items </div>
-          </div>,
-        ]}
-      </ol>
+        ))}
+      </ListTag>
       {hasMore && (
-        <button 
+        <button
           onClick={() => setShowAll(!showAll)}
-          className="w-full text-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+          className="mt-2 w-full rounded-lg py-2 text-sm text-ink-muted hover:bg-zinc-50 dark:hover:bg-zinc-900"
         >
-          {showAll ? '[show less]' : '[show more]'}
+          {showAll ? 'show less' : 'show more'}
         </button>
       )}
-    </div>
-  );
-};
-
-const UnsortedList = ({ items, showAll, setShowAll, onSelectItem }) => {
-  const displayCount = 25;
-  const hasMore = items?.length > displayCount;
-  const displayItems = !showAll && hasMore ? items?.slice(0, displayCount) : items;
-
-  const handleItemClick = (item) => {
-    selected_item.value = item;
-    drawer_open.value = true;
-    onSelectItem?.(item);
-  };
-
-  return (
-    <div>
-      <div>
-        <div>
-          <div colSpan="2">unsorted items</div>
-        </div>
-      </div>
-      <ol className="list-disc ml-3">
-        {displayItems?.map((item) => (
-          <Item 
-            key={item["id"]} 
-            item={item} 
-            onClick={() => handleItemClick(item)}
-          />
-        )) ?? [<tr key="2"></tr>]}
-      </ol>
-      {hasMore && (
-        <button 
-          onClick={() => setShowAll(!showAll)}
-          className="w-full text-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-        >
-          {showAll ? '[show less]' : '[show more]'}
-        </button>
-      )}
-    </div>
+    </section>
   );
 };
 
@@ -93,47 +46,35 @@ export const ItemsLists = ({ sorteditems = [], unsorteditems = [], skippedItems 
   };
 
   return (
-    <div className={"p-3 w-full"}>
-      <div className="flex flex-col space-y-8">
-        {sorteditems?.length > 0 && (
-          <div className="w-full">
-            <SortedList 
-              items={sorteditems} 
-              showAll={showAllSorted.value} 
-              setShowAll={(val) => showAllSorted.value = val}
-              onSelectItem={handleItemClick}
-            />
-          </div>
-        )}
-        {unsorteditems?.length > 0 && (
-          <div className="w-full">
-            <UnsortedList 
-              items={unsorteditems} 
-              showAll={showAllUnsorted.value} 
-              setShowAll={(val) => showAllUnsorted.value = val}
-              onSelectItem={handleItemClick}
-            />
-          </div>
-        )}
-      </div>
-      {skippedItems?.length > 0 && (
-        <div className="mt-8">
-          <div>
-            <div>
-              <div colSpan="2">skipped items</div>
-            </div>
-          </div>
-          <ol className="list-disc ml-3">
-            {skippedItems?.map((item) => (
-              <Item 
-                key={item["id"]} 
-                item={item} 
-                onClick={() => handleItemClick(item)}
-              />
-            )) ?? [<tr key="2"></tr>]}
-          </ol>
-        </div>
+    <div className="page flex flex-col gap-6">
+      {sorteditems.length > 0 && (
+        <ListBlock
+          title="sorted"
+          items={sorteditems}
+          ordered
+          showAll={showAllSorted.value}
+          setShowAll={(val) => (showAllSorted.value = val)}
+          onSelectItem={handleItemClick}
+        />
+      )}
+      {unsorteditems.length > 0 && (
+        <ListBlock
+          title="unsorted"
+          items={unsorteditems}
+          ordered={false}
+          showAll={showAllUnsorted.value}
+          setShowAll={(val) => (showAllUnsorted.value = val)}
+          onSelectItem={handleItemClick}
+        />
+      )}
+      {skippedItems.length > 0 && (
+        <ListBlock
+          title="skipped"
+          items={skippedItems}
+          ordered={false}
+          onSelectItem={handleItemClick}
+        />
       )}
     </div>
   );
-}; 
+};

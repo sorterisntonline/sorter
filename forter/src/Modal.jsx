@@ -1,23 +1,19 @@
 export const Modal = ({ isOpen, onClose, children }) => {
-  if (!isOpen) {
-    return null;
-  }
+  if (!isOpen) return null;
 
   return (
-    <div className="fixed z-10 inset-0 overflow-y-visible">
-      <div className="flex items-center justify-center min-h-screen text-center sm:block sm:p-0">
-        <div className="fixed inset-0 transition-opacity" onClick={onClose}>
-          <div className="absolute inset-0 bg-slate-300 dark:bg-black opacity-50"></div>
-        </div>
-
-        <div className="inline-block align-bottom bg-slate-300 dark:bg-black text-left shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full overflow-visible page-padding-top">
-          <div className="">
-            <div className="sm:flex sm:items-start">
-              <div className="mt-3 text-center sm:mt-0 sm:text-left w-full">
-                {children}
-              </div>
-            </div>
-          </div>
+    <div className="fixed inset-0 z-modal">
+      <button
+        className="absolute inset-0 bg-black/50"
+        aria-label="close"
+        onClick={onClose}
+      />
+      <div className="flex min-h-full items-end justify-center p-4 sm:items-center">
+        <div
+          className="relative w-full max-w-lg animate-fade-up rounded-card border border-zinc-200 bg-surface p-4 shadow-float dark:border-zinc-800"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {children}
         </div>
       </div>
     </div>
