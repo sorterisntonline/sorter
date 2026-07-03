@@ -1,57 +1,46 @@
-import { signal } from "@preact/signals-react";
-import { selected_item, toggle } from "./App";
+import { selected_item } from './App';
 
-const formatNumber = (number) => {
-  // take only 3 digits
-  var num = Math.round(number * 100) / 100;
-  return num;
-};
+const formatNumber = (number) => Math.round(number * 100) / 100;
 
-export const Item = ({ item }) => {
-  const onClick = () => {
+export const Item = ({ item, rank, onClick }) => {
+  const handleClick = () => {
     const url = new URLSearchParams(window.location.search);
     if (selected_item.value === item) {
       selected_item.value = false;
-      url.delete("item");
+      url.delete('item');
     } else {
       selected_item.value = item;
-      url.set("item", selected_item.value["id"]);
+      url.set('item', item.id);
     }
-    window.history.replaceState({}, "", window.location.pathname + "?" + url.toString());
+    window.history.replaceState({}, '', `${window.location.pathname}?${url.toString()}`);
+    onClick?.();
   };
 
-  const truncateText = (text, length) => {
-    if (text.length > length) {
-      return text.substring(0, length) + "...";
-    }
-    return text;
-  };
+  const isActive = item === selected_item.value;
 
   return (
-    <>
-      <li
-        id={`item-${item.id}`}
-        className={
-          `cursor-pointer text-left border-b border-dashed ml-4 border-gray-200 dark:border-gray-800 dark:hover:border-gray-200 ` +
-          (item === selected_item.value ? "bg-gray-300 dark:bg-gray-700" : "")
-        }
-        onClick={onClick}
-      >
-        <div className="flex justify-between">
-          <div>
-            {item.elo === undefined ? (
-              <></>
-            ) : (
-              <span className="px-4">{formatNumber(item.elo)}</span>
-            )}
-            <span>{truncateText(item["title"], toggle.value ? 99999 : 15)}</span>
-          </div>
-          <div className="flex">
-            {item.vote_count &&
-              <div className="float-right text-gray-500">{item.num_comments > 0 ? <>{item.num_comments} comments</> : <></>} {item.vote_count} votes</div>}
-          </div>
-        </div>
-      </li>
-    </>
+    <li
+      id={`item-${item.id}`}
+      className={`item-row ${isActive ? 'item-row--active' : ''}`}
+      onClick={handleClick}
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        {rank != null && (
+          <span className="w-6 shrink-0 text-sm text-ink-muted">{rank}</span>
+        )}
+        {item.elo !== undefined && (
+          <span className="w-12 shrink-0 text-sm font-medium tabular-nums text-accent">
+            {formatNumber(item.elo)}
+          </span>
+        )}
+        <span className="truncate">{item.title}</span>
+      </div>
+      {item.vote_count != null && (
+        <span className="shrink-0 text-xs text-ink-muted">
+          {item.num_comments > 0 ? `${item.num_comments} comments · ` : ''}
+          {item.vote_count} votes
+        </span>
+      )}
+    </li>
   );
-}; 
+};

@@ -11,6 +11,7 @@ import { getVoteEmoji } from './constants/voting_extras';
 import { handleApiError } from './ErrorHandler';
 import { withAuth } from './utils/withAuth';
 import { TopBanner } from './components/TopBanner';
+import { Button } from './components/ui/Button';
 
 const calculateMargin = (magnitude) => {
   if (magnitude < 50) {
@@ -85,9 +86,11 @@ const MobileVoteCard = ({ item, isTop, dragX, magnitudeMotionValue }) => {
 
   return (
     <motion.div
-      className="absolute w-[90vw] h-[38vh] rounded-xl overflow-hidden bg-white dark:bg-gray-800 shadow-lg"
+      className="absolute inset-x-4 rounded-card border border-zinc-200 bg-surface-raised shadow-card dark:border-zinc-800"
       style={{
-        top: isTop ? '4vh' : '42vh',
+        top: isTop ? 'calc(var(--nav-height) + 0.75rem)' : 'auto',
+        bottom: isTop ? 'auto' : 'calc(7.5rem + env(safe-area-inset-bottom, 0px))',
+        height: 'min(34dvh, 280px)',
         y: useTransform(
           magnitudeMotionValue,
           [0, 50, 100],
@@ -139,14 +142,13 @@ const MobileVoteCard = ({ item, isTop, dragX, magnitudeMotionValue }) => {
             'bg-gradient-to-t from-black/80 to-transparent' : 
             'h-full flex flex-col justify-center'}`}
       >
-        <h3 className={`text-xl font-bold ${(mediaUrl || item.domain_pk_namespace === "spotify.track") ? 
-          'text-white' : 'text-black dark:text-white'}`}>
+        <h3 className={`text-2xl font-semibold ${(mediaUrl || item.domain_pk_namespace === "spotify.track") ?
+          'text-white' : 'text-ink'}`}>
           {item.title}
         </h3>
-        {!mediaUrl && !item.domain_pk_namespace === "spotify.track" && item.description && (
-          <p className="text-sm text-gray-600 dark:text-gray-300 text-left mt-2">
-            {item.description.substring(0, 150)}
-            {item.description.length > 150 ? '...' : ''}
+        {!mediaUrl && item.domain_pk_namespace !== "spotify.track" && item.body && (
+          <p className="mt-2 line-clamp-3 text-sm text-ink-muted">
+            {item.body}
           </p>
         )}
       </div>
@@ -164,10 +166,10 @@ const MobileVoteSlider = ({ dragX, onSliderDrag, voteCount }) => {
   );
 
   return (
-    <div className="h-14 flex items-center justify-center">
-      <div className="w-[90vw] h-0.5 bg-gray-300 dark:bg-gray-600 rounded relative">
+    <div className="px-4 pb-3 pt-2">
+      <div className="relative h-12 rounded-full bg-zinc-200 dark:bg-zinc-800">
         <motion.div
-          className="absolute top-0 left-1/2 -translate-y-[10px] -translate-x-1/2"
+          className="absolute left-1/2 top-1/2 flex h-10 w-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-vote shadow-sm"
           initial={{ x: 0 }}
           animate={{ x: sliderX }}
           style={{ x: sliderX }}
@@ -178,17 +180,8 @@ const MobileVoteSlider = ({ dragX, onSliderDrag, voteCount }) => {
             onSliderDrag(dragValue);
           }}
         >
-          {/* Container for indicator with right offset */}
-          <div className="relative right-3 -top-2 w-6 h-6 flex items-center justify-center cursor-grab active:cursor-grabbing">
-            <div className="text-2xl select-none">
-              {getVoteEmoji(voteCount) || (
-                <div className="w-0 h-0 
-                            border-l-[6px] border-l-transparent
-                            border-r-[6px] border-r-transparent
-                            border-b-[8px] border-yellow-400
-                            dark:border-yellow-500" />
-              )}
-            </div>
+          <div className="text-xl select-none">
+            {getVoteEmoji(voteCount) || '↔'}
           </div>
         </motion.div>
       </div>
@@ -395,10 +388,10 @@ const MobileVotePanel = ({ left, right, onSubmitVote, voteCount }) => {
 
   return (
     <motion.div
-      className="fixed inset-0 touch-none transition-colors duration-1000"
+      className="fixed inset-0 touch-none bg-surface"
       style={{ backgroundColor: getBgColor() }}
     >
-      <div className="absolute inset-0 flex flex-col items-center z-10">
+      <div className="absolute inset-0 z-10 px-0">
         <MobileVoteCard 
           item={left} 
           isTop={true}
@@ -413,7 +406,7 @@ const MobileVotePanel = ({ left, right, onSubmitVote, voteCount }) => {
         />
       </div>
 
-      <div className="fixed bottom-16 left-0 right-0 z-30">
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-200 bg-surface/95 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur dark:border-zinc-800">
         <MobileVoteSlider 
           dragX={dragX} 
           onSliderDrag={handleDrag}
@@ -531,47 +524,29 @@ const VotePanelComponent = ({ handleError, isMobile = false }) => {
       >
         Please consider your vote more carefully before submitting. You're voting too quickly!
       </TopBanner>
-      <div className="w-full justify-center page-padding-top">
-        <div className="text-xl flex flex-row items-end">
-          <div
-            className="flex-1"
-            style={{
-              left: 0,
-              width: "50%",
-              marginBottom: leftMargin,
-            }}
-          >
+      <div className="page pt-2 lg:pt-4">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div style={{ marginBottom: leftMargin }}>
             <ItemFull item={left} />
           </div>
-          <div
-            className="flex-2"
-            style={{
-              right: 0,
-              width: "50%",
-              marginBottom: rightMargin,
-              justifyContent: "right",
-            }}
-          >
+          <div style={{ marginBottom: rightMargin }}>
             <ItemFull item={right} right={true} />
           </div>
         </div>
         <input
-          className="w-full h-10 bg-gray-300 dark:bg-gray-600 appearance-none cursor-pointer"
+          className="mt-4 w-full"
           type="range"
           min="0"
           max="100"
           step="1"
           value={magnitude.value}
           onChange={(e) => {
-            magnitude.value = parseInt(e.target.value);
+            magnitude.value = parseInt(e.target.value, 10);
           }}
         />
-        <button
-          className="bigbutton border-8 w-full h-12 border-yellow-500"
-          onClick={submitVote}
-        >
+        <Button variant="vote" size="lg" className="mt-4 w-full" onClick={submitVote}>
           vote
-        </button>
+        </Button>
       </div>
     </>
   );

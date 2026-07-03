@@ -73,13 +73,9 @@ export const TopNav = () => {
   }, [hideTimeout]);
 
   return (
-    <div
-      className="fixed top-0 right-0 hidden lg:flex items-center justify-between bg-white 
-        dark:bg-black text-black dark:text-white w-full px-4 p-2.5 z-40 transition-[top] 
-        duration-300 ease-in"
-      style={{ 
-        top: showAnnouncement.value ? '32px' : '0',
-      }}
+    <header
+      className="fixed inset-x-0 top-0 z-nav hidden h-nav items-center justify-between border-b border-zinc-200 bg-surface/95 px-6 backdrop-blur dark:border-zinc-800 lg:flex"
+      style={{ top: showAnnouncement.value ? '2rem' : '0' }}
     >
       {/* Left side navigation links */}
       <div className="flex items-center space-x-4">
@@ -134,6 +130,6 @@ export const TopNav = () => {
           )
         )}
       </div>
-    </div>
+    </header>
   );
 }; 

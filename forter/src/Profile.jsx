@@ -321,7 +321,7 @@ const ProfileComponent = () => {
         }
     }
 
-    return <div className="page-padding-top dark:text-white h-full">
+    return <div className="page dark:text-white">
         <div className="border m-3 border-dashed dark:border-gray-600 text-left lg:w-1/2">
             <div className="p-4">
                 <div className="flex items-center mb-2">

@@ -1,85 +1,58 @@
-import { useState, useRef, useEffect } from 'react';
-import { ChevronDownIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon } from "@heroicons/react/24/solid";
-import { signal } from "@preact/signals-react";
+import { useState, useRef } from 'react';
+import { ChevronDownIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon } from '@heroicons/react/24/solid';
+import { signal } from '@preact/signals-react';
 
-// Signal to track maximized state across drawer instances
 export const drawer_maximized = signal(false);
 
 export const Drawer = ({ children, isOpen, onClose }) => {
   const contentRef = useRef(null);
-  
-  // Get the appropriate height based on maximized state
-  const getDrawerHeight = () => {
-    const viewportHeight = window.innerHeight;
-    return `${viewportHeight * (drawer_maximized.value ? 0.9 : 0.5)}px`;
-  };
-
-  const toggleMaximize = () => {
-    drawer_maximized.value = !drawer_maximized.value;
-  };
 
   const handleClose = () => {
-    // Clear the 'item' parameter from URL
     const params = new URLSearchParams(window.location.search);
     if (params.has('item')) {
       params.delete('item');
-      const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+      const newUrl = window.location.pathname + (params.toString() ? `?${params.toString()}` : '');
       window.history.replaceState({}, '', newUrl);
     }
-    
-    // Call the provided onClose handler
     onClose();
   };
 
-  return (
-    <div 
-      className={`fixed inset-0 z-[60] transition-opacity duration-300 
-                ${isOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`}
-    >
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black bg-opacity-50 transition-opacity duration-300"
-        onClick={handleClose}
-      />
+  const height = drawer_maximized.value ? 'min(92dvh, 100%)' : 'min(58dvh, 100%)';
 
-      {/* Drawer */}
+  return (
+    <div className={`fixed inset-0 z-drawer ${isOpen ? 'visible' : 'invisible'}`}>
+      <button className="absolute inset-0 bg-black/50" aria-label="close drawer" onClick={handleClose} />
       <div
-        style={{ height: getDrawerHeight() }}
-        className={`absolute bottom-0 left-0 right-0 bg-white dark:bg-gray-900 rounded-t-2xl shadow-lg 
-                   transform transition-all duration-300 ease-out overflow-hidden
-                   ${isOpen ? 'translate-y-0' : 'translate-y-full'}`}
+        style={{ height }}
+        className={`absolute inset-x-0 bottom-0 flex flex-col rounded-t-card border border-zinc-200 bg-surface shadow-float transition-transform duration-300 dark:border-zinc-800 ${
+          isOpen ? 'translate-y-0' : 'translate-y-full'
+        }`}
       >
-        {/* Handle */}
-        <div className="sticky top-0 w-full bg-white dark:bg-gray-900 pt-3 pb-2 px-4 flex justify-between items-center border-b border-gray-200 dark:border-gray-700 z-10">
-          <button 
-            onClick={toggleMaximize}
-            className="w-8 h-8 flex items-center justify-center"
+        <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+          <button
+            onClick={() => (drawer_maximized.value = !drawer_maximized.value)}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900"
+            aria-label="resize drawer"
           >
             {drawer_maximized.value ? (
-              <ArrowsPointingInIcon className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+              <ArrowsPointingInIcon className="h-5 w-5" />
             ) : (
-              <ArrowsPointingOutIcon className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+              <ArrowsPointingOutIcon className="h-5 w-5" />
             )}
           </button>
-          <div className="w-12 h-1 bg-gray-300 dark:bg-gray-600 rounded-full" />
-          <button 
+          <div className="h-1 w-12 rounded-full bg-zinc-300 dark:bg-zinc-700" />
+          <button
             onClick={handleClose}
-            className="w-8 h-8 flex items-center justify-center"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900"
+            aria-label="close drawer"
           >
-            <ChevronDownIcon className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+            <ChevronDownIcon className="h-5 w-5" />
           </button>
         </div>
-
-        {/* Content */}
-        <div 
-          ref={contentRef}
-          className="overflow-y-auto h-[calc(100%-3rem)] pt-0"
-        >
-          <div className="p-4">
-            {children}
-          </div>
+        <div ref={contentRef} className="flex-1 overflow-y-auto p-4">
+          {children}
         </div>
       </div>
     </div>
   );
-}; 
+};
