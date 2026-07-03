@@ -227,3 +227,24 @@ This project is optimized for AI agent interaction:
 - Comprehensive logging and status reporting
 - Dependency checking and environment setup
 - All operations accessible through simple commands
+
+## Cursor Cloud specific instructions
+
+The `uv run main.py ...` / `supervisord` orchestrator described above does **not exist in this repo** (`main.py` and `supervisord.conf` are missing; `start.sh` only calls the missing `main.py`). Use the manual commands in `dev-commands.md` — that file is the source of truth for running the stack. CI workflows are also disabled (`.github/workflows/*.disabled`).
+
+Toolchain/deps are pre-installed by the startup update script (`uv sync --extra test`, `npm install --prefix frontsorter`) plus the VM snapshot (Rust nightly per `rust-toolchain.toml`, `uv`, `dbmate`, native PostgreSQL 16, `libssl-dev`). Do not add service startup, migrations, or builds to the update script.
+
+**Services** (run each; see `dev-commands.md` for exact commands):
+- **PostgreSQL** runs **natively** (not Docker) on **port 5439** with data dir `~/sorter-pgdata`. Start it with `/usr/lib/postgresql/16/bin/pg_ctl -D ~/sorter-pgdata -l ~/sorter-pgdata.log start` (socket dir is `~/pgsock`, configured in `postgresql.conf`). It is not auto-started on VM boot, so start it before the backend/tests.
+- **Rust backend** (`rustsorter/`) on port **8081**: requires `DATABASE_URL=postgres://postgres:password@localhost:5439/postgres?sslmode=disable`; run `cargo run` from `rustsorter/`. Exits immediately if `DATABASE_URL` is unset.
+- **React frontend** (`frontsorter/`) on port **5173**: `npm run dev`; it proxies `/api` → `127.0.0.1:8081`.
+
+**Migrations** live in `./db/migrations` (NOT `database/sql`): `dbmate --migrations-dir ./db/migrations up` with `PGSSLMODE=disable` and the `DATABASE_URL` above.
+
+**Auth for local testing:** the only real login is Spotify OAuth (needs external creds), so browser login is unavailable by default. Two workarounds:
+- API calls: send header `Authorization: Bearer STATIC_TEST_KEY_FOR_ADMIN_USER_123` (maps to the seeded `admin` user).
+- Authenticated SPA/browser session: insert a `user_sessions` row (`session_type='full'`, future `expires_at`) for the `admin` user, then set the browser cookie `session_id=<that uuid>` on `localhost:5173`. This is required for UI write actions (e.g. Create Entity), which otherwise return 401.
+
+**API quirk:** the ranking GET endpoint is nested, so it lives at `/api/rank/rank?ns=<parent_ns>&pk=<parent_pk>` (not `/api/rank`). The `POST /api/rank/` variant ranks a posted list of children.
+
+Tests: Rust `cd rustsorter && cargo test` (needs DB + `DATABASE_URL`); Python integration `cd test && uv run --extra test python -m pytest` (needs the backend running on 8081). Frontend lint: `npm run lint --prefix frontsorter`.
