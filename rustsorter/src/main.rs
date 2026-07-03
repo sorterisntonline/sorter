@@ -8,7 +8,7 @@ pub struct AppState {
     pub db: sqlx::PgPool,
 }
 
-use std::{env, sync::Arc};
+use std::{env, sync::Arc, time::Duration};
 
 use actix_web::{App, HttpServer, middleware::Logger, web, HttpResponse, get};
 use dotenv::dotenv;
@@ -33,12 +33,21 @@ async fn main() -> Result<(), anyhow::Error> {
     // Retrieve the database URL from the environment
     let database_string = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-    // Create the database pool
-    let pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(5)
-        .connect(&database_string)
-        .await
-        .expect("Unable to connect to database");
+    // Create the database pool with retries for external databases
+    let pool = loop {
+        match sqlx::postgres::PgPoolOptions::new()
+            .max_connections(5)
+            .acquire_timeout(Duration::from_secs(10))
+            .connect(&database_string)
+            .await
+        {
+            Ok(pool) => break pool,
+            Err(e) => {
+                eprintln!("unable to connect to database: {e}, retrying in 5s...");
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            }
+        }
+    };
 
     // Shared application state
     let app_state = Arc::new(AppState { db: pool.clone() });

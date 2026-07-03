@@ -16,12 +16,20 @@
 
 (defn parse-jdbc [jdbc-url]
   (try
-    (drop 1 (re-matches
-             #"postgres://(.*):(.*)@(.*):(\d*)/(.*)"
-             jdbc-url))
+    (let [normalized (-> jdbc-url
+                         (clojure.string/replace #"^postgresql://" "postgres://")
+                         (clojure.string/replace #"\?.*$" ""))]
+      (drop 1 (re-matches
+               #"postgres://(.*):(.*)@(.*):(\d*)/(.*)"
+               normalized)))
     (catch Exception e
       (log/error "Failed to parse JDBC URL:" (.getMessage e))
       nil)))
+
+(defn ssl-config [jdbc-url]
+  (when (or (clojure.string/includes? (or jdbc-url "") "sslmode=require")
+            (= "require" (System/getenv "PGSSLMODE")))
+    {:ssl true :sslmode "require"}))
 
 (defn build-datasource []
   ;; Read DATABASE_URL *at runtime*
@@ -39,22 +47,23 @@
             (swap! db-state assoc :last-error "Invalid DATABASE_URL format")
             nil)
           (let [[username password host port database] parsed
-                cfg {:auto-commit        true
-                     :read-only          false
-                     :connection-timeout 30000
-                     :validation-timeout 5000
-                     :idle-timeout       600000
-                     :max-lifetime       1800000
-                     :minimum-idle       10
-                     :maximum-pool-size  10
-                     :pool-name          "db-pool"
-                     :register-mbeans    false
-                     :adapter            "postgresql"
-                     :username           username
-                     :password           password
-                     :server-name        host
-                     :port-number        (Integer/parseInt port)
-                     :database-name      database}]
+                cfg (merge {:auto-commit        true
+                            :read-only          false
+                            :connection-timeout 30000
+                            :validation-timeout 5000
+                            :idle-timeout       600000
+                            :max-lifetime       1800000
+                            :minimum-idle       2
+                            :maximum-pool-size  5
+                            :pool-name          "db-pool"
+                            :register-mbeans    false
+                            :adapter            "postgresql"
+                            :username           username
+                            :password           password
+                            :server-name        host
+                            :port-number        (Integer/parseInt port)
+                            :database-name      database}
+                           (ssl-config database-url))]
             (try
               (log/info "Attempting to create database connection pool")
               (make-datasource cfg)

@@ -81,23 +81,24 @@
 (defn -main
   "Run with `clj -M -m prod` or with optional port override {:port 3000}"
   [& {:keys [port] :or {port 8080}}]
-  (log/info "\n ______   _____   ______ _______ _______  ______\n |_____] |     | |_____/    |    |______ |_____/\n |_____] |_____| |    \\_    |    |______ |    \\_\n\n📦️" version "\n")
-  (log/info "starting borter" version "in" environment "environment")
-  (log/debug "server configuration:" electric-server-config)
-  (log/info "starting repl with config" (dissoc nrepl-config :auth))  ; don't log password
-  (reset! server-instance (nrepl-server/start-server nrepl-config))
-  (try
-    (db/run-migrations)
-    (log/info "database migrations completed successfully")
-    (catch Exception e
-      (log/error e "failed to run database migrations")))
-  (try
-    (http/start {:port port})
-    (log/info "http server started successfully on port" port)
-    (catch Exception e
-      (log/error e "failed to start http server")))
-  ;; Start the database health checker
-  (start-db-health-checker))
+  (let [port (or (some-> (System/getenv "PORT") Integer/parseInt)
+                 port)]
+    (log/info "\n ______   _____   ______ _______ _______  ______\n |_____] |     | |_____/    |    |______ |_____/\n |_____] |_____| |    \\_    |    |______ |    \\_\n\n📦️" version "\n")
+    (log/info "starting borter" version "in" environment "environment")
+    (log/debug "server configuration:" electric-server-config)
+    (log/info "starting repl with config" (dissoc nrepl-config :auth))  ; don't log password
+    (reset! server-instance (nrepl-server/start-server nrepl-config))
+    (try
+      (db/run-migrations)
+      (log/info "database migrations completed successfully")
+      (catch Exception e
+        (log/error e "failed to run database migrations")))
+    (try
+      (http/start {:port port})
+      (log/info "http server started successfully on port" port)
+      (catch Exception e
+        (log/error e "failed to start http server")))
+    (start-db-health-checker)))
 
 (defn -shutdown-hook []
   (log/info "Shutdown hook called, cleaning up resources")
