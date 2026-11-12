@@ -1,54 +1,37 @@
 [package]
-name = "rustsorter"
-version = "0.1.0"
+default-run = "rustsorter"
 edition = "2021"
-default-run="rustsorter"
+name = "rustsorter"
+version = "0.1.2"
+
 
 [dependencies]
 actix-files = "0.6.5"
-actix-web = {version="4", features = ["rustls-0_21"]}
+actix-session = { version = "0.9.0", features = ["cookie-session"] }
+actix-web = { version = "4", features = ["rustls-0_21"] }
+anyhow = "1.0"
 bcrypt = "0.15.0"
+chrono = { version = "^0", features = ["serde"] }
 dotenv = "0.15.0"
-edn = "0.3.0"
-edn-format = "3.3.0"
+elo = "0.3.0"
 env_logger = "0.11.2"
 graph = "0.3.1"
 graph_builder = "0.4.0"
-serde = { version = "1.0", features = ["derive"] }
-chrono = { version = "^0", features = ["serde"] }
-serde_json = "1"
-sqlx = { version = "0.8.2", features = ["runtime-async-std-native-tls", "postgres", "chrono", "uuid"] }
-actix-session = { version = "0.9.0", features = ["cookie-session"] }
-slug = "0.1.5"
 rand = "0.8.5"
-elo = "0.3.0"
 rayon = "1.9.0"
-serenity = "0.12"
-tokio = { version = "1.21.2", features = ["macros", "rt-multi-thread"] }
 reqwest = { version = "0.11", features = ["json"] }
-
-[dev-dependencies]
-sqlx = { version = "0.8.2", features = ["runtime-async-std-native-tls", "postgres", "chrono", "uuid"] }
-
-[profile.dev]
-debug = true
-opt-level = 0
-
-[profile.release]
-debug = false
-opt-level = 3
-lto = true
-codegen-units = 1
-panic = "abort"
-strip = true  # Removes debug symbols
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1"
+slug = "0.1.5"
+sqlx = { version = "0.8.2", features = [
+    "chrono",
+    "postgres",
+    "runtime-async-std-native-tls",
+    "uuid",
+] }
+tokio = { version = "1.21.2", features = ["macros", "rt-multi-thread"] }
 
 [profile.staging]
-inherits = "release"
-debug = false
-strip = true
-name = "test_pair"
-path = "src/bin/test_pair.rs"
+inherits = "dev"
 
-[[bin]]
-name = "test_rank"
-path = "src/bin/test_rank.rs"
+[profile.release]

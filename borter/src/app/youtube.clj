@@ -6,6 +6,7 @@
             [ring.util.response :as response]
             [app.database :as db]
             [app.permissions :as perms]
+            [app.util :as util]
             [honey.sql.helpers :as h]
             [sluj.core :refer [sluj]]))
 
@@ -32,9 +33,7 @@
       :body (json/read-str {:key-fn keyword})))
 
 (defn get-hostname []
-  (case (.getCanonicalHostName (java.net.InetAddress/getLocalHost))
-    "localhost" "http://localhost:3000/api/youtube/callback"
-    "https://sorter.isnt.online/api/youtube/callback"))
+  (str (util/get-base-url) "/api/youtube/callback"))
 
 
 
@@ -80,10 +79,10 @@
                                 :from :tokens
                                 :where [:and
                                         [:= :owner (-> req :session :user_name)]
-                                        [:= :domain_pk_namespace "youtube"]
-                                        ]
+                                        [:= :domain_pk_namespace "youtube"]]
+                                        
                                 :limit 1}))
-                 first ))
+                 first))
   (def existing-youtube-tag (-> (db/exec! (-> {:select :id
                                                :from :tags
                                                :where [:and [:= :owner (-> req :session :user_name)]
@@ -96,9 +95,9 @@
                                     :domain_pk_namespace "youtube.liked"
                                     :title (str (-> req :session :user_name) " liked youtube videos")
                                     :slug (str (-> req :session :user_name) "-liked-youtube-videos")}]
-                          :returning :* })))
+                          :returning :*})))
     (db/exec! {:insert-into :perms
-               :values (perms/public-permissions (:tags/id (first r)) )}))
+               :values (perms/public-permissions (:tags/id (first r)))}))
   
   (def liked-tag (-> (db/exec! (-> {:select :id
                                     :from :tags
@@ -114,8 +113,8 @@
                            :items/domain_pk id
                            :items/domain_pk_namespace "youtube.video"
                            :items/slug (sluj title)
-                           :items/owner (-> req :session :user_name)
-                           })
+                           :items/owner (-> req :session :user_name)})
+                           
                         :returning :*
                         :on-conflict [ :domain_pk :domain_pk_namespace]
                         :do-update-set [:domain_pk]}))
@@ -124,12 +123,14 @@
                        {:item_in_tags/item_id (:items/id item)
                         :item_in_tags/tag_id liked-tag})
              :on-conflict [:item_id :tag_id]
-             :do-nothing true
-             })
+             :do-nothing true})
+             
   {:status 200 :body {:liked true}})
 
-(def routes [["/callback" {:get {:handler #'handle-callback}}]
-             ["/playlist" {:post {:handler #'start-tracking-liked}}]])
+(def routes [["/callback" {:get {:no-doc false
+                                :handler handle-callback}}]
+             ["/playlist" {:post {:no-doc false
+                                  :handler start-tracking-liked}}]])
 
 
 

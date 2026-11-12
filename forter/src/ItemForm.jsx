@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { selected_item, tag } from "./App";
-import { makeRequest } from "./Network";
-
+import { makeRequest, loadTag } from "./Network";
 import { editing_item } from "./ItemPanel";
+import { drawer_open } from "./App";
 
 export const ItemForm = () => {
   const item = editing_item.value;
   const isEditing = item["id"] !== undefined;
+  const isMobileDevice = () => window.innerWidth < 1024;
 
   const [title, setTitle] = useState(item["title"] || "");
   const [url, setUrl] = useState(item["url"] || "");
@@ -19,9 +20,6 @@ export const ItemForm = () => {
       alert("title is required");
       return;
     }
-    setTitle("");
-    setBody("");
-    setUrl("");
 
     const data = {
       title: title,
@@ -39,18 +37,33 @@ export const ItemForm = () => {
 
     await makeRequest("POST", "/api/item", data);
 
-    if (isEditing) {
-      editing_item.value = false;
+    // Reset form
+    setTitle("");
+    setBody("");
+    setUrl("");
+    
+    // Reset editing state
+    editing_item.value = false;
+    
+    // Close mobile drawer if on mobile
+    if (isMobileDevice()) {
+      drawer_open.value = false;
     }
 
-    const freshItem = [...tag.value.unsorted, ...tag.value.sorted]
-      .filter((x) => x["id"] === item["id"])
-      .at(0);
+    // Refresh tag data to show new item
+    await loadTag(tag.value.tag.id);
 
-    if (freshItem) {
-      selected_item.value = freshItem;
-    } else {
-      selected_item.value = false;
+    // Update selected item if editing
+    if (isEditing) {
+      const freshItem = [...tag.value.unsorted, ...tag.value.sorted]
+        .filter((x) => x["id"] === item["id"])
+        .at(0);
+
+      if (freshItem) {
+        selected_item.value = freshItem;
+      } else {
+        selected_item.value = false;
+      }
     }
   };
 

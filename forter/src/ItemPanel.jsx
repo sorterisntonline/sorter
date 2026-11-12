@@ -3,6 +3,20 @@ import { current_session } from "./session";
 import { loadTag, makeRequest } from "./Network";
 import { signal } from "@preact/signals-react";
 import MarkdownRenderer from "./MarkdownRenderer";
+import { motion, AnimatePresence } from 'framer-motion';
+import { Item } from "./Item";
+import { Drawer } from './components/Drawer';
+import { selected_item, toggle, items_by_id, magnitude, tag, drawer_open } from "./App";
+import { ItemForm } from "./ItemForm";
+import { Feed } from "./Feed";
+import { useEffect, useRef, useState } from "react";
+import { VotesPanel } from "./VotesPanel";
+import { Comments } from "./Comments";
+import { useLocation } from "wouter";
+import { selected_attribute } from "./AttributePanel";
+import { Tweet } from "react-twitter-widgets";
+import { useSearch } from "wouter/use-location";
+
 const createEmbedUrl = (item) => {
   const [code, time] = item["domain_pk"].split("?t=")
 
@@ -53,21 +67,10 @@ const TikTokEmbed = ({ item }) => {
   </div >
 }
 
-import { items_by_id, magnitude, tag } from "./App";
-export const pinned_left = signal(false);
-export const pinned_right = signal(false);
-
 export const ItemFull = ({ item, right, skipped, mutate }) => {
   right = right || false;
   skipped = skipped || false;
-
-  const pinLeft = () => {
-    pinned_left.value = pinned_left.value === item.id ? false : item.id;
-  };
-
-  const pinRight = () => {
-    pinned_right.value = pinned_right.value === item.id ? false : item.id;
-  };
+  const isMobileDevice = () => window.innerWidth < 1024;
 
   const toggleSkip = async () => {
     await makeRequest("POST", "/api/item/skip", {
@@ -77,7 +80,7 @@ export const ItemFull = ({ item, right, skipped, mutate }) => {
   }
 
   return (
-    <div className={"p-3 flex flex-col w-full " + (right ? "text-right" : "text-left")}>
+    <div className={`flex flex-col w-full ${right ? 'text-right' : 'text-left'}`}>
       <a className="cursor-pointer" href={"/" + tag.value.tag.id + '/' + tag.value.tag.slug + '?item=' + item.id} target="_blank">
         {
           item["title"] && (
@@ -128,7 +131,7 @@ export const ItemFull = ({ item, right, skipped, mutate }) => {
         item["domain_pk_namespace"] === "youtube.video" && (
           <iframe
             width="100%" height="500px"
-            className="p-3"
+            className="page-padding-top"
             src={createEmbedUrl(item)}>
           </iframe>
         )
@@ -145,84 +148,85 @@ export const ItemFull = ({ item, right, skipped, mutate }) => {
           </div>
         )
       }
-      <div>
+      {/* Skip button - hidden on mobile */}
+      {!isMobileDevice() && (
         <div>
-          <button onClick={pinLeft} className="border-2 bigbutton w-fit">
-            {pinned_left.value === item.id ? "📍 unpin left" : "📌 pin left"}
-          </button>
-          <button onClick={pinRight} className="border-2 bigbutton w-fit">
-            {pinned_right.value === item.id ? "📍 unpin right" : "📌 pin right"}
-          </button>
-          {!skipped &&
-            <button onClick={toggleSkip} className="border-2 bigbutton w-fit">
-              skip
-            </button>}
+          <div>
+            {!skipped &&
+              <button onClick={toggleSkip} className="rounded-lg border border-zinc-300 px-3 py-1 text-sm dark:border-zinc-700">
+                skip
+              </button>}
+          </div>
         </div>
-      </div>
+      )}
     </div >
   );
 };
-
-import { selected_item, toggle } from "./App";
-import { ItemForm } from "./ItemForm";
-import { Feed } from "./Feed";
-import { useEffect, useRef, useState } from "react";
-import { VotesPanel } from "./VotesPanel";
-import { Comments } from "./Comments";
-import { useLocation } from "wouter";
-import { selected_attribute } from "./AttributePanel";
-import { Tweet } from "react-twitter-widgets";
-import { useSearch } from "wouter/use-location";
 
 export const editing_item = signal(false);
 
 const fetcher = (arg) => fetch(arg).then((res) => res.json());
 export const ItemPanel = () => {
   const item = selected_item.value;
-
-  const showPinnedLeft = () => {
-    if (pinned_left.value) {
-      const pinnedItem = items_by_id.value[pinned_left.value];
-      if (pinnedItem) {
-        selected_item.value = pinnedItem;
-      }
-    }
-  };
-
-  const showPinnedRight = () => {
-    if (pinned_right.value) {
-      const pinnedItem = items_by_id.value[pinned_right.value];
-      if (pinnedItem) {
-        selected_item.value = pinnedItem;
-      }
-    }
-  };
-
+  const [location, setLocation] = useLocation();
+  const [isAddingToAnotherTag, setIsAddingToAnotherTag] = useState(false);
+  const isMobileDevice = () => window.innerWidth < 1024;
+  const contentRef = useRef(null);
+  
   const { data, error, isLoading, mutate } = useSWR(
-    "/api/item/membership?item_id=" + (item["id"] ?? -1),
+    "/api/item/membership?item_id=" + (item?.id ?? -1),
     fetcher
   );
 
-  const [location, setLocation] = useLocation();
+  useEffect(() => {
+    // When drawer opens, scroll content to top
+    if (drawer_open.value && contentRef.current) {
+      contentRef.current.scrollTop = 0;
+    }
+  }, [drawer_open.value]);
 
-  const [isAddingToAnotherTag, setIsAddingToAnotherTag] = useState(false);
+  const closeDrawer = () => {
+    // Clear the drawer state
+    drawer_open.value = false;
+    selected_item.value = null;
 
+    // Clear the 'item' parameter from URL
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('item')) {
+      params.delete('item');
+      const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+      window.history.replaceState({}, '', newUrl);
+    }
+  };
 
+  // If we're editing, show the ItemForm
+  if (editing_item.value) {
+    return <ItemForm />;
+  }
 
-  if (isLoading) return <h1> loading... </h1>;
-  if (error) return <h1> error </h1>;
-  if (!item && !editing_item.value) return <Feed />;
+  // If no item selected and not editing, show nothing
+  if (!item && !editing_item.value) {
+    return null;
+  }
 
-  const { membership, skips } = data;
+  if (isLoading) return <h1>loading...</h1>;
+  if (error) return <h1>error</h1>;
 
-  const isOwnedByUser = current_session.value.user_name === item["owner"];
+  const { membership = [], skips = [] } = data || {};
+  const isOwnedByUser = item ? current_session.value.user_name === item["owner"] : false;
+
+  const editItem = () => {
+    editing_item.value = item;
+  };
+
   const onRemoveTag = async (tagid) => {
-    //selected_item.value = false;
     await makeRequest("DELETE", "/api/item/membership", {
       "item_id": item["id"],
       "tag_id": tagid,
     });
-    mutate();
+
+    selected_item.value = null;
+    loadTag(tag.value.tag.id);
   };
 
   const unskip = async () => {
@@ -230,10 +234,6 @@ export const ItemPanel = () => {
       "item_id": item["id"],
     })
     mutate();
-  }
-
-  const editItem = () => {
-    editing_item.value = item;
   }
 
   const attrid = selected_attribute.value.value.id;
@@ -258,33 +258,70 @@ export const ItemPanel = () => {
   </>
 
   const showMoreActions = skips?.length > 0 || isOwnedByUser;
-  return (
-    <div className="">
-      <div className="flex justify-between mb-4">
-        <button 
-          onClick={showPinnedLeft} 
-          className={`border-2 bigbutton ${!pinned_left.value && 'opacity-50'}`}
-          disabled={!pinned_left.value}
-        >
-          📍 Left Pin
-        </button>
-        <button 
-          onClick={showPinnedRight}
-          className={`border-2 bigbutton ${!pinned_right.value && 'opacity-50'}`}
-          disabled={!pinned_right.value}
-        >
-          📍 Right Pin
-        </button>
-      </div>
-      {editing_item.value ? <ItemForm /> : notEditing}
+
+  const content = (
+    <div className="w-full" ref={contentRef}>
+      {item && (
+        <div className="flex flex-col">
+          <h1 className="text-3xl">{item.title}</h1>
+          
+          {/* Media content */}
+          {(item.domain_pk_namespace === "IMG" || item.domain_pk_namespace === "reddit.post") && item.url && (
+            <img className="object-cover w-full rounded-lg mt-4" src={item.url} alt={item.title} />
+          )}
+          
+          {item.domain_pk_namespace === "spotify.track" && (
+            <div className="mt-4">
+              <iframe
+                src={`https://open.spotify.com/embed/track/${item.domain_pk}`}
+                width="100%"
+                height="380"
+                allowtransparency="true"
+                allow="encrypted-media"
+              ></iframe>
+            </div>
+          )}
+          
+          {item.domain_pk_namespace === "youtube.video" && (
+            <div className="mt-4">
+              <iframe
+                width="100%" 
+                height="250"
+                src={createEmbedUrl(item)}
+                allowFullScreen
+              ></iframe>
+            </div>
+          )}
+          
+          {item.domain_pk_namespace === "tiktok.video" && (
+            <div className="mt-4">
+              <TikTokEmbed item={item} />
+            </div>
+          )}
+          
+          {item.domain_pk_namespace === "x.xeet" && (
+            <div className="mt-4">
+              <Tweet tweetId={item.domain_pk} />
+            </div>
+          )}
+
+          {/* Description/body content */}
+          {item.body && (
+            <div className="markdown-body mt-4">
+              <MarkdownRenderer content={item.body} />
+            </div>
+          )}
+        </div>
+      )}
+
       <br />
       <table>
         <tbody className="text-left">
           {showMoreActions &&
             <tr>
               <td className="flex flex-row">
-                {isOwnedByUser && <div className="cursor-pointer border-2 bigbutton" onClick={editItem}>edit item</div>}
-                {skips?.length > 0 && <div className="cursor-pointer border-2 bigbutton" onClick={unskip}>unskip</div>}
+                {isOwnedByUser && <button type="button" className="rounded-lg border border-zinc-300 px-3 py-1 text-sm dark:border-zinc-700" onClick={editItem}>edit item</button>}
+                {skips?.length > 0 && <button type="button" className="rounded-lg border border-zinc-300 px-3 py-1 text-sm dark:border-zinc-700" onClick={unskip}>unskip</button>}
               </td>
             </tr>}
           <tr>
@@ -300,7 +337,7 @@ export const ItemPanel = () => {
                   {isOwnedByUser && (
                     <td>
                       <button
-                        className="border-2 bigbutton text-red-600 border-red-600"
+                        className="rounded-lg border border-red-400 px-3 py-1 text-sm text-red-600"
                         onClick={(e) => {
                           e.stopPropagation();
                           onRemoveTag(tag["tag_id"])
@@ -314,7 +351,7 @@ export const ItemPanel = () => {
             </td>
           </tr>
           <div className="cursor-pointer" onClick={() => setIsAddingToAnotherTag(true)}>
-            {!isAddingToAnotherTag && <div className="border-2 bigbutton">add to another tag</div>}
+            {!isAddingToAnotherTag && <button type="button" className="rounded-lg border border-zinc-300 px-3 py-1 text-sm dark:border-zinc-700">add to another tag</button>}
             {isAddingToAnotherTag && <OtherTagInput mutate={mutate} close={() => setIsAddingToAnotherTag(false)} />}
           </div>
         </tbody>
@@ -324,6 +361,21 @@ export const ItemPanel = () => {
       {item.id && <Comments coord={"item:" + item.id} />}
     </div>
   );
+
+  // If we're on mobile, wrap the content in the drawer
+  if (isMobileDevice()) {
+    return (
+      <Drawer 
+        isOpen={drawer_open.value} 
+        onClose={closeDrawer}
+      >
+        {content}
+      </Drawer>
+    );
+  }
+
+  // Desktop version - no animation
+  return content;
 };
 
 const OtherTagInput = ({ mutate, close }) => {

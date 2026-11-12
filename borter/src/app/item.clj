@@ -3,7 +3,12 @@
             [app.database :as db]
             [honey.sql.helpers :as h]
             [lambdaisland.regal :as r]
-            [ring.util.codec :as codec]))
+            [ring.util.codec :as codec]
+            [app.permissions :as perms]))
+
+(defn get-admin-users []
+  (when-let [admins (System/getenv "BORTER_STATIC_ADMINS")]
+    (set (clojure.string/split admins #","))))
 
 (def yt (r/regex [:cat
                   [:? [:capture "http" [:? "s"] "://"]]
@@ -127,17 +132,17 @@
         item (assoc item
                     :owner (-> r :session :user_name)
                     :slug (sluj (:title item)))
-        item (extract-yt-timecode item)
-        item (extract-tiktok-code item)
-        item (extract-spotify-code item)
-        item (extract-twitter-code item)
+        item (if (:url item) (extract-yt-timecode item) item)
+        item (if (:url item) (extract-tiktok-code item) item)
+        item (if (:url item) (extract-spotify-code item) item)
+        item (if (:url item) (extract-twitter-code item) item)
         ret (db/exec! (-> (h/insert-into :items)
                           (h/values [item])
                           (h/returning :*)
                           (h/on-conflict :domain_pk :domain_pk_namespace)
-                          (h/do-update-set {:domain_pk (:domain_pk item)} )))
+                          (h/do-update-set {:domain_pk (:domain_pk item)})))
         
-        itemid (-> ret first :items/id )
+        itemid (-> ret first :items/id)
         tagids [(-> r :body-params :tag_id)]]
 
     "add item to items_in_tags"
@@ -161,4 +166,246 @@
                            (extract-tiktok-code)
                            (extract-spotify-code)
                            (extract-twitter-code)))
-                (h/where [:= :items/id (-> r :body-params :id) ]))))
+                (h/where [:= :items/id (-> r :body-params :id)])
+                (h/returning :*))))
+
+(defn item-slug-check [r]
+  (let [title (-> r :query-params (get "title"))
+        tag-id (some-> (-> r :query-params (get "tag_id")) Integer/parseInt)
+        slug (sluj title)
+        
+        ;; Check if item exists by title/slug
+        existing-item (first (db/exec! {:select :*
+                                        :from :items
+                                        :where [:= :items/slug slug]}))]
+    
+    ;; If we have a tag_id, also check if the item is in that tag
+    (let [item-in-tag (when (and existing-item tag-id)
+                        (not-empty (db/exec! {:select :*
+                                              :from :items_in_tags
+                                              :where [:and
+                                                      [:= :item_id (:items/id existing-item)]
+                                                      [:= :tag_id tag-id]]})))]
+      
+      {:status 200 
+       :body (cond
+               ;; Item exists and is in the specified tag
+               (and existing-item tag-id item-in-tag)
+               (assoc existing-item 
+                      :exists true
+                      :in_tag true)
+               
+               ;; Item exists but is not in the specified tag
+               (and existing-item tag-id)
+               (assoc existing-item
+                      :exists true
+                      :in_tag false)
+               
+               ;; Item exists (no tag check requested)
+               existing-item
+               (assoc existing-item
+                      :exists true)
+               
+               ;; Item doesn't exist
+               :else
+               {:slug slug
+                :exists false})})))
+
+(defn item-exists-check [r]
+  (let [body (:body-params r)
+        title (:title body)
+        tag-id (:tag_id body)
+        domain-pk-ns (:domain_pk_namespace body)
+        domain-pk (:domain_pk body)
+        
+        ;; Build query based on parameters
+        query (cond
+                ;; Use title if available
+                title
+                {:select :*
+                 :from :items
+                 :where [:= :items/slug (sluj title)]}
+                
+                ;; Use domain identifiers if no title
+                (and domain-pk-ns domain-pk)
+                {:select :*
+                 :from :items
+                 :where [:and
+                         [:= :items/domain_pk_namespace domain-pk-ns]
+                         [:= :items/domain_pk domain-pk]]}
+                
+                :else
+                (throw (ex-info "Either title or domain_pk_namespace+domain_pk are required" {:status 400})))]
+        
+    (let [existing-item (first (db/exec! query))
+          
+          ;; If we have a tag_id, also check if the item is in that tag
+          item-in-tag (when (and existing-item tag-id)
+                        (not-empty (db/exec! {:select :*
+                                              :from :items_in_tags
+                                              :where [:and
+                                                      [:= :item_id (:items/id existing-item)]
+                                                      [:= :tag_id tag-id]]})))]
+      
+      {:status 200 
+       :body (cond
+               ;; Item exists and is in the specified tag
+               (and existing-item tag-id item-in-tag)
+               (assoc existing-item 
+                      :exists true
+                      :in_tag true)
+               
+               ;; Item exists but is not in the specified tag
+               (and existing-item tag-id)
+               (assoc existing-item
+                      :exists true
+                      :in_tag false)
+               
+               ;; Item exists (no tag check requested)
+               existing-item
+               (assoc existing-item
+                      :exists true)
+               
+               ;; Item doesn't exist
+               :else
+               {:exists false})})))
+
+
+(defn item-owner [id] (-> {:select [:owner] :from :items :where [:= :items/id id]}
+                          db/exec! first :items/owner))
+(defn item-post [req] 
+  (let [username (-> req :session :user_name)
+        tagids [(-> req :body-params :tag_id)]
+        admin-users (get-admin-users)
+        is-admin (and admin-users (contains? admin-users username))]
+
+    {:status 200 :body (if (-> req :body-params :id)
+                         (do
+                           (when-not (or is-admin
+                                         (= (item-owner (-> req :body-params :id)) username))
+                             (throw (ex-info "must own item to update it" {:status 403})))
+
+                           ;; TODO: i don't think this works to unwrap our output -- and it might be best that it is wrapped, honestly...
+                           (let [result (update-item req)]
+                             (if (and (sequential? result) (= 1 (count result)))
+                               (first result)
+                               result)))
+                         (let [result (create-item req)]
+                           (if (and (sequential? result) (= 1 (count result)))
+                             (first result)
+                             result)))}))
+
+(defn item-m-get [r]
+  (let [itemid (-> r :query-params (get "item_id"))]
+    (if (= -1 itemid)
+      {:status 200 :body {:membership [] :skips []}}
+      {:status 200 :body (let [itemid (Integer/parseInt itemid)
+                               ;; Function to remove namespace from keys
+                               remove-ns (fn [m]
+                                           (reduce-kv
+                                            (fn [acc k v]
+                                              (let [new-k (if (namespace k)
+                                                            (keyword (name k))
+                                                            k)]
+                                                (assoc acc new-k v)))
+                                            {} m))]
+                           {:membership
+                            (map remove-ns
+                                 (db/exec! (-> (h/select :*)
+                                               (h/from :items_in_tags)
+                                               (h/where [:= :item_id itemid]) 
+                                               (h/join :tags [:= :items_in_tags.tag_id :tags.id]))))
+                            :skips
+                            (map remove-ns
+                                 (db/exec! (-> (h/select :*)
+                                               (h/from :skipped)
+                                               (h/where [:and
+                                                         [:= :item_id itemid]
+                                                         [:= :owner (-> r :session :user_name)]]))))})})))
+
+(defn item-m-delete [r]
+  (let [admin-users (get-admin-users)
+        username (-> r :session :user_name)
+        item-owner (-> (db/exec! (-> (h/select :owner) 
+                                     (h/from :items)
+                                     (h/where [:= :items/id (-> r :body-params :item_id)])))
+                       first 
+                       :items/owner)]
+    (when-not (or (and admin-users (contains? admin-users username))
+                  (= username item-owner))
+      (throw (ex-info "must own item to remove it from tag" {:status 401}))))
+
+  (db/exec! (-> (h/delete-from :items_in_Tags)
+                (h/where [:and
+                          [:= :item_id (-> r :body-params :item_id)]
+                          [:= :tag_id (-> r :body-params :tag_id)]])))
+  {:status 200 :body {:ok true}})
+
+(defn item-m-post [req] ;; TODO: fix that this returns really ugly global scoped fields (ie, :items_in_tags/discord_channel_id)
+  ;; TODO change so that you just need add permission on that tag?
+  (when-not (perms/can-tag (-> req :body-params :tag_id) "add" (-> req :session :user_name))
+    (throw (ex-info "must have add permission on target tag" {:status 401})))
+
+  (db/exec! (-> (h/insert-into :items_in_tags)
+                (h/values [(-> req :body-params)])))
+  {:status 200 :body {:ok true}})
+
+(defn item-skip [req]
+  (when-not (-> req :session :user_name)
+    (throw (ex-info "must be logged in to skip" {:status 401})))
+
+  (db/exec! {:insert-into :skipped
+             :values [{:owner (-> req :session :user_name)
+                       :item_id (-> req :body-params :item_id)}]})
+
+  {:status 200 :body {:ok true}})
+
+(defn item-skip-delete [req]
+  (when-not (-> req :session :user_name)
+    (throw (ex-info "must be logged in to skip" {:status 401})))
+
+  (db/exec! (-> (h/delete-from :skipped)
+                (h/where [:and
+                          [:= :item_id (-> req :body-params :item_id)]
+                          [:= :owner (-> req :session :user_name)]])))
+  {:status 200 :body {:ok true}})
+
+;; Define routes
+(def routes
+  ["/item" {:swagger {:tags ["item"]}}
+   
+   ["" {:post {:handler item-post
+               :parameters {:body {:title string?
+                                   :body string?
+                                   :url string?
+                                   :id int?
+                                   :tag_id int?
+                                   :discord_channel_id string?
+                                   :discord_server_id string?}}}}]
+   
+   ["/slug-check" {:get {:handler item-slug-check
+                         :parameters {:query {:title string?
+                                              :tag_id string?}}}}]
+   
+   ["/exists" {:post {:handler item-exists-check
+                      :parameters {:body {:title string?
+                                          :tag_id int?
+                                          :domain_pk_namespace string?
+                                          :domain_pk string?}}}}]
+   
+   ["/membership" {:get {:handler item-m-get
+                         :parameters {:query {:item_id string?}}}
+                   
+                   :post {:handler item-m-post
+                          :parameters {:body {:tag_id int?
+                                              :item_id int?}}}
+                   
+                   :delete {:handler item-m-delete
+                            :parameters {:body {:tag_id int?
+                                                :item_id int?}}}}]
+   
+   ["/skip" {:post {:handler item-skip
+                    :parameters {:body {:item_id int?}}}
+             
+             :delete {:handler item-skip-delete
+                      :parameters {:body {:item_id int?}}}}]])

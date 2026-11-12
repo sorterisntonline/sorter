@@ -6,6 +6,7 @@
             [ring.util.response :as response]
             [app.database :as db]
             [app.permissions :as perms]
+            [app.util :as util]
             [honey.sql.helpers :as h]
             [sluj.core :refer [sluj]]))
 
@@ -13,9 +14,7 @@
 (def client-secret (System/getenv "BORTER_LINEAR_CLIENT_SECRET"))
 
 (defn get-hostname []
-  (case (.getCanonicalHostName (java.net.InetAddress/getLocalHost))
-    "sorter.social" "https://sorter.social/api/linear/callback"
-    "http://localhost:3000/api/linear/callback"))
+  (str (util/get-base-url) "/api/linear/callback"))
 
 (defn code->token [code]
   (def code code)
@@ -125,7 +124,7 @@
   
   ;; so that we remove old ones
   (db/exec! (-> {:delete-from :items_in_tags
-                 :where [:= :tag_id (-> r :tags/id)]} ))
+                 :where [:= :tag_id (-> r :tags/id)]}))
   
   (db/exec! (-> {:insert-into :items_in_tags
                  :values (map (fn [item] {:item_id (-> item :items/id)
@@ -135,6 +134,9 @@
 
   {:status 200 :body {:message "ok"}})
 
-(def routes [["/callback" {:get {:handler #'handle-callback}}]
-             ["/views" {:get {:handler #'get-views}
-                        :post {:handler #'project-sync-tag}}]])
+(def routes [["/callback" {:get {:no-doc false
+                                 :handler handle-callback}}]
+             ["/views" {:get {:no-doc false
+                              :handler get-views}
+                        :post {:no-doc false
+                               :handler project-sync-tag}}]])

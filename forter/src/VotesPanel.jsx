@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Vote } from "./Vote";
 
-export const VotesPanel = ({ votes }) => {
+export const VotesPanel = ({ votes, onSelectItem }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const votesPerPage = 5;
   const pageNumbersToShow = 5;
@@ -51,6 +51,10 @@ export const VotesPanel = ({ votes }) => {
     }
   };
 
+  const handleItemClick = (item) => {
+    onSelectItem(item);
+  };
+
   if (votes === undefined || votes === null || votes.length === 0) {
     return (
       <table key={2} className="w-full">
@@ -68,7 +72,12 @@ export const VotesPanel = ({ votes }) => {
       <table key={2} className="w-full">
         <tbody>
           {votes.map((vote) => (
-            <Vote key={vote["id"]} vote={vote} showDelete={true} />
+            <Vote 
+              key={vote["id"]} 
+              vote={vote} 
+              showDelete={true} 
+              onItemClick={handleItemClick}
+            />
           ))}
         </tbody>
       </table>
@@ -76,19 +85,24 @@ export const VotesPanel = ({ votes }) => {
   }
 
   return (
-    <div>
-      <table key={2} className="w-full">
-        <tbody key={3}>
+    <div className="w-full overflow-visible">
+      <table className="w-full">
+        <tbody>
           {currentVotes?.map((vote) => (
-            <Vote key={vote["id"]} vote={vote} showDelete={true} />
+            <Vote 
+              key={vote["id"]} 
+              vote={vote} 
+              showDelete={true} 
+              onItemClick={handleItemClick}
+            />
           )) ?? (
-              <tr>
-                <td> no votes </td>
-              </tr>
-            )}
+            <tr>
+              <td> no votes </td>
+            </tr>
+          )}
         </tbody>
       </table>
-      <div className="flex justify-center mt-4">
+      <div className="flex justify-center mt-4 mb-8">
         <button
           className="mx-1 px-2 py-1 rounded"
           onClick={handlePrevClick}
@@ -99,10 +113,11 @@ export const VotesPanel = ({ votes }) => {
         {pageNumbers.map((pageNumber) => (
           <button
             key={pageNumber}
-            className={`mx-1 px-2 py-1 ${currentPage === pageNumber
-              ? "dark:text-white border border-gray-100"
-              : " dark:text-white border border-gray-900"
-              }`}
+            className={`mx-1 px-2 py-1 ${
+              currentPage === pageNumber
+                ? "dark:text-white border border-gray-100"
+                : "dark:text-white border border-gray-900"
+            }`}
             onClick={() => handleClick(pageNumber)}
           >
             {pageNumber}

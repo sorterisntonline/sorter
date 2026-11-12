@@ -1,0 +1,32 @@
+app = 'sorter-fly-app'
+primary_region = 'ewr'
+
+[build]
+  dockerfile = 'docker/fly/Dockerfile'
+
+[env]
+  ENVIRONMENT = 'staging'
+  PORT = '8080'
+  PGSSLMODE = 'require'
+  AUTO_LOGIN = 'true'
+  NO_RATE_LIMITS = 'true'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ['app']
+
+  [[http_service.checks]]
+    interval = '30s'
+    timeout = '10s'
+    grace_period = '180s'
+    method = 'GET'
+    path = '/index.html'
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '512mb'
+  cpus = 1

@@ -92,18 +92,7 @@ export const CallbackRoute = ({ refreshFrontpage, setClosed }) => {
 };
 
 export const login = async () => {
-  const params = new URLSearchParams("");
-  params.append("client_id", import.meta.env.VITE_SPOTIFY_CLIENT_ID);
-  params.append("response_type", "code");
-  const redirect_uri = window.location.origin + "/api/spotify/callback";
-  params.append("redirect_uri", redirect_uri);
-  params.append(
-    "scope",
-    "playlist-read-private playlist-modify-private playlist-modify-public playlist-read-collaborative"
-  );
-  params.append("state", window.location);
-  window.location.href =
-    "https://accounts.spotify.com/authorize?" + params.toString();
+  window.location.href = `/api/spotify/auth?redirect=${encodeURIComponent(window.location.href)}`;
 };
 
 const getPlaylists = async (q) => {

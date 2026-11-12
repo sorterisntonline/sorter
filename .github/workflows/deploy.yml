@@ -14,8 +14,17 @@ on:
         options:
           - production
           - staging
-          - development
         default: 'staging'
+      build_borter:
+        description: 'Build borter'
+        required: true
+        type: boolean
+        default: true
+      build_rustsorter:
+        description: 'Build rustsorter'
+        required: true
+        type: boolean
+        default: true
 
 # Add concurrency group configuration
 concurrency:
@@ -34,8 +43,25 @@ jobs:
       DEPLOY_ENV: ${{ (github.event_name == 'push' && github.ref_name == 'production') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'production') && 'production' || 'development' }}
       BRANCH: ${{ github.event_name == 'push' && github.ref_name || inputs.environment }}
       BUILD_MODE: ${{ (github.event_name == 'push' && github.ref_name == 'production') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'production') && 'prod' || 'development' }}
+      WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      DISCORD_WEBHOOK_URL: ${{ (github.ref_name == 'production' || inputs.environment == 'production') && vars.DISCORD_WEBHOOK_URL || vars.DISCORD_WEBHOOK_URL_STAGING }}
 
     steps:
+      # Add Discord notification step for build start
+      - name: Notify Build Start
+        uses: tsickert/discord-webhook@v6.0.0
+        with:
+          webhook-url: ${{ env.DISCORD_WEBHOOK_URL }}
+          embed-title: "[CI/CD] build started"
+          embed-url: ${{ env.WORKFLOW_URL }}
+          embed-color: "3447003"
+          embed-thumbnail-url: "https://img.icons8.com/external-smashingstocks-outline-color-smashing-stocks/66/external-rocket-space-smashingstocks-outline-color-smashing-stocks.png"
+          embed-timestamp: ${{ github.event.head_commit.timestamp || '' }}
+          embed-description: ${{ vars.DISCORD_WEBHOOK_PING_ROLEID && format('<@&{0}>', vars.DISCORD_WEBHOOK_PING_ROLEID) || '' }}
+          embed-author-name: ${{ github.triggering_actor || github.actor }}
+          embed-author-url: ${{ github.event.head_commit.url || format('{0}/{1}/commit/{2}', github.server_url, github.repository, github.sha) }}
+          embed-author-icon-url: https://github.com/${{ github.triggering_actor || github.actor }}.png
+
       # Step 1: Checkout the repository
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -47,42 +73,62 @@ jobs:
       - name: Check rustsorter changes
         id: check_rust
         run: |
-          git fetch origin ${{ env.BRANCH }}
-          RUST_CHANGED=$(git diff --name-only HEAD^...HEAD | grep "^rustsorter/" || echo "")
-          COMMIT_MSG=$(git log -1 --pretty=%B)
-          # Check for force build flags first (case insensitive)
-          if echo "$COMMIT_MSG" | grep -iE "(force-build-rust|forcebuild-rust|force-build|forcebuild)" > /dev/null; then
-            echo "skip_rust=false" >> $GITHUB_OUTPUT
-          # Then check for skip flags (case insensitive)
-          elif echo "$COMMIT_MSG" | grep -iE "(skip.?rust|skiprust)" > /dev/null; then
-            echo "skip_rust=true" >> $GITHUB_OUTPUT
-          # Finally check for actual changes
-          elif [ -z "$RUST_CHANGED" ]; then
-            echo "skip_rust=true" >> $GITHUB_OUTPUT
+          # If this is a workflow dispatch, respect only the input setting
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ inputs.build_rustsorter }}" = "true" ]; then
+              echo "skip_rust=false" >> $GITHUB_OUTPUT
+            else
+              echo "skip_rust=true" >> $GITHUB_OUTPUT
+            fi
           else
-            echo "skip_rust=false" >> $GITHUB_OUTPUT
+            # Normal push-triggered behavior
+            git fetch origin ${{ env.BRANCH }}
+            echo "Checking for changes in rustsorter components..."
+            PREVIOUS_COMMIT=$(git rev-parse origin/${{ env.BRANCH }}^)
+            RUST_CHANGED=$(git diff --name-only $PREVIOUS_COMMIT HEAD | grep "^rustsorter/" || echo "")
+            echo "Changes detected: $RUST_CHANGED"
+            COMMIT_MSG=$(git log -1 --pretty=%B)
+            
+            if echo "$COMMIT_MSG" | grep -iE "(force-build-rust|forcebuild-rust)" > /dev/null; then
+              echo "skip_rust=false" >> $GITHUB_OUTPUT
+            elif echo "$COMMIT_MSG" | grep -iE "(skip.?rust|skiprust)" > /dev/null; then
+              echo "skip_rust=true" >> $GITHUB_OUTPUT
+            elif [ -z "$RUST_CHANGED" ]; then
+              echo "skip_rust=true" >> $GITHUB_OUTPUT
+            else
+              echo "skip_rust=false" >> $GITHUB_OUTPUT
+            fi
           fi
 
       # Check borter/forter/clisorter changes
       - name: Check borter changes
         id: check_bort
         run: |
-          git fetch origin ${{ env.BRANCH }}
-          echo "Checking for changes in borter components..."
-          BORT_CHANGED=$(git diff --name-only HEAD^...HEAD | grep -E "^(borter|forter|clisorter|public)/" || echo "")
-          echo "Changes detected: $BORT_CHANGED"
-          COMMIT_MSG=$(git log -1 --pretty=%B)
-          # Check for force build flags first (case insensitive)
-          if echo "$COMMIT_MSG" | grep -iE "(force-build-bort|forcebuild-bort|force-build|forcebuild)" > /dev/null; then
-            echo "skip_bort=false" >> $GITHUB_OUTPUT
-          # Then check for skip flags (case insensitive)
-          elif echo "$COMMIT_MSG" | grep -iE "(skip.?bort|skipbort)" > /dev/null; then
-            echo "skip_bort=true" >> $GITHUB_OUTPUT
-          # Finally check for actual changes
-          elif [ -z "$BORT_CHANGED" ]; then
-            echo "skip_bort=true" >> $GITHUB_OUTPUT
+          # If this is a workflow dispatch, respect only the input setting
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ inputs.build_borter }}" = "true" ]; then
+              echo "skip_bort=false" >> $GITHUB_OUTPUT
+            else
+              echo "skip_bort=true" >> $GITHUB_OUTPUT
+            fi
           else
-            echo "skip_bort=false" >> $GITHUB_OUTPUT
+            # Normal push-triggered behavior
+            git fetch origin ${{ env.BRANCH }}
+            echo "Checking for changes in borter components..."
+            PREVIOUS_COMMIT=$(git rev-parse origin/${{ env.BRANCH }}^)
+            BORT_CHANGED=$(git diff --name-only $PREVIOUS_COMMIT HEAD | grep -E "^(borter|forter|clisorter|public)/" || echo "")
+            echo "Changes detected: $BORT_CHANGED"
+            COMMIT_MSG=$(git log -1 --pretty=%B)
+            
+            if echo "$COMMIT_MSG" | grep -iE "(force-build-bort|forcebuild-bort)" > /dev/null; then
+              echo "skip_bort=false" >> $GITHUB_OUTPUT
+            elif echo "$COMMIT_MSG" | grep -iE "(skip.?bort|skipbort)" > /dev/null; then
+              echo "skip_bort=true" >> $GITHUB_OUTPUT
+            elif [ -z "$BORT_CHANGED" ]; then
+              echo "skip_bort=true" >> $GITHUB_OUTPUT
+            else
+              echo "skip_bort=false" >> $GITHUB_OUTPUT
+            fi
           fi
 
       # Step 2: Set up Git user for tagging
@@ -133,45 +179,31 @@ jobs:
           git tag ${{ steps.new_tag.outputs.tag }}
           git push origin ${{ steps.new_tag.outputs.tag }}
 
-      # Step 5: Generate Release Notes
-      - name: Generate Release Notes
-        id: release_notes
-        run: |
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${{ github.sha }}^ 2>/dev/null || echo "")
-          if [ -z "$PREVIOUS_TAG" ]; then
-            NOTES=$(git log --pretty=format:'- %s' ${{ github.sha }})
-          else
-            NOTES=$(git log $PREVIOUS_TAG..${{ github.sha }} --pretty=format:'- %s')
-          fi
-          
-          if [ "${{ steps.check_rust.outputs.skip_rust }}" == "true" ]; then
-            NOTES="⏭️🦀 [SKIP-RUST] No changes detected in rustsorter - previous build retained.
-
-            ${NOTES}"
-          fi
-          
-          if [ "${{ steps.check_bort.outputs.skip_bort }}" == "true" ]; then
-            NOTES="⏭️ƛ [SKIP-BORT] No changes detected in borter components - previous builds retained.
-
-            ${NOTES}"
-          fi
-          
-          echo "notes<<EOF" >> $GITHUB_OUTPUT
-          echo "$NOTES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      # Step 6: Create GitHub Release
-      - name: Create GitHub Release
-        id: create_release
-        uses: softprops/action-gh-release@v1
+      # Add notification for rustsorter skip/build
+      - name: Notify Rustsorter Status
+        uses: tsickert/discord-webhook@v6.0.0
+        if: success()
         with:
-          tag_name: ${{ steps.new_tag.outputs.tag }}
-          name: "Release ${{ steps.new_tag.outputs.tag }}"
-          body: "${{ steps.release_notes.outputs.notes }}"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          webhook-url: ${{ env.DISCORD_WEBHOOK_URL }}
+          embed-title: ${{ steps.check_rust.outputs.skip_rust == 'true' && '[CI/CD] skipping rustsorter - no changes detected' || '[CI/CD] building rustsorter...' }}
+          embed-url: ${{ env.WORKFLOW_URL }}
+          embed-color: ${{ steps.check_rust.outputs.skip_rust == 'true' && '16776960' || '3447003' }}
+          embed-thumbnail-url: ${{ steps.check_rust.outputs.skip_rust == 'true' && 'https://img.icons8.com/fluency/144/stop--v1.png' || 'https://img.icons8.com/glyph-neue/64/FFFFFF/construction-worker.png' }}
+          embed-timestamp: ${{ github.event.head_commit.timestamp || '' }}
 
-      # Step 7: Setup SSH for Deployment
+      # Add notification for borter skip/build
+      - name: Notify Borter Status
+        uses: tsickert/discord-webhook@v6.0.0
+        if: success()
+        with:
+          webhook-url: ${{ env.DISCORD_WEBHOOK_URL }}
+          embed-title: ${{ steps.check_bort.outputs.skip_bort == 'true' && '[CI/CD] skipping borter - no changes detected' || '[CI/CD] building borter...' }}
+          embed-url: ${{ env.WORKFLOW_URL }}
+          embed-color: ${{ steps.check_bort.outputs.skip_bort == 'true' && '16776960' || '3447003' }}
+          embed-thumbnail-url: ${{ steps.check_bort.outputs.skip_bort == 'true' && 'https://img.icons8.com/fluency/144/stop--v1.png' || 'https://img.icons8.com/glyph-neue/64/FFFFFF/construction-worker.png' }}
+          embed-timestamp: ${{ github.event.head_commit.timestamp || '' }}
+
+      # Step 5: Setup SSH for Deployment
       - name: Setup SSH for Deployment
         uses: webfactory/ssh-agent@v0.7.0
         with:
@@ -218,6 +250,7 @@ jobs:
             cat <<EOF > rustsorter/.env
             # rustsorter/.env
 
+            
             DISCORD_TOKEN=${{ secrets.RUSTSORTER_DISCORD_TOKEN }}
             EOF
 
@@ -227,7 +260,14 @@ jobs:
             # Write borter/.env
             cat <<EOF > borter/.env
             # borter/.env
-            HOSTNAME=${{ secrets.HOSTNAME }}
+            HOSTNAME=${{ github.ref_name == 'production' && vars.HOSTNAME || vars.HOSTNAME_STAGING }}
+
+            # Logging Configuration
+            BORTER_LOG_PATH=${{ github.ref_name == 'production' && vars.BORTER_LOG_PATH || vars.BORTER_LOG_PATH_STAGING }}
+            BORTER_LOG_LEVEL=${{ github.ref_name == 'production' && vars.BORTER_LOG_LEVEL || vars.BORTER_LOG_LEVEL_STAGING }}
+
+            # REPL Password
+            REPL_PASSWORD=${{ github.ref_name == 'production' && secrets.BORTER_REPL_PASSWORD || secrets.BORTER_REPL_PASSWORD_STAGING }}
 
             # Linear Integration
             BORTER_LINEAR_CLIENT_ID=${{ secrets.BORTER_LINEAR_CLIENT_ID }}
@@ -254,6 +294,11 @@ jobs:
             BORTER_YOUTUBE_CLIENT_SECRET=${{ secrets.BORTER_YOUTUBE_CLIENT_SECRET }}
             BORTER_YOUTUBE_REDIRECT_URIS=${{ secrets.BORTER_YOUTUBE_REDIRECT_URIS }}
             BORTER_YOUTUBE_JAVASCRIPT_ORIGINS=${{ secrets.BORTER_YOUTUBE_JAVASCRIPT_ORIGINS }}
+
+            # Sendgrid API Key
+            BORTER_SENDGRID_API_KEY=${{ github.ref_name == 'production' && secrets.BORTER_SENDGRID_API_KEY || secrets.BORTER_SENDGRID_API_KEY_STAGING }}
+            BORTER_STATIC_ADMINS=${{ vars.BORTER_STATIC_ADMINS }}
+            BORTER_STATIC_API_KEYS=${{ github.ref_name == 'production' && secrets.BORTER_STATIC_API_KEYS || secrets.BORTER_STATIC_API_KEYS_STAGING }}
             EOF
 
             chmod 600 borter/.env 
@@ -278,13 +323,6 @@ jobs:
               npm run ${{ env.BRANCH }}
               cd ..
 
-              # Build clisorter
-              echo -e "\033[3mBuilding clisorter...\033[0m"
-              cd clisorter
-              npm install
-              npm run build # eventually this needs to include mode via branch or something like that
-              cd ..
-
               # Build borter
               echo -e "\033[3mBuilding borter...\033[0m"
               cd borter
@@ -301,21 +339,26 @@ jobs:
             else
               echo -e "\033[3mBuilding rustsorter...\033[0m"
               cd rustsorter
-              SQLX_OFFLINE=true /home/deployer/.cargo/bin/cargo build --profile ${{ env.BUILD_MODE == 'prod' && 'release' || 'staging' }}  
+              # Source the prod.env file before building
+              if [ -f "/home/deployer/prod.env" ]; then
+                #source /home/deployer/prod.env
+                #export DATABASE_URL
+                export SQLX_OFFLINE=true
+                #echo "NOTE: database connected, using live for build"
+              else
+                #echo "WARNING: prod.env file not found at /home/deployer/prod.env, building with sqlx_offline"
+                export SQLX_OFFLINE=true
+              fi
+              /home/deployer/.cargo/bin/cargo build --profile ${{ env.BUILD_MODE == 'prod' && 'release' || 'staging' }}  
               cd ..
             fi
 
             echo -e "\033[1mDone building, running (with systemctl)...\033[0m"
 
             # Reload systemd to recognize new services (if any changes)
+            # TODO: we shouldn't need to do this? 
             echo -e "\033[3mReloading systemd...\033[0m"
             sudo systemctl daemon-reload
-
-            # Restart services
-            echo -e "\033[3mRestarting borter...\033[0m"
-            sudo systemctl restart borter.service
-            echo -e "\033[3mRestarting rustsorter...\033[0m"
-            sudo systemctl restart rustsorter.service
 
             # Backup borter jar if we built it
             if [[ "${{ steps.check_bort.outputs.skip_bort }}" != "true" ]]; then
@@ -326,6 +369,23 @@ jobs:
               mkdir -p "${BORTER_BACKUP_DIR}"
 
               BORTER_BACKUP_NAME="borter-$(date +%Y%m%d_%H%M%S).jar"
+              
+              # Check available disk space before copying
+              AVAILABLE_SPACE=$(df -k "${BORTER_BACKUP_DIR}" | awk 'NR==2 {print $4}')
+              REQUIRED_SPACE=$(du -sk borter/target/sorter-*-standalone.jar | awk '{print $1}')
+              echo "Available space: ${AVAILABLE_SPACE}KB, Required space: ${REQUIRED_SPACE}KB"
+              
+              # If we don't have enough space, remove older backups until we do
+              while [ ${AVAILABLE_SPACE} -lt ${REQUIRED_SPACE} ] && [ $(ls -1 "${BORTER_BACKUP_DIR}" | wc -l) -gt 1 ]; do
+                OLDEST_BACKUP=$(ls -t "${BORTER_BACKUP_DIR}" | tail -n1)
+                echo "Removing oldest backup ${OLDEST_BACKUP} to free up space"
+                rm -f "${BORTER_BACKUP_DIR}/${OLDEST_BACKUP}"
+                
+                # Recalculate available space
+                AVAILABLE_SPACE=$(df -k "${BORTER_BACKUP_DIR}" | awk 'NR==2 {print $4}')
+                echo "Available space after cleanup: ${AVAILABLE_SPACE}KB"
+              done
+              
               cp borter/target/sorter-*-standalone.jar "${BORTER_BACKUP_DIR}/${BORTER_BACKUP_NAME}"
               
               # Keep only the 40 most recent borter backups (approximately 2GB worth)
@@ -343,6 +403,22 @@ jobs:
               # Create a new backup directory for this release
               mkdir -p "${RUST_BACKUP_DIR}/${RUST_BACKUP_NAME}"
               
+              # Check available disk space before copying
+              AVAILABLE_SPACE=$(df -k "${RUST_BACKUP_DIR}" | awk 'NR==2 {print $4}')
+              REQUIRED_SPACE=$(du -sk rustsorter/target/${{ env.BUILD_MODE == 'prod' && 'release' || 'staging' }} | awk '{print $1}')
+              echo "Available space: ${AVAILABLE_SPACE}KB, Required space: ${REQUIRED_SPACE}KB"
+              
+              # If we don't have enough space, remove older backups until we do
+              while [ ${AVAILABLE_SPACE} -lt ${REQUIRED_SPACE} ] && [ $(ls -1 "${RUST_BACKUP_DIR}" | wc -l) -gt 1 ]; do
+                OLDEST_BACKUP=$(ls -t "${RUST_BACKUP_DIR}" | tail -n1)
+                echo "Removing oldest backup ${OLDEST_BACKUP} to free up space"
+                rm -rf "${RUST_BACKUP_DIR}/${OLDEST_BACKUP}"
+                
+                # Recalculate available space
+                AVAILABLE_SPACE=$(df -k "${RUST_BACKUP_DIR}" | awk 'NR==2 {print $4}')
+                echo "Available space after cleanup: ${AVAILABLE_SPACE}KB"
+              done
+              
               # Copy the entire release directory using the correct build profile
               cp -r rustsorter/target/${{ env.BUILD_MODE == 'prod' && 'release' || 'staging' }}/* "${RUST_BACKUP_DIR}/${RUST_BACKUP_NAME}/"
               
@@ -358,17 +434,86 @@ jobs:
             sudo chown deployer:deployer /home/deployer/live/borter
             sudo chown deployer:deployer /home/deployer/live/rustsorter
 
-            # Update symlinks after successful builds
+            # Update symlinks - if we didn't build a component, link to its most recent backup
+            echo -e "\033[3mUpdating live symlinks...\033[0m"
+            
+            # Handle borter symlinks
             if [[ "${{ steps.check_bort.outputs.skip_bort }}" != "true" ]]; then
+              echo "Linking newly built borter jar..."
               ln -sf ~/sorter/borter/target/sorter-*-standalone.jar /home/deployer/live/borter/sorter.jar
+            else
+              echo "Linking most recent borter backup..."
+              LATEST_BORTER=$(ls -t /home/deployer/backups/borter/borter-*.jar | head -n1)
+              if [ ! -z "$LATEST_BORTER" ]; then
+                ln -sf "$LATEST_BORTER" /home/deployer/live/borter/sorter.jar
+              else
+                echo "WARNING: No borter backup found!"
+              fi
             fi
 
+            # Handle rustsorter symlinks
             if [[ "${{ steps.check_rust.outputs.skip_rust }}" != "true" ]]; then
+              echo "Linking newly built rustsorter..."
               rm -f /home/deployer/live/rustsorter/current
               ln -sf ~/sorter/rustsorter/target/${{ env.BUILD_MODE == 'prod' && 'release' || 'staging' }} /home/deployer/live/rustsorter/current
+            else
+              echo "Linking most recent rustsorter backup..."
+              LATEST_RUST=$(ls -t /home/deployer/backups/rustsorter | head -n1)
+              if [ ! -z "$LATEST_RUST" ]; then
+                rm -f /home/deployer/live/rustsorter/current
+                ln -sf "/home/deployer/backups/rustsorter/$LATEST_RUST" /home/deployer/live/rustsorter/current
+              else
+                echo "WARNING: No rustsorter backup found!"
+              fi
             fi
 
+            # Restart services
+            echo -e "\033[3mRestarting borter...\033[0m"
+            sudo systemctl restart borter.service
+            echo -e "\033[3mRestarting rustsorter...\033[0m"
+            sudo systemctl restart rustsorter.service
+
             exit 0
+
+      # Step 7: Generate Release Notes
+      - name: Generate Release Notes
+        id: release_notes
+        if: success() && steps.deploy.outcome == 'success'
+        run: |
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${{ github.sha }}^ 2>/dev/null || echo "")
+          if [ -z "$PREVIOUS_TAG" ]; then
+            NOTES=$(git log --pretty=format:'- %s' ${{ github.sha }})
+          else
+            NOTES=$(git log $PREVIOUS_TAG..${{ github.sha }} --pretty=format:'- %s')
+          fi
+          
+          if [ "${{ steps.check_rust.outputs.skip_rust }}" == "true" ]; then
+            NOTES="⏭️🦀 [SKIP-RUST] No changes detected in rustsorter - previous build retained.
+
+            ${NOTES}"
+          fi
+          
+          if [ "${{ steps.check_bort.outputs.skip_bort }}" == "true" ]; then
+            NOTES="⏭️ƛ [SKIP-BORT] No changes detected in borter components - previous builds retained.
+
+            ${NOTES}"
+          fi
+          
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      # Step 8: Create GitHub Release
+      - name: Create GitHub Release
+        id: create_release
+        if: success() && steps.deploy.outcome == 'success'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.new_tag.outputs.tag }}
+          name: "Release ${{ steps.new_tag.outputs.tag }}"
+          body: "${{ steps.release_notes.outputs.notes }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # New fallback step that runs on deploy failure
       - name: Fallback to Latest Backup
@@ -396,10 +541,41 @@ jobs:
               echo "Falling back to latest rustsorter backup..."
               LATEST_RUST=$(ls -t /home/deployer/backups/rustsorter | head -n1)
               if [ ! -z "$LATEST_RUST" ]; then
-                RUST_LIVE_DIR="/home/deployer/live/rustsorter/current"
-                mkdir -p "$RUST_LIVE_DIR"
-                rm -rf "$RUST_LIVE_DIR/*"
-                ln -sf /home/deployer/backups/rustsorter/"$LATEST_RUST"/* "$RUST_LIVE_DIR/"
+                rm -f /home/deployer/live/rustsorter/current
+                ln -sf "/home/deployer/backups/rustsorter/$LATEST_RUST" /home/deployer/live/rustsorter/current
                 sudo systemctl restart rustsorter.service
               fi
             fi
+
+      # Add notification for successful deployment
+      - name: Notify Successful Deployment
+        if: success() && steps.deploy.outcome == 'success'
+        uses: tsickert/discord-webhook@v6.0.0
+        with:
+          webhook-url: ${{ env.DISCORD_WEBHOOK_URL }}
+          embed-title: "[CI/CD] build succeeded"
+          embed-url: ${{ env.WORKFLOW_URL }}
+          embed-color: "5763719"
+          embed-thumbnail-url: "https://img.icons8.com/fluency/144/ok--v1.png"
+          embed-timestamp: ${{ github.event.head_commit.timestamp || '' }}
+          embed-description: |
+            ${{ vars.DISCORD_WEBHOOK_PING_ROLEID && format('<@&{0}>', vars.DISCORD_WEBHOOK_PING_ROLEID) || '' }}
+            **Release:** [${{ steps.new_tag.outputs.tag }}](https://github.com/${{ github.repository }}/releases/tag/${{ steps.new_tag.outputs.tag }})
+            
+            ${{ steps.release_notes.outputs.notes }}
+
+      # Add notification for fallback
+      - name: Notify Fallback
+        if: failure() && steps.deploy.outcome == 'failure'
+        uses: tsickert/discord-webhook@v6.0.0
+        with:
+          webhook-url: ${{ env.DISCORD_WEBHOOK_URL }}
+          embed-title: "[CI/CD] build failed - falling back to backup"
+          embed-url: ${{ env.WORKFLOW_URL }}
+          embed-color: "15158332"
+          embed-thumbnail-url: "https://img.icons8.com/color/144/undelete.png"
+          embed-timestamp: ${{ github.event.head_commit.timestamp || '' }}
+          embed-description: ${{ vars.DISCORD_WEBHOOK_PING_ROLEID && format('<@&{0}>', vars.DISCORD_WEBHOOK_PING_ROLEID) || '' }}
+          embed-author-name: ${{ github.triggering_actor || github.actor }}
+          embed-author-url: ${{ github.event.head_commit.url || format('{0}/{1}/commit/{2}', github.server_url, github.repository, github.sha) }}
+          embed-author-icon-url: https://github.com/${{ github.triggering_actor || github.actor }}.png

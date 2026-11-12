@@ -1,0 +1,43 @@
+# Common
+.git
+.DS_Store
+.cursor
+.vscode
+.clj-kondo
+.lsp
+**/.DS_Store
+**/.env
+**/*.log
+**/*.swp
+
+# Node.js specific
+node_modules
+**/node_modules
+forter/node_modules
+npm-debug.log
+yarn-error.log
+
+# Clojure specific
+.cpcache
+**/target
+borter/target
+**/.lsp
+**/.clj-kondo
+**/.calva
+**/logs
+borter/logs
+
+# Rust specific
+rustsorter/target
+**/target/
+**/.cargo
+rustsorter/.cargo
+
+# Large files
+repomix-output.txt
+**/repomix-output.txt
+all.txt 
+
+# database
+borter/database/pgdata
+borter/database/mnt_data

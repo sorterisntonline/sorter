@@ -4,6 +4,7 @@ import { startTrackingLiked, youtubeLogin } from "./Youtube";
 import { loginLinear, postView } from "./Linear";
 import { current_session } from "../session";
 import { loadTag } from "../Network";
+import { login as spotifyLogin } from './Spotify';
 
 const LinearControls = () => {
   return (
@@ -104,32 +105,22 @@ const RedditControls = () => {
 };
 
 export const IntegrationsPanel = () => {
+  // Early return conditions
   if (current_session.value !== null && !current_session.value.user_name === tag["owner"]) return <></>;
   if (!tag.value.tag["domain_pk_namespace"]) return <></>;
-  if (tag.value.tag["domain_pk_namespace"] === "spotify.playlist")
-    return <SpotifyControls />;
-  if (tag.value.tag["domain_pk_namespace"] === "youtube.liked")
-    return <YoutubeControls />;
-  if (tag.value.tag["domain_pk_namespace"] === "linear.project")
-    return <LinearControls />;
-  if (tag.value.tag["domain_pk_namespace"] === "reddit.sub")
-    return <RedditControls />;
-  return <div>unknown integration type</div>;
-};
 
-const spotifyLogin = async () => {
-  const params = new URLSearchParams("");
-  params.append("client_id", "e61d249115c9451a8137a2a5af90d76b");
-  params.append("response_type", "code");
-  const redirect_uri = window.location.origin + "/api/spotify/callback";
-  params.append("redirect_uri", redirect_uri);
-  params.append(
-    "scope",
-    "playlist-read-private playlist-modify-private playlist-modify-public playlist-read-collaborative"
+  // Wrap the entire panel in a hidden-on-mobile div
+  return (
+    <div className="hidden lg:block">
+      {tag.value.tag["domain_pk_namespace"] === "spotify.playlist" && <SpotifyControls />}
+      {tag.value.tag["domain_pk_namespace"] === "youtube.liked" && <YoutubeControls />}
+      {tag.value.tag["domain_pk_namespace"] === "linear.project" && <LinearControls />}
+      {tag.value.tag["domain_pk_namespace"] === "reddit.sub" && <RedditControls />}
+      {!["spotify.playlist", "youtube.liked", "linear.project", "reddit.sub"].includes(tag.value.tag["domain_pk_namespace"]) && 
+        <div>unknown integration type</div>
+      }
+    </div>
   );
-  params.append("state", window.location);
-  window.location.href =
-    "https://accounts.spotify.com/authorize?" + params.toString();
 };
 
 const fetcher = (arg) => fetch(arg).then((res) => res.json());
