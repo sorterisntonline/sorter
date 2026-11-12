@@ -97,8 +97,7 @@
       (http/start {:port port})
       (log/info "http server started successfully on port" port)
       (catch Exception e
-        (log/error e "failed to start http server")))
-    (start-db-health-checker)))
+        (log/error e "failed to start http server")))))
 
 (defn -shutdown-hook []
   (log/info "Shutdown hook called, cleaning up resources")
