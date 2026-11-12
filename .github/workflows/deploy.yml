@@ -3,7 +3,6 @@ name: Deploy to Environment
 on:
   push:
     branches:
-      - production
       - staging
   workflow_dispatch:
     inputs:
